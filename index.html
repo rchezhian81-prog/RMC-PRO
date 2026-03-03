@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f0faf4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="RMC Pro">
+<meta name="description" content="RMC Plant Management PWA">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>RMC Pro — Plant Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ─────────────────────────────────────────────
+   DESIGN SYSTEM  — Soft botanical light theme
+   Primary:  Light Green   #4caf7d / #e8f8ee
+   Accent:   Warm Yellow   #f5c842 / #fef9e3
+   Support:  Soft Purple   #9b72cf / #f0ebfa
+   Neutral:  Warm white    #fafaf7 / #f2f2ed
+───────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg:          #f6f9f4;
+  --bg2:         #eef7f1;
+  --bg3:         #ffffff;
+  --sidebar-bg:  #ffffff;
+  --topbar-bg:   rgba(246,249,244,0.92);
+
+  /* Green palette */
+  --green:       #3da668;
+  --green-light: #e6f5ec;
+  --green-mid:   #b8e4c8;
+  --green-deep:  #1e7a47;
+  --green-text:  #1a6638;
+
+  /* Yellow palette */
+  --yellow:      #e8b928;
+  --yellow-light:#fef8e1;
+  --yellow-mid:  #fde68a;
+  --yellow-deep: #b8860b;
+  --yellow-text: #7a5800;
+
+  /* Purple palette */
+  --purple:      #8b5fcf;
+  --purple-light:#f0ebfa;
+  --purple-mid:  #d0b8f0;
+  --purple-deep: #5e3a9e;
+  --purple-text: #4a2d80;
+
+  /* Neutrals */
+  --text:        #1e2b22;
+  --text2:       #3d5047;
+  --muted:       #7a9486;
+  --border:      #d4e8db;
+  --border2:     #e8f0eb;
+  --shadow:      rgba(40,90,60,0.08);
+  --shadow2:     rgba(40,90,60,0.15);
+
+  /* Status */
+  --red:         #e05252;
+  --red-light:   #fdeaea;
+  --orange:      #e88026;
+  --orange-light:#fef0e0;
+
+  /* Fonts */
+  --font-head:   'Nunito', sans-serif;
+  --font-body:   'Sora', sans-serif;
+  --font-mono:   'IBM Plex Mono', monospace;
+
+  /* Radius */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-size: 14px;
+}
+
+/* ── SUBTLE BG TEXTURE ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(circle at 20% 20%, rgba(76,175,125,0.06) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 80%, rgba(139,95,207,0.05) 0%, transparent 50%),
+                    radial-gradient(circle at 60% 10%, rgba(232,185,40,0.04) 0%, transparent 40%);
+}
+
+/* ═══════════════════════ TOP BAR ═══════════════════════ */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 60px;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 22px;
+  box-shadow: 0 2px 12px var(--shadow);
+}
+
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-size: 15px; font-weight: 900; color: white;
+  box-shadow: 0 3px 10px rgba(61,166,104,0.35);
+}
+.logo-name { font-family: var(--font-head); font-size: 20px; font-weight: 800; color: var(--green-deep); letter-spacing: -.3px; }
+.logo-name span { color: var(--purple); }
+.logo-tagline { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; line-height: 1; margin-top: 1px; }
+
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+
+.live-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--green-light); border: 1.5px solid var(--green-mid);
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; font-family: var(--font-mono); color: var(--green-text); font-weight: 600;
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  animation: blink 1.6s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+.clock-pill {
+  background: var(--yellow-light); border: 1.5px solid var(--yellow-mid);
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; font-family: var(--font-mono); color: var(--yellow-text); font-weight: 600;
+}
+
+.notif-btn {
+  position: relative; cursor: pointer; width: 36px; height: 36px;
+  background: var(--purple-light); border: 1.5px solid var(--purple-mid);
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-size: 17px; transition: all .2s;
+}
+.notif-btn:hover { background: var(--purple-mid); transform: scale(1.05); }
+.notif-count {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--red); color: white;
+  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 8px;
+  font-family: var(--font-mono);
+}
+
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--purple-deep));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; color: white;
+  font-family: var(--font-head); cursor: pointer;
+  box-shadow: 0 3px 8px rgba(139,95,207,0.3);
+}
+
+/* ═══════════════════════ SIDEBAR ═══════════════════════ */
+.sidebar {
+  position: fixed; left: 0; top: 60px; bottom: 0; width: 225px; z-index: 50;
+  background: var(--sidebar-bg);
+  border-right: 1.5px solid var(--border);
+  padding: 18px 0 80px;
+  overflow-y: auto;
+  box-shadow: 2px 0 16px var(--shadow);
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+}
+
+.sidebar-section { margin-bottom: 4px; }
+
+.sidebar-label {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted);
+  padding: 10px 20px 5px; font-family: var(--font-mono);
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 16px 10px 20px; cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all .18s; font-size: 13.5px; font-weight: 500;
+  color: var(--text2); text-decoration: none; border-radius: 0;
+  margin: 1px 10px 1px 0; border-radius: 0 10px 10px 0;
+}
+.nav-item:hover {
+  background: var(--green-light); color: var(--green-deep);
+  border-left-color: var(--green-mid);
+}
+.nav-item.active {
+  background: linear-gradient(90deg, var(--green-light), rgba(232,248,238,0.4));
+  color: var(--green-deep); border-left-color: var(--green);
+  font-weight: 700;
+}
+.nav-icon { font-size: 17px; width: 22px; text-align: center; }
+.nav-badge {
+  margin-left: auto; background: var(--red); color: white;
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 10px;
+}
+
+/* Target progress in sidebar */
+.sidebar-target {
+  margin: 14px 14px 0;
+  background: linear-gradient(135deg, var(--green-light), var(--yellow-light));
+  border: 1.5px solid var(--green-mid); border-radius: var(--r-md); padding: 14px;
+}
+.target-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.target-val { font-family: var(--font-head); font-size: 26px; font-weight: 800; color: var(--green-deep); line-height: 1; }
+.target-unit { font-size: 12px; font-weight: 500; color: var(--muted); }
+.progress-wrap { margin-top: 10px; }
+.progress-track { height: 8px; background: var(--green-mid); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--green), var(--green-deep)); transition: width 1.2s ease; }
+.progress-meta { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10.5px; }
+
+/* ═══════════════════════ MAIN ═══════════════════════ */
+.main {
+  margin-left: 225px; margin-top: 60px;
+  padding: 24px; min-height: calc(100vh - 60px);
+  position: relative; z-index: 1;
+}
+.page { display: none; animation: fadeUp .4s ease both; }
+.page.active { display: block; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(14px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ═══════════════════════ PAGE HEADER ═══════════════════════ */
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 22px; flex-wrap: wrap; gap: 12px;
+}
+.page-title { font-family: var(--font-head); font-size: 27px; font-weight: 800; color: var(--text); letter-spacing: -.3px; }
+.page-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ═══════════════════════ BUTTONS ═══════════════════════ */
+.btn {
+  padding: 9px 18px; border-radius: var(--r-sm); font-size: 13px; font-weight: 700;
+  cursor: pointer; border: none; transition: all .18s; font-family: var(--font-body);
+  display: inline-flex; align-items: center; gap: 6px; line-height: 1;
+}
+.btn-green {
+  background: var(--green); color: white;
+  box-shadow: 0 3px 12px rgba(61,166,104,0.35);
+}
+.btn-green:hover { background: var(--green-deep); transform: translateY(-1px); box-shadow: 0 5px 16px rgba(61,166,104,0.4); }
+
+.btn-yellow {
+  background: var(--yellow); color: var(--yellow-text);
+  box-shadow: 0 3px 10px rgba(232,185,40,0.3);
+}
+.btn-yellow:hover { background: #d4a820; transform: translateY(-1px); }
+
+.btn-purple {
+  background: var(--purple); color: white;
+  box-shadow: 0 3px 10px rgba(139,95,207,0.3);
+}
+.btn-purple:hover { background: var(--purple-deep); transform: translateY(-1px); }
+
+.btn-ghost {
+  background: white; color: var(--text2);
+  border: 1.5px solid var(--border);
+  box-shadow: 0 1px 4px var(--shadow);
+}
+.btn-ghost:hover { background: var(--bg2); border-color: var(--green-mid); color: var(--green-deep); }
+
+.btn-red { background: var(--red); color: white; }
+
+/* ═══════════════════════ ALERTS ═══════════════════════ */
+.alert {
+  padding: 12px 16px; border-radius: var(--r-md); font-size: 13px;
+  margin-bottom: 10px; display: flex; align-items: flex-start; gap: 10px;
+  border: 1.5px solid; font-weight: 500;
+}
+.alert-warn  { background: var(--yellow-light); border-color: var(--yellow-mid); color: var(--yellow-text); }
+.alert-err   { background: var(--red-light); border-color: #f5b8b8; color: #c0392b; }
+.alert-ok    { background: var(--green-light); border-color: var(--green-mid); color: var(--green-text); }
+.alert-purple{ background: var(--purple-light); border-color: var(--purple-mid); color: var(--purple-text); }
+
+/* ═══════════════════════ KPI CARDS ═══════════════════════ */
+.kpi-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 14px; margin-bottom: 22px;
+}
+.kpi-card {
+  background: white; border: 1.5px solid var(--border2);
+  border-radius: var(--r-lg); padding: 18px 20px;
+  position: relative; overflow: hidden; cursor: pointer;
+  transition: all .22s; box-shadow: 0 2px 10px var(--shadow);
+}
+.kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px var(--shadow2); border-color: var(--border); }
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: var(--card-accent, var(--green));
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.kpi-card::after {
+  content: ''; position: absolute;
+  top: -30px; right: -30px;
+  width: 90px; height: 90px; border-radius: 50%;
+  background: var(--card-bg, var(--green-light));
+  opacity: .6;
+}
+.kpi-emoji {
+  font-size: 24px; margin-bottom: 10px; display: inline-block;
+  position: relative; z-index: 1;
+}
+.kpi-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px;
+  font-family: var(--font-mono);
+}
+.kpi-value {
+  font-family: var(--font-head); font-size: 32px; font-weight: 800;
+  color: var(--text); line-height: 1; position: relative; z-index: 1;
+}
+.kpi-unit { font-size: 14px; font-weight: 600; color: var(--muted); }
+.kpi-trend {
+  margin-top: 7px; font-size: 11.5px; font-weight: 600;
+  display: flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono);
+}
+.trend-up   { color: var(--green); }
+.trend-down { color: var(--red); }
+.trend-flat { color: var(--muted); }
+
+.kpi-bar { margin-top: 10px; height: 5px; background: var(--bg2); border-radius: 3px; overflow:hidden; }
+.kpi-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+
+/* ═══════════════════════ PANELS ═══════════════════════ */
+.grid-2      { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-3      { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-60-40  { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+.panel {
+  background: white; border: 1.5px solid var(--border2);
+  border-radius: var(--r-lg); padding: 20px;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+.panel-green  { border-top: 4px solid var(--green); }
+.panel-yellow { border-top: 4px solid var(--yellow); }
+.panel-purple { border-top: 4px solid var(--purple); }
+
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+}
+.panel-title {
+  font-family: var(--font-head); font-size: 15.5px; font-weight: 800; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ═══════════════════════ TABLE ═══════════════════════ */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.data-table th {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); padding: 9px 12px; text-align: left;
+  border-bottom: 1.5px solid var(--border);
+  background: var(--bg); font-family: var(--font-mono);
+}
+.data-table th:first-child { border-radius: var(--r-sm) 0 0 0; }
+.data-table th:last-child  { border-radius: 0 var(--r-sm) 0 0; }
+.data-table td {
+  padding: 11px 12px; border-bottom: 1px solid var(--border2); color: var(--text);
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--green-light); }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+
+/* ═══════════════════════ BADGES / STATUS ═══════════════════════ */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; font-family: var(--font-mono);
+}
+.badge-green  { background: var(--green-light); color: var(--green-text); border: 1.5px solid var(--green-mid); }
+.badge-yellow { background: var(--yellow-light); color: var(--yellow-text); border: 1.5px solid var(--yellow-mid); }
+.badge-purple { background: var(--purple-light); color: var(--purple-text); border: 1.5px solid var(--purple-mid); }
+.badge-red    { background: var(--red-light); color: #c0392b; border: 1.5px solid #f5b8b8; }
+.badge-gray   { background: var(--bg2); color: var(--muted); border: 1.5px solid var(--border); }
+
+/* ═══════════════════════ CHIP TABS ═══════════════════════ */
+.chip-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.chip {
+  padding: 6px 16px; border-radius: 20px; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; transition: all .18s; font-family: var(--font-body);
+  background: white; color: var(--muted); border: 1.5px solid var(--border);
+}
+.chip:hover { background: var(--green-light); color: var(--green-deep); border-color: var(--green-mid); }
+.chip.active { background: var(--green); color: white; border-color: var(--green); box-shadow: 0 3px 10px rgba(61,166,104,0.3); }
+
+/* ═══════════════════════ PROGRESS BARS ═══════════════════════ */
+.prog { height: 7px; background: var(--bg2); border-radius: 4px; overflow:hidden; margin-top: 4px; }
+.prog-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+.prog-green  { background: linear-gradient(90deg, var(--green-mid), var(--green)); }
+.prog-yellow { background: linear-gradient(90deg, var(--yellow-mid), var(--yellow)); }
+.prog-purple { background: linear-gradient(90deg, var(--purple-mid), var(--purple)); }
+.prog-red    { background: linear-gradient(90deg, #f5a0a0, var(--red)); }
+
+/* ═══════════════════════ BAR CHART ═══════════════════════ */
+.bar-chart { display: flex; align-items: flex-end; gap: 6px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bar {
+  width: 100%; border-radius: 6px 6px 0 0;
+  min-height: 6px; transition: height .9s cubic-bezier(.4,0,.2,1);
+}
+.bar-green  { background: linear-gradient(180deg, var(--green-mid), var(--green)); }
+.bar-yellow { background: linear-gradient(180deg, var(--yellow-mid), var(--yellow)); }
+.bar-purple { background: linear-gradient(180deg, var(--purple-mid), var(--purple)); }
+.bar-ghost  { background: var(--bg2); border: 1.5px dashed var(--border); }
+.bar-lbl { font-size: 10px; color: var(--muted); font-family: var(--font-mono); }
+.bar-val { font-size: 10.5px; color: var(--green-text); font-family: var(--font-mono); font-weight: 600; }
+
+/* ═══════════════════════ DONUT LEGEND ═══════════════════════ */
+.donut-wrap { display: flex; align-items: center; gap: 20px; }
+.legend { flex: 1; }
+.legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; font-weight: 500; }
+.legend-dot { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.legend-num { margin-left: auto; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+
+/* ═══════════════════════ VEHICLE CARDS ═══════════════════════ */
+.vehicle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px,1fr)); gap: 12px; }
+.v-card {
+  background: white; border: 1.5px solid var(--border2); border-radius: var(--r-md);
+  padding: 16px; cursor: pointer; transition: all .2s;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.v-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px var(--shadow2); }
+.v-card.ok     { border-top: 3px solid var(--green); }
+.v-card.warn   { border-top: 3px solid var(--yellow); }
+.v-card.broken { border-top: 3px solid var(--red); }
+.v-card.idle   { border-top: 3px solid var(--muted); }
+.v-card.pump   { border-top: 3px solid var(--purple); }
+.v-num  { font-family: var(--font-head); font-size: 20px; font-weight: 800; margin-bottom: 2px; }
+.v-type { font-size: 11px; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
+.v-meta { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono); color: var(--text2); }
+.v-note { margin-top: 6px; font-size: 11px; }
+
+/* ═══════════════════════ TIMELINE ═══════════════════════ */
+.timeline { list-style: none; }
+.tl-item { display: flex; gap: 12px; padding-bottom: 18px; position: relative; }
+.tl-item::before {
+  content:''; position:absolute; left:14px; top:30px; bottom:0;
+  width: 1.5px; background: var(--border);
+}
+.tl-item:last-child::before { display:none; }
+.tl-dot {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink:0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; border: 2px solid var(--border); background: white;
+}
+.tl-dot.green  { border-color: var(--green-mid); background: var(--green-light); }
+.tl-dot.yellow { border-color: var(--yellow-mid); background: var(--yellow-light); }
+.tl-dot.purple { border-color: var(--purple-mid); background: var(--purple-light); }
+.tl-dot.red    { border-color: #f5b8b8; background: var(--red-light); }
+.tl-body { flex:1; padding-top: 3px; }
+.tl-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.tl-meta  { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+
+/* ═══════════════════════ MAP AREA ═══════════════════════ */
+.map-area {
+  background: linear-gradient(135deg, #e8f5ee 0%, #f0ebfa 50%, #fef9e3 100%);
+  border-radius: var(--r-md); height: 210px;
+  position: relative; overflow: hidden;
+  border: 1.5px solid var(--border);
+}
+.map-area::before {
+  content:''; position:absolute; inset:0;
+  background-image: linear-gradient(rgba(76,175,125,0.08) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(76,175,125,0.08) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+.map-dot {
+  position: absolute; width: 12px; height: 12px; border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.6);
+  animation: drive 9s ease-in-out infinite;
+}
+.map-dot::before {
+  content:''; position:absolute; inset:-4px; border-radius:50%;
+  background: inherit; opacity:.25; animation: pulse-map 2s ease-in-out infinite;
+}
+@keyframes pulse-map { 0%,100%{transform:scale(1);opacity:.25;} 50%{transform:scale(1.8);opacity:0;} }
+@keyframes drive {
+  0%  {top:25%;left:15%}  25%{top:55%;left:50%}
+  50% {top:65%;left:72%}  75%{top:30%;left:60%}  100%{top:25%;left:15%}
+}
+.map-labels { position:absolute; top:10px; left:12px; display:flex; gap:8px; flex-wrap:wrap; }
+.map-tag {
+  background: rgba(255,255,255,.85); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px 10px; font-size: 10.5px; font-weight: 700;
+  font-family: var(--font-mono); backdrop-filter: blur(4px);
+}
+.map-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:4px; }
+
+/* ═══════════════════════ FORM ═══════════════════════ */
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .8px; display: block; margin-bottom: 6px; font-family: var(--font-mono); }
+.form-control {
+  width: 100%; background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 14px;
+  color: var(--text); font-family: var(--font-body); font-size: 13.5px;
+  outline: none; transition: all .18s;
+}
+.form-control:focus { border-color: var(--green); background: white; box-shadow: 0 0 0 3px rgba(61,166,104,0.12); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+select.form-control { cursor: pointer; }
+
+/* ═══════════════════════ METER ROW ═══════════════════════ */
+.meter-row { display: flex; justify-content: space-around; align-items: center; padding: 10px 0; gap: 8px; flex-wrap: wrap; }
+.meter-item { text-align: center; flex: 1; min-width: 70px; }
+.meter-val { font-family: var(--font-head); font-size: 28px; font-weight: 800; }
+.meter-lbl { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; font-family: var(--font-mono); }
+.meter-unit { font-size: 12px; font-weight: 500; color: var(--muted); }
+
+/* ═══════════════════════ MODAL ═══════════════════════ */
+.modal-bg {
+  display: none; position:fixed; inset:0; z-index:200;
+  background: rgba(30,43,34,0.35); backdrop-filter: blur(6px);
+  align-items: center; justify-content: center;
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: white; border: 1.5px solid var(--border);
+  border-radius: var(--r-xl); padding: 28px; width: 480px; max-width: 95vw;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(30,43,34,0.2);
+  animation: fadeUp .28s ease;
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+.modal-title { font-family: var(--font-head); font-size: 20px; font-weight: 800; }
+.modal-close { background: var(--bg2); border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 16px; display:flex;align-items:center;justify-content:center; transition: all .2s; }
+.modal-close:hover { background: var(--red-light); color: var(--red); }
+
+/* ═══════════════════════ SECTION CARD ═══════════════════════ */
+.section-head {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: var(--green-light); border: 1.5px solid var(--green-mid);
+  border-radius: var(--r-md); margin-bottom: 16px; font-family: var(--font-head);
+  font-size: 15px; font-weight: 800; color: var(--green-text);
+}
+
+/* ═══════════════════════ REPORT CARDS ═══════════════════════ */
+.report-card {
+  background: white; border: 1.5px solid var(--border2); border-radius: var(--r-lg);
+  padding: 24px; text-align: center; cursor: pointer; transition: all .22s;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+.report-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px var(--shadow2); }
+.report-card:nth-child(1) { border-top: 4px solid var(--green); }
+.report-card:nth-child(2) { border-top: 4px solid var(--yellow); }
+.report-card:nth-child(3) { border-top: 4px solid var(--purple); }
+.report-card:nth-child(4) { border-top: 4px solid var(--green); }
+.report-card:nth-child(5) { border-top: 4px solid var(--yellow); }
+.report-card:nth-child(6) { border-top: 4px solid var(--purple); }
+.report-icon { font-size: 38px; margin-bottom: 10px; display:block; }
+.report-name { font-family: var(--font-head); font-size: 16px; font-weight: 800; color: var(--text); }
+.report-desc { font-size: 12px; color: var(--muted); margin-top: 5px; margin-bottom: 14px; }
+
+/* ═══════════════════════ BOTTOM NAV (mobile) ═══════════════════════ */
+.bottom-nav {
+  display: none; position: fixed; bottom:0; left:0; right:0; z-index:100;
+  background: rgba(255,255,255,0.96); backdrop-filter: blur(12px);
+  border-top: 1.5px solid var(--border); padding: 6px 0 env(safe-area-inset-bottom,6px);
+  justify-content: space-around; box-shadow: 0 -4px 16px var(--shadow);
+}
+.bn-item {
+  display: flex; flex-direction:column; align-items:center; gap:3px;
+  cursor:pointer; padding: 6px 10px; color: var(--muted); font-size: 10px; font-weight:600;
+  transition: color .18s; border-radius: var(--r-sm);
+}
+.bn-item.active { color: var(--green-text); }
+.bn-item.active .bn-icon { background: var(--green-light); }
+.bn-icon { font-size: 21px; width: 36px; height: 30px; display:flex; align-items:center; justify-content:center; border-radius: 8px; }
+
+/* ═══════════════════════ INSTALL BANNER ═══════════════════════ */
+#install-banner {
+  display: none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+  background: white; border: 1.5px solid var(--green-mid); border-radius: var(--r-lg);
+  padding: 12px 18px; z-index:999; box-shadow: 0 8px 24px var(--shadow2);
+  align-items:center; gap:12px; min-width:280px; max-width:90vw;
+  font-family: var(--font-body); font-size:13px; color: var(--text);
+}
+
+/* ═══════════════════════ SCROLLBAR ═══════════════════════ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--green-mid); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--green); }
+
+/* ═══════════════════════ RESPONSIVE ═══════════════════════ */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-220px); box-shadow: none; }
+  .sidebar.open { transform: translateX(0); box-shadow: 4px 0 20px var(--shadow2); }
+  .main { margin-left: 0; padding-bottom: 80px; padding: 16px 14px 80px; }
+  .grid-2, .grid-3, .grid-60-40 { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .bottom-nav { display: flex; }
+  .form-row { grid-template-columns: 1fr; }
+  .page-header { flex-direction: column; }
+}
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .vehicle-grid { grid-template-columns: 1fr 1fr; }
+  .page-title { font-size: 22px; }
+  .topbar-date { display: none; }
+}
+
+.divider { border: none; border-top: 1.5px solid var(--border2); margin: 18px 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ TOP BAR ═══════════ -->
+<nav class="topbar">
+  <div class="logo">
+    <button id="menu-toggle" onclick="toggleSidebar()" style="display:none;background:none;border:none;cursor:pointer;font-size:22px;margin-right:4px;color:var(--text2)">☰</button>
+    <div class="logo-icon">RC</div>
+    <div>
+      <div class="logo-name">RMC<span>Pro</span></div>
+      <div class="logo-tagline">Plant Management</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+    <div class="clock-pill" id="live-clock">--:--:--</div>
+    <div class="notif-btn" onclick="openModal('alert-modal')">
+      🔔<div class="notif-count">3</div>
+    </div>
+    <div class="avatar">MG</div>
+  </div>
+</nav>
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Main</div>
+    <a class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span> Dashboard</a>
+    <a class="nav-item" onclick="showPage('production',this)"><span class="nav-icon">🏗️</span> Production</a>
+    <a class="nav-item" onclick="showPage('quality',this)"><span class="nav-icon">🧪</span> Quality Control</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Operations</div>
+    <a class="nav-item" onclick="showPage('vehicles',this)"><span class="nav-icon">🚛</span> Vehicles <span class="nav-badge">2</span></a>
+    <a class="nav-item" onclick="showPage('materials',this)"><span class="nav-icon">📦</span> Materials</a>
+    <a class="nav-item" onclick="showPage('electricity',this)"><span class="nav-icon">⚡</span> Electricity</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Business</div>
+    <a class="nav-item" onclick="showPage('delivery',this)"><span class="nav-icon">📋</span> Delivery</a>
+    <a class="nav-item" onclick="showPage('reports',this)"><span class="nav-icon">📊</span> Reports</a>
+    <a class="nav-item" onclick="showPage('settings',this)"><span class="nav-icon">⚙️</span> Settings</a>
+  </div>
+
+  <div class="sidebar-target">
+    <div class="target-label">Today's Target</div>
+    <div class="target-val">322 <span class="target-unit">/ 480 m³</span></div>
+    <div class="progress-wrap">
+      <div class="progress-track">
+        <div class="progress-fill" style="width:67%"></div>
+      </div>
+      <div class="progress-meta">
+        <span style="font-size:10.5px;color:var(--green-text);font-weight:700;font-family:var(--font-mono)">67% done</span>
+        <span style="font-size:10.5px;color:var(--muted);font-family:var(--font-mono)">158 m³ left</span>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main class="main">
+
+<!-- ════════════════════════════════════════════
+     DASHBOARD
+════════════════════════════════════════════ -->
+<div class="page active" id="page-dashboard">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Good Morning, Mohan 👋</div>
+      <div class="page-sub">Tuesday, 3 March 2026 · Morning Shift · Bangalore North Plant</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost" onclick="openModal('batch-modal')">➕ New Batch</button>
+      <button class="btn btn-green" onclick="openModal('report-modal')">📄 Daily Report</button>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="alert alert-warn">⚠️ <div><strong>Low Stock:</strong> Fly Ash at 12 MT — below minimum 15 MT. Raise PO to supplier immediately.</div></div>
+  <div class="alert alert-err" style="margin-bottom:18px">🔧 <div><strong>Breakdown:</strong> TM-04 drum vibration since 09:45 AM. Mechanic Ravi dispatched — ETA 30 mins.</div></div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--card-accent:var(--green);--card-bg:var(--green-light)">
+      <div class="kpi-emoji">🏗️</div>
+      <div class="kpi-label">Produced Today</div>
+      <div class="kpi-value">322 <span class="kpi-unit">m³</span></div>
+      <div class="kpi-trend trend-up">↑ 12% vs yesterday</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:67%;background:var(--green)"></div></div>
+    </div>
+    <div class="kpi-card" style="--card-accent:var(--yellow);--card-bg:var(--yellow-light)">
+      <div class="kpi-emoji">🚛</div>
+      <div class="kpi-label">Trips Completed</div>
+      <div class="kpi-value">41 <span class="kpi-unit">trips</span></div>
+      <div class="kpi-trend trend-up">↑ 5 more than yesterday</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:80%;background:var(--yellow)"></div></div>
+    </div>
+    <div class="kpi-card" style="--card-accent:var(--purple);--card-bg:var(--purple-light)">
+      <div class="kpi-emoji">🧪</div>
+      <div class="kpi-label">QC Pass Rate</div>
+      <div class="kpi-value">96.4 <span class="kpi-unit">%</span></div>
+      <div class="kpi-trend trend-up">↑ 2.1% this week</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:96.4%;background:var(--purple)"></div></div>
+    </div>
+    <div class="kpi-card" style="--card-accent:var(--green);--card-bg:var(--green-light)">
+      <div class="kpi-emoji">📦</div>
+      <div class="kpi-label">Cement Consumed</div>
+      <div class="kpi-value">48.6 <span class="kpi-unit">MT</span></div>
+      <div class="kpi-trend trend-flat">→ On target (150 kg/m³)</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:62%;background:var(--green)"></div></div>
+    </div>
+    <div class="kpi-card" style="--card-accent:var(--yellow);--card-bg:var(--yellow-light)">
+      <div class="kpi-emoji">⚡</div>
+      <div class="kpi-label">Power Consumed</div>
+      <div class="kpi-value">284 <span class="kpi-unit">kWh</span></div>
+      <div class="kpi-trend trend-up">↑ 0.88 kWh/m³ (efficient)</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:58%;background:var(--yellow)"></div></div>
+    </div>
+    <div class="kpi-card" style="--card-accent:var(--purple);--card-bg:var(--purple-light)">
+      <div class="kpi-emoji">🏭</div>
+      <div class="kpi-label">Plant Utilization</div>
+      <div class="kpi-value">78 <span class="kpi-unit">%</span></div>
+      <div class="kpi-trend trend-flat">Downtime: 1.8 hrs today</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:78%;background:var(--purple)"></div></div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="grid-60-40">
+    <div class="panel panel-green">
+      <div class="panel-header">
+        <div class="panel-title">📊 Hourly Production (m³)</div>
+        <select class="form-control" style="width:110px;padding:5px 10px;font-size:12px">
+          <option>Today</option><option>Yesterday</option><option>This Week</option>
+        </select>
+      </div>
+      <div class="bar-chart" style="height:110px;align-items:flex-end">
+        <div class="bar-col"><div class="bar-val">32</div><div class="bar bar-green" style="height:62px"></div><div class="bar-lbl">6AM</div></div>
+        <div class="bar-col"><div class="bar-val">45</div><div class="bar bar-green" style="height:88px"></div><div class="bar-lbl">7AM</div></div>
+        <div class="bar-col"><div class="bar-val">41</div><div class="bar bar-green" style="height:80px"></div><div class="bar-lbl">8AM</div></div>
+        <div class="bar-col"><div class="bar-val">48</div><div class="bar bar-yellow" style="height:94px"></div><div class="bar-lbl">9AM</div></div>
+        <div class="bar-col"><div class="bar-val">52</div><div class="bar bar-yellow" style="height:102px"></div><div class="bar-lbl">10AM</div></div>
+        <div class="bar-col"><div class="bar-val">38</div><div class="bar bar-green" style="height:74px"></div><div class="bar-lbl">11AM</div></div>
+        <div class="bar-col"><div class="bar-val">33</div><div class="bar bar-green" style="height:64px"></div><div class="bar-lbl">12PM</div></div>
+        <div class="bar-col"><div class="bar-val">—</div><div class="bar bar-ghost" style="height:32px"></div><div class="bar-lbl">1PM</div></div>
+      </div>
+    </div>
+
+    <div class="panel panel-purple">
+      <div class="panel-header"><div class="panel-title">🎯 Mix Grade Split</div></div>
+      <div class="donut-wrap">
+        <svg width="100" height="100" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#f0ebfa" stroke-width="6"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#3da668" stroke-width="6" stroke-dasharray="44 44" stroke-dashoffset="-33" transform="rotate(-90 18 18)"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#e8b928" stroke-width="6" stroke-dasharray="22 66" stroke-dashoffset="-77" transform="rotate(-90 18 18)"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#8b5fcf" stroke-width="6" stroke-dasharray="16 72" stroke-dashoffset="-99" transform="rotate(-90 18 18)"/>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="#b8e4c8" stroke-width="6" stroke-dasharray="6 82" stroke-dashoffset="-115" transform="rotate(-90 18 18)"/>
+          <text x="18" y="21" text-anchor="middle" font-size="5.5" font-weight="800" fill="#1e2b22" font-family="Nunito,sans-serif">322</text>
+        </svg>
+        <div class="legend">
+          <div class="legend-row"><div class="legend-dot" style="background:var(--green)"></div>M30 <span class="legend-num" style="color:var(--green-text)">136 m³</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:var(--yellow)"></div>M25 <span class="legend-num" style="color:var(--yellow-text)">78 m³</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:var(--purple)"></div>M35 <span class="legend-num" style="color:var(--purple-text)">62 m³</span></div>
+          <div class="legend-row"><div class="legend-dot" style="background:var(--green-mid)"></div>M20 <span class="legend-num" style="color:var(--muted)">46 m³</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Row -->
+  <div class="grid-2">
+    <div class="panel panel-yellow">
+      <div class="panel-header">
+        <div class="panel-title">🚛 Fleet Status</div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:5px 12px" onclick="showPage('vehicles',document.querySelector('[onclick*=vehicles]'))">View All →</button>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Vehicle</th><th>Status</th><th>Location</th><th>Trips</th></tr></thead>
+        <tbody>
+          <tr><td class="mono" style="font-weight:700">TM-01</td><td><span class="badge badge-green">● ON ROAD</span></td><td style="font-size:11px;color:var(--muted)">Site A · 4.2km</td><td class="mono">6</td></tr>
+          <tr><td class="mono" style="font-weight:700">TM-02</td><td><span class="badge badge-yellow">● LOADING</span></td><td style="font-size:11px;color:var(--muted)">At Plant</td><td class="mono">5</td></tr>
+          <tr><td class="mono" style="font-weight:700">TM-03</td><td><span class="badge badge-purple">● RETURNING</span></td><td style="font-size:11px;color:var(--muted)">Site B · 2.1km</td><td class="mono">6</td></tr>
+          <tr><td class="mono" style="font-weight:700">TM-04</td><td><span class="badge badge-red">● BREAKDOWN</span></td><td style="font-size:11px;color:var(--muted)">At Plant</td><td class="mono">3</td></tr>
+          <tr><td class="mono" style="font-weight:700">TM-05</td><td><span class="badge badge-gray">● IDLE</span></td><td style="font-size:11px;color:var(--muted)">At Plant</td><td class="mono">4</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel panel-purple">
+      <div class="panel-header">
+        <div class="panel-title">📡 Live Activity</div>
+        <span class="badge badge-green" style="font-size:10px">AUTO</span>
+      </div>
+      <ul class="timeline">
+        <li class="tl-item">
+          <div class="tl-dot green">✓</div>
+          <div class="tl-body">
+            <div class="tl-title">Batch #188 dispatched — M30 · 7m³</div>
+            <div class="tl-meta">TM-02 → Prestige Site · 11:42 AM</div>
+          </div>
+        </li>
+        <li class="tl-item">
+          <div class="tl-dot red">!</div>
+          <div class="tl-body">
+            <div class="tl-title">TM-04 breakdown — Driver Raju</div>
+            <div class="tl-meta">Drum vibration · Mechanic assigned · 09:45 AM</div>
+          </div>
+        </li>
+        <li class="tl-item">
+          <div class="tl-dot yellow">📦</div>
+          <div class="tl-body">
+            <div class="tl-title">Fly Ash stock low — 12 MT</div>
+            <div class="tl-meta">PO raised to supplier · 09:10 AM</div>
+          </div>
+        </li>
+        <li class="tl-item">
+          <div class="tl-dot purple">🧪</div>
+          <div class="tl-body">
+            <div class="tl-title">QC Pass — M30 #184 · 32.4 N/mm²</div>
+            <div class="tl-meta">Target: 30 N/mm² · Priya · 08:30 AM</div>
+          </div>
+        </li>
+        <li class="tl-item">
+          <div class="tl-dot green">⚡</div>
+          <div class="tl-body">
+            <div class="tl-title">EB restored after 18 min outage</div>
+            <div class="tl-meta">DG auto-stopped · 07:30 AM</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     PRODUCTION
+════════════════════════════════════════════ -->
+<div class="page" id="page-production">
+  <div class="page-header">
+    <div><div class="page-title">Production Log 🏗️</div><div class="page-sub">Batch entry & live production tracking</div></div>
+    <button class="btn btn-green" onclick="openModal('batch-modal')">➕ New Batch</button>
+  </div>
+
+  <div class="chip-tabs">
+    <button class="chip active">All Grades</button>
+    <button class="chip">M20</button><button class="chip">M25</button>
+    <button class="chip">M30</button><button class="chip">M35</button><button class="chip">M40</button>
+  </div>
+
+  <div class="panel panel-green">
+    <div class="panel-header">
+      <div class="panel-title">📋 Today's Batch Log</div>
+      <input class="form-control" placeholder="🔍 Search batch…" style="width:190px;padding:7px 12px;font-size:12px">
+    </div>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Batch#</th><th>Time</th><th>Grade</th><th>Volume</th><th>Slump</th><th>Temp</th><th>W/C</th><th>TM</th><th>Site</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">#188</td><td class="mono">11:42</td><td><span class="badge badge-green">M30</span></td><td>7.0 m³</td><td>120mm</td><td>29°C</td><td>0.45</td><td>TM-02</td><td>Prestige</td><td><span class="badge badge-green">Dispatched</span></td></tr>
+          <tr><td class="mono">#187</td><td class="mono">11:20</td><td><span class="badge badge-yellow">M25</span></td><td>6.0 m³</td><td>115mm</td><td>30°C</td><td>0.50</td><td>TM-01</td><td>DLF Site</td><td><span class="badge badge-green">Delivered</span></td></tr>
+          <tr><td class="mono">#186</td><td class="mono">10:55</td><td><span class="badge badge-green">M30</span></td><td>7.0 m³</td><td>125mm</td><td>31°C</td><td>0.45</td><td>TM-03</td><td>Prestige</td><td><span class="badge badge-green">Poured</span></td></tr>
+          <tr><td class="mono">#185</td><td class="mono">10:30</td><td><span class="badge badge-yellow">M20</span></td><td>5.0 m³</td><td>110mm</td><td>29°C</td><td>0.55</td><td>TM-05</td><td>Tata Proj</td><td><span class="badge badge-green">Poured</span></td></tr>
+          <tr><td class="mono">#184</td><td class="mono">10:02</td><td><span class="badge badge-green">M30</span></td><td>7.0 m³</td><td>118mm</td><td>30°C</td><td>0.45</td><td>TM-01</td><td>Prestige</td><td><span class="badge badge-purple">QC Pass</span></td></tr>
+          <tr><td class="mono">#183</td><td class="mono">09:38</td><td><span class="badge badge-purple">M35</span></td><td>8.0 m³</td><td>100mm</td><td>29°C</td><td>0.40</td><td>TM-02</td><td>Infra Corp</td><td><span class="badge badge-yellow">In Transit</span></td></tr>
+          <tr><td class="mono">#182</td><td class="mono">09:10</td><td><span class="badge badge-yellow">M20</span></td><td>5.0 m³</td><td>112mm</td><td>30°C</td><td>0.55</td><td>TM-04</td><td>City Bldr</td><td><span class="badge badge-red">TM Fault</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:16px">
+    <div class="panel panel-yellow">
+      <div class="panel-title" style="margin-bottom:16px">⚙️ Plant Parameters (Live)</div>
+      <div class="meter-row">
+        <div class="meter-item"><div class="meter-val" style="color:var(--green)">6.8</div><div class="meter-unit">m³</div><div class="meter-lbl">Batch Size</div></div>
+        <div class="meter-item"><div class="meter-val" style="color:var(--yellow-text)">45</div><div class="meter-unit">m³/hr</div><div class="meter-lbl">Output Rate</div></div>
+        <div class="meter-item"><div class="meter-val" style="color:var(--purple)">188</div><div class="meter-unit">#</div><div class="meter-lbl">Batches</div></div>
+        <div class="meter-item"><div class="meter-val" style="color:var(--green-deep)">120</div><div class="meter-unit">sec</div><div class="meter-lbl">Cycle Time</div></div>
+      </div>
+    </div>
+    <div class="panel panel-purple">
+      <div class="panel-title" style="margin-bottom:14px">📦 Material Status</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Cement OPC 53</span><span class="mono" style="color:var(--green-text);font-weight:700">82 MT</span></div><div class="prog"><div class="prog-fill prog-green" style="width:68%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Fly Ash ⚠️</span><span class="mono" style="color:var(--red);font-weight:700">12 MT</span></div><div class="prog"><div class="prog-fill prog-red" style="width:18%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>Sand (Fine Agg.)</span><span class="mono" style="color:var(--yellow-text);font-weight:700">145 MT</span></div><div class="prog"><div class="prog-fill prog-yellow" style="width:55%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>20mm Aggregate</span><span class="mono" style="color:var(--green-text);font-weight:700">210 MT</span></div><div class="prog"><div class="prog-fill prog-green" style="width:72%"></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     VEHICLES
+════════════════════════════════════════════ -->
+<div class="page" id="page-vehicles">
+  <div class="page-header">
+    <div><div class="page-title">Fleet Management 🚛</div><div class="page-sub">Transit Mixers · Pumps · Support Vehicles</div></div>
+    <button class="btn btn-yellow">➕ Log Trip</button>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--card-accent:var(--green);--card-bg:var(--green-light)"><div class="kpi-emoji">🚛</div><div class="kpi-label">Total Fleet</div><div class="kpi-value">8</div><div class="kpi-trend trend-flat">6 TM · 1 Pump · 1 Tipper</div></div>
+    <div class="kpi-card" style="--card-accent:var(--yellow);--card-bg:var(--yellow-light)"><div class="kpi-emoji">✅</div><div class="kpi-label">On Duty</div><div class="kpi-value">6</div><div class="kpi-trend trend-up">75% fleet utilization</div></div>
+    <div class="kpi-card" style="--card-accent:var(--red);--card-bg:var(--red-light)"><div class="kpi-emoji">🔧</div><div class="kpi-label">Breakdown</div><div class="kpi-value">1</div><div class="kpi-trend trend-down">TM-04 since 09:45</div></div>
+    <div class="kpi-card" style="--card-accent:var(--purple);--card-bg:var(--purple-light)"><div class="kpi-emoji">⛽</div><div class="kpi-label">Diesel Today</div><div class="kpi-value">312 <span class="kpi-unit">L</span></div><div class="kpi-trend trend-flat">₹35,880 total</div></div>
+  </div>
+
+  <div class="panel panel-green" style="margin-bottom:16px">
+    <div class="panel-header"><div class="panel-title">🗺️ Vehicle Tracker (Live GPS)</div><span class="badge badge-green">LIVE</span></div>
+    <div class="map-area">
+      <div class="map-dot" style="background:var(--green)"></div>
+      <div class="map-dot" style="background:var(--yellow);top:58%;left:42%;animation-delay:-2s;animation-duration:10s"></div>
+      <div class="map-dot" style="background:var(--purple);top:28%;left:65%;animation-delay:-5s;animation-duration:7s"></div>
+      <div class="map-dot" style="background:var(--orange);top:70%;left:22%;animation-delay:-3s;animation-duration:9s"></div>
+      <div class="map-labels">
+        <span class="map-tag" style="color:var(--green-text)">● TM-01 On Road</span>
+        <span class="map-tag" style="color:var(--yellow-text)">● TM-02 At Site</span>
+        <span class="map-tag" style="color:var(--purple-text)">● TM-03 Returning</span>
+        <span class="map-tag" style="color:var(--orange)">● PP-01 Pumping</span>
+      </div>
+      <div class="map-center" style="opacity:.4">
+        <div style="font-size:30px">🗺️</div>
+        <div style="font-size:12px;color:var(--text2);font-weight:600">4 vehicles tracked live</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vehicle-grid">
+    <div class="v-card ok"><div class="v-num" style="color:var(--green-deep)">TM-01</div><div class="v-type">Transit Mixer · 7m³</div><span class="badge badge-green" style="margin-bottom:8px;display:inline-flex">● ON ROAD</span><div class="v-meta"><span>Ramesh</span><span style="color:var(--green-text);font-weight:700">6 trips</span></div><div class="v-note" style="color:var(--muted)">48L · 142km</div></div>
+    <div class="v-card warn"><div class="v-num" style="color:var(--yellow-text)">TM-02</div><div class="v-type">Transit Mixer · 7m³</div><span class="badge badge-yellow" style="margin-bottom:8px;display:inline-flex">● LOADING</span><div class="v-meta"><span>Suresh</span><span style="color:var(--yellow-text);font-weight:700">5 trips</span></div><div class="v-note" style="color:var(--muted)">42L · 118km</div></div>
+    <div class="v-card ok"><div class="v-num" style="color:var(--green-deep)">TM-03</div><div class="v-type">Transit Mixer · 7m³</div><span class="badge badge-purple" style="margin-bottom:8px;display:inline-flex">● RETURNING</span><div class="v-meta"><span>Ganesh</span><span style="color:var(--green-text);font-weight:700">6 trips</span></div><div class="v-note" style="color:var(--muted)">52L · 156km</div></div>
+    <div class="v-card broken"><div class="v-num" style="color:var(--red)">TM-04</div><div class="v-type">Transit Mixer · 7m³</div><span class="badge badge-red" style="margin-bottom:8px;display:inline-flex">● BREAKDOWN</span><div class="v-meta"><span>Raju</span><span style="color:var(--red);font-weight:700">3 trips</span></div><div class="v-note" style="color:var(--red);font-weight:600">⚠ Drum vibration · 09:45AM</div></div>
+    <div class="v-card idle"><div class="v-num" style="color:var(--muted)">TM-05</div><div class="v-type">Transit Mixer · 7m³</div><span class="badge badge-gray" style="margin-bottom:8px;display:inline-flex">● IDLE</span><div class="v-meta"><span>Vijay</span><span style="color:var(--muted)">4 trips</span></div><div class="v-note" style="color:var(--muted)">36L · 98km</div></div>
+    <div class="v-card ok"><div class="v-num" style="color:var(--green-deep)">TM-06</div><div class="v-type">Transit Mixer · 6m³</div><span class="badge badge-green" style="margin-bottom:8px;display:inline-flex">● ON ROAD</span><div class="v-meta"><span>Kiran</span><span style="color:var(--green-text);font-weight:700">5 trips</span></div><div class="v-note" style="color:var(--muted)">44L · 122km</div></div>
+    <div class="v-card pump"><div class="v-num" style="color:var(--purple-deep)">PP-01</div><div class="v-type">Boom Pump · 42m</div><span class="badge badge-purple" style="margin-bottom:8px;display:inline-flex">● PUMPING</span><div class="v-meta"><span>Santhosh</span><span style="color:var(--purple-text);font-weight:700">82 m³</span></div><div class="v-note" style="color:var(--muted)">Infra Corp · 2hrs left</div></div>
+    <div class="v-card idle"><div class="v-num" style="color:var(--muted)">TIP-01</div><div class="v-type">Tipper · 10MT</div><span class="badge badge-gray" style="margin-bottom:8px;display:inline-flex">● STANDBY</span><div class="v-meta"><span>Mohan</span><span style="color:var(--muted)">2 trips</span></div><div class="v-note" style="color:var(--muted)">Aggregate delivery</div></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     ELECTRICITY
+════════════════════════════════════════════ -->
+<div class="page" id="page-electricity">
+  <div class="page-header">
+    <div><div class="page-title">Electricity Monitor ⚡</div><div class="page-sub">EB Grid · DG Backup · Equipment Consumption</div></div>
+    <button class="btn btn-yellow">➕ Add Reading</button>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--card-accent:var(--yellow);--card-bg:var(--yellow-light)"><div class="kpi-emoji">⚡</div><div class="kpi-label">EB Units Today</div><div class="kpi-value">226 <span class="kpi-unit">kWh</span></div><div class="kpi-trend trend-flat">Grid up since 07:30</div></div>
+    <div class="kpi-card" style="--card-accent:var(--purple);--card-bg:var(--purple-light)"><div class="kpi-emoji">🔋</div><div class="kpi-label">DG Units Today</div><div class="kpi-value">58 <span class="kpi-unit">kWh</span></div><div class="kpi-trend trend-down">18 min outage @ 07:12</div></div>
+    <div class="kpi-card" style="--card-accent:var(--green);--card-bg:var(--green-light)"><div class="kpi-emoji">📉</div><div class="kpi-label">Power per m³</div><div class="kpi-value">0.88 <span class="kpi-unit">kWh</span></div><div class="kpi-trend trend-up">↑ Efficient (target &lt;1.0)</div></div>
+    <div class="kpi-card" style="--card-accent:var(--yellow);--card-bg:var(--yellow-light)"><div class="kpi-emoji">💰</div><div class="kpi-label">Energy Cost</div><div class="kpi-value">₹3,260</div><div class="kpi-trend trend-flat">₹10.12 per m³</div></div>
+  </div>
+
+  <div class="grid-60-40">
+    <div class="panel panel-yellow">
+      <div class="panel-header"><div class="panel-title">📈 Hourly Power (kWh)</div></div>
+      <div class="bar-chart" style="height:120px;align-items:flex-end">
+        <div class="bar-col"><div class="bar-val" style="color:var(--yellow-text)">28</div><div class="bar bar-yellow" style="height:52px"></div><div class="bar-lbl">6AM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--purple-text)">14</div><div class="bar bar-purple" style="height:26px"></div><div class="bar-lbl">7AM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--yellow-text)">38</div><div class="bar bar-yellow" style="height:70px"></div><div class="bar-lbl">8AM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--yellow-text)">42</div><div class="bar bar-yellow" style="height:78px"></div><div class="bar-lbl">9AM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--yellow-text)">46</div><div class="bar bar-yellow" style="height:86px"></div><div class="bar-lbl">10AM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--yellow-text)">40</div><div class="bar bar-yellow" style="height:74px"></div><div class="bar-lbl">11AM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--yellow-text)">36</div><div class="bar bar-yellow" style="height:66px"></div><div class="bar-lbl">12PM</div></div>
+        <div class="bar-col"><div class="bar-val" style="color:var(--muted)">—</div><div class="bar bar-ghost" style="height:22px"></div><div class="bar-lbl">1PM</div></div>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:12px;font-size:11px;font-weight:600">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;background:var(--yellow);border-radius:2px;display:inline-block"></span> EB Grid</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;background:var(--purple);border-radius:2px;display:inline-block"></span> DG Backup</span>
+      </div>
+    </div>
+    <div class="panel panel-purple">
+      <div class="panel-title" style="margin-bottom:16px">⚙️ Equipment Load</div>
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;font-weight:500"><span>Batching Plant</span><span class="mono" style="color:var(--yellow-text);font-weight:700">75 kW</span></div><div class="prog"><div class="prog-fill prog-yellow" style="width:78%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;font-weight:500"><span>Air Compressor</span><span class="mono" style="color:var(--green-text);font-weight:700">22 kW</span></div><div class="prog"><div class="prog-fill prog-green" style="width:55%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;font-weight:500"><span>Conveyors</span><span class="mono" style="color:var(--green-text);font-weight:700">18 kW</span></div><div class="prog"><div class="prog-fill prog-green" style="width:45%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;font-weight:500"><span>Water Pumps</span><span class="mono" style="color:var(--purple-text);font-weight:700">11 kW</span></div><div class="prog"><div class="prog-fill prog-purple" style="width:28%"></div></div></div>
+        <div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;font-weight:500"><span>Office / Lighting</span><span class="mono" style="color:var(--muted);font-weight:700">5 kW</span></div><div class="prog"><div class="prog-fill" style="width:12%;background:var(--muted)"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel panel-green">
+    <div class="panel-header"><div class="panel-title">📋 Meter Readings Today</div></div>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>Meter (kWh)</th><th>Units</th><th>Power Factor</th><th>Voltage R/Y/B</th><th>Load (kW)</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">06:00</td><td class="mono">48,240</td><td class="mono">—</td><td>0.92</td><td>414 / 412 / 415</td><td>88</td><td><span class="badge badge-green">EB</span></td></tr>
+          <tr style="background:var(--purple-light)"><td class="mono">07:12</td><td colspan="5" style="color:var(--purple-text);font-size:12px;font-weight:600">⚡ EB OUTAGE — DG Auto-Start · Duration 18 min</td><td><span class="badge badge-purple">DG</span></td></tr>
+          <tr><td class="mono">08:00</td><td class="mono">48,296</td><td class="mono">56 kWh</td><td>0.91</td><td>415 / 414 / 416</td><td>112</td><td><span class="badge badge-green">EB</span></td></tr>
+          <tr><td class="mono">10:00</td><td class="mono">48,388</td><td class="mono">92 kWh</td><td>0.93</td><td>416 / 413 / 415</td><td>124</td><td><span class="badge badge-green">EB</span></td></tr>
+          <tr><td class="mono">12:00</td><td class="mono">48,466</td><td class="mono">78 kWh</td><td>0.92</td><td>414 / 415 / 414</td><td>118</td><td><span class="badge badge-green">EB</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     MATERIALS
+════════════════════════════════════════════ -->
+<div class="page" id="page-materials">
+  <div class="page-header">
+    <div><div class="page-title">Material Stock 📦</div><div class="page-sub">Inventory, consumption & purchase tracking</div></div>
+    <button class="btn btn-green">➕ Add Receipt</button>
+  </div>
+  <div class="panel panel-green">
+    <div class="panel-header"><div class="panel-title">📦 Current Stock Status</div><span class="badge badge-green">LIVE</span></div>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Material</th><th>Opening</th><th>Received</th><th>Consumed</th><th>Closing</th><th>Min Level</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Cement OPC 53</strong></td><td>120 MT</td><td>10 MT</td><td>48.6 MT</td><td class="mono" style="color:var(--green-text);font-weight:700">81.4 MT</td><td>30 MT</td><td><span class="badge badge-green">OK</span></td></tr>
+          <tr><td><strong>Fly Ash</strong></td><td>28 MT</td><td>0 MT</td><td>16 MT</td><td class="mono" style="color:var(--red);font-weight:700">12 MT</td><td>15 MT</td><td><span class="badge badge-red">LOW ⚠️</span></td></tr>
+          <tr><td><strong>Sand (Fine Agg.)</strong></td><td>200 MT</td><td>0 MT</td><td>55 MT</td><td class="mono" style="color:var(--yellow-text);font-weight:700">145 MT</td><td>50 MT</td><td><span class="badge badge-yellow">OK</span></td></tr>
+          <tr><td><strong>CA 20mm</strong></td><td>310 MT</td><td>0 MT</td><td>100 MT</td><td class="mono" style="color:var(--green-text);font-weight:700">210 MT</td><td>80 MT</td><td><span class="badge badge-green">OK</span></td></tr>
+          <tr><td><strong>CA 10mm</strong></td><td>180 MT</td><td>0 MT</td><td>48 MT</td><td class="mono" style="color:var(--green-text);font-weight:700">132 MT</td><td>40 MT</td><td><span class="badge badge-green">OK</span></td></tr>
+          <tr><td><strong>GGBS</strong></td><td>45 MT</td><td>0 MT</td><td>12 MT</td><td class="mono" style="color:var(--yellow-text);font-weight:700">33 MT</td><td>20 MT</td><td><span class="badge badge-yellow">MONITOR</span></td></tr>
+          <tr><td><strong>Admixture SP</strong></td><td>800 L</td><td>200 L</td><td>220 L</td><td class="mono" style="color:var(--green-text);font-weight:700">780 L</td><td>200 L</td><td><span class="badge badge-green">OK</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     QUALITY CONTROL
+════════════════════════════════════════════ -->
+<div class="page" id="page-quality">
+  <div class="page-header">
+    <div><div class="page-title">Quality Control 🧪</div><div class="page-sub">Cube tests, slump records & NCR management</div></div>
+    <button class="btn btn-purple">➕ New Test</button>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--card-accent:var(--green);--card-bg:var(--green-light)"><div class="kpi-emoji">✅</div><div class="kpi-label">Pass Rate Today</div><div class="kpi-value">96.4<span class="kpi-unit">%</span></div><div class="kpi-bar"><div class="kpi-bar-fill" style="width:96.4%;background:var(--green)"></div></div></div>
+    <div class="kpi-card" style="--card-accent:var(--purple);--card-bg:var(--purple-light)"><div class="kpi-emoji">🧪</div><div class="kpi-label">Tests Done</div><div class="kpi-value">28</div><div class="kpi-trend trend-up">Cubes: 14 · Slump: 14</div></div>
+    <div class="kpi-card" style="--card-accent:var(--red);--card-bg:var(--red-light)"><div class="kpi-emoji">📋</div><div class="kpi-label">Open NCRs</div><div class="kpi-value">1</div><div class="kpi-trend trend-down">NCR-2026-014</div></div>
+  </div>
+  <div class="panel panel-purple">
+    <div class="panel-header"><div class="panel-title">🧪 Cube Test Results</div></div>
+    <table class="data-table">
+      <thead><tr><th>Sample ID</th><th>Batch</th><th>Grade</th><th>7-Day (N/mm²)</th><th>28-Day (N/mm²)</th><th>Target</th><th>Result</th><th>QC By</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">QC-188-A</td><td>#188</td><td><span class="badge badge-green">M30</span></td><td class="mono">22.4</td><td class="mono">—</td><td>30</td><td><span class="badge badge-yellow">Pending</span></td><td>Priya</td></tr>
+        <tr><td class="mono">QC-184-A</td><td>#184</td><td><span class="badge badge-green">M30</span></td><td class="mono">21.8</td><td class="mono">32.4</td><td>30</td><td><span class="badge badge-green">PASS</span></td><td>Priya</td></tr>
+        <tr><td class="mono">QC-180-B</td><td>#180</td><td><span class="badge badge-yellow">M25</span></td><td class="mono">18.6</td><td class="mono">28.2</td><td>25</td><td><span class="badge badge-green">PASS</span></td><td>Arjun</td></tr>
+        <tr><td class="mono">QC-175-A</td><td>#175</td><td><span class="badge badge-green">M30</span></td><td class="mono">19.2</td><td class="mono">29.1</td><td>30</td><td><span class="badge badge-red">FAIL</span></td><td>Priya</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     DELIVERY
+════════════════════════════════════════════ -->
+<div class="page" id="page-delivery">
+  <div class="page-header">
+    <div><div class="page-title">Delivery Management 📋</div><div class="page-sub">Dispatch, challan & customer delivery status</div></div>
+    <button class="btn btn-green">➕ New DO</button>
+  </div>
+  <div class="panel panel-yellow">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>DO No.</th><th>Customer</th><th>Site</th><th>Grade</th><th>Vol (m³)</th><th>TM</th><th>Dispatch</th><th>Status</th><th>Signature</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">DO-1044</td><td>Prestige Group</td><td>Prestige City</td><td><span class="badge badge-green">M30</span></td><td>7.0</td><td>TM-02</td><td class="mono">11:42</td><td><span class="badge badge-yellow">In Transit</span></td><td style="color:var(--muted)">Pending</td></tr>
+          <tr><td class="mono">DO-1043</td><td>DLF Builders</td><td>DLF Park</td><td><span class="badge badge-yellow">M25</span></td><td>6.0</td><td>TM-01</td><td class="mono">11:20</td><td><span class="badge badge-green">Delivered</span></td><td style="color:var(--green-text);font-weight:700">✓ Signed</td></tr>
+          <tr><td class="mono">DO-1042</td><td>Prestige Group</td><td>Prestige City</td><td><span class="badge badge-green">M30</span></td><td>7.0</td><td>TM-03</td><td class="mono">10:55</td><td><span class="badge badge-green">Poured</span></td><td style="color:var(--green-text);font-weight:700">✓ Signed</td></tr>
+          <tr><td class="mono">DO-1041</td><td>Tata Projects</td><td>Tata Campus</td><td><span class="badge badge-yellow">M20</span></td><td>5.0</td><td>TM-05</td><td class="mono">10:30</td><td><span class="badge badge-green">Poured</span></td><td style="color:var(--green-text);font-weight:700">✓ Signed</td></tr>
+          <tr><td class="mono">DO-1040</td><td>Infra Corp</td><td>Ring Road</td><td><span class="badge badge-purple">M35</span></td><td>8.0</td><td>PP-01</td><td class="mono">09:38</td><td><span class="badge badge-purple">Pumping</span></td><td style="color:var(--muted)">Pending</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     REPORTS
+════════════════════════════════════════════ -->
+<div class="page" id="page-reports">
+  <div class="page-header">
+    <div><div class="page-title">Reports 📊</div><div class="page-sub">Generate, export and share all reports</div></div>
+  </div>
+  <div class="grid-3">
+    <div class="report-card" onclick="openModal('report-modal')"><span class="report-icon">📄</span><div class="report-name">Daily Activity Report</div><div class="report-desc">Full plant summary PDF</div><button class="btn btn-green" style="width:100%">Generate</button></div>
+    <div class="report-card"><span class="report-icon">🚛</span><div class="report-name">Vehicle Report</div><div class="report-desc">Fleet trip & fuel summary</div><button class="btn btn-yellow" style="width:100%">Generate</button></div>
+    <div class="report-card"><span class="report-icon">⚡</span><div class="report-name">Electricity Report</div><div class="report-desc">EB + DG consumption log</div><button class="btn btn-purple" style="width:100%">Generate</button></div>
+    <div class="report-card"><span class="report-icon">🧪</span><div class="report-name">QC Report</div><div class="report-desc">Cube tests & pass rates</div><button class="btn btn-green" style="width:100%">Generate</button></div>
+    <div class="report-card"><span class="report-icon">📦</span><div class="report-name">Material Report</div><div class="report-desc">Stock & consumption log</div><button class="btn btn-yellow" style="width:100%">Generate</button></div>
+    <div class="report-card"><span class="report-icon">📊</span><div class="report-name">Monthly Summary</div><div class="report-desc">KPI trends & analytics</div><button class="btn btn-purple" style="width:100%">Generate</button></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     SETTINGS
+════════════════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="page-header">
+    <div><div class="page-title">Settings ⚙️</div><div class="page-sub">Plant configuration, users & alert thresholds</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="panel panel-green">
+      <div class="panel-title" style="margin-bottom:16px">🏭 Plant Information</div>
+      <div class="form-group"><label class="form-label">Plant Name</label><input class="form-control" value="RMC Plant – Bangalore North"></div>
+      <div class="form-group"><label class="form-label">Location</label><input class="form-control" value="Yelahanka, Bangalore – 560064"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Capacity (m³/hr)</label><input class="form-control" value="60" type="number"></div>
+        <div class="form-group"><label class="form-label">Daily Target (m³)</label><input class="form-control" value="480" type="number"></div>
+      </div>
+      <button class="btn btn-green" style="margin-top:4px">💾 Save Settings</button>
+    </div>
+    <div class="panel panel-yellow">
+      <div class="panel-title" style="margin-bottom:16px">🔔 Alert Thresholds</div>
+      <div class="form-group"><label class="form-label">Fly Ash Min Stock (MT)</label><input class="form-control" value="15" type="number"></div>
+      <div class="form-group"><label class="form-label">Cement Min Stock (MT)</label><input class="form-control" value="30" type="number"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Max Slump (mm)</label><input class="form-control" value="150" type="number"></div>
+        <div class="form-group"><label class="form-label">Max Temp (°C)</label><input class="form-control" value="35" type="number"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Alert Channel</label>
+        <select class="form-control"><option>Push Notification</option><option>WhatsApp</option><option>Email</option></select>
+      </div>
+      <button class="btn btn-yellow" style="margin-top:4px">💾 Save Thresholds</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- ═══════════ BOTTOM NAV ═══════════ -->
+<nav class="bottom-nav">
+  <div class="bn-item active" onclick="showPage('dashboard',this)"><div class="bn-icon">🏠</div>Home</div>
+  <div class="bn-item" onclick="showPage('production',this)"><div class="bn-icon">🏗️</div>Batch</div>
+  <div class="bn-item" onclick="showPage('vehicles',this)"><div class="bn-icon">🚛</div>Fleet</div>
+  <div class="bn-item" onclick="showPage('electricity',this)"><div class="bn-icon">⚡</div>Power</div>
+  <div class="bn-item" onclick="showPage('reports',this)"><div class="bn-icon">📊</div>Reports</div>
+</nav>
+
+<!-- ═══════════ MODAL: New Batch ═══════════ -->
+<div class="modal-bg" id="batch-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🏗️ New Batch Entry</div>
+      <button class="modal-close" onclick="closeModal('batch-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Batch Number</label><input class="form-control" value="#189" readonly style="background:var(--green-light);color:var(--green-text);font-weight:700"></div>
+      <div class="form-group"><label class="form-label">Date & Time</label><input class="form-control" type="datetime-local"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Mix Grade</label><select class="form-control"><option>M20</option><option>M25</option><option selected>M30</option><option>M35</option><option>M40</option></select></div>
+      <div class="form-group"><label class="form-label">Volume (m³)</label><input class="form-control" type="number" value="7.0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Slump (mm)</label><input class="form-control" type="number" placeholder="e.g. 120"></div>
+      <div class="form-group"><label class="form-label">Concrete Temp (°C)</label><input class="form-control" type="number" placeholder="e.g. 30"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Transit Mixer</label><select class="form-control"><option>TM-01</option><option>TM-02</option><option>TM-03</option><option>TM-05</option></select></div>
+      <div class="form-group"><label class="form-label">Delivery Site</label><input class="form-control" placeholder="Site name"></div>
+    </div>
+    <div class="form-group"><label class="form-label">W/C Ratio</label><input class="form-control" type="number" value="0.45" step="0.01"></div>
+    <div class="form-group"><label class="form-label">Remarks</label><input class="form-control" placeholder="Any observations…"></div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-green" style="flex:1" onclick="closeModal('batch-modal')">✅ Save Batch</button>
+      <button class="btn btn-ghost" onclick="closeModal('batch-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: Alerts ═══════════ -->
+<div class="modal-bg" id="alert-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🔔 Notifications</div>
+      <button class="modal-close" onclick="closeModal('alert-modal')">✕</button>
+    </div>
+    <div class="alert alert-err">🔧 <div><strong>TM-04 Breakdown</strong><br>Drum vibration · Driver Raju · 09:45 AM · Mechanic dispatched</div></div>
+    <div class="alert alert-warn">📦 <div><strong>Fly Ash Low Stock</strong><br>12 MT remaining — below minimum 15 MT. Raise PO urgently.</div></div>
+    <div class="alert alert-ok">✅ <div><strong>QC Test Passed</strong><br>M30 Batch #184 · 32.4 N/mm² · Priya · 08:30 AM</div></div>
+    <div class="alert alert-purple">⚡ <div><strong>EB Power Restored</strong><br>Grid back after 18 min outage · DG auto-stopped · 07:30 AM</div></div>
+    <button class="btn btn-green" style="width:100%;margin-top:10px" onclick="closeModal('alert-modal')">✓ Mark All as Read</button>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: Daily Report ═══════════ -->
+<div class="modal-bg" id="report-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">📄 Generate Daily Report</div>
+      <button class="modal-close" onclick="closeModal('report-modal')">✕</button>
+    </div>
+    <div class="form-group"><label class="form-label">Report Date</label><input class="form-control" type="date"></div>
+    <div class="form-group"><label class="form-label">Shift</label>
+      <select class="form-control"><option>Morning (6AM–2PM)</option><option>Afternoon (2PM–10PM)</option><option>Night (10PM–6AM)</option><option>Full Day</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Include Sections</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" checked> Production</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" checked> Materials</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" checked> Vehicles</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" checked> QC Tests</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" checked> Electricity</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" checked> Manpower</label>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Export Format</label>
+      <select class="form-control"><option>PDF</option><option>Excel (.xlsx)</option><option>WhatsApp Share</option><option>Email</option></select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn btn-green" style="flex:1" onclick="closeModal('report-modal')">📄 Generate Report</button>
+      <button class="btn btn-ghost" onclick="closeModal('report-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ INSTALL BANNER ═══════════ -->
+<div id="install-banner">
+  <span style="font-size:24px">📱</span>
+  <div style="flex:1"><strong style="font-family:var(--font-head)">Install RMC Pro</strong><br>
+  <span style="color:var(--muted);font-size:11px">Add to home screen for quick access</span></div>
+  <button id="install-btn" class="btn btn-green" style="padding:7px 14px;font-size:12px">Install</button>
+  <button id="install-dismiss" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">✕</button>
+</div>
+
+<script>
+// ── LIVE CLOCK ──────────────────────────────────
+function tick() {
+  document.getElementById('live-clock').textContent =
+    new Date().toLocaleTimeString('en-IN', { hour12: false });
+}
+setInterval(tick, 1000); tick();
+
+// ── PAGE NAV ─────────────────────────────────────
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+
+  document.querySelectorAll('.sidebar .nav-item').forEach(i => i.classList.remove('active'));
+  if (el?.classList?.contains('nav-item')) el.classList.add('active');
+
+  document.querySelectorAll('.bn-item').forEach(i => i.classList.remove('active'));
+  if (el?.classList?.contains('bn-item')) el.classList.add('active');
+
+  document.getElementById('sidebar').classList.remove('open');
+  window.scrollTo(0, 0);
+
+  // animate bars on show
+  animateBars();
+}
+
+// ── SIDEBAR MOBILE ───────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ── MODALS ───────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(bg =>
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); })
+);
+
+// ── CHIP TABS ────────────────────────────────────
+document.querySelectorAll('.chip-tabs').forEach(g =>
+  g.querySelectorAll('.chip').forEach(c =>
+    c.addEventListener('click', () => {
+      g.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+    })
+  )
+);
+
+// ── ANIMATE BARS ─────────────────────────────────
+function animateBars() {
+  document.querySelectorAll('.page.active .bar:not(.bar-ghost)').forEach(b => {
+    const h = b.style.height;
+    b.style.height = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.height = h; }));
+  });
+  document.querySelectorAll('.page.active .prog-fill, .page.active .kpi-bar-fill, .page.active .progress-fill').forEach(b => {
+    const w = b.style.width;
+    b.style.width = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.width = w; }));
+  });
+}
+
+// ── RESPONSIVE MENU TOGGLE ───────────────────────
+function checkMobile() {
+  const t = document.getElementById('menu-toggle');
+  t.style.display = window.innerWidth <= 900 ? 'block' : 'none';
+}
+window.addEventListener('resize', checkMobile); checkMobile();
+
+// ── PWA INSTALL ──────────────────────────────────
+let deferredPrompt;
+const banner = document.getElementById('install-banner');
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredPrompt = e;
+  banner.style.display = 'flex';
+});
+document.getElementById('install-btn')?.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null; banner.style.display = 'none';
+});
+document.getElementById('install-dismiss')?.addEventListener('click', () => {
+  banner.style.display = 'none';
+});
+window.addEventListener('appinstalled', () => { banner.style.display = 'none'; });
+
+// ── SERVICE WORKER ───────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(r => { console.log('[PWA] SW registered:', r.scope); setInterval(() => r.update(), 60000); })
+      .catch(e => console.error('[PWA] SW failed:', e));
+  });
+}
+
+// ── INITIAL ANIMATION ────────────────────────────
+window.addEventListener('load', () => setTimeout(animateBars, 200));
+</script>
+</body>
+</html>

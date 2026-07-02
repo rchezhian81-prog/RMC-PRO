@@ -1,6 +1,8 @@
 # RMC Plant SaaS Software
 ## Design Stage Document 6: Database Entity Design
 
+**Version:** 6.1 — refined with consistency updates before API design. The final section **"Doc 6.1 Consistency Refinements Before API Design"** adds multi-grade orders (`order_items`), rate contracts (`rate_contracts` / `rate_contract_items`), a revised `invoice_items`, and supporting masters (`uoms`, `hsn_tax_rates`, `transporters`, `banks`, `payment_modes`). Where that section revises an earlier table, the Doc 6.1 definition is authoritative.
+
 ## 1. Purpose of This Document
 
 This document defines the database entity design for the RMC Plant SaaS software.
@@ -2559,6 +2561,11 @@ Phase 1 must include these tables:
 - mix_design_materials
 - vehicles
 - drivers
+- uoms
+- hsn_tax_rates
+- transporters
+- banks
+- payment_modes
 
 ## Sales and Orders
 
@@ -2566,7 +2573,10 @@ Phase 1 must include these tables:
 - quotations
 - quotation_items
 - quotation_revisions
+- rate_contracts
+- rate_contract_items
 - orders
+- order_items
 - credit_hold_requests
 - order_status_history
 
@@ -2837,6 +2847,280 @@ This database design is accepted when:
 20. Language/translation tables are defined.
 21. Phase 1 required tables are clearly listed.
 22. Future phase tables are noted.
+
+---
+
+# Doc 6.1 Consistency Refinements Before API Design
+
+This section refines the Phase-1 schema based on the pre-API-design review. It adds multi-grade order support, rate contracts, richer invoice lines, and supporting master tables. Where a table here revises an earlier definition, **the Doc 6.1 version is authoritative**. All tables added in this section are **Phase-1 required**.
+
+---
+
+## R1. Multi-Grade Orders — `orders` (header) + `order_items` (new)
+
+### R1.1 `orders` (revised — now a header)
+
+`orders` becomes an order header. Grade-level detail moves to `order_items`. Pricing-source references are added and are nullable.
+
+Added / changed fields:
+
+```text
+quotation_id            -- nullable (pricing source: quotation)
+rate_contract_id        -- nullable (pricing source: rate contract)   [NEW]
+pricing_source          -- quotation | rate_contract | manual         [NEW]
+```
+
+Phase-1 note:
+
+- The database and API must support **multiple order items from day one**.
+- The Phase-1 UI may still allow **one grade per order** for simplicity.
+- `grade_id` and `quantity_m3` may remain on `orders` only as a denormalized "primary grade / total quantity" summary; `order_items` is the authoritative source.
+- Every order price must be traceable to `quotation_id`, `rate_contract_id`, or a **manual approved rate** (via `quotation_discount` approval).
+
+### R1.2 `order_items` (new)
+
+Purpose: grade-wise / load-wise lines for an order.
+
+```text
+id
+tenant_id
+order_id
+grade_id
+mix_design_id
+quantity_m3
+rate
+slump_required
+pump_required
+required_datetime            -- per-item delivery schedule
+delivery_interval_minutes
+line_status
+remarks
+created_at
+updated_at
+```
+
+Line status:
+
+```text
+pending
+scheduled
+in_production
+dispatched
+completed
+cancelled
+```
+
+---
+
+## R2. Rate Contracts — `rate_contracts` (new) + `rate_contract_items` (new)
+
+Rate contracts capture project/customer-specific negotiated rates. Orders may reference a rate contract instead of (or in addition to) a quotation.
+
+### R2.1 `rate_contracts` (new)
+
+```text
+id
+tenant_id
+rate_contract_no
+customer_id
+site_id                 -- nullable (customer-level or site/project-level contract)
+valid_from
+valid_to
+transport_terms
+pump_terms
+payment_terms
+approval_status
+approved_by
+approved_at
+status
+remarks
+created_at
+updated_at
+```
+
+Approval / status values:
+
+```text
+approval_status: draft | pending_approval | approved | rejected
+status: active | expired | cancelled
+```
+
+### R2.2 `rate_contract_items` (new)
+
+```text
+id
+tenant_id
+rate_contract_id
+grade_id
+rate_per_m3
+transport_charge
+pump_charge
+waiting_charge
+gst_applicable
+remarks
+created_at
+updated_at
+```
+
+---
+
+## R3. `invoice_items` (revised — supersedes §13.2)
+
+An invoice may include concrete supply (goods, HSN) and services such as pumping / transport / waiting (SAC), each with different tax treatment and cess. The revised line supports mixed HSN/SAC and cess.
+
+```text
+id
+tenant_id
+invoice_id
+challan_id              -- nullable (service lines may not map to a challan)
+item_type              -- concrete | pumping | transport | waiting | other   [NEW]
+grade_id               -- nullable (null for service lines)
+description
+hsn_sac                -- HSN for goods, SAC for services                    [NEW]
+uom                                                                          [NEW]
+quantity               -- generalized (m³, hour, trip, etc.)
+rate
+taxable_amount
+tax_rate               -- combined GST rate %                                [NEW]
+cgst_rate
+cgst_amount
+sgst_rate
+sgst_amount
+igst_rate
+igst_amount
+cess_rate                                                                    [NEW]
+cess_amount                                                                  [NEW]
+line_total
+created_at
+updated_at
+```
+
+Notes:
+
+- `quantity` generalizes the earlier `quantity_m3` (a pumping line may be billed per hour/trip, not per m³).
+- `item_type` + `hsn_sac` let one invoice carry concrete (HSN 3824 50 10) and pumping/transport service (SAC 9954…) lines together.
+
+---
+
+## R4. Supporting Master Tables (new)
+
+Simple in Phase 1, but present so e-way bill, GST, payment, and Tally integration stay clean later.
+
+### R4.1 `uoms`
+
+```text
+id
+tenant_id
+uom_code
+uom_name
+decimal_precision
+is_active
+created_at
+updated_at
+```
+
+Examples: `m3, kg, ton, bag, ltr, hour, trip, nos`
+
+### R4.2 `hsn_tax_rates`
+
+```text
+id
+tenant_id
+code                   -- HSN or SAC code
+code_type              -- hsn | sac
+description
+gst_rate
+cess_rate
+effective_from
+is_active
+created_at
+updated_at
+```
+
+Examples: `HSN 38245010` (RMC, 18%), `SAC 995454` (construction / pumping service)
+
+### R4.3 `transporters`
+
+```text
+id
+tenant_id
+transporter_name
+transporter_gstin
+transporter_id_govt    -- GST transporter ID (TRANSIN) for e-way bill
+contact_person
+mobile
+address
+state
+is_active
+created_at
+updated_at
+```
+
+### R4.4 `banks`
+
+```text
+id
+tenant_id
+company_id
+bank_name
+account_name
+account_no
+ifsc
+branch
+is_default
+is_active
+created_at
+updated_at
+```
+
+### R4.5 `payment_modes`
+
+```text
+id
+tenant_id
+mode_code
+mode_name              -- Cash | Cheque | NEFT | RTGS | UPI | Card | Adjustment
+requires_reference
+is_active
+created_at
+updated_at
+```
+
+---
+
+## R5. Phase 1 Inclusion
+
+All Doc 6.1 tables are Phase-1 required and are added to the Section 21 list:
+
+```text
+order_items
+rate_contracts
+rate_contract_items
+uoms
+hsn_tax_rates
+transporters
+banks
+payment_modes
+```
+
+The revised `invoice_items` columns (`item_type`, `hsn_sac`, `uom`, `tax_rate`, `cess_rate`, `cess_amount`) are Phase-1.
+
+---
+
+## R6. Additional Indexes and Constraints
+
+```text
+order_items          : index (tenant_id + order_id); FK grade_id, mix_design_id
+rate_contracts       : unique (tenant_id + rate_contract_no); index (tenant_id + customer_id)
+rate_contract_items  : index (tenant_id + rate_contract_id)
+invoice_items        : index (tenant_id + invoice_id); index (tenant_id + hsn_sac) for GST reports
+uoms                 : unique (tenant_id + uom_code)
+hsn_tax_rates        : unique (tenant_id + code + code_type)
+transporters         : index (tenant_id + transporter_id_govt)
+payment_modes        : unique (tenant_id + mode_code)
+banks                : index (tenant_id + company_id)
+orders               : add nullable FK rate_contract_id
+```
 
 ---
 

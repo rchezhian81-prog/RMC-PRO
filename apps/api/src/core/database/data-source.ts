@@ -6,6 +6,7 @@ import { Platform1720000001000 } from './migrations/1720000001000-Platform';
 import { Masters1720000002000 } from './migrations/1720000002000-Masters';
 import { Sales1720000003000 } from './migrations/1720000003000-Sales';
 import { Orders1720000004000 } from './migrations/1720000004000-Orders';
+import { Production1720000005000 } from './migrations/1720000005000-Production';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -27,6 +28,7 @@ export const AppDataSource = new DataSource({
     Masters1720000002000,
     Sales1720000003000,
     Orders1720000004000,
+    Production1720000005000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

@@ -47,6 +47,17 @@ const GROUPS = [
       { href: '/app/credit-holds', label: 'Credit Holds' },
     ],
   },
+  {
+    title: 'Production',
+    items: [
+      { href: '/app/production/mix-designs', label: 'Mix Designs' },
+      { href: '/app/production/plans', label: 'Production Plans' },
+      { href: '/app/production/batch-queue', label: 'Batch Queue' },
+      { href: '/app/production/batch-tickets', label: 'Batch Tickets' },
+      { href: '/app/production/stock', label: 'Stock' },
+      { href: '/app/production/reports', label: 'Prod. Reports' },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

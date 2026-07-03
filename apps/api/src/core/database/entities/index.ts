@@ -7,4 +7,7 @@ export * from './masters.entities';
 export * from './sales.entities';
 export * from './orders.entities';
 export * from './credit.entities';
+export * from './mixdesign.entities';
+export * from './production.entities';
+export * from './inventory.entities';
 export * from './notification.entities';

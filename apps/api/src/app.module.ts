@@ -11,6 +11,7 @@ import { SetupModule } from './setup/setup.module';
 import { MastersModule } from './masters/masters.module';
 import { SalesModule } from './sales/sales.module';
 import { OrdersModule } from './orders/orders.module';
+import { ProductionModule } from './production/production.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -29,6 +30,7 @@ import { DemoModule } from './demo/demo.module';
     MastersModule,
     SalesModule,
     OrdersModule,
+    ProductionModule,
     PlantsModule,
     DemoModule,
   ],

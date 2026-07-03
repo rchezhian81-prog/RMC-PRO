@@ -211,6 +211,52 @@ export const creditHoldsApi = {
   reject: (id: string, note: string) => post(`/credit-holds/${id}/reject`, { note }),
 };
 
+// ---- Production & batching (Sprint 6) ----
+export const mixDesignsApi = {
+  list: () => apiFetch<Row[]>('/mix-designs'),
+  get: (id: string) => apiFetch<Row>(`/mix-designs/${id}`),
+  create: (b: Record<string, unknown>) => post('/mix-designs', b),
+  addMaterial: (id: string, b: Record<string, unknown>) => post(`/mix-designs/${id}/materials`, b),
+  deleteMaterial: (id: string, rowId: string) =>
+    apiFetch<Row>(`/mix-designs/${id}/materials/${rowId}`, { method: 'DELETE' }),
+  approve: (id: string) => post(`/mix-designs/${id}/approve`),
+  reject: (id: string) => post(`/mix-designs/${id}/reject`),
+};
+
+export const productionPlansApi = {
+  list: () => apiFetch<Row[]>('/production-plans'),
+  get: (id: string) => apiFetch<Row>(`/production-plans/${id}`),
+  create: (b: Record<string, unknown>) => post('/production-plans', b),
+  addItem: (id: string, b: Record<string, unknown>) => post(`/production-plans/${id}/items`, b),
+  enqueue: (id: string) => post(`/production-plans/${id}/enqueue`),
+};
+
+export const batchQueueApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/batch-queue${status ? `?status=${status}` : ''}`),
+  enqueueFromOrder: (orderId: string) => post(`/batch-queue/from-order/${orderId}`),
+};
+
+export const batchTicketsApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/batch-tickets${status ? `?status=${status}` : ''}`),
+  get: (id: string) => apiFetch<Row>(`/batch-tickets/${id}`),
+  createFromQueue: (queueId: string, b: Record<string, unknown>) => post(`/batch-tickets/from-queue/${queueId}`, b),
+  updateActuals: (id: string, materials: Record<string, unknown>[]) => post(`/batch-tickets/${id}/actuals`, { materials }),
+  confirm: (id: string, overrideVariance?: boolean) => post(`/batch-tickets/${id}/confirm`, { overrideVariance }),
+  cancel: (id: string) => post(`/batch-tickets/${id}/cancel`),
+};
+
+export const stockApi = {
+  balances: () => apiFetch<Row[]>('/stock/balances'),
+  ledger: (materialId?: string) => apiFetch<Row[]>(`/stock/ledger${materialId ? `?materialId=${materialId}` : ''}`),
+  setOpening: (b: Record<string, unknown>) => post('/stock/opening', b),
+};
+
+export const productionReportsApi = {
+  summary: () => apiFetch<{ byGrade: Row[]; totals: Row }>('/production-reports/summary'),
+  variance: () => apiFetch<Row[]>('/production-reports/variance'),
+  consumption: () => apiFetch<Row[]>('/production-reports/material-consumption'),
+};
+
 /** Fetch the quotation PDF as a blob (auth header required) and open it. */
 export async function openQuotationPdf(id: string): Promise<void> {
   const token = getSession()?.token;

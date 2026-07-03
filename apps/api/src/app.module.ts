@@ -1,13 +1,25 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { DatabaseModule } from './core/database/database.module';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
+import { PlantsModule } from './plants/plants.module';
 
 /**
- * Root application module.
- *
- * Phase-1 build sequence (Design Doc / DEV-PLAN §5): tenancy → auth → rbac →
- * platform → tenant-setup → masters → ... modules are added here as they land.
+ * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
+ * (RLS) → auth → domain modules. Business modules are added here as they land.
  */
 @Module({
-  imports: [HealthModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env', '.env'] }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    DatabaseModule,
+    HealthModule,
+    AuthModule,
+    PlantsModule,
+  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

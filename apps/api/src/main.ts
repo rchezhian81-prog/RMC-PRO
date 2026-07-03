@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
@@ -8,6 +9,7 @@ async function bootstrap() {
 
   // Versioned API base path (Design Doc 7 §2.2); health stays unprefixed.
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.enableCors();
 

@@ -44,6 +44,20 @@ export interface ChallanPdfData {
   receiverName?: string | null;
 }
 
+export interface WeighbridgePdfData {
+  companyName: string;
+  slipNo: string;
+  entryDatetime?: string | null;
+  vehicleNo?: string | null;
+  supplierName?: string | null;
+  materialLabel?: string | null;
+  grossWeight: string | number;
+  tareWeight: string | number;
+  netWeight: string | number;
+  supplierChallanNo?: string | null;
+  status: string;
+}
+
 const money = (v: string | number): string =>
   Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -225,6 +239,61 @@ export class PdfService {
 
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text('System-generated delivery challan.', { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /** Weighbridge slip PDF (Design Doc 6 §12.4) — pdfkit. */
+  weighbridgePdf(data: WeighbridgePdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 44 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      doc.fontSize(18).font('Helvetica-Bold').text(data.companyName);
+      doc.moveDown(0.3);
+      doc.fontSize(15).font('Helvetica-Bold').text('WEIGHBRIDGE SLIP', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`Slip No: ${data.slipNo}`, { align: 'right' });
+      doc.text(`Status: ${data.status}`, { align: 'right' });
+      if (data.entryDatetime) doc.text(`Date/time: ${data.entryDatetime}`, { align: 'right' });
+
+      doc.moveDown(0.6);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.6);
+
+      const row = (label: string, value: string) => {
+        doc.font('Helvetica-Bold').fontSize(10).text(`${label}: `, { continued: true });
+        doc.font('Helvetica').text(value || '-');
+      };
+      row('Vehicle', data.vehicleNo ?? '-');
+      row('Supplier', data.supplierName ?? '-');
+      row('Material', data.materialLabel ?? '-');
+      row('Supplier challan', data.supplierChallanNo ?? '-');
+      doc.moveDown(0.6);
+
+      const weights: Array<[string, string]> = [
+        ['Gross weight', money(data.grossWeight)],
+        ['Tare weight', money(data.tareWeight)],
+        ['Net weight', money(data.netWeight)],
+      ];
+      let y = doc.y;
+      for (const [k, v] of weights) {
+        const bold = k === 'Net weight';
+        doc.rect(left, y - 2, right - left, 24).fill(bold ? '#eef1f6' : '#f8f9fc').fillColor('#000');
+        doc.font('Helvetica-Bold').fontSize(bold ? 12 : 10).text(k, left + 6, y + 4, { width: 200 });
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').text(v, left + 220, y + 4);
+        y += 26;
+      }
+
+      doc.y = y + 24;
+      doc.x = left;
+      doc.fontSize(8).fillColor('#777').text('System-generated weighbridge slip (manual entry).', { align: 'center' });
       doc.end();
     });
   }

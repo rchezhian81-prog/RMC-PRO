@@ -78,15 +78,46 @@ export class StockService {
     referenceId: string,
     userId: string | null,
   ): Promise<number> {
-    const bal = await this.upsertBalance(m, tenantId, plantId, materialId, materialLabel, uom, -quantity, false);
-    const balanceAfter = num(bal.currentQuantity);
-    await this.writeTxn(m, tenantId, {
-      plantId, materialId, materialLabel,
-      transactionType: balanceAfter < 0 ? 'negative_stock' : 'batch_consumption',
-      inQuantity: 0, outQuantity: quantity, balanceAfter,
+    const balanceAfter = await this.applyDeltaWithin(m, tenantId, {
+      plantId, materialId, materialLabel, uom, delta: -quantity,
       referenceType: 'batch_ticket', referenceId, remarks: 'Batch consumption', createdBy: userId,
     });
     return balanceAfter;
+  }
+
+  /**
+   * Apply a signed delta to a material balance (positive = in, negative = out)
+   * and write the matching ledger row. `txnType` overrides the auto type
+   * (in→'inward', out→'batch_consumption' unless the result is negative). Shared
+   * by batch consumption, material inward and stock adjustment.
+   */
+  async applyDeltaWithin(
+    m: EntityManager,
+    tenantId: string,
+    p: {
+      plantId: string | null; materialId: string; materialLabel: string | null; uom: string | null;
+      delta: number; txnType?: string; referenceType: string | null; referenceId: string | null;
+      remarks: string | null; createdBy: string | null;
+    },
+  ): Promise<number> {
+    const bal = await this.upsertBalance(m, tenantId, p.plantId, p.materialId, p.materialLabel, p.uom, p.delta, false);
+    const balanceAfter = num(bal.currentQuantity);
+    const auto = p.delta >= 0 ? 'inward' : balanceAfter < 0 ? 'negative_stock' : 'batch_consumption';
+    await this.writeTxn(m, tenantId, {
+      plantId: p.plantId, materialId: p.materialId, materialLabel: p.materialLabel,
+      transactionType: p.txnType ?? auto,
+      inQuantity: p.delta > 0 ? p.delta : 0,
+      outQuantity: p.delta < 0 ? -p.delta : 0,
+      balanceAfter, referenceType: p.referenceType, referenceId: p.referenceId,
+      remarks: p.remarks, createdBy: p.createdBy,
+    });
+    return balanceAfter;
+  }
+
+  /** Current balance for a material at a plant (0 if none). */
+  async balanceOf(m: EntityManager, plantId: string | null, materialId: string): Promise<number> {
+    const bal = await m.getRepository(StockBalance).findOne({ where: { plantId: plantId ?? IsNull(), materialId } });
+    return num(bal?.currentQuantity);
   }
 
   private async upsertBalance(

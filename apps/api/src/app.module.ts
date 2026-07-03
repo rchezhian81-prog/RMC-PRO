@@ -13,6 +13,7 @@ import { SalesModule } from './sales/sales.module';
 import { OrdersModule } from './orders/orders.module';
 import { ProductionModule } from './production/production.module';
 import { DispatchModule } from './dispatch/dispatch.module';
+import { InventoryModule } from './inventory/inventory.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -33,6 +34,7 @@ import { DemoModule } from './demo/demo.module';
     OrdersModule,
     ProductionModule,
     DispatchModule,
+    InventoryModule,
     PlantsModule,
     DemoModule,
   ],

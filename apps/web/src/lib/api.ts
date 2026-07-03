@@ -275,6 +275,38 @@ export const challansApi = {
   share: (id: string, mobile: string) => post(`/delivery-challans/${id}/share`, { mobile }),
 };
 
+// ---- Inventory & weighbridge (Sprint 8) ----
+export const materialInwardApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/material-inwards${status ? `?status=${status}` : ''}`),
+  create: (b: Record<string, unknown>) => post('/material-inwards', b),
+  post: (id: string) => post(`/material-inwards/${id}/post`),
+  cancel: (id: string) => post(`/material-inwards/${id}/cancel`),
+};
+
+export const weighbridgeApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/weighbridge${status ? `?status=${status}` : ''}`),
+  create: (b: Record<string, unknown>) => post('/weighbridge', b),
+  toInward: (id: string, rate: number) => post(`/weighbridge/${id}/to-inward`, { rate }),
+  setStatus: (id: string, status: string) => post(`/weighbridge/${id}/status`, { status }),
+};
+
+export const stockAdjustApi = {
+  adjust: (b: Record<string, unknown>) => post('/stock-adjustments', b),
+};
+
+export const negativeStockApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/negative-stock-requests${status ? `?status=${status}` : ''}`),
+  approve: (id: string, remarks: string) => post(`/negative-stock-requests/${id}/approve`, { remarks }),
+  reject: (id: string, remarks: string) => post(`/negative-stock-requests/${id}/reject`, { remarks }),
+};
+
+export const inventoryReportsApi = {
+  lowStock: () => apiFetch<Row[]>('/inventory-reports/low-stock'),
+  negativeStock: () => apiFetch<Row[]>('/inventory-reports/negative-stock'),
+  valuation: () => apiFetch<{ rows: Row[]; total: number }>('/inventory-reports/valuation'),
+  movement: () => apiFetch<Row[]>('/inventory-reports/movement'),
+};
+
 /** Fetch a PDF as a blob (auth header required) and open it in a new tab. */
 export async function openPdf(path: string): Promise<void> {
   const token = getSession()?.token;

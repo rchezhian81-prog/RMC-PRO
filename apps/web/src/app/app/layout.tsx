@@ -65,6 +65,16 @@ const GROUPS = [
       { href: '/app/dispatch/challans', label: 'Delivery Challans' },
     ],
   },
+  {
+    title: 'Inventory',
+    items: [
+      { href: '/app/inventory/inward', label: 'Material Inward' },
+      { href: '/app/inventory/weighbridge', label: 'Weighbridge' },
+      { href: '/app/inventory/adjustments', label: 'Stock Adjustments' },
+      { href: '/app/inventory/negative-stock', label: 'Negative Stock' },
+      { href: '/app/inventory/reports', label: 'Inventory Reports' },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

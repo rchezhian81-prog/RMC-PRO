@@ -343,6 +343,23 @@ export async function downloadTallyCsv(): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+// ---- Dashboard, reports center, sync (Sprint 10) ----
+export const dashboardApi = {
+  summary: () => apiFetch<Row>('/dashboard/summary'),
+  funnel: () => apiFetch<Row>('/dashboard/operations-funnel'),
+};
+
+export const reportsCatalogApi = {
+  catalog: () => apiFetch<{ groups: { module: string; reports: { key: string; name: string; path: string }[] }[] }>('/reports/catalog'),
+};
+
+export const syncApi = {
+  devices: () => apiFetch<Row[]>('/sync/devices'),
+  reservations: () => apiFetch<Row[]>('/sync/number-reservations'),
+  conflicts: (status?: string) => apiFetch<Row[]>(`/sync/conflicts${status ? `?status=${status}` : ''}`),
+  resolveConflict: (id: string, resolution: string) => post(`/sync/conflicts/${id}/resolve`, { resolution }),
+};
+
 /** Fetch a PDF as a blob (auth header required) and open it in a new tab. */
 export async function openPdf(path: string): Promise<void> {
   const token = getSession()?.token;

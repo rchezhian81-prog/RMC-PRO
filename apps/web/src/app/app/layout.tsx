@@ -9,6 +9,12 @@ import { ghostButton } from '../../lib/ui';
 
 const GROUPS = [
   {
+    title: 'Overview',
+    items: [
+      { href: '/app/dashboard', label: 'Dashboard' },
+    ],
+  },
+  {
     title: 'Setup',
     items: [
       { href: '/app/company', label: 'Company' },
@@ -82,6 +88,13 @@ const GROUPS = [
       { href: '/app/billing/receipts', label: 'Receipts' },
       { href: '/app/billing/outstanding', label: 'Outstanding' },
       { href: '/app/billing/reports', label: 'Billing Reports' },
+    ],
+  },
+  {
+    title: 'Control',
+    items: [
+      { href: '/app/reports', label: 'Reports Center' },
+      { href: '/app/devices', label: 'Devices & Sync' },
     ],
   },
 ];

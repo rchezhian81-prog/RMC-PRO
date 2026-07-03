@@ -52,6 +52,9 @@ import {
   InvoiceChallan,
   Payment,
   PaymentAllocation,
+  Device,
+  LocalNumberReservation,
+  SyncConflict,
   NotificationLog,
 } from './entities';
 
@@ -110,5 +113,8 @@ export const ENTITIES = [
   InvoiceChallan,
   Payment,
   PaymentAllocation,
+  Device,
+  LocalNumberReservation,
+  SyncConflict,
   NotificationLog,
 ];

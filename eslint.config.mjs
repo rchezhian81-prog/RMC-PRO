@@ -13,6 +13,9 @@ export default tseslint.config(
       '**/coverage/**',
       '**/next-env.d.ts',
       'prototype/**',
+      // Standalone Electron/Node app — plain JS with its own runtime conventions
+      // (CJS preload, browser renderer). Not part of the TS lint surface.
+      'apps/plant-app/**',
     ],
   },
   js.configs.recommended,

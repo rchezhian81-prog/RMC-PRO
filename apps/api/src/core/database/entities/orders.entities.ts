@@ -2,14 +2,16 @@ import { Column, Entity, Unique } from 'typeorm';
 import { TenantScopedEntity } from './base.entity';
 
 /**
- * Sprint 4 — Order DRAFT entities only (Design Doc 6 §9.1, Doc 6.1 R1).
- * These exist purely as a sales→operations handoff. Confirmed-order workflow,
- * credit hold, production planning, dispatch, batching and billing are OUT OF
- * SCOPE for Sprint 4 and are introduced in later sprints. Orders created here
- * always start (and remain) in order_status = 'draft'.
+ * Order header (Design Doc 6 §9.1, Doc 6.1 R1).
+ * Sprint 4 introduced these as the sales→operations DRAFT handoff. Sprint 5
+ * (DEV-PLAN M6/B8) adds the confirmed-order lifecycle + credit control:
+ * draft → confirm → (credit ok) confirmed | (limit breach) credit_hold →
+ * approve → confirmed. Production planning, dispatch, batching, inventory and
+ * billing remain OUT OF SCOPE (later sprints).
+ *
+ * order_status:  draft | confirmed | credit_hold | cancelled
+ * credit_status: not_checked | approved | on_hold | rejected
  */
-
-/** Order header — draft handoff from sales (Doc 6 §9.1). */
 @Entity('orders')
 @Unique('uq_orders_no', ['tenantId', 'orderNo'])
 export class Order extends TenantScopedEntity {
@@ -26,6 +28,10 @@ export class Order extends TenantScopedEntity {
   @Column({ name: 'credit_status', type: 'varchar', default: 'not_checked' }) creditStatus!: string;
   @Column({ name: 'order_status', type: 'varchar', default: 'draft' }) orderStatus!: string;
   @Column({ name: 'special_instructions', type: 'text', nullable: true }) specialInstructions!: string | null;
+  // Sprint 5 lifecycle fields
+  @Column({ name: 'confirmed_by', type: 'uuid', nullable: true }) confirmedBy!: string | null;
+  @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true }) confirmedAt!: Date | null;
+  @Column({ name: 'cancelled_reason', type: 'varchar', nullable: true }) cancelledReason!: string | null;
 }
 
 /** Order line — grade-wise draft line (Doc 6 §9.1). */

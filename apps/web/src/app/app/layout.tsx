@@ -40,6 +40,13 @@ const GROUPS = [
       { href: '/app/sales/order-drafts', label: 'Order Drafts' },
     ],
   },
+  {
+    title: 'Orders',
+    items: [
+      { href: '/app/orders', label: 'Orders' },
+      { href: '/app/credit-holds', label: 'Credit Holds' },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

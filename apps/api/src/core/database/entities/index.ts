@@ -6,4 +6,5 @@ export * from './platform.entities';
 export * from './masters.entities';
 export * from './sales.entities';
 export * from './orders.entities';
+export * from './credit.entities';
 export * from './notification.entities';

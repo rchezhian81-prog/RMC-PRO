@@ -10,6 +10,7 @@ import { PlatformModule } from './platform/platform.module';
 import { SetupModule } from './setup/setup.module';
 import { MastersModule } from './masters/masters.module';
 import { SalesModule } from './sales/sales.module';
+import { OrdersModule } from './orders/orders.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -27,6 +28,7 @@ import { DemoModule } from './demo/demo.module';
     SetupModule,
     MastersModule,
     SalesModule,
+    OrdersModule,
     PlantsModule,
     DemoModule,
   ],

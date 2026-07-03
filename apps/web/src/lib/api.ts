@@ -196,6 +196,21 @@ export const orderDraftsApi = {
     post(`/order-drafts/from-rate-contract/${rateContractId}`, b),
 };
 
+// ---- Orders + credit control (Sprint 5) ----
+export const ordersApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/orders${status ? `?status=${status}` : ''}`),
+  get: (id: string) => apiFetch<Row>(`/orders/${id}`),
+  creditCheck: (id: string) => apiFetch<Row>(`/orders/${id}/credit-check`),
+  confirm: (id: string) => post(`/orders/${id}/confirm`),
+  cancel: (id: string, reason: string) => post(`/orders/${id}/cancel`, { reason }),
+};
+
+export const creditHoldsApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/credit-holds${status ? `?status=${status}` : ''}`),
+  approve: (id: string, note: string) => post(`/credit-holds/${id}/approve`, { note }),
+  reject: (id: string, note: string) => post(`/credit-holds/${id}/reject`, { note }),
+};
+
 /** Fetch the quotation PDF as a blob (auth header required) and open it. */
 export async function openQuotationPdf(id: string): Promise<void> {
   const token = getSession()?.token;

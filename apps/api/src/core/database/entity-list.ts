@@ -30,6 +30,8 @@ import {
   RateContractItem,
   Order,
   OrderItem,
+  CreditHoldRequest,
+  OrderStatusHistory,
   NotificationLog,
 } from './entities';
 
@@ -66,5 +68,7 @@ export const ENTITIES = [
   RateContractItem,
   Order,
   OrderItem,
+  CreditHoldRequest,
+  OrderStatusHistory,
   NotificationLog,
 ];

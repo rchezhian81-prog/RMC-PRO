@@ -4,3 +4,6 @@ export * from './setup.entities';
 export * from './iam.entities';
 export * from './platform.entities';
 export * from './masters.entities';
+export * from './sales.entities';
+export * from './orders.entities';
+export * from './notification.entities';

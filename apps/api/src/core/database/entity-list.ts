@@ -21,6 +21,16 @@ import {
   Vehicle,
   Driver,
   ConcreteGrade,
+  Lead,
+  LeadFollowup,
+  Quotation,
+  QuotationItem,
+  QuotationRevision,
+  RateContract,
+  RateContractItem,
+  Order,
+  OrderItem,
+  NotificationLog,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -47,4 +57,14 @@ export const ENTITIES = [
   Vehicle,
   Driver,
   ConcreteGrade,
+  Lead,
+  LeadFollowup,
+  Quotation,
+  QuotationItem,
+  QuotationRevision,
+  RateContract,
+  RateContractItem,
+  Order,
+  OrderItem,
+  NotificationLog,
 ];

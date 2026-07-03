@@ -4,6 +4,7 @@ import { ENTITIES } from './entity-list';
 import { Init1720000000000 } from './migrations/1720000000000-Init';
 import { Platform1720000001000 } from './migrations/1720000001000-Platform';
 import { Masters1720000002000 } from './migrations/1720000002000-Masters';
+import { Sales1720000003000 } from './migrations/1720000003000-Sales';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -19,7 +20,12 @@ export const AppDataSource = new DataSource({
   username: process.env.POSTGRES_USER ?? 'rmc',
   password: process.env.POSTGRES_PASSWORD ?? 'rmc',
   entities: ENTITIES,
-  migrations: [Init1720000000000, Platform1720000001000, Masters1720000002000],
+  migrations: [
+    Init1720000000000,
+    Platform1720000001000,
+    Masters1720000002000,
+    Sales1720000003000,
+  ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',
 });

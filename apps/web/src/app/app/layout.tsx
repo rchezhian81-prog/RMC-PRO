@@ -31,6 +31,15 @@ const GROUPS = [
       { href: '/app/entity/concrete-grades', label: 'Grades' },
     ],
   },
+  {
+    title: 'Sales',
+    items: [
+      { href: '/app/sales/leads', label: 'Leads' },
+      { href: '/app/sales/quotations', label: 'Quotations' },
+      { href: '/app/sales/rate-contracts', label: 'Rate Contracts' },
+      { href: '/app/sales/order-drafts', label: 'Order Drafts' },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

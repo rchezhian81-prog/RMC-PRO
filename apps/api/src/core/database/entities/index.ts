@@ -11,4 +11,5 @@ export * from './mixdesign.entities';
 export * from './production.entities';
 export * from './inventory.entities';
 export * from './dispatch.entities';
+export * from './billing.entities';
 export * from './notification.entities';

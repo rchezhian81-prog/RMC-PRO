@@ -14,6 +14,7 @@ import { OrdersModule } from './orders/orders.module';
 import { ProductionModule } from './production/production.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { BillingModule } from './billing/billing.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -35,6 +36,7 @@ import { DemoModule } from './demo/demo.module';
     ProductionModule,
     DispatchModule,
     InventoryModule,
+    BillingModule,
     PlantsModule,
     DemoModule,
   ],

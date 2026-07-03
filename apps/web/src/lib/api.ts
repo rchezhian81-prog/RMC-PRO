@@ -307,6 +307,42 @@ export const inventoryReportsApi = {
   movement: () => apiFetch<Row[]>('/inventory-reports/movement'),
 };
 
+// ---- Billing & payments (Sprint 9) ----
+export const invoicesApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/invoices${status ? `?status=${status}` : ''}`),
+  get: (id: string) => apiFetch<Row>(`/invoices/${id}`),
+  billableChallans: (customerId: string) => apiFetch<Row[]>(`/invoices/billable-challans?customerId=${customerId}`),
+  fromChallans: (b: Record<string, unknown>) => post('/invoices/from-challans', b),
+  issue: (id: string) => post(`/invoices/${id}/issue`),
+  cancel: (id: string, reason: string) => post(`/invoices/${id}/cancel`, { reason }),
+  share: (id: string, mobile: string) => post(`/invoices/${id}/share`, { mobile }),
+};
+
+export const receiptsApi = {
+  list: () => apiFetch<Row[]>('/receipts'),
+  get: (id: string) => apiFetch<Row>(`/receipts/${id}`),
+  create: (b: Record<string, unknown>) => post('/receipts', b),
+  share: (id: string, mobile: string) => post(`/receipts/${id}/share`, { mobile }),
+};
+
+export const billingReportsApi = {
+  outstanding: () => apiFetch<{ rows: Row[]; totals: Row }>('/billing-reports/outstanding'),
+  salesRegister: () => apiFetch<{ rows: Row[]; total: number; taxable: number; count: number }>('/billing-reports/sales-register'),
+  gstSummary: () => apiFetch<Row>('/billing-reports/gst-summary'),
+  receiptsRegister: () => apiFetch<Row[]>('/billing-reports/receipts-register'),
+};
+
+/** Download the Tally export CSV (auth header required). */
+export async function downloadTallyCsv(): Promise<void> {
+  const token = getSession()?.token;
+  const res = await fetch(`${BASE}/api/v1/billing-reports/tally-export`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error('Failed to export');
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tally-sales-export.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** Fetch a PDF as a blob (auth header required) and open it in a new tab. */
 export async function openPdf(path: string): Promise<void> {
   const token = getSession()?.token;

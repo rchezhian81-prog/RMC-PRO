@@ -58,6 +58,41 @@ export interface WeighbridgePdfData {
   status: string;
 }
 
+export interface InvoicePdfItem {
+  description: string;
+  hsnSac: string;
+  uom: string;
+  quantity: string | number;
+  rate: string | number;
+  taxableAmount: string | number;
+  gstRate: string | number;
+  cgstAmount: string | number;
+  sgstAmount: string | number;
+  igstAmount: string | number;
+  lineTotal: string | number;
+}
+export interface InvoicePdfData {
+  companyName: string;
+  companyGstin?: string | null;
+  companyState?: string | null;
+  invoiceNo: string;
+  invoiceDate?: string | null;
+  dueDate?: string | null;
+  invoiceStatus: string;
+  customerName: string;
+  customerGstin?: string | null;
+  placeOfSupply?: string | null;
+  isInterstate: boolean;
+  items: InvoicePdfItem[];
+  taxableAmount: string | number;
+  cgstAmount: string | number;
+  sgstAmount: string | number;
+  igstAmount: string | number;
+  cessAmount: string | number;
+  roundOff: string | number;
+  totalAmount: string | number;
+}
+
 const money = (v: string | number): string =>
   Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -294,6 +329,90 @@ export class PdfService {
       doc.y = y + 24;
       doc.x = left;
       doc.fontSize(8).fillColor('#777').text('System-generated weighbridge slip (manual entry).', { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /** Tax invoice PDF (Design Doc 6 §13, Doc 12) — pdfkit. */
+  invoicePdf(data: InvoicePdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      doc.fontSize(17).font('Helvetica-Bold').text(data.companyName);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      if (data.companyGstin) doc.text(`GSTIN: ${data.companyGstin}`);
+      if (data.companyState) doc.text(`State: ${data.companyState}`);
+      doc.fillColor('#000');
+
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text('TAX INVOICE', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.invoiceNo}`, { align: 'right' });
+      doc.text(`Status: ${data.invoiceStatus}`, { align: 'right' });
+      if (data.invoiceDate) doc.text(`Date: ${data.invoiceDate}`, { align: 'right' });
+      if (data.dueDate) doc.text(`Due: ${data.dueDate}`, { align: 'right' });
+
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(10).text('Bill to: ', { continued: true });
+      doc.font('Helvetica').text(data.customerName);
+      if (data.customerGstin) doc.font('Helvetica').fontSize(9).text(`GSTIN: ${data.customerGstin}`);
+      doc.fontSize(9).text(`Place of supply: ${data.placeOfSupply ?? '-'} (${data.isInterstate ? 'Inter-state / IGST' : 'Intra-state / CGST+SGST'})`);
+      doc.moveDown(0.6);
+
+      const cols = [
+        { key: 'desc', label: 'Description', w: 150, align: 'left' as const },
+        { key: 'hsn', label: 'HSN/SAC', w: 60, align: 'left' as const },
+        { key: 'uom', label: 'UOM', w: 40, align: 'left' as const },
+        { key: 'qty', label: 'Qty', w: 52, align: 'right' as const },
+        { key: 'rate', label: 'Rate', w: 58, align: 'right' as const },
+        { key: 'taxable', label: 'Taxable', w: 70, align: 'right' as const },
+        { key: 'gst', label: 'GST%', w: 40, align: 'right' as const },
+        { key: 'total', label: 'Total', w: 75, align: 'right' as const },
+      ];
+      const startX = left;
+      let y = doc.y;
+      const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+        const rowH = 18;
+        if (fill) doc.rect(startX, y - 2, right - left, rowH).fill(fill).fillColor('#000');
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+        let x = startX;
+        cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align }); x += c.w; });
+        y += rowH;
+      };
+      drawRow(cols.map((c) => c.label), true, '#eef1f6');
+      for (const it of data.items) {
+        drawRow([
+          it.description || '-', it.hsnSac || '-', it.uom || '-',
+          money(it.quantity), money(it.rate), money(it.taxableAmount), String(Number(it.gstRate)), money(it.lineTotal),
+        ], false);
+        if (y > doc.page.height - 160) { doc.addPage(); y = doc.page.margins.top; }
+      }
+
+      doc.y = y + 10;
+      doc.x = left;
+      const totalLine = (label: string, value: string, bold = false) => {
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 9.5)
+          .text(`${label}   ${value}`, { align: 'right' });
+      };
+      totalLine('Taxable', money(data.taxableAmount));
+      if (Number(data.cgstAmount) > 0) totalLine('CGST', money(data.cgstAmount));
+      if (Number(data.sgstAmount) > 0) totalLine('SGST', money(data.sgstAmount));
+      if (Number(data.igstAmount) > 0) totalLine('IGST', money(data.igstAmount));
+      if (Number(data.cessAmount) > 0) totalLine('Cess', money(data.cessAmount));
+      if (Number(data.roundOff) !== 0) totalLine('Round off', money(data.roundOff));
+      totalLine('Total', `INR ${money(data.totalAmount)}`, true);
+
+      doc.moveDown(1.5);
+      doc.fontSize(8).fillColor('#777').text('System-generated tax invoice.', { align: 'center' });
       doc.end();
     });
   }

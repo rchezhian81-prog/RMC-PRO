@@ -1,0 +1,204 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
+import { TenantDbService } from '../core/database/tenant-db.service';
+import {
+  Company,
+  Customer,
+  DeliveryChallan,
+  Invoice,
+  InvoiceChallan,
+  InvoiceItem,
+} from '../core/database/entities';
+import { NumberingService } from '../sales/numbering.service';
+import { WhatsAppService } from '../sales/whatsapp.service';
+import type { InvoicePdfData } from '../sales/pdf.service';
+import { computeLineTax, round2 } from './tax.util';
+
+const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
+const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
+const num = (v: unknown): number => Number(v ?? 0) || 0;
+
+/**
+ * Invoicing (DEV-PLAN B12). Generates a GST invoice from DELIVERED, not-yet-
+ * invoiced challans; each challan becomes an invoice line with a GENERIC
+ * quantity + HSN/SAC + UOM. Marks source challans invoiced. E-invoice / e-way
+ * fields are stored ready-only (no live API).
+ */
+@Injectable()
+export class InvoiceService {
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly numbering: NumberingService,
+    private readonly whatsapp: WhatsAppService,
+  ) {}
+
+  list(tenantId: string, status?: string) {
+    return this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(Invoice).find({ where: status ? { invoiceStatus: status } : {}, order: { createdAt: 'DESC' } }),
+    );
+  }
+
+  private async loadFull(m: EntityManager, id: string) {
+    const invoice = await m.getRepository(Invoice).findOne({ where: { id } });
+    if (!invoice) throw notFound();
+    const items = await m.getRepository(InvoiceItem).find({ where: { invoiceId: id }, order: { createdAt: 'ASC' } });
+    const challans = await m.getRepository(InvoiceChallan).find({ where: { invoiceId: id } });
+    return { ...invoice, items, challans };
+  }
+
+  get(tenantId: string, id: string) {
+    return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
+  }
+
+  /** Delivered, not-yet-invoiced challans for a customer (candidates to bill). */
+  billableChallans(tenantId: string, customerId?: string) {
+    return this.db.runInTenant(tenantId, (m) => {
+      const where: Record<string, unknown> = { challanStatus: 'delivered', invoiceStatus: 'not_invoiced' };
+      if (customerId) where.customerId = customerId;
+      return m.getRepository(DeliveryChallan).find({ where, order: { createdAt: 'DESC' } });
+    });
+  }
+
+  /** Create a draft invoice from a set of delivered challans (same customer). */
+  fromChallans(tenantId: string, dto: Record<string, unknown>) {
+    const customerId = String(dto.customerId ?? '');
+    if (!customerId) throw badReq('customerId required');
+    const lines = Array.isArray(dto.lines) ? (dto.lines as Record<string, unknown>[]) : [];
+    if (!lines.length) throw badReq('At least one challan line is required');
+
+    return this.db.runInTenant(tenantId, async (m) => {
+      const customer = await m.getRepository(Customer).findOne({ where: { id: customerId } });
+      if (!customer) throw badReq('Customer not found');
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const isInterstate = !!(customer.state && company?.state && customer.state !== company.state);
+
+      const invoiceNo = await this.numbering.next(m, tenantId, 'invoice', 'INV-');
+      const invoiceRepo = m.getRepository(Invoice);
+      const invoice = await invoiceRepo.save(
+        invoiceRepo.create({
+          tenantId, invoiceNo,
+          invoiceDate: (dto.invoiceDate as string) ?? null,
+          dueDate: (dto.dueDate as string) ?? null,
+          customerId, siteId: (dto.siteId as string) ?? null,
+          billingAddress: customer.billingAddress, placeOfSupply: customer.state, gstin: customer.gstin,
+          isInterstate, invoiceStatus: 'draft', paymentStatus: 'unpaid',
+        }),
+      );
+
+      const itemRepo = m.getRepository(InvoiceItem);
+      const linkRepo = m.getRepository(InvoiceChallan);
+      const challanRepo = m.getRepository(DeliveryChallan);
+      let taxable = 0, cgst = 0, sgst = 0, igst = 0, cess = 0;
+
+      for (const line of lines) {
+        const challan = await challanRepo.findOne({ where: { id: String(line.challanId ?? '') } });
+        if (!challan) throw badReq('Challan not found');
+        if (challan.challanStatus !== 'delivered') throw badReq(`Challan ${challan.challanNo} is not delivered`);
+        if (challan.invoiceStatus !== 'not_invoiced') throw badReq(`Challan ${challan.challanNo} already invoiced`);
+        if (challan.customerId && challan.customerId !== customerId) throw badReq('Challan belongs to a different customer');
+
+        const quantity = num(challan.quantityM3);
+        const rate = num(line.rate);
+        const gstRate = num(line.gstRate);
+        const cessRate = num(line.cessRate);
+        const t = computeLineTax(quantity, rate, gstRate, cessRate, isInterstate);
+
+        await itemRepo.save(
+          itemRepo.create({
+            tenantId, invoiceId: invoice.id, challanId: challan.id, gradeId: challan.gradeId,
+            description: (line.description as string) ?? `${challan.gradeLabel ?? 'Concrete'} — ${challan.challanNo}`,
+            hsnSac: (line.hsnSac as string) ?? null, uom: (line.uom as string) ?? 'm3',
+            quantity: String(quantity), rate: String(rate), taxableAmount: String(t.taxableAmount),
+            gstRate: String(gstRate),
+            cgstRate: String(t.cgstRate), cgstAmount: String(t.cgstAmount),
+            sgstRate: String(t.sgstRate), sgstAmount: String(t.sgstAmount),
+            igstRate: String(t.igstRate), igstAmount: String(t.igstAmount),
+            cessRate: String(t.cessRate), cessAmount: String(t.cessAmount),
+            lineTotal: String(t.lineTotal),
+          }),
+        );
+        await linkRepo.save(linkRepo.create({ tenantId, invoiceId: invoice.id, challanId: challan.id, quantityM3: String(quantity) }));
+        await challanRepo.update(challan.id, { invoiceStatus: 'invoiced' });
+
+        taxable += t.taxableAmount; cgst += t.cgstAmount; sgst += t.sgstAmount; igst += t.igstAmount; cess += t.cessAmount;
+      }
+
+      const grand = taxable + cgst + sgst + igst + cess;
+      const total = Math.round(grand);
+      const roundOff = round2(total - grand);
+      await invoiceRepo.update(invoice.id, {
+        taxableAmount: String(round2(taxable)), cgstAmount: String(round2(cgst)), sgstAmount: String(round2(sgst)),
+        igstAmount: String(round2(igst)), cessAmount: String(round2(cess)), roundOff: String(roundOff),
+        totalAmount: String(total), outstandingAmount: String(total),
+      });
+      return this.loadFull(m, invoice.id);
+    });
+  }
+
+  issue(tenantId: string, id: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Invoice);
+      const invoice = await repo.findOne({ where: { id } });
+      if (!invoice) throw notFound();
+      if (invoice.invoiceStatus !== 'draft') throw badReq(`Invoice already ${invoice.invoiceStatus}`);
+      await repo.update(id, { invoiceStatus: 'issued' });
+      return this.loadFull(m, id);
+    });
+  }
+
+  cancel(tenantId: string, id: string, _reason?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Invoice);
+      const invoice = await repo.findOne({ where: { id } });
+      if (!invoice) throw notFound();
+      if (invoice.invoiceStatus === 'cancelled') throw badReq('Invoice already cancelled');
+      if (num(invoice.amountPaid) > 0) throw badReq('Cannot cancel an invoice with receipts allocated');
+      // Revert linked challans back to not_invoiced.
+      const links = await m.getRepository(InvoiceChallan).find({ where: { invoiceId: id } });
+      const challanRepo = m.getRepository(DeliveryChallan);
+      for (const l of links) await challanRepo.update(l.challanId, { invoiceStatus: 'not_invoiced' });
+      await repo.update(id, { invoiceStatus: 'cancelled', paymentStatus: 'cancelled' });
+      return this.loadFull(m, id);
+    });
+  }
+
+  async pdfData(tenantId: string, id: string): Promise<{ data: InvoicePdfData; invoice: Invoice }> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const customer = full.customerId ? await m.getRepository(Customer).findOne({ where: { id: full.customerId } }) : null;
+      const data: InvoicePdfData = {
+        companyName: company?.companyName ?? 'Company',
+        companyGstin: company?.gstin ?? null,
+        companyState: company?.state ?? null,
+        invoiceNo: full.invoiceNo, invoiceDate: full.invoiceDate, dueDate: full.dueDate,
+        invoiceStatus: full.invoiceStatus,
+        customerName: customer?.customerName ?? 'Customer', customerGstin: full.gstin,
+        placeOfSupply: full.placeOfSupply, isInterstate: full.isInterstate,
+        items: full.items.map((it) => ({
+          description: it.description ?? '', hsnSac: it.hsnSac ?? '', uom: it.uom ?? '',
+          quantity: it.quantity, rate: it.rate, taxableAmount: it.taxableAmount, gstRate: it.gstRate,
+          cgstAmount: it.cgstAmount, sgstAmount: it.sgstAmount, igstAmount: it.igstAmount, lineTotal: it.lineTotal,
+        })),
+        taxableAmount: full.taxableAmount, cgstAmount: full.cgstAmount, sgstAmount: full.sgstAmount,
+        igstAmount: full.igstAmount, cessAmount: full.cessAmount, roundOff: full.roundOff, totalAmount: full.totalAmount,
+      };
+      return { data, invoice: full };
+    });
+  }
+
+  async share(tenantId: string, id: string, dto: Record<string, unknown>) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const invoice = await m.getRepository(Invoice).findOne({ where: { id } });
+      if (!invoice) throw notFound();
+      const customer = invoice.customerId ? await m.getRepository(Customer).findOne({ where: { id: invoice.customerId } }) : null;
+      const mobile = (dto.mobile as string) ?? customer?.mobile ?? null;
+      const message = (dto.message as string) ??
+        `Invoice ${invoice.invoiceNo} for ₹${invoice.totalAmount}. Status: ${invoice.invoiceStatus}. Thank you.`;
+      return this.whatsapp.logWithin(m, tenantId, {
+        recipientMobile: mobile, moduleKey: 'billing', eventKey: 'invoice_share',
+        referenceType: 'invoice', referenceId: id, message,
+      });
+    });
+  }
+}

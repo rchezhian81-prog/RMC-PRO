@@ -75,6 +75,15 @@ const GROUPS = [
       { href: '/app/inventory/reports', label: 'Inventory Reports' },
     ],
   },
+  {
+    title: 'Billing',
+    items: [
+      { href: '/app/billing/invoices', label: 'Invoices' },
+      { href: '/app/billing/receipts', label: 'Receipts' },
+      { href: '/app/billing/outstanding', label: 'Outstanding' },
+      { href: '/app/billing/reports', label: 'Billing Reports' },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

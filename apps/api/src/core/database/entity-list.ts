@@ -47,6 +47,11 @@ import {
   Dispatch,
   DeliveryChallan,
   DeliveryStatusHistory,
+  Invoice,
+  InvoiceItem,
+  InvoiceChallan,
+  Payment,
+  PaymentAllocation,
   NotificationLog,
 } from './entities';
 
@@ -100,5 +105,10 @@ export const ENTITIES = [
   Dispatch,
   DeliveryChallan,
   DeliveryStatusHistory,
+  Invoice,
+  InvoiceItem,
+  InvoiceChallan,
+  Payment,
+  PaymentAllocation,
   NotificationLog,
 ];

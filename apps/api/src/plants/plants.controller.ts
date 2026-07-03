@@ -1,27 +1,19 @@
-import { Controller, Get, NotFoundException, Param, UseGuards } from '@nestjs/common';
-import { PlantsService } from './plants.service';
+import { Controller, UseGuards } from '@nestjs/common';
+import { BaseCrudController } from '../common/base-crud.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PermissionsGuard } from '../rbac/permissions.guard';
-import { CurrentUser, type AuthUser } from '../auth/auth-user';
+import { TenantGuard } from '../rbac/tenant.guard';
+import { Plant } from '../core/database/entities';
+import { PlantsService } from './plants.service';
 
 /**
- * Demo protected resource proving end-to-end tenant isolation: a tenant user
- * only ever sees their own plants (RLS), and cross-tenant ids resolve to 404.
+ * Plant setup master. Also the earliest proof of tenant isolation (Sprint 1):
+ * every read/write runs in the caller's RLS context, so a tenant only ever
+ * sees its own plants and cross-tenant ids resolve to 404.
  */
 @Controller('plants')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
-export class PlantsController {
-  constructor(private readonly plants: PlantsService) {}
-
-  @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.plants.list(user.tenantId);
-  }
-
-  @Get(':id')
-  async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    const plant = await this.plants.getById(user.tenantId, id);
-    if (!plant) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Plant not found' });
-    return plant;
+@UseGuards(JwtAuthGuard, TenantGuard)
+export class PlantsController extends BaseCrudController<Plant> {
+  constructor(protected readonly service: PlantsService) {
+    super();
   }
 }

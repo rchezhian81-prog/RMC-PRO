@@ -20,12 +20,8 @@ export default function LoginPage() {
     setError(null);
     try {
       const r = await api.login(login, password);
-      if (r.user.userType !== 'super_admin') {
-        setError('This build includes the Super Admin portal only.');
-        return;
-      }
       saveSession({ token: r.access_token, userType: r.user.userType, email: r.user.email });
-      router.push('/admin/tenants');
+      router.push(r.user.userType === 'super_admin' ? '/admin/tenants' : '/app');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

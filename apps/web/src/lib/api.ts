@@ -91,3 +91,54 @@ export const api = {
     }),
   modules: () => apiFetch<ModuleRow[]>('/platform/modules'),
 };
+
+// ---- Tenant portal (Sprint 3) ----
+export interface Row {
+  id: string;
+  [k: string]: unknown;
+}
+
+/** Generic tenant-scoped CRUD client for a resource path. */
+export function crud(path: string) {
+  return {
+    list: () => apiFetch<Row[]>(`/${path}`),
+    create: (b: Record<string, unknown>) =>
+      apiFetch<Row>(`/${path}`, { method: 'POST', body: JSON.stringify(b) }),
+    update: (id: string, b: Record<string, unknown>) =>
+      apiFetch<Row>(`/${path}/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  };
+}
+
+export const company = {
+  get: () => apiFetch<Row | null>('/company'),
+  update: (b: Record<string, unknown>) =>
+    apiFetch<Row>('/company', { method: 'PATCH', body: JSON.stringify(b) }),
+};
+
+export const settings = {
+  list: () => apiFetch<Row[]>('/settings'),
+  set: (key: string, value: string) =>
+    apiFetch<Row>(`/settings/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    }),
+};
+
+export const usersApi = {
+  list: () => apiFetch<Row[]>('/users'),
+  create: (b: Record<string, unknown>) =>
+    apiFetch<Row>('/users', { method: 'POST', body: JSON.stringify(b) }),
+};
+
+export const rolesApi = {
+  list: () => apiFetch<Row[]>('/roles'),
+  create: (b: Record<string, unknown>) =>
+    apiFetch<Row>('/roles', { method: 'POST', body: JSON.stringify(b) }),
+  catalog: () => apiFetch<Row[]>('/roles/permissions-catalog'),
+  getPerms: (id: string) => apiFetch<string[]>(`/roles/${id}/permissions`),
+  setPerms: (id: string, permissionIds: string[]) =>
+    apiFetch<string[]>(`/roles/${id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissionIds }),
+    }),
+};

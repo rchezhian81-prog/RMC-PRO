@@ -1,4 +1,4 @@
-import { Column, Entity } from 'typeorm';
+import { Column, Entity, Unique } from 'typeorm';
 import { TenantScopedEntity } from './base.entity';
 
 /** Company inside a tenant (Design Doc 6 §5.1) — trimmed for the Phase-1 foundation. */
@@ -31,4 +31,49 @@ export class Plant extends TenantScopedEntity {
 
   @Column({ name: 'status', type: 'varchar', default: 'active' })
   status!: string;
+}
+
+/** Document numbering series (Design Doc 6 §5.4). */
+@Entity('number_series')
+export class NumberSeries extends TenantScopedEntity {
+  @Column({ name: 'plant_id', type: 'uuid', nullable: true })
+  plantId!: string | null;
+
+  @Column({ name: 'document_type', type: 'varchar' })
+  documentType!: string;
+
+  @Column({ name: 'prefix', type: 'varchar', nullable: true })
+  prefix!: string | null;
+
+  @Column({ name: 'suffix', type: 'varchar', nullable: true })
+  suffix!: string | null;
+
+  @Column({ name: 'current_number', type: 'int', default: 0 })
+  currentNumber!: number;
+
+  @Column({ name: 'padding_length', type: 'int', default: 4 })
+  paddingLength!: number;
+
+  @Column({ name: 'financial_year', type: 'varchar', nullable: true })
+  financialYear!: string | null;
+
+  @Column({ name: 'reset_frequency', type: 'varchar', default: 'yearly' })
+  resetFrequency!: string;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive!: boolean;
+}
+
+/** Tenant-specific settings (Design Doc 6 §5.5). */
+@Entity('tenant_settings')
+@Unique('uq_tenant_settings_key', ['tenantId', 'settingKey'])
+export class TenantSetting extends TenantScopedEntity {
+  @Column({ name: 'setting_key', type: 'varchar' })
+  settingKey!: string;
+
+  @Column({ name: 'setting_value', type: 'text', nullable: true })
+  settingValue!: string | null;
+
+  @Column({ name: 'data_type', type: 'varchar', default: 'string' })
+  dataType!: string;
 }

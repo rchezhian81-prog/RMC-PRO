@@ -2,6 +2,8 @@ import {
   Tenant,
   Company,
   Plant,
+  NumberSeries,
+  TenantSetting,
   User,
   Permission,
   Role,
@@ -12,6 +14,13 @@ import {
   PlanModule,
   ModuleEntity,
   TenantModule,
+  Customer,
+  Site,
+  Material,
+  Supplier,
+  Vehicle,
+  Driver,
+  ConcreteGrade,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -19,6 +28,8 @@ export const ENTITIES = [
   Tenant,
   Company,
   Plant,
+  NumberSeries,
+  TenantSetting,
   User,
   Permission,
   Role,
@@ -29,4 +40,11 @@ export const ENTITIES = [
   PlanModule,
   ModuleEntity,
   TenantModule,
+  Customer,
+  Site,
+  Material,
+  Supplier,
+  Vehicle,
+  Driver,
+  ConcreteGrade,
 ];

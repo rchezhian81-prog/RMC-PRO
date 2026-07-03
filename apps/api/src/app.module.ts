@@ -7,6 +7,8 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { PlantsModule } from './plants/plants.module';
 import { PlatformModule } from './platform/platform.module';
+import { SetupModule } from './setup/setup.module';
+import { MastersModule } from './masters/masters.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -21,6 +23,8 @@ import { DemoModule } from './demo/demo.module';
     HealthModule,
     AuthModule,
     PlatformModule,
+    SetupModule,
+    MastersModule,
     PlantsModule,
     DemoModule,
   ],

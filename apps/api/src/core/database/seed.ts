@@ -4,18 +4,27 @@ import { MODULE_CATALOG, PERMISSIONS, ROLE_KEYS } from '@rmc/shared';
 import { AppDataSource } from './data-source';
 import {
   Company,
+  ConcreteGrade,
+  Customer,
+  Driver,
+  Material,
   ModuleEntity,
+  NumberSeries,
   Permission,
   Plant,
   PlanModule,
   Role,
   RolePermission,
+  Site,
   SubscriptionPlan,
+  Supplier,
   Tenant,
   TenantModule,
+  TenantSetting,
   User,
   UserPlantAccess,
   UserRole,
+  Vehicle,
 } from './entities';
 
 const DEMO_PASSWORD = 'Passw0rd!';
@@ -27,7 +36,9 @@ async function main() {
   await AppDataSource.query(
     `TRUNCATE tenants, users, permissions, companies, plants, roles,
      role_permissions, user_roles, user_plant_access,
-     subscription_plans, plan_modules, modules, tenant_modules
+     subscription_plans, plan_modules, modules, tenant_modules,
+     number_series, tenant_settings, customers, sites, materials,
+     suppliers, vehicles, drivers, concrete_grades
      RESTART IDENTITY CASCADE;`,
   );
 
@@ -161,6 +172,80 @@ async function main() {
     starterModules.map((k) =>
       m.create(TenantModule, { tenantId: alpha.tenant.id, moduleKey: k, isEnabled: true }),
     ),
+  );
+
+  // Demo master data for Alpha so the tenant portal shows records.
+  const at = alpha.tenant.id;
+  const customer = await m.save(
+    m.create(Customer, {
+      tenantId: at,
+      customerCode: 'CUST001',
+      customerName: 'L&T Construction',
+      gstin: '33AAAAA0000A1Z5',
+      state: 'TN',
+      contactPerson: 'S. Kumar',
+      mobile: '9840000001',
+      creditLimit: 500000,
+      creditDays: 30,
+    }),
+  );
+  await m.save(
+    m.create(Site, {
+      tenantId: at,
+      customerId: customer.id,
+      siteCode: 'SITE001',
+      siteName: 'Metro Rail Phase 2',
+      city: 'Chennai',
+      state: 'TN',
+      pumpRequired: true,
+    }),
+  );
+  await m.save([
+    m.create(Material, { tenantId: at, materialCode: 'CEM53', materialName: 'OPC 53 Cement', category: 'cement', uom: 'bag', hsnCode: '2523' }),
+    m.create(Material, { tenantId: at, materialCode: 'AGG20', materialName: '20mm Aggregate', category: 'aggregate', uom: 'ton', hsnCode: '2517' }),
+  ]);
+  await m.save(
+    m.create(Supplier, {
+      tenantId: at,
+      supplierCode: 'SUP001',
+      supplierName: 'UltraTech Cement Ltd',
+      gstin: '27BBBBB1111B1Z5',
+      state: 'MH',
+      paymentTerms: '30 days',
+    }),
+  );
+  const driver = await m.save(
+    m.create(Driver, { tenantId: at, driverCode: 'DRV001', driverName: 'Ravi Kumar', mobile: '9840000010', licenseNo: 'TN1234567' }),
+  );
+  await m.save(
+    m.create(Vehicle, {
+      tenantId: at,
+      vehicleNo: 'TN01AB1234',
+      vehicleType: 'Transit Mixer',
+      capacityM3: 6,
+      ownershipType: 'own',
+      driverId: driver.id,
+    }),
+  );
+  await m.save([
+    m.create(ConcreteGrade, { tenantId: at, gradeCode: 'M25', gradeName: 'M25', strengthClass: '25 MPa' }),
+    m.create(ConcreteGrade, { tenantId: at, gradeCode: 'M30', gradeName: 'M30', strengthClass: '30 MPa' }),
+  ]);
+  await m.save(
+    m.create(NumberSeries, {
+      tenantId: at,
+      documentType: 'delivery_challan',
+      prefix: 'DC',
+      paddingLength: 4,
+      financialYear: '2026-27',
+    }),
+  );
+  await m.save(
+    m.create(TenantSetting, {
+      tenantId: at,
+      settingKey: 'credit_block_stage',
+      settingValue: 'order_booking',
+    }),
   );
 
   await m.save(

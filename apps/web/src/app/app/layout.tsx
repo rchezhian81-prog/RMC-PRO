@@ -58,6 +58,13 @@ const GROUPS = [
       { href: '/app/production/reports', label: 'Prod. Reports' },
     ],
   },
+  {
+    title: 'Dispatch',
+    items: [
+      { href: '/app/dispatch/board', label: 'Dispatch Board' },
+      { href: '/app/dispatch/challans', label: 'Delivery Challans' },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {

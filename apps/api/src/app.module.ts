@@ -12,6 +12,7 @@ import { MastersModule } from './masters/masters.module';
 import { SalesModule } from './sales/sales.module';
 import { OrdersModule } from './orders/orders.module';
 import { ProductionModule } from './production/production.module';
+import { DispatchModule } from './dispatch/dispatch.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -31,6 +32,7 @@ import { DemoModule } from './demo/demo.module';
     SalesModule,
     OrdersModule,
     ProductionModule,
+    DispatchModule,
     PlantsModule,
     DemoModule,
   ],

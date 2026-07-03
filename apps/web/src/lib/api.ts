@@ -257,6 +257,34 @@ export const productionReportsApi = {
   consumption: () => apiFetch<Row[]>('/production-reports/material-consumption'),
 };
 
+// ---- Dispatch & delivery challan (Sprint 7) ----
+export const dispatchApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/dispatches${status ? `?status=${status}` : ''}`),
+  get: (id: string) => apiFetch<Row>(`/dispatches/${id}`),
+  createFromBatch: (batchTicketId: string, b: Record<string, unknown>) => post(`/dispatches/from-batch-ticket/${batchTicketId}`, b),
+  setStatus: (id: string, status: string, extra: Record<string, unknown> = {}) => post(`/dispatches/${id}/status`, { status, ...extra }),
+};
+
+export const challansApi = {
+  list: (status?: string) => apiFetch<Row[]>(`/delivery-challans${status ? `?status=${status}` : ''}`),
+  get: (id: string) => apiFetch<Row>(`/delivery-challans/${id}`),
+  createFromDispatch: (dispatchId: string, b: Record<string, unknown>) => post(`/delivery-challans/from-dispatch/${dispatchId}`, b),
+  issue: (id: string) => post(`/delivery-challans/${id}/issue`),
+  deliver: (id: string, b: Record<string, unknown>) => post(`/delivery-challans/${id}/deliver`, b),
+  cancel: (id: string, reason: string) => post(`/delivery-challans/${id}/cancel`, { reason }),
+  share: (id: string, mobile: string) => post(`/delivery-challans/${id}/share`, { mobile }),
+};
+
+/** Fetch a PDF as a blob (auth header required) and open it in a new tab. */
+export async function openPdf(path: string): Promise<void> {
+  const token = getSession()?.token;
+  const res = await fetch(`${BASE}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error('Failed to load PDF');
+  const url = URL.createObjectURL(await res.blob());
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** Fetch the quotation PDF as a blob (auth header required) and open it. */
 export async function openQuotationPdf(id: string): Promise<void> {
   const token = getSession()?.token;

@@ -27,6 +27,23 @@ export interface QuotationPdfData {
   items: QuotationPdfItem[];
 }
 
+export interface ChallanPdfData {
+  companyName: string;
+  companyGstin?: string | null;
+  companyState?: string | null;
+  challanNo: string;
+  challanStatus: string;
+  dispatchTime?: string | null;
+  customerName: string;
+  siteName?: string | null;
+  vehicleNo?: string | null;
+  driverName?: string | null;
+  gradeLabel: string;
+  quantityM3: string | number;
+  slump?: string | null;
+  receiverName?: string | null;
+}
+
 const money = (v: string | number): string =>
   Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -142,6 +159,72 @@ export class PdfService {
         { align: 'center' },
       );
 
+      doc.end();
+    });
+  }
+
+  /** Delivery challan PDF (Design Doc 6 §11.2, Doc 12) — pdfkit. */
+  challanPdf(data: ChallanPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 44 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      doc.fontSize(18).font('Helvetica-Bold').text(data.companyName);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      if (data.companyGstin) doc.text(`GSTIN: ${data.companyGstin}`);
+      if (data.companyState) doc.text(`State: ${data.companyState}`);
+      doc.fillColor('#000');
+
+      doc.moveDown(0.4);
+      doc.fontSize(15).font('Helvetica-Bold').text('DELIVERY CHALLAN', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.challanNo}`, { align: 'right' });
+      doc.text(`Status: ${data.challanStatus}`, { align: 'right' });
+      if (data.dispatchTime) doc.text(`Dispatched: ${data.dispatchTime}`, { align: 'right' });
+
+      doc.moveDown(0.6);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.6);
+
+      const row = (label: string, value: string) => {
+        doc.font('Helvetica-Bold').fontSize(10).text(`${label}: `, { continued: true });
+        doc.font('Helvetica').text(value || '-');
+      };
+      row('Customer', data.customerName);
+      row('Site / Project', data.siteName ?? '-');
+      row('Vehicle', data.vehicleNo ?? '-');
+      row('Driver', data.driverName ?? '-');
+      doc.moveDown(0.6);
+
+      // Delivery details box.
+      const cells: Array<[string, string]> = [
+        ['Grade', data.gradeLabel || '-'],
+        ['Quantity (m³)', money(data.quantityM3)],
+        ['Slump', data.slump ?? '-'],
+      ];
+      let y = doc.y;
+      for (const [k, v] of cells) {
+        doc.rect(left, y - 2, right - left, 22).fill('#f4f6fa').fillColor('#000');
+        doc.font('Helvetica-Bold').fontSize(10).text(k, left + 6, y + 3, { width: 160 });
+        doc.font('Helvetica').text(v, left + 180, y + 3);
+        y += 24;
+      }
+
+      doc.y = y + 24;
+      doc.x = left;
+      doc.font('Helvetica-Bold').fontSize(10).text(`Received by: ${data.receiverName ?? '________________'}`);
+      doc.moveDown(2);
+      doc.font('Helvetica').fontSize(9).fillColor('#555').text('Receiver signature: ____________________', { align: 'right' });
+      doc.fillColor('#000');
+
+      doc.moveDown(1.5);
+      doc.fontSize(8).fillColor('#777').text('System-generated delivery challan.', { align: 'center' });
       doc.end();
     });
   }

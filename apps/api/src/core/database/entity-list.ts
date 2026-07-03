@@ -41,6 +41,9 @@ import {
   BatchTicketMaterial,
   StockBalance,
   StockTransaction,
+  Dispatch,
+  DeliveryChallan,
+  DeliveryStatusHistory,
   NotificationLog,
 } from './entities';
 
@@ -88,5 +91,8 @@ export const ENTITIES = [
   BatchTicketMaterial,
   StockBalance,
   StockTransaction,
+  Dispatch,
+  DeliveryChallan,
+  DeliveryStatusHistory,
   NotificationLog,
 ];

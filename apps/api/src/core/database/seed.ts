@@ -1,14 +1,18 @@
 import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
-import { PERMISSIONS, ROLE_KEYS } from '@rmc/shared';
+import { MODULE_CATALOG, PERMISSIONS, ROLE_KEYS } from '@rmc/shared';
 import { AppDataSource } from './data-source';
 import {
   Company,
+  ModuleEntity,
   Permission,
   Plant,
+  PlanModule,
   Role,
   RolePermission,
+  SubscriptionPlan,
   Tenant,
+  TenantModule,
   User,
   UserPlantAccess,
   UserRole,
@@ -22,7 +26,16 @@ async function main() {
 
   await AppDataSource.query(
     `TRUNCATE tenants, users, permissions, companies, plants, roles,
-     role_permissions, user_roles, user_plant_access RESTART IDENTITY CASCADE;`,
+     role_permissions, user_roles, user_plant_access,
+     subscription_plans, plan_modules, modules, tenant_modules
+     RESTART IDENTITY CASCADE;`,
+  );
+
+  // Module catalog.
+  await m.save(
+    MODULE_CATALOG.map((mod) =>
+      m.create(ModuleEntity, { moduleKey: mod.key, name: mod.name, phase: mod.phase }),
+    ),
   );
 
   // Permission catalog (single source of truth in @rmc/shared).
@@ -109,8 +122,46 @@ async function main() {
     return { tenant, adminEmail };
   }
 
-  await seedTenant('ALPHA', 'Alpha Ready Mix', 'admin@alpha.test');
+  const alpha = await seedTenant('ALPHA', 'Alpha Ready Mix', 'admin@alpha.test');
   await seedTenant('BETA', 'Beta Concrete', 'admin@beta.test');
+
+  // Demo subscription plans.
+  const starterModules = ['masters', 'sales', 'orders', 'dispatch', 'inventory', 'billing', 'reports'];
+  const proModules = MODULE_CATALOG.filter((mod) => mod.phase === 1).map((mod) => mod.key);
+
+  const starter = await m.save(
+    m.create(SubscriptionPlan, {
+      planCode: 'STARTER',
+      planName: 'Starter',
+      monthlyPrice: 2999,
+      yearlyPrice: 29990,
+      maxPlants: 1,
+      maxUsers: 5,
+    }),
+  );
+  const pro = await m.save(
+    m.create(SubscriptionPlan, {
+      planCode: 'PRO',
+      planName: 'Professional',
+      monthlyPrice: 7999,
+      yearlyPrice: 79990,
+      maxPlants: 5,
+      maxUsers: 25,
+    }),
+  );
+  await m.save(
+    starterModules.map((k) => m.create(PlanModule, { planId: starter.id, moduleKey: k })),
+  );
+  await m.save(proModules.map((k) => m.create(PlanModule, { planId: pro.id, moduleKey: k })));
+
+  // Assign Starter to Alpha (includes 'orders'); Beta gets no plan (modules off)
+  // so MODULE_NOT_ENABLED enforcement is demonstrable out of the box.
+  await m.update(Tenant, alpha.tenant.id, { currentPlanId: starter.id });
+  await m.save(
+    starterModules.map((k) =>
+      m.create(TenantModule, { tenantId: alpha.tenant.id, moduleKey: k, isEnabled: true }),
+    ),
+  );
 
   await m.save(
     m.create(User, {

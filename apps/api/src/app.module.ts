@@ -6,6 +6,8 @@ import { DatabaseModule } from './core/database/database.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { PlantsModule } from './plants/plants.module';
+import { PlatformModule } from './platform/platform.module';
+import { DemoModule } from './demo/demo.module';
 
 /**
  * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
@@ -18,7 +20,9 @@ import { PlantsModule } from './plants/plants.module';
     DatabaseModule,
     HealthModule,
     AuthModule,
+    PlatformModule,
     PlantsModule,
+    DemoModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

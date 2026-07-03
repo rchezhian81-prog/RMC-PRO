@@ -19,4 +19,7 @@ export class Tenant extends BaseUuidEntity {
 
   @Column({ name: 'default_language', type: 'varchar', default: 'en' })
   defaultLanguage!: string;
+
+  @Column({ name: 'current_plan_id', type: 'uuid', nullable: true })
+  currentPlanId!: string | null;
 }

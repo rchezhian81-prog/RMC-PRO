@@ -8,8 +8,11 @@ import {
   Customer,
   Driver,
   Material,
+  MixDesign,
+  MixDesignMaterial,
   ModuleEntity,
   NumberSeries,
+  StockBalance,
   Permission,
   Plant,
   PlanModule,
@@ -130,7 +133,7 @@ async function main() {
         }),
       ),
     );
-    return { tenant, adminEmail };
+    return { tenant, adminEmail, plants };
   }
 
   const alpha = await seedTenant('ALPHA', 'Alpha Ready Mix', 'admin@alpha.test');
@@ -200,10 +203,10 @@ async function main() {
       pumpRequired: true,
     }),
   );
-  await m.save([
+  const [cem53, agg20] = (await m.save([
     m.create(Material, { tenantId: at, materialCode: 'CEM53', materialName: 'OPC 53 Cement', category: 'cement', uom: 'bag', hsnCode: '2523' }),
     m.create(Material, { tenantId: at, materialCode: 'AGG20', materialName: '20mm Aggregate', category: 'aggregate', uom: 'ton', hsnCode: '2517' }),
-  ]);
+  ])) as [Material, Material];
   await m.save(
     m.create(Supplier, {
       tenantId: at,
@@ -227,9 +230,28 @@ async function main() {
       driverId: driver.id,
     }),
   );
-  await m.save([
+  const [m25] = (await m.save([
     m.create(ConcreteGrade, { tenantId: at, gradeCode: 'M25', gradeName: 'M25', strengthClass: '25 MPa' }),
     m.create(ConcreteGrade, { tenantId: at, gradeCode: 'M30', gradeName: 'M30', strengthClass: '30 MPa' }),
+  ])) as [ConcreteGrade, ConcreteGrade];
+
+  // Demo production readiness: opening stock at Plant 1 and an approved M25 mix
+  // design, so a demo user can batch a load out of the box (Sprint 11 polish).
+  const alphaPlant1 = alpha.plants[0]!;
+  await m.save([
+    m.create(StockBalance, { tenantId: at, plantId: alphaPlant1.id, materialId: cem53.id, materialLabel: cem53.materialName, currentQuantity: '2000', uom: cem53.uom, lastUpdatedAt: new Date() }),
+    m.create(StockBalance, { tenantId: at, plantId: alphaPlant1.id, materialId: agg20.id, materialLabel: agg20.materialName, currentQuantity: '500', uom: agg20.uom, lastUpdatedAt: new Date() }),
+  ]);
+  const m25Mix = await m.save(
+    m.create(MixDesign, {
+      tenantId: at, plantId: alphaPlant1.id, gradeId: m25.id, mixCode: 'M25-STD', versionNo: 1,
+      slumpMin: 100, slumpMax: 120, cementType: 'OPC 53', waterCementRatio: '0.45', pumpable: true,
+      approvalStatus: 'approved', isActiveVersion: true,
+    }),
+  );
+  await m.save([
+    m.create(MixDesignMaterial, { tenantId: at, mixDesignId: m25Mix.id, materialId: cem53.id, materialLabel: cem53.materialName, targetQuantity: '7', uom: cem53.uom, tolerancePercentage: '2', sequenceNo: 1 }),
+    m.create(MixDesignMaterial, { tenantId: at, mixDesignId: m25Mix.id, materialId: agg20.id, materialLabel: agg20.materialName, targetQuantity: '0.75', uom: agg20.uom, tolerancePercentage: '3', sequenceNo: 2 }),
   ]);
   await m.save(
     m.create(NumberSeries, {

@@ -59,9 +59,12 @@ export class BatchTicketsService {
       return repo.findOne({ where: { id: explicitId } });
     }
     if (!gradeId) return Promise.resolve(null);
+    // A grade can carry several approved active mix designs (distinct mix codes).
+    // Resolve deterministically — highest version, then most recently created —
+    // so the current standard recipe wins instead of an arbitrary row.
     return repo.findOne({
       where: { gradeId, approvalStatus: 'approved', isActiveVersion: true },
-      order: { versionNo: 'DESC' },
+      order: { versionNo: 'DESC', createdAt: 'DESC' },
     });
   }
 

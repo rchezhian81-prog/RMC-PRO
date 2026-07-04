@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "node --experimental-sqlite tests/run.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\""
   },

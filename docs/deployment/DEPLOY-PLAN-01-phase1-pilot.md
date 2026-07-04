@@ -138,8 +138,14 @@ committed**, with **every secret replaced**. Checklist (✅ = must set a real va
 **Web (build-time)** — ✅ `NEXT_PUBLIC_API_URL=https://api.rmcpro.example.in` (must be
 present at `pnpm build`, not just runtime).
 
-**New for production (execution item, not yet in `.env.example`):**
-- `CORS_ORIGIN=https://app.rmcpro.example.in` — to replace open `enableCors()` (§12).
+**CORS (implemented — pre-go-live fix):**
+- ✅ `CORS_ORIGINS=https://app.rmcpro.example.in,https://api.rmcpro.example.in`
+  — comma-separated browser-origin allowlist. Open `enableCors()` has been replaced;
+  unset = localhost-only (dev). The API is never opened to `*`.
+
+**Production bootstrap (implemented — `pnpm seed:prod`):**
+- `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD` (strong, non-demo), optional
+  `SUPERADMIN_NAME` — used once to create the platform super admin if absent.
 
 Hard rules: no `change-me-*` values in production; secrets generated with a CSPRNG;
 `.env` file perms `600`, owned by the deploy user; secrets stored in the provider's
@@ -217,15 +223,15 @@ smoke tests (§10).
 > development bootstrap and is **destructive** — it must **never** be run against a
 > tenant-loaded production database.
 
-Execution items:
-1. **Production bootstrap (idempotent, non-destructive)** — author a
-   `seed:prod`/bootstrap that inserts **only** the platform-global data required to
-   operate: module catalog, permission catalog, subscription plans, and **one**
-   platform super-admin user (credentials set from env, not a hardcoded demo password).
-   No demo tenants, no `TRUNCATE`.
-2. **Super-admin credential** — created via the bootstrap with a strong password from a
-   secret (forced rotation on first login is a nice-to-have; at minimum a unique strong
-   password communicated out-of-band).
+1. ✅ **Production bootstrap (idempotent, non-destructive) — IMPLEMENTED as
+   `pnpm seed:prod`** (`apps/api/src/core/database/seed-prod.ts`). Inserts **only** the
+   platform-global data required to operate: module catalog, permission catalog, default
+   subscription plans (+ module grants). No demo tenants, no demo master data, no
+   `TRUNCATE`. Every step inserts only what is missing, so it is safe to run repeatedly.
+2. ✅ **Super-admin credential** — `seed:prod` creates **one** super admin only when
+   `SUPERADMIN_EMAIL` is set and that email does not already exist; the password comes
+   from `SUPERADMIN_PASSWORD` and is **rejected if weak or a demo value** (≥12 chars,
+   upper+lower+digit). Communicate it out-of-band; rotate on first login (nice-to-have).
 3. **Never ship** `admin@alpha.test` / `admin@beta.test` / `super@platform.test` /
    `Passw0rd!` to production.
 4. Verify post-bootstrap: super-admin can log in; permission/module/plan catalogs are
@@ -299,8 +305,8 @@ sustained 5xx.
 
 ## 12. Monitoring / logging checklist
 
-- [ ] **CORS hardening** (pre-go-live, code): replace open `enableCors()` with an
-      allowlist of `https://app.<domain>` (via `CORS_ORIGIN`). *(Execution item.)*
+- [x] **CORS hardening** (pre-go-live, code) — ✅ **DONE**: open `enableCors()` replaced
+      with an env allowlist (`CORS_ORIGINS`). Set it to the pilot web origin(s) at deploy.
 - [ ] Container logs shipped/retained (`docker compose logs` + rotation; or a light
       log agent). API logs are structured Nest logs.
 - [ ] Health monitoring: external uptime check on `api/health` and `app` root;
@@ -368,16 +374,22 @@ open.
 
 ## 15. Proposed execution order (after approval)
 
+Pre-go-live code fixes ✅ **DONE** (this change): env-based CORS allowlist
+(`CORS_ORIGINS`) and idempotent production bootstrap (`pnpm seed:prod`).
+
 1. Provision VPS + firewall + Docker.
-2. Author Dockerfiles, prod compose, Nginx config; add `CORS_ORIGIN` + production
-   bootstrap script (`seed:prod`).
+2. Author Dockerfiles, prod compose, Nginx config. *(CORS allowlist + `seed:prod`
+   already done.)*
 3. DNS records; TLS issuance.
 4. Bring up DB; pre-deploy backup; run migrations (owner role); verify.
-5. Run production bootstrap (super-admin + catalogs).
-6. Build/pull images; `up -d` api + web; configure Nginx; enable HTTPS + HSTS.
+5. Run production bootstrap `pnpm seed:prod` (super-admin + catalogs/plans).
+6. Build/pull images (`CORS_ORIGINS` set to the web origin); `up -d` api + web;
+   configure Nginx; enable HTTPS + HSTS.
 7. Smoke tests (§10); wire monitoring/backups/alerts.
 8. Onboard first pilot tenant; train; validate; expand.
 
-> **Pausing here for approval.** No provisioning, no production changes, and none of the
-> §6/§8 execution artifacts (Dockerfiles, prod compose, Nginx, `seed:prod`, CORS change)
-> have been created yet — they are authored only after this plan is approved.
+> **Status.** The two pre-go-live safety fixes are now implemented: the env-based CORS
+> allowlist (`CORS_ORIGINS`) and the idempotent, non-destructive production bootstrap
+> (`pnpm seed:prod`). The remaining §6 execution artifacts (Dockerfiles, prod compose,
+> Nginx config) and all provisioning/production changes are **not** started and are
+> deferred until the final pilot domain is confirmed and execution is approved.

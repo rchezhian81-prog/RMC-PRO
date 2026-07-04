@@ -10,7 +10,8 @@
     "test": "echo \"(no tests yet)\" && exit 0",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/core/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/core/database/data-source.ts",
-    "seed": "ts-node src/core/database/seed.ts"
+    "seed": "ts-node src/core/database/seed.ts",
+    "seed:prod": "ts-node src/core/database/seed-prod.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

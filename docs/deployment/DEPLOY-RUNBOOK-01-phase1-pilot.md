@@ -1,0 +1,107 @@
+# RMC Plant SaaS — Deployment Runbook (Phase-1 Controlled Pilot)
+
+**Status:** Runbook for the artifacts in this repo. **Nothing here has been executed.**
+Companion to `DEPLOY-PLAN-01-phase1-pilot.md`. Do **not** run any step until the real
+registered domain is confirmed and execution is approved.
+
+**Scheme (Option A):** `app.<DOMAIN>` = web portal · `rmc.<DOMAIN>` = API ·
+`pilot.<DOMAIN>` → 301 to `app.<DOMAIN>`. `<DOMAIN>` is a **placeholder** everywhere.
+
+## Artifacts this runbook uses
+| File | Purpose |
+|---|---|
+| `apps/api/Dockerfile` | API image (multi-stage; runtime is dev-dep-free, runs compiled JS) |
+| `apps/web/Dockerfile` | Web image (Next.js standalone; `NEXT_PUBLIC_API_URL` baked at build) |
+| `docker/docker-compose.prod.yml` | Prod topology; only nginx is published |
+| `docker/nginx/rmc.conf` | Reverse proxy + TLS (literal `<DOMAIN>` token to replace) |
+| `.env.production.example` | Env sample — copy to `.env.production` and fill in |
+| `apps/api` scripts | `migration:run:compiled`, `seed:prod:compiled` (no ts-node) |
+
+---
+
+## 0. Prerequisites (operator, on your infra — NOT done here)
+- VPS (Ubuntu LTS) with Docker Engine + Compose plugin; firewall allows 22/80/443 only.
+- DNS `A` records: `app.<DOMAIN>`, `rmc.<DOMAIN>`, `pilot.<DOMAIN>` → VPS IP.
+- The repo checked out on the VPS (or images built in CI and pulled).
+
+## 1. Prepare env and domain
+```bash
+cp .env.production.example .env.production
+# Replace EVERY __REPLACE__ with a CSPRNG secret (openssl rand -base64 36),
+# and set DOMAIN + both host URLs. Owner and app DB passwords MUST differ.
+# Ensure: CORS_ORIGINS=https://app.<DOMAIN>  and  NEXT_PUBLIC_API_URL=https://rmc.<DOMAIN>
+
+# Replace the placeholder token in the nginx template with your real domain:
+sed -i 's/<DOMAIN>/example.in/g' docker/nginx/rmc.conf   # use your domain
+```
+Never commit `.env.production` (git-ignored). Only `*.example` files are tracked.
+
+## 2. Issue TLS certificates (operator)
+Use certbot on the host to obtain a cert covering the three names (webroot
+`/var/www/certbot`, or DNS-01 for a wildcard). Point the nginx cert paths in
+`rmc.conf` at the issued `fullchain.pem`/`privkey.pem`. Enable HSTS only after HTTPS
+is confirmed working. *(TLS is not issued by this repo.)*
+
+## 3. Build images
+In CI (recommended) or on the VPS, from the repo root:
+```bash
+export IMAGE_TAG=$(git rev-parse --short HEAD)
+docker build -f apps/api/Dockerfile -t rmc-api:$IMAGE_TAG .
+docker build -f apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL=https://rmc.<DOMAIN> -t rmc-web:$IMAGE_TAG .
+```
+> The web image bakes `NEXT_PUBLIC_API_URL` at build time — rebuild to change it.
+
+## 4. Database migrate + production bootstrap (one-shot)
+The `migrate` service applies migrations as the **owner** role, then runs the
+idempotent `seed:prod` (catalogs/plans + one super admin from `SUPERADMIN_*`). It uses
+compiled JS — no ts-node:
+```bash
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml \
+  up -d postgres
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml \
+  run --rm migrate
+```
+Verify: 11 migrations present; `idx_users_tenant` + `idx_number_series_lookup` exist;
+`rmc_app` is `rolsuper=false, rolbypassrls=false`; **no demo tenants**; the configured
+super admin exists.
+
+## 5. Bring up app + proxy
+```bash
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d
+```
+Order is enforced by `depends_on`: postgres(healthy) → migrate(completed) → api → web,
+with nginx last. Reload nginx after TLS is in place.
+
+## 6. Smoke tests (see plan §10 for the full list)
+- `https://rmc.<DOMAIN>/health` → 200 `{status:"ok"}`.
+- `https://app.<DOMAIN>` loads over valid HTTPS; `http://…` redirects to HTTPS;
+  `https://pilot.<DOMAIN>` → 301 to `app.<DOMAIN>`.
+- Postgres/Redis/MinIO NOT reachable from the public internet.
+- CORS: a request with `Origin: https://app.<DOMAIN>` is allowed; a foreign origin is not.
+- Super-admin login; create a pilot tenant + plan; tenant isolation spot-check.
+- Order-to-cash happy path (quotation → … → receipt); offline plant-app sync; dashboards.
+
+## 7. Rollback (see plan §11)
+- App: redeploy the previous `IMAGE_TAG` (`docker compose ... up -d`).
+- DB: restore the pre-deploy `pg_dump`. The index migration's `down` is safe (drops
+  indexes only); prefer a snapshot restore when data may have changed.
+- Keep the previous `rmc.conf`; `nginx -t` before every reload.
+
+---
+
+## Verification performed in-repo (no deployment)
+- `docker compose --env-file .env.production.example -f docker/docker-compose.prod.yml
+  config` resolves cleanly: `api` depends on `migrate`(completed) + `postgres`(healthy);
+  `CORS_ORIGINS=https://app.<DOMAIN>`; web build arg `NEXT_PUBLIC_API_URL=https://rmc.<DOMAIN>`;
+  only nginx publishes 80/443.
+- The compiled one-shot commands were run locally against Postgres:
+  `typeorm migration:run -d dist/core/database/data-source.js` → "No migrations are
+  pending"; `node dist/core/database/seed-prod.js` → idempotent bootstrap. This is
+  exactly what the `migrate` service runs (no ts-node in the image).
+- Image builds could **not** be run in this environment (container registry egress is
+  blocked — 403 pulling `node:22-alpine`). Build/validate the images in CI or on the VPS,
+  where registry access is available.
+
+> **Not done and out of scope until you approve execution and provide the real domain:**
+> provisioning, DNS, TLS issuance, and any production `up`. No real secrets are committed.

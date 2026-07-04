@@ -181,25 +181,25 @@ secret manager / a vault, not in shell history.
 
 ## 6. Docker / Nginx deployment plan
 
-**To author during execution (after approval):**
-1. `apps/api/Dockerfile` — multi-stage: build with pnpm (workspace-aware,
-   `@rmc/shared` first), run `node dist/main.js`. Non-root user. Healthcheck hits
-   `/health`.
-2. `apps/web/Dockerfile` — multi-stage Next.js build with `NEXT_PUBLIC_API_URL` passed
-   as a build arg; `next start` on `:3000`. Non-root user.
-3. `docker/docker-compose.prod.yml` — services: `postgres`, `redis`, `minio`, `api`,
-   `web`, plus a one-shot `migrate` service (owner role). **DB/Redis/MinIO ports NOT
-   published**; only the reverse proxy is public. Named volumes as today
-   (`rmc_pgdata`, `rmc_redisdata`, `rmc_miniodata`). `restart: unless-stopped`.
-4. `docker/nginx/rmc.conf` — two server blocks (`app.`, `api.`), TLS, HTTP→HTTPS
-   redirect, security headers (HSTS, X-Content-Type-Options, X-Frame-Options,
-   Referrer-Policy), sane `client_max_body_size` (PDF/CSV), gzip, proxy timeouts,
-   `proxy_pass` to web:3000 / api:4000, and a WebSocket-upgrade block (future-proof).
+**Authored ✅ (repo artifacts — not yet executed).** Option A host scheme
+(`app.`/`rmc.`/`pilot.`); step-by-step usage in `DEPLOY-RUNBOOK-01-phase1-pilot.md`.
+1. ✅ `apps/api/Dockerfile` — multi-stage; runtime is dev-dep-free (`pnpm deploy --prod`)
+   and runs compiled JS; non-root `node` user; `/health` healthcheck.
+2. ✅ `apps/web/Dockerfile` — Next.js **standalone** build with `NEXT_PUBLIC_API_URL` as
+   a build arg; runs `node apps/web/server.js` on `:3000`; non-root.
+3. ✅ `docker/docker-compose.prod.yml` — `postgres`, `redis`, `minio`, one-shot
+   `migrate` (owner role → migrations + `seed:prod`), `api`, `web`, `nginx`.
+   **DB/Redis/MinIO NOT published**; only nginx exposes 80/443. Named volumes.
+4. ✅ `docker/nginx/rmc.conf` — server blocks for `app.` (→web:3000), `rmc.` (→api:4000)
+   and `pilot.` (301→app), TLS, HTTP→HTTPS redirect, security headers (HSTS,
+   X-Content-Type-Options, X-Frame-Options, Referrer-Policy), `client_max_body_size`
+   for PDF/CSV, proxy timeouts, WebSocket-upgrade map. Literal `<DOMAIN>` to replace.
 5. Build strategy: **build images in CI**, push to a registry, `docker compose pull` +
    `up -d` on the VPS (keeps the VPS clean of build toolchain). Fallback: build on VPS.
 
 Deploy sequence: `pull` → `migrate` (one-shot) → `up -d api web` → reload Nginx →
-smoke tests (§10).
+smoke tests (§10). Image builds must be validated in CI/on the VPS (registry egress is
+blocked in the dev sandbox).
 
 ---
 

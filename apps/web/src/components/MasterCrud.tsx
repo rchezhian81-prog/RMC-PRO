@@ -3,7 +3,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { crud, type Row } from '../lib/api';
 import type { EntityConfig } from '../lib/entity-config';
-import { button, card, input, table, td, th } from '../lib/ui';
+import { Card } from './ui/Card';
+import { Table, Th, Td } from './ui/Table';
+import { Button } from './ui/Button';
+import { Field, Input } from './ui/Field';
+import { ErrorState, EmptyState } from './ui/States';
 
 /** Config-driven list + create screen reused by every tenant master. */
 export function MasterCrud({ config }: { config: EntityConfig }) {
@@ -39,62 +43,55 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>{config.title}</h1>
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>{config.title}</h1>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New {config.title.replace(/s$/, '')}</h3>
-        <form onSubmit={submit} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-          {config.fields.map((f) => (
-            <div key={f.key}>
-              <label style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {f.label}
-                {f.required ? ' *' : ''}
-              </label>
-              <input
-                style={{ ...input, width: 150 }}
-                type={f.type === 'number' ? 'number' : 'text'}
-                value={form[f.key] ?? ''}
-                onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                required={f.required}
-              />
+      <div style={{ marginBottom: 18 }}>
+        <Card title={`New ${config.title.replace(/s$/, '')}`}>
+          <form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            {config.fields.map((f) => (
+              <div key={f.key} style={{ minWidth: 150 }}>
+                <Field label={f.label} required={f.required}>
+                  <Input
+                    type={f.type === 'number' ? 'number' : 'text'}
+                    value={form[f.key] ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                    required={f.required}
+                  />
+                </Field>
+              </div>
+            ))}
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit">Create</Button>
             </div>
-          ))}
-          <button style={button}>Create</button>
-        </form>
-        {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      </section>
+          </form>
+          {error && <div style={{ marginTop: 4 }}><ErrorState message={error} /></div>}
+        </Card>
+      </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              {config.columns.map((c) => (
-                <th key={c} style={th}>
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
+      <Card title={config.title} padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
                 {config.columns.map((c) => (
-                  <td key={c} style={td}>
-                    {String(r[c] ?? '')}
-                  </td>
+                  <Th key={c}>{c}</Th>
                 ))}
               </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td style={{ ...td, color: 'var(--muted)' }} colSpan={config.columns.length}>
-                  No records yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  {config.columns.map((c) => (
+                    <Td key={c}>{String(r[c] ?? '')}</Td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No records yet" description={`Add your first ${config.title.replace(/s$/, '').toLowerCase()} above.`} />
+        )}
+      </Card>
     </div>
   );
 }

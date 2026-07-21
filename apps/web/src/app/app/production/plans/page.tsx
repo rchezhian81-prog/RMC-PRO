@@ -2,9 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { crud, ordersApi, productionPlansApi, type Row } from '../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../lib/ui';
-
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 export default function ProductionPlansPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -22,11 +25,19 @@ export default function ProductionPlansPage() {
     setPlants(pl);
     setOrders(o);
   }
-  useEffect(() => { reload().catch((e) => setError(String(e))); }, []);
+  useEffect(() => {
+    reload().catch((e) => setError(String(e)));
+  }, []);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
-    setError(null); setMsg(null);
-    try { await fn(); if (okMsg) setMsg(okMsg); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    setError(null);
+    setMsg(null);
+    try {
+      await fn();
+      if (okMsg) setMsg(okMsg);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
   }
 
   async function create(e: FormEvent) {
@@ -38,7 +49,11 @@ export default function ProductionPlansPage() {
       setSel(await productionPlansApi.get(String(created.id)));
     });
   }
-  async function open(id: string) { setMsg(null); setError(null); setSel(await productionPlansApi.get(id)); }
+  async function open(id: string) {
+    setMsg(null);
+    setError(null);
+    setSel(await productionPlansApi.get(id));
+  }
   async function addItem(e: FormEvent) {
     e.preventDefault();
     if (!sel) return;
@@ -52,83 +67,141 @@ export default function ProductionPlansPage() {
   const items = (sel?.items as Row[]) ?? [];
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Production Plans</h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <h1 style={{ fontSize: 24, margin: 0 }}>Production Plans</h1>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13, margin: 0 }}>
+          {msg}
+        </p>
+      )}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New Plan</h3>
-        <form onSubmit={create} style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-          <div><label style={lbl}>Plant</label>
-            <select style={{ ...input, width: 160 }} value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
-              <option value="">—</option>
-              {plants.map((p) => <option key={p.id} value={String(p.id)}>{String(p.plantName ?? p.plantCode)}</option>)}
-            </select>
+      <Card title="New plan">
+        <form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 160 }}>
+            <Field label="Plant">
+              <select className="mn-input" value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
+                <option value="">—</option>
+                {plants.map((p) => (
+                  <option key={p.id} value={String(p.id)}>{String(p.plantName ?? p.plantCode)}</option>
+                ))}
+              </select>
+            </Field>
           </div>
-          <div><label style={lbl}>Date</label><input type="date" style={input} value={form.planDate} onChange={(e) => setForm({ ...form, planDate: e.target.value })} /></div>
-          <div><label style={lbl}>Shift</label>
-            <select style={{ ...input, width: 100 }} value={form.shift} onChange={(e) => setForm({ ...form, shift: e.target.value })}>
-              <option value="day">day</option><option value="night">night</option>
-            </select>
+          <div style={{ minWidth: 150 }}>
+            <Field label="Date">
+              <Input type="date" value={form.planDate} onChange={(e) => setForm({ ...form, planDate: e.target.value })} />
+            </Field>
           </div>
-          <button style={button}>Create</button>
+          <div style={{ minWidth: 110 }}>
+            <Field label="Shift">
+              <select className="mn-input" value={form.shift} onChange={(e) => setForm({ ...form, shift: e.target.value })}>
+                <option value="day">day</option>
+                <option value="night">night</option>
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <Button type="submit">Create</Button>
+          </div>
         </form>
-      </section>
+      </Card>
 
-      <section style={card}>
-        <table style={table}>
-          <thead><tr><th style={th}>Plan No</th><th style={th}>Date</th><th style={th}>Shift</th><th style={th}>Status</th><th style={th}></th></tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.planNo ?? '')}</td>
-                <td style={td}>{String(r.planDate ?? '—')}</td>
-                <td style={td}>{String(r.shift ?? '—')}</td>
-                <td style={td}>{String(r.status ?? '')}</td>
-                <td style={td}><button style={ghostButton} onClick={() => open(String(r.id))}>Open</button></td>
+      <Card title="Plans" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Plan No</Th>
+                <Th>Date</Th>
+                <Th>Shift</Th>
+                <Th>Status</Th>
+                <Th />
               </tr>
-            ))}
-            {!rows.length && <tr><td style={td} colSpan={5}>No plans yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.planNo ?? '')}</Td>
+                  <Td>{String(r.planDate ?? '—')}</Td>
+                  <Td>{String(r.shift ?? '—')}</Td>
+                  <Td><StatusBadge status={String(r.status ?? '')} /></Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button variant="secondary" size="sm" onClick={() => open(String(r.id))}>Open</Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No plans yet" />
+        )}
+      </Card>
 
       {sel && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>{String(sel.planNo)} — items <span style={{ color: 'var(--muted)', fontSize: 12 }}>({String(sel.status)})</span></h3>
-          <table style={table}>
-            <thead><tr><th style={th}>Order</th><th style={th}>Grade</th><th style={th}>Planned m³</th><th style={th}>Status</th></tr></thead>
+        <Card title={`${String(sel.planNo)} — items`} actions={<StatusBadge status={String(sel.status)} />}>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Order</Th>
+                <Th>Grade</Th>
+                <Th numeric>Planned m³</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
             <tbody>
               {items.map((it) => (
                 <tr key={it.id}>
-                  <td style={td}>{String(orders.find((o) => o.id === it.orderId)?.orderNo ?? '—')}</td>
-                  <td style={td}>{String(it.gradeLabel ?? '—')}</td>
-                  <td style={td}>{String(it.plannedQuantityM3)}</td>
-                  <td style={td}>{String(it.status)}</td>
+                  <Td>{String(orders.find((o) => o.id === it.orderId)?.orderNo ?? '—')}</Td>
+                  <Td>{String(it.gradeLabel ?? '—')}</Td>
+                  <Td numeric>{String(it.plannedQuantityM3)}</Td>
+                  <Td><StatusBadge status={String(it.status)} /></Td>
                 </tr>
               ))}
-              {!items.length && <tr><td style={td} colSpan={4}>No items yet.</td></tr>}
+              {!items.length && (
+                <tr>
+                  <Td colSpan={4} style={{ color: 'var(--mn-muted)' }}>No items yet.</Td>
+                </tr>
+              )}
             </tbody>
-          </table>
+          </Table>
 
-          <form onSubmit={addItem} style={{ display: 'flex', gap: 8, alignItems: 'end', marginTop: 12, flexWrap: 'wrap' }}>
-            <div><label style={lbl}>Confirmed order</label>
-              <select style={{ ...input, width: 240 }} value={item.orderId} onChange={(e) => setItem({ ...item, orderId: e.target.value })} required>
-                <option value="">— select —</option>
-                {orders.map((o) => <option key={o.id} value={String(o.id)}>{String(o.orderNo)}</option>)}
-              </select>
+          <form onSubmit={addItem} style={{ display: 'flex', gap: 12, alignItems: 'end', marginTop: 14, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 240 }}>
+              <Field label="Confirmed order" required>
+                <select className="mn-input" value={item.orderId} onChange={(e) => setItem({ ...item, orderId: e.target.value })} required>
+                  <option value="">— select —</option>
+                  {orders.map((o) => (
+                    <option key={o.id} value={String(o.id)}>{String(o.orderNo)}</option>
+                  ))}
+                </select>
+              </Field>
             </div>
-            <div><label style={lbl}>Planned m³</label><input type="number" step="any" style={{ ...input, width: 100 }} value={item.plannedQuantityM3} onChange={(e) => setItem({ ...item, plannedQuantityM3: e.target.value })} /></div>
-            <button style={button}>Add item</button>
+            <div style={{ minWidth: 110 }}>
+              <Field label="Planned m³">
+                <Input type="number" step="any" value={item.plannedQuantityM3} onChange={(e) => setItem({ ...item, plannedQuantityM3: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit" variant="secondary">Add item</Button>
+            </div>
           </form>
 
-          <div style={{ marginTop: 14 }}>
-            <button style={button} onClick={() => run(async () => { const r = await productionPlansApi.enqueue(String(sel.id)); setSel(await productionPlansApi.get(String(sel.id))); setMsg(`${(r as Row).queued} load(s) sent to batch queue`); await reload(); })}>
+          <div style={{ marginTop: 6 }}>
+            <Button
+              onClick={() =>
+                run(async () => {
+                  const r = await productionPlansApi.enqueue(String(sel.id));
+                  setSel(await productionPlansApi.get(String(sel.id)));
+                  setMsg(`${(r as Row).queued} load(s) sent to batch queue`);
+                  await reload();
+                })
+              }
+            >
               Enqueue to batch queue
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
     </div>
   );

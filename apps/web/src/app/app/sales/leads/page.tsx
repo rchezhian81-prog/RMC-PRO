@@ -2,7 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { leadsApi, type Row } from '../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const STAGES = ['new', 'qualified', 'quoted', 'won', 'lost'];
 
@@ -52,115 +57,117 @@ export default function LeadsPage() {
   }
 
   const followups = (sel?.followups as Row[]) ?? [];
+  const F = ({ label, v, on, w, req }: { label: string; v: string; on: (v: string) => void; w?: number; req?: boolean }) => (
+    <div style={{ minWidth: w ?? 150 }}>
+      <Field label={label} required={req}>
+        <Input value={v} onChange={(e) => on(e.target.value)} required={req} />
+      </Field>
+    </div>
+  );
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Sales Leads</h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <h1 style={{ fontSize: 24, margin: 0 }}>Sales Leads</h1>
+      {error && <ErrorState message={error} />}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New Lead</h3>
-        <form onSubmit={create} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-          <Field label="Customer name *" v={form.customerName} on={(v) => setForm({ ...form, customerName: v })} w={190} />
-          <Field label="Contact" v={form.contactPerson} on={(v) => setForm({ ...form, contactPerson: v })} w={140} />
-          <Field label="Mobile" v={form.mobile} on={(v) => setForm({ ...form, mobile: v })} w={130} />
-          <Field label="Site location" v={form.siteLocation} on={(v) => setForm({ ...form, siteLocation: v })} w={160} />
-          <Field label="Source" v={form.leadSource} on={(v) => setForm({ ...form, leadSource: v })} w={120} />
-          <button style={button}>Create</button>
+      <Card title="New lead">
+        <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+          <F label="Customer name" v={form.customerName} on={(v) => setForm({ ...form, customerName: v })} w={190} req />
+          <F label="Contact" v={form.contactPerson} on={(v) => setForm({ ...form, contactPerson: v })} w={140} />
+          <F label="Mobile" v={form.mobile} on={(v) => setForm({ ...form, mobile: v })} w={130} />
+          <F label="Site location" v={form.siteLocation} on={(v) => setForm({ ...form, siteLocation: v })} w={160} />
+          <F label="Source" v={form.leadSource} on={(v) => setForm({ ...form, leadSource: v })} w={120} />
+          <div style={{ marginBottom: 14 }}>
+            <Button type="submit">Create</Button>
+          </div>
         </form>
-      </section>
+      </Card>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Lead No</th>
-              <th style={th}>Customer</th>
-              <th style={th}>Mobile</th>
-              <th style={th}>Stage</th>
-              <th style={th}>Next follow-up</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.leadNo ?? '')}</td>
-                <td style={td}>{String(r.customerName ?? '')}</td>
-                <td style={td}>{String(r.mobile ?? '')}</td>
-                <td style={td}>{String(r.leadStage ?? '')}</td>
-                <td style={td}>{String(r.nextFollowupDate ?? '—')}</td>
-                <td style={td}>
-                  <button style={ghostButton} onClick={() => open(String(r.id))}>
-                    Follow-ups
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr><td style={td} colSpan={6}>No leads yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      {sel && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>
-            {String(sel.leadNo)} — {String(sel.customerName)}{' '}
-            <span style={{ color: 'var(--muted)', fontSize: 12 }}>({String(sel.leadStage)})</span>
-          </h3>
-
-          <form onSubmit={addFollowup} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end', marginBottom: 14 }}>
-            <Field label="Notes" v={fu.notes} on={(v) => setFu({ ...fu, notes: v })} w={220} />
-            <Field label="Outcome" v={fu.outcome} on={(v) => setFu({ ...fu, outcome: v })} w={130} />
-            <div>
-              <label style={lbl}>Next date</label>
-              <input type="date" style={input} value={fu.nextFollowupDate} onChange={(e) => setFu({ ...fu, nextFollowupDate: e.target.value })} />
-            </div>
-            <div>
-              <label style={lbl}>Move stage</label>
-              <select style={{ ...input, width: 140 }} value={fu.leadStage} onChange={(e) => setFu({ ...fu, leadStage: e.target.value })}>
-                <option value="">— keep —</option>
-                {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <button style={button}>Add follow-up</button>
-          </form>
-
-          <table style={table}>
+      <Card title="Leads" padded={false}>
+        {rows.length ? (
+          <Table>
             <thead>
               <tr>
-                <th style={th}>When</th>
-                <th style={th}>Notes</th>
-                <th style={th}>Outcome</th>
-                <th style={th}>Next</th>
+                <Th>Lead No</Th>
+                <Th>Customer</Th>
+                <Th>Mobile</Th>
+                <Th>Stage</Th>
+                <Th>Next follow-up</Th>
+                <Th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.leadNo ?? '')}</Td>
+                  <Td>{String(r.customerName ?? '')}</Td>
+                  <Td>{String(r.mobile ?? '')}</Td>
+                  <Td><StatusBadge status={String(r.leadStage ?? '')} /></Td>
+                  <Td>{String(r.nextFollowupDate ?? '—')}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button variant="secondary" size="sm" onClick={() => open(String(r.id))}>Follow-ups</Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No leads yet" description="Capture your first lead above." />
+        )}
+      </Card>
+
+      {sel && (
+        <Card title={`${String(sel.leadNo)} — ${String(sel.customerName)}`} actions={<StatusBadge status={String(sel.leadStage)} />}>
+          <form onSubmit={addFollowup} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 16 }}>
+            <F label="Notes" v={fu.notes} on={(v) => setFu({ ...fu, notes: v })} w={220} />
+            <F label="Outcome" v={fu.outcome} on={(v) => setFu({ ...fu, outcome: v })} w={130} />
+            <div style={{ minWidth: 150 }}>
+              <Field label="Next date">
+                <Input type="date" value={fu.nextFollowupDate} onChange={(e) => setFu({ ...fu, nextFollowupDate: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 140 }}>
+              <Field label="Move stage">
+                <select className="mn-input" value={fu.leadStage} onChange={(e) => setFu({ ...fu, leadStage: e.target.value })}>
+                  <option value="">— keep —</option>
+                  {STAGES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit">Add follow-up</Button>
+            </div>
+          </form>
+
+          <Table>
+            <thead>
+              <tr>
+                <Th>When</Th>
+                <Th>Notes</Th>
+                <Th>Outcome</Th>
+                <Th>Next</Th>
               </tr>
             </thead>
             <tbody>
               {followups.map((f) => (
                 <tr key={f.id}>
-                  <td style={td}>{String(f.createdAt ?? '').slice(0, 10)}</td>
-                  <td style={td}>{String(f.notes ?? '')}</td>
-                  <td style={td}>{String(f.outcome ?? '')}</td>
-                  <td style={td}>{String(f.nextFollowupDate ?? '—')}</td>
+                  <Td>{String(f.createdAt ?? '').slice(0, 10)}</Td>
+                  <Td>{String(f.notes ?? '')}</Td>
+                  <Td>{String(f.outcome ?? '')}</Td>
+                  <Td>{String(f.nextFollowupDate ?? '—')}</Td>
                 </tr>
               ))}
-              {!followups.length && <tr><td style={td} colSpan={4}>No follow-ups yet.</td></tr>}
+              {!followups.length && (
+                <tr>
+                  <Td colSpan={4} style={{ color: 'var(--mn-muted)' }}>No follow-ups yet.</Td>
+                </tr>
+              )}
             </tbody>
-          </table>
-        </section>
+          </Table>
+        </Card>
       )}
-    </div>
-  );
-}
-
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
-function Field({ label, v, on, w }: { label: string; v: string; on: (v: string) => void; w: number }) {
-  return (
-    <div>
-      <label style={lbl}>{label}</label>
-      <input style={{ ...input, width: w }} value={v} onChange={(e) => on(e.target.value)} />
     </div>
   );
 }

@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { orderDraftsApi, type Row } from '../../../../lib/api';
-import { card, ghostButton, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
-const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function OrderDraftsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -23,75 +27,85 @@ export default function OrderDraftsPage() {
   const items = (sel?.items as Row[]) ?? [];
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Order Drafts</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
-        Draft orders created from approved quotations / rate contracts. This is the sales → operations
-        handoff only — confirmation, credit check, scheduling, dispatch and billing come in later sprints.
-      </p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <h1 style={{ fontSize: 24, margin: '0 0 4px' }}>Order Drafts</h1>
+        <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0, maxWidth: 780 }}>
+          Draft orders created from approved quotations / rate contracts — the sales → operations handoff.
+          Confirmation and credit check happen in Orders.
+        </p>
+      </div>
+      {error && <ErrorState message={error} />}
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Order No</th>
-              <th style={th}>Source</th>
-              <th style={th}>Order date</th>
-              <th style={th}>Credit</th>
-              <th style={th}>Status</th>
-              <th style={th}>Est. value</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.orderNo ?? '')}</td>
-                <td style={td}>{String(r.pricingSource ?? '—')}</td>
-                <td style={td}>{String(r.orderDate ?? '—')}</td>
-                <td style={td}>{String(r.creditStatus ?? '')}</td>
-                <td style={td}><span style={{ color: '#e0b341', fontWeight: 600 }}>{String(r.orderStatus)}</span></td>
-                <td style={td}>{money(r.estimatedOrderValue)}</td>
-                <td style={td}><button style={ghostButton} onClick={() => open(String(r.id))}>Lines</button></td>
-              </tr>
-            ))}
-            {!rows.length && <tr><td style={td} colSpan={7}>No order drafts yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
-
-      {sel && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>{String(sel.orderNo)} — lines</h3>
-          <table style={table}>
+      <Card title="Order drafts" padded={false}>
+        {rows.length ? (
+          <Table>
             <thead>
               <tr>
-                <th style={th}>Grade</th>
-                <th style={th}>Qty m³</th>
-                <th style={th}>Rate/m³</th>
-                <th style={th}>Transport</th>
-                <th style={th}>Pump</th>
-                <th style={th}>Waiting</th>
-                <th style={th}>Line status</th>
+                <Th>Order No</Th>
+                <Th>Source</Th>
+                <Th>Order date</Th>
+                <Th>Credit</Th>
+                <Th>Status</Th>
+                <Th numeric>Est. value</Th>
+                <Th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.orderNo ?? '')}</Td>
+                  <Td>{String(r.pricingSource ?? '—')}</Td>
+                  <Td>{String(r.orderDate ?? '—')}</Td>
+                  <Td>{String(r.creditStatus ?? '')}</Td>
+                  <Td><StatusBadge status={String(r.orderStatus)} /></Td>
+                  <Td numeric>{money(r.estimatedOrderValue)}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button variant="secondary" size="sm" onClick={() => open(String(r.id))}>Lines</Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No order drafts yet" description="Convert an approved quotation to create one." />
+        )}
+      </Card>
+
+      {sel && (
+        <Card title={`${String(sel.orderNo)} — lines`} padded={false}>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Grade</Th>
+                <Th numeric>Qty m³</Th>
+                <Th numeric>Rate/m³</Th>
+                <Th numeric>Transport</Th>
+                <Th numeric>Pump</Th>
+                <Th numeric>Waiting</Th>
+                <Th>Line status</Th>
               </tr>
             </thead>
             <tbody>
               {items.map((it) => (
                 <tr key={it.id}>
-                  <td style={td}>{String(it.gradeLabel ?? '')}</td>
-                  <td style={td}>{money(it.quantityM3)}</td>
-                  <td style={td}>{money(it.ratePerM3)}</td>
-                  <td style={td}>{money(it.transportCharge)}</td>
-                  <td style={td}>{money(it.pumpCharge)}</td>
-                  <td style={td}>{money(it.waitingCharge)}</td>
-                  <td style={td}>{String(it.lineStatus ?? '')}</td>
+                  <Td>{String(it.gradeLabel ?? '')}</Td>
+                  <Td numeric>{Number(it.quantityM3 ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Td>
+                  <Td numeric>{Number(it.ratePerM3 ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Td>
+                  <Td numeric>{Number(it.transportCharge ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Td>
+                  <Td numeric>{Number(it.pumpCharge ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Td>
+                  <Td numeric>{Number(it.waitingCharge ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Td>
+                  <Td>{String(it.lineStatus ?? '')}</Td>
                 </tr>
               ))}
-              {!items.length && <tr><td style={td} colSpan={7}>No lines.</td></tr>}
+              {!items.length && (
+                <tr>
+                  <Td colSpan={7} style={{ color: 'var(--mn-muted)' }}>No lines.</Td>
+                </tr>
+              )}
             </tbody>
-          </table>
-        </section>
+          </Table>
+        </Card>
       )}
     </div>
   );

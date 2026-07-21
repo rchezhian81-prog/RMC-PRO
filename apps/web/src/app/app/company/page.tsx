@@ -2,7 +2,10 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { company } from '../../../lib/api';
-import { button, card, input } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Field';
+import { ErrorState } from '../../../components/ui/States';
 
 const FIELDS: Array<[string, string]> = [
   ['companyName', 'Company name'],
@@ -43,24 +46,23 @@ export default function CompanyPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Company Profile</h1>
-      <section style={{ ...card, maxWidth: 420 }}>
-        <form onSubmit={save}>
-          {FIELDS.map(([k, label]) => (
-            <div key={k} style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, color: 'var(--muted)' }}>{label}</label>
-              <input
-                style={input}
-                value={form[k] ?? ''}
-                onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
-              />
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Company Profile</h1>
+      <div style={{ maxWidth: 440 }}>
+        <Card title="Company details">
+          <form onSubmit={save}>
+            {FIELDS.map(([k, label]) => (
+              <Field key={k} label={label}>
+                <Input value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))} />
+              </Field>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+              <Button type="submit">Save</Button>
+              {msg && <span style={{ color: 'var(--mn-success)', fontSize: 13 }}>{msg}</span>}
             </div>
-          ))}
-          <button style={button}>Save</button>
-          {msg && <span style={{ marginLeft: 12, color: '#6ee7a8', fontSize: 13 }}>{msg}</span>}
-          {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-        </form>
-      </section>
+            {error && <div style={{ marginTop: 12 }}><ErrorState message={error} /></div>}
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }

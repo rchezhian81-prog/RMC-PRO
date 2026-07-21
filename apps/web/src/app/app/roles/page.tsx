@@ -2,7 +2,11 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { rolesApi, type Row } from '../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Table, Th, Td } from '../../../components/ui/Table';
+import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../components/ui/States';
 
 export default function RolesPage() {
   const [roles, setRoles] = useState<Row[]>([]);
@@ -58,71 +62,88 @@ export default function RolesPage() {
   }
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Roles &amp; Permissions</h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <h1 style={{ fontSize: 24, margin: 0 }}>Roles &amp; Permissions</h1>
+      {error && <ErrorState message={error} />}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New Role</h3>
-        <form onSubmit={createRole} style={{ display: 'flex', gap: 10, alignItems: 'end' }}>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Role key</label>
-            <input style={{ ...input, width: 180 }} value={form.roleKey} onChange={(e) => setForm({ ...form, roleKey: e.target.value })} required />
+      <Card title="New role">
+        <form onSubmit={createRole} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 180 }}>
+            <Field label="Role key" required>
+              <Input value={form.roleKey} onChange={(e) => setForm({ ...form, roleKey: e.target.value })} required />
+            </Field>
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Role name</label>
-            <input style={{ ...input, width: 220 }} value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })} required />
+          <div style={{ minWidth: 220 }}>
+            <Field label="Role name" required>
+              <Input value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })} required />
+            </Field>
           </div>
-          <button style={button}>Create</button>
+          <div style={{ marginBottom: 14 }}>
+            <Button type="submit">Create</Button>
+          </div>
         </form>
-      </section>
+      </Card>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Role</th>
-              <th style={th}>Key</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.roleName ?? '')}</td>
-                <td style={td}>{String(r.roleKey ?? '')}</td>
-                <td style={td}>
-                  <button style={ghostButton} onClick={() => selectRole(r)}>
-                    Permissions
-                  </button>
-                </td>
+      <Card title="Roles" padded={false}>
+        {roles.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Role</Th>
+                <Th>Key</Th>
+                <Th />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {roles.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.roleName ?? '')}</Td>
+                  <Td>{String(r.roleKey ?? '')}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button variant="secondary" size="sm" onClick={() => selectRole(r)}>Permissions</Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No roles yet" />
+        )}
+      </Card>
 
       {selRole && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>
-            Permissions — {String(selRole.roleName)}{' '}
-            {msg && <span style={{ color: '#6ee7a8', fontSize: 12 }}>({msg})</span>}
-          </h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 14px' }}>
+        <Card
+          title={`Permissions — ${String(selRole.roleName)}`}
+          actions={msg ? <span style={{ color: 'var(--mn-success)', fontSize: 12 }}>{msg}</span> : undefined}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             {catalog.map((p) => {
               const id = String(p.id);
+              const on = checked.has(id);
               return (
-                <label key={id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, border: '1px solid #26314b', borderRadius: 8, padding: '4px 8px' }}>
-                  <input type="checkbox" checked={checked.has(id)} onChange={() => toggle(id)} />
+                <label
+                  key={id}
+                  style={{
+                    display: 'flex',
+                    gap: 6,
+                    alignItems: 'center',
+                    fontSize: 12.5,
+                    border: `1px solid ${on ? 'var(--mn-primary)' : 'var(--mn-border)'}`,
+                    background: on ? 'var(--mn-purple-50)' : 'var(--mn-surface)',
+                    color: on ? 'var(--mn-primary)' : 'var(--mn-text)',
+                    borderRadius: 'var(--mn-radius-pill)',
+                    padding: '5px 11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input type="checkbox" checked={on} onChange={() => toggle(id)} />
                   {String(p.permissionKey)}
                 </label>
               );
             })}
           </div>
-          <button style={button} onClick={savePerms}>
-            Save permissions
-          </button>
-        </section>
+          <Button onClick={savePerms}>Save permissions</Button>
+        </Card>
       )}
     </div>
   );

@@ -3,7 +3,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { api, type PlanRow, type TenantRow } from '../../../lib/api';
-import { button, card, input, table, td, th } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Table, Th, Td } from '../../../components/ui/Table';
+import { StatusBadge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../components/ui/States';
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
@@ -26,11 +31,7 @@ export default function TenantsPage() {
     e.preventDefault();
     setError(null);
     try {
-      await api.createTenant({
-        tenantCode: code,
-        tenantName: name,
-        planId: planId || undefined,
-      });
+      await api.createTenant({ tenantCode: code, tenantName: name, planId: planId || undefined });
       setCode('');
       setName('');
       setPlanId('');
@@ -42,65 +43,73 @@ export default function TenantsPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Tenants</h1>
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Tenants</h1>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New Tenant</h3>
-        <form onSubmit={create} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Code</label>
-            <input style={{ ...input, width: 140 }} value={code} onChange={(e) => setCode(e.target.value)} required />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Company name</label>
-            <input style={{ ...input, width: 220 }} value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Plan (optional)</label>
-            <select style={{ ...input, width: 180 }} value={planId} onChange={(e) => setPlanId(e.target.value)}>
-              <option value="">— none —</option>
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button style={button}>Create</button>
-        </form>
-        {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      </section>
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New tenant">
+          <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ minWidth: 140 }}>
+              <Field label="Code" required>
+                <Input value={code} onChange={(e) => setCode(e.target.value)} required />
+              </Field>
+            </div>
+            <div style={{ minWidth: 220 }}>
+              <Field label="Company name" required>
+                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+              </Field>
+            </div>
+            <div style={{ minWidth: 180 }}>
+              <Field label="Plan (optional)">
+                <select className="mn-input" value={planId} onChange={(e) => setPlanId(e.target.value)}>
+                  <option value="">— none —</option>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit">Create</Button>
+            </div>
+          </form>
+          {error && <div style={{ marginTop: 4 }}><ErrorState message={error} /></div>}
+        </Card>
+      </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Code</th>
-              <th style={th}>Company</th>
-              <th style={th}>Status</th>
-              <th style={th}>Plan</th>
-              <th style={th}>Modules</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.map((t) => (
-              <tr key={t.id}>
-                <td style={td}>{t.code}</td>
-                <td style={td}>{t.name}</td>
-                <td style={td}>{t.status}</td>
-                <td style={td}>{t.planCode ?? '—'}</td>
-                <td style={td}>{t.enabledModules}</td>
-                <td style={td}>
-                  <Link href={`/admin/tenants/${t.id}`} style={{ color: 'var(--brand)' }}>
-                    Manage →
-                  </Link>
-                </td>
+      <Card title="Tenants" padded={false}>
+        {tenants.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Code</Th>
+                <Th>Company</Th>
+                <Th>Status</Th>
+                <Th>Plan</Th>
+                <Th numeric>Modules</Th>
+                <Th />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {tenants.map((t) => (
+                <tr key={t.id}>
+                  <Td style={{ fontWeight: 600 }}>{t.code}</Td>
+                  <Td>{t.name}</Td>
+                  <Td><StatusBadge status={t.status} /></Td>
+                  <Td>{t.planCode ?? '—'}</Td>
+                  <Td numeric>{t.enabledModules}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Link href={`/admin/tenants/${t.id}`}>
+                      <Button variant="secondary" size="sm">Manage</Button>
+                    </Link>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No tenants yet" description="Create your first tenant above." />
+        )}
+      </Card>
     </div>
   );
 }

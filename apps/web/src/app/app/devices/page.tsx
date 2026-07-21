@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { syncApi, type Row } from '../../../lib/api';
-import { button, card, ghostButton, table, td, th } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Table, Th, Td } from '../../../components/ui/Table';
+import { StatusBadge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
+import { ErrorState, EmptyState } from '../../../components/ui/States';
 
 const dt = (v: unknown) => (v ? String(v).slice(0, 19).replace('T', ' ') : '—');
 
@@ -15,87 +19,134 @@ export default function DevicesSyncPage() {
 
   const reload = useCallback(async () => {
     const [d, r, c] = await Promise.all([syncApi.devices(), syncApi.reservations(), syncApi.conflicts()]);
-    setDevices(d); setReservations(r); setConflicts(c);
+    setDevices(d);
+    setReservations(r);
+    setConflicts(c);
   }, []);
-  useEffect(() => { reload().catch((e) => setError(String(e))); }, [reload]);
+  useEffect(() => {
+    reload().catch((e) => setError(String(e)));
+  }, [reload]);
 
   async function resolve(id: string, resolution: string) {
-    setError(null); setMsg(null);
-    try { await syncApi.resolveConflict(id, resolution); setMsg(`Conflict resolved (${resolution}).`); await reload(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    setError(null);
+    setMsg(null);
+    try {
+      await syncApi.resolveConflict(id, resolution);
+      setMsg(`Conflict resolved (${resolution}).`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
   }
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Devices &amp; Sync</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>Registered plant devices, cloud-issued number reservations, and offline↔cloud conflicts.</p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <h1 style={{ fontSize: 24, margin: '0 0 4px' }}>Devices &amp; Sync</h1>
+        <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>Registered plant devices, cloud-issued number reservations, and offline↔cloud conflicts.</p>
+      </div>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13, margin: 0 }}>
+          {msg}
+        </p>
+      )}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Devices</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Name</th><th style={th}>Type</th><th style={th}>Identifier</th><th style={th}>Status</th><th style={th}>Last sync</th></tr></thead>
-          <tbody>
-            {devices.map((d) => (
-              <tr key={d.id}>
-                <td style={td}>{String(d.deviceName ?? '')}</td>
-                <td style={td}>{String(d.deviceType ?? '')}</td>
-                <td style={td}>{String(d.deviceIdentifier ?? '')}</td>
-                <td style={td}>{String(d.status ?? '')}</td>
-                <td style={td}>{dt(d.lastSyncToken)}</td>
+      <Card title="Devices" padded={false}>
+        {devices.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Name</Th>
+                <Th>Type</Th>
+                <Th>Identifier</Th>
+                <Th>Status</Th>
+                <Th>Last sync</Th>
               </tr>
-            ))}
-            {!devices.length && <tr><td style={td} colSpan={5}>No devices registered.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {devices.map((d) => (
+                <tr key={d.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(d.deviceName ?? '')}</Td>
+                  <Td>{String(d.deviceType ?? '')}</Td>
+                  <Td>{String(d.deviceIdentifier ?? '')}</Td>
+                  <Td><StatusBadge status={String(d.status ?? '')} /></Td>
+                  <Td>{dt(d.lastSyncToken)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No devices registered" />
+        )}
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Number reservations</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Document</th><th style={th}>Prefix</th><th style={th}>From</th><th style={th}>To</th><th style={th}>Used</th><th style={th}>Status</th></tr></thead>
-          <tbody>
-            {reservations.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.documentType ?? '')}</td>
-                <td style={td}>{String(r.prefix ?? '')}</td>
-                <td style={td}>{String(r.numberFrom)}</td>
-                <td style={td}>{String(r.numberTo)}</td>
-                <td style={td}>{String(r.usedCount)}</td>
-                <td style={td}>{String(r.status)}</td>
+      <Card title="Number reservations" padded={false}>
+        {reservations.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Document</Th>
+                <Th>Prefix</Th>
+                <Th numeric>From</Th>
+                <Th numeric>To</Th>
+                <Th numeric>Used</Th>
+                <Th>Status</Th>
               </tr>
-            ))}
-            {!reservations.length && <tr><td style={td} colSpan={6}>No reservations.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {reservations.map((r) => (
+                <tr key={r.id}>
+                  <Td>{String(r.documentType ?? '')}</Td>
+                  <Td>{String(r.prefix ?? '')}</Td>
+                  <Td numeric>{String(r.numberFrom)}</Td>
+                  <Td numeric>{String(r.numberTo)}</Td>
+                  <Td numeric>{String(r.usedCount)}</Td>
+                  <Td><StatusBadge status={String(r.status)} /></Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No reservations" />
+        )}
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Sync conflicts</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Entity</th><th style={th}>Reason</th><th style={th}>Cloud ID</th><th style={th}>Status</th><th style={th}></th></tr></thead>
-          <tbody>
-            {conflicts.map((c) => (
-              <tr key={c.id}>
-                <td style={td}>{String(c.entityName ?? '')}</td>
-                <td style={td}>{String(c.conflictReason ?? '')}</td>
-                <td style={td}><code style={{ fontSize: 11 }}>{String(c.cloudId ?? '—').slice(0, 8)}</code></td>
-                <td style={td}>{String(c.resolutionStatus)}</td>
-                <td style={td}>
-                  {c.resolutionStatus === 'pending' && (
-                    <span style={{ display: 'flex', gap: 6 }}>
-                      <button style={button} onClick={() => resolve(String(c.id), 'keep_cloud')}>Keep cloud</button>
-                      <button style={ghostButton} onClick={() => resolve(String(c.id), 'keep_local')}>Keep local</button>
-                    </span>
-                  )}
-                </td>
+      <Card title="Sync conflicts" padded={false}>
+        {conflicts.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Entity</Th>
+                <Th>Reason</Th>
+                <Th>Cloud ID</Th>
+                <Th>Status</Th>
+                <Th />
               </tr>
-            ))}
-            {!conflicts.length && <tr><td style={td} colSpan={5}>No conflicts.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {conflicts.map((c) => (
+                <tr key={c.id}>
+                  <Td>{String(c.entityName ?? '')}</Td>
+                  <Td>{String(c.conflictReason ?? '')}</Td>
+                  <Td><code style={{ fontSize: 11 }}>{String(c.cloudId ?? '—').slice(0, 8)}</code></Td>
+                  <Td><StatusBadge status={String(c.resolutionStatus)} /></Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    {c.resolutionStatus === 'pending' && (
+                      <span style={{ display: 'inline-flex', gap: 6 }}>
+                        <Button size="sm" onClick={() => resolve(String(c.id), 'keep_cloud')}>Keep cloud</Button>
+                        <Button variant="secondary" size="sm" onClick={() => resolve(String(c.id), 'keep_local')}>Keep local</Button>
+                      </span>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No conflicts" description="Offline↔cloud sync conflicts will appear here." />
+        )}
+      </Card>
     </div>
   );
 }

@@ -2,7 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { usersApi, type Row } from '../../../lib/api';
-import { button, card, input, table, td, th } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Table, Th, Td } from '../../../components/ui/Table';
+import { StatusBadge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../components/ui/States';
 
 export default function UsersPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -30,48 +35,58 @@ export default function UsersPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Users</h1>
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Users</h1>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New User</h3>
-        <form onSubmit={create} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Name *</label>
-            <input style={{ ...input, width: 180 }} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Email *</label>
-            <input style={{ ...input, width: 220 }} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-          </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Password *</label>
-            <input style={{ ...input, width: 160 }} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-          </div>
-          <button style={button}>Create</button>
-        </form>
-        {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      </section>
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New user">
+          <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ minWidth: 180 }}>
+              <Field label="Name" required>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </Field>
+            </div>
+            <div style={{ minWidth: 220 }}>
+              <Field label="Email" required>
+                <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              </Field>
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <Field label="Password" required>
+                <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit">Create</Button>
+            </div>
+          </form>
+          {error && <div style={{ marginTop: 4 }}><ErrorState message={error} /></div>}
+        </Card>
+      </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Name</th>
-              <th style={th}>Email</th>
-              <th style={th}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.name ?? '')}</td>
-                <td style={td}>{String(r.email ?? '')}</td>
-                <td style={td}>{String(r.status ?? '')}</td>
+      <Card title="Users" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Name</Th>
+                <Th>Email</Th>
+                <Th>Status</Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.name ?? '')}</Td>
+                  <Td>{String(r.email ?? '')}</Td>
+                  <Td><StatusBadge status={String(r.status ?? '')} /></Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No users yet" description="Add your first user above." />
+        )}
+      </Card>
     </div>
   );
 }

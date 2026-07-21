@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { crud, orderDraftsApi, rateContractsApi, type Row } from '../../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../../lib/ui';
+import { Card } from '../../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../../components/ui/Table';
+import { StatusBadge } from '../../../../../components/ui/Badge';
+import { Button } from '../../../../../components/ui/Button';
+import { Field, Input } from '../../../../../components/ui/Field';
+import { Loading, ErrorState } from '../../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -69,100 +75,114 @@ export default function RateContractDetail() {
     });
   }
 
-  if (!rc) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
+  if (!rc) return <Loading label="Loading rate contract…" />;
   const items = (rc.items as Row[]) ?? [];
   const status = String(rc.approvalStatus);
   const locked = status === 'approved';
+  const Num = ({ label, v, on }: { label: string; v: string; on: (v: string) => void }) => (
+    <div style={{ minWidth: 96 }}>
+      <Field label={label}>
+        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} />
+      </Field>
+    </div>
+  );
 
   return (
-    <div>
-      <button style={{ ...ghostButton, marginBottom: 12 }} onClick={() => router.push('/app/sales/rate-contracts')}>← Rate Contracts</button>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>
-        {String(rc.rateContractNo)} <span style={{ fontSize: 13, color: 'var(--muted)' }}>{status}</span>
-      </h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} onClick={() => router.push('/app/sales/rate-contracts')}>
+          Rate Contracts
+        </Button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 24, margin: 0 }}>{String(rc.rateContractNo)}</h1>
+        <StatusBadge status={status} />
+      </div>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <div style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
+          {msg}
+        </div>
+      )}
 
-      <section style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {status === 'draft' && <button style={button} onClick={() => run(() => rateContractsApi.submit(id), 'Submitted')}>Submit</button>}
-        {status === 'rejected' && <button style={button} onClick={() => run(() => rateContractsApi.submit(id), 'Re-submitted')}>Re-submit</button>}
-        {status === 'submitted' && <button style={button} onClick={() => run(() => rateContractsApi.approve(id), 'Approved')}>Approve</button>}
-        {status === 'submitted' && <button style={ghostButton} onClick={() => run(() => rateContractsApi.reject(id, 'Not accepted'), 'Rejected')}>Reject</button>}
-      </section>
+      <Card title="Actions">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {status === 'draft' && <Button onClick={() => run(() => rateContractsApi.submit(id), 'Submitted')}>Submit</Button>}
+          {status === 'rejected' && <Button onClick={() => run(() => rateContractsApi.submit(id), 'Re-submitted')}>Re-submit</Button>}
+          {status === 'submitted' && <Button onClick={() => run(() => rateContractsApi.approve(id), 'Approved')}>Approve</Button>}
+          {status === 'submitted' && <Button variant="secondary" onClick={() => run(() => rateContractsApi.reject(id, 'Not accepted'), 'Rejected')}>Reject</Button>}
+        </div>
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Grade-wise agreed rates</h3>
-        <table style={table}>
+      <Card title="Grade-wise agreed rates" padded={false}>
+        <Table>
           <thead>
             <tr>
-              <th style={th}>Grade</th>
-              <th style={th}>Rate/m³</th>
-              <th style={th}>Transport</th>
-              <th style={th}>Pump</th>
-              <th style={th}>Waiting</th>
-              {locked && <th style={th}>Order qty m³</th>}
-              <th style={th}></th>
+              <Th>Grade</Th>
+              <Th numeric>Rate/m³</Th>
+              <Th numeric>Transport</Th>
+              <Th numeric>Pump</Th>
+              <Th numeric>Waiting</Th>
+              {locked && <Th numeric>Order qty m³</Th>}
+              <Th />
             </tr>
           </thead>
           <tbody>
             {items.map((it) => (
               <tr key={it.id}>
-                <td style={td}>{String(it.gradeLabel ?? '')}</td>
-                <td style={td}>{money(it.ratePerM3)}</td>
-                <td style={td}>{money(it.transportCharge)}</td>
-                <td style={td}>{money(it.pumpCharge)}</td>
-                <td style={td}>{money(it.waitingCharge)}</td>
+                <Td>{String(it.gradeLabel ?? '')}</Td>
+                <Td numeric>{money(it.ratePerM3)}</Td>
+                <Td numeric>{money(it.transportCharge)}</Td>
+                <Td numeric>{money(it.pumpCharge)}</Td>
+                <Td numeric>{money(it.waitingCharge)}</Td>
                 {locked && (
-                  <td style={td}>
-                    <input type="number" step="any" style={{ ...input, width: 90 }} value={qty[String(it.id)] ?? ''} onChange={(e) => setQty({ ...qty, [String(it.id)]: e.target.value })} />
-                  </td>
+                  <Td numeric>
+                    <Input type="number" step="any" style={{ width: 90, textAlign: 'right' }} value={qty[String(it.id)] ?? ''} onChange={(e) => setQty({ ...qty, [String(it.id)]: e.target.value })} />
+                  </Td>
                 )}
-                <td style={td}>
-                  {!locked && <button style={ghostButton} onClick={() => run(() => rateContractsApi.deleteItem(id, String(it.id)))}>Remove</button>}
-                </td>
+                <Td style={{ textAlign: 'right' }}>
+                  {!locked && <Button variant="ghost" size="sm" onClick={() => run(() => rateContractsApi.deleteItem(id, String(it.id)))}>Remove</Button>}
+                </Td>
               </tr>
             ))}
-            {!items.length && <tr><td style={td} colSpan={locked ? 7 : 6}>No items yet.</td></tr>}
+            {!items.length && (
+              <tr>
+                <Td colSpan={locked ? 7 : 6} style={{ color: 'var(--mn-muted)' }}>No items yet.</Td>
+              </tr>
+            )}
           </tbody>
-        </table>
-
+        </Table>
         {!locked && (
-          <form onSubmit={addItem} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', marginTop: 12 }}>
-            <div>
-              <label style={lbl}>Grade</label>
-              <select style={{ ...input, width: 130 }} value={item.gradeId} onChange={(e) => setItem({ ...item, gradeId: e.target.value })}>
-                <option value="">— pick —</option>
-                {grades.map((g) => <option key={g.id} value={String(g.id)}>{String(g.gradeCode)}</option>)}
-              </select>
+          <form onSubmit={addItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
+            <div style={{ minWidth: 130 }}>
+              <Field label="Grade">
+                <select className="mn-input" value={item.gradeId} onChange={(e) => setItem({ ...item, gradeId: e.target.value })}>
+                  <option value="">— pick —</option>
+                  {grades.map((g) => (
+                    <option key={g.id} value={String(g.id)}>{String(g.gradeCode)}</option>
+                  ))}
+                </select>
+              </Field>
             </div>
             <Num label="Rate/m³" v={item.ratePerM3} on={(v) => setItem({ ...item, ratePerM3: v })} />
             <Num label="Transport" v={item.transportCharge} on={(v) => setItem({ ...item, transportCharge: v })} />
             <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
             <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
-            <button style={button}>Add rate</button>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit" variant="secondary">Add rate</Button>
+            </div>
           </form>
         )}
-      </section>
+      </Card>
 
       {locked && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>Convert to order draft</h3>
-          <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 0 }}>
+        <Card title="Convert to order draft">
+          <p style={{ color: 'var(--mn-muted)', fontSize: 12, marginTop: 0 }}>
             Enter order quantities per grade above, then create a draft order (handoff to operations).
           </p>
-          <button style={button} onClick={convert}>Convert → Order draft</button>
-        </section>
+          <Button onClick={convert}>Convert → Order draft</Button>
+        </Card>
       )}
-    </div>
-  );
-}
-
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
-function Num({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
-  return (
-    <div>
-      <label style={lbl}>{label}</label>
-      <input type="number" step="any" style={{ ...input, width: 90 }} value={v} onChange={(e) => on(e.target.value)} />
     </div>
   );
 }

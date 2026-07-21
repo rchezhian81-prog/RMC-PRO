@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, Download, Share2 } from 'lucide-react';
 import { crud, orderDraftsApi, openQuotationPdf, quotationsApi, type Row } from '../../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../../lib/ui';
+import { Card } from '../../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../../components/ui/Table';
+import { StatusBadge } from '../../../../../components/ui/Badge';
+import { Button } from '../../../../../components/ui/Button';
+import { Field, Input } from '../../../../../components/ui/Field';
+import { Loading, ErrorState } from '../../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -57,127 +63,141 @@ export default function QuotationDetail() {
     });
   }
 
-  if (!q) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
+  if (!q) return <Loading label="Loading quotation…" />;
   const items = (q.items as Row[]) ?? [];
   const status = String(q.approvalStatus);
   const locked = status === 'approved';
+  const Num = ({ label, v, on }: { label: string; v: string; on: (v: string) => void }) => (
+    <div style={{ minWidth: 96 }}>
+      <Field label={label}>
+        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} />
+      </Field>
+    </div>
+  );
 
   return (
-    <div>
-      <button style={{ ...ghostButton, marginBottom: 12 }} onClick={() => router.push('/app/sales/quotations')}>← Quotations</button>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>
-        {String(q.quotationNo)} <span style={{ fontSize: 13, color: 'var(--muted)' }}>rev {String(q.revisionNo)} · {status}</span>
-      </h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} onClick={() => router.push('/app/sales/quotations')}>
+          Quotations
+        </Button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 24, margin: 0 }}>{String(q.quotationNo)}</h1>
+        <StatusBadge status={status} />
+        <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>rev {String(q.revisionNo)}</span>
+      </div>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <div style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
+          {msg}
+        </div>
+      )}
 
-      {/* Actions */}
-      <section style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {status === 'draft' && <button style={button} onClick={() => run(() => quotationsApi.submit(id), 'Submitted for approval')}>Submit</button>}
-        {status === 'rejected' && <button style={button} onClick={() => run(() => quotationsApi.submit(id), 'Re-submitted')}>Re-submit</button>}
-        {status === 'submitted' && <button style={button} onClick={() => run(() => quotationsApi.approve(id), 'Approved')}>Approve</button>}
-        {status === 'submitted' && <button style={ghostButton} onClick={() => run(() => quotationsApi.reject(id, 'Not accepted'), 'Rejected')}>Reject</button>}
-        <button style={ghostButton} onClick={() => openQuotationPdf(id).catch((e) => setError(String(e)))}>Download PDF</button>
-        <button style={ghostButton} onClick={() => run(async () => {
-          const m = window.prompt('Recipient mobile (WhatsApp)', '');
-          if (m !== null) await quotationsApi.share(id, m);
-        }, 'WhatsApp message logged')}>Share on WhatsApp</button>
-        <button style={ghostButton} onClick={() => run(async () => {
-          const reason = window.prompt('Revision reason', '');
-          if (reason !== null) await quotationsApi.createRevision(id, reason);
-        }, 'New revision created')}>New revision</button>
-        {status === 'approved' && (
-          <button style={button} onClick={() => run(async () => {
-            const od = await orderDraftsApi.fromQuotation(id, {});
-            setMsg(`Order draft ${String(od.orderNo)} created`);
-          })}>Convert → Order draft</button>
-        )}
-      </section>
+      <Card title="Actions">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {status === 'draft' && <Button onClick={() => run(() => quotationsApi.submit(id), 'Submitted for approval')}>Submit</Button>}
+          {status === 'rejected' && <Button onClick={() => run(() => quotationsApi.submit(id), 'Re-submitted')}>Re-submit</Button>}
+          {status === 'submitted' && <Button onClick={() => run(() => quotationsApi.approve(id), 'Approved')}>Approve</Button>}
+          {status === 'submitted' && <Button variant="secondary" onClick={() => run(() => quotationsApi.reject(id, 'Not accepted'), 'Rejected')}>Reject</Button>}
+          <Button variant="secondary" icon={<Download size={16} />} onClick={() => openQuotationPdf(id).catch((e) => setError(String(e)))}>Download PDF</Button>
+          <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = window.prompt('Recipient mobile (WhatsApp)', ''); if (m !== null) await quotationsApi.share(id, m); }, 'WhatsApp message logged')}>Share on WhatsApp</Button>
+          <Button variant="secondary" onClick={() => run(async () => { const reason = window.prompt('Revision reason', ''); if (reason !== null) await quotationsApi.createRevision(id, reason); }, 'New revision created')}>New revision</Button>
+          {status === 'approved' && (
+            <Button onClick={() => run(async () => { const od = await orderDraftsApi.fromQuotation(id, {}); setMsg(`Order draft ${String(od.orderNo)} created`); })}>Convert → Order draft</Button>
+          )}
+        </div>
+      </Card>
 
-      {/* Items */}
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Grade-wise items</h3>
-        <table style={table}>
+      <Card title="Grade-wise items" padded={false}>
+        <Table>
           <thead>
             <tr>
-              <th style={th}>Grade</th>
-              <th style={th}>Qty (m³)</th>
-              <th style={th}>Rate/m³</th>
-              <th style={th}>Transport</th>
-              <th style={th}>Pump</th>
-              <th style={th}>Waiting</th>
-              <th style={th}>GST</th>
-              <th style={th}></th>
+              <Th>Grade</Th>
+              <Th numeric>Qty (m³)</Th>
+              <Th numeric>Rate/m³</Th>
+              <Th numeric>Transport</Th>
+              <Th numeric>Pump</Th>
+              <Th numeric>Waiting</Th>
+              <Th>GST</Th>
+              <Th />
             </tr>
           </thead>
           <tbody>
             {items.map((it) => (
               <tr key={it.id}>
-                <td style={td}>{String(it.gradeLabel ?? '')}</td>
-                <td style={td}>{money(it.estimatedQuantity)}</td>
-                <td style={td}>{money(it.ratePerM3)}</td>
-                <td style={td}>{money(it.transportCharge)}</td>
-                <td style={td}>{money(it.pumpCharge)}</td>
-                <td style={td}>{money(it.waitingCharge)}</td>
-                <td style={td}>{it.gstApplicable ? 'Yes' : 'No'}</td>
-                <td style={td}>
+                <Td>{String(it.gradeLabel ?? '')}</Td>
+                <Td numeric>{money(it.estimatedQuantity)}</Td>
+                <Td numeric>{money(it.ratePerM3)}</Td>
+                <Td numeric>{money(it.transportCharge)}</Td>
+                <Td numeric>{money(it.pumpCharge)}</Td>
+                <Td numeric>{money(it.waitingCharge)}</Td>
+                <Td>{it.gstApplicable ? 'Yes' : 'No'}</Td>
+                <Td style={{ textAlign: 'right' }}>
                   {!locked && (
-                    <button style={ghostButton} onClick={() => run(() => quotationsApi.deleteItem(id, String(it.id)))}>Remove</button>
+                    <Button variant="ghost" size="sm" onClick={() => run(() => quotationsApi.deleteItem(id, String(it.id)))}>Remove</Button>
                   )}
-                </td>
+                </Td>
               </tr>
             ))}
-            {!items.length && <tr><td style={td} colSpan={8}>No items yet.</td></tr>}
+            {!items.length && (
+              <tr>
+                <Td colSpan={8} style={{ color: 'var(--mn-muted)' }}>No items yet.</Td>
+              </tr>
+            )}
           </tbody>
-        </table>
-
-        {!locked && (
-          <form onSubmit={addItem} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', marginTop: 12 }}>
-            <div>
-              <label style={lbl}>Grade</label>
-              <select style={{ ...input, width: 130 }} value={item.gradeId} onChange={(e) => setItem({ ...item, gradeId: e.target.value })}>
-                <option value="">— pick —</option>
-                {grades.map((g) => <option key={g.id} value={String(g.id)}>{String(g.gradeCode)}</option>)}
-              </select>
+        </Table>
+        {!locked ? (
+          <form onSubmit={addItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
+            <div style={{ minWidth: 130 }}>
+              <Field label="Grade">
+                <select className="mn-input" value={item.gradeId} onChange={(e) => setItem({ ...item, gradeId: e.target.value })}>
+                  <option value="">— pick —</option>
+                  {grades.map((g) => (
+                    <option key={g.id} value={String(g.id)}>{String(g.gradeCode)}</option>
+                  ))}
+                </select>
+              </Field>
             </div>
             <Num label="Qty m³" v={item.estimatedQuantity} on={(v) => setItem({ ...item, estimatedQuantity: v })} />
             <Num label="Rate/m³" v={item.ratePerM3} on={(v) => setItem({ ...item, ratePerM3: v })} />
             <Num label="Transport" v={item.transportCharge} on={(v) => setItem({ ...item, transportCharge: v })} />
             <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
             <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
-            <button style={button}>Add item</button>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit" variant="secondary">Add item</Button>
+            </div>
           </form>
+        ) : (
+          <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 16 }}>Approved quotation is locked. Create a revision to edit.</p>
         )}
-        {locked && <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>Approved quotation is locked. Create a revision to edit.</p>}
-      </section>
+      </Card>
 
-      {/* Revisions */}
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Revision history</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Rev</th><th style={th}>Reason</th><th style={th}>When</th></tr></thead>
+      <Card title="Revision history" padded={false}>
+        <Table>
+          <thead>
+            <tr>
+              <Th numeric>Rev</Th>
+              <Th>Reason</Th>
+              <Th>When</Th>
+            </tr>
+          </thead>
           <tbody>
             {revs.map((r) => (
               <tr key={r.id}>
-                <td style={td}>{String(r.revisionNo)}</td>
-                <td style={td}>{String(r.changeReason ?? '—')}</td>
-                <td style={td}>{String(r.createdAt ?? '').slice(0, 19).replace('T', ' ')}</td>
+                <Td numeric>{String(r.revisionNo)}</Td>
+                <Td>{String(r.changeReason ?? '—')}</Td>
+                <Td>{String(r.createdAt ?? '').slice(0, 19).replace('T', ' ')}</Td>
               </tr>
             ))}
-            {!revs.length && <tr><td style={td} colSpan={3}>No revisions.</td></tr>}
+            {!revs.length && (
+              <tr>
+                <Td colSpan={3} style={{ color: 'var(--mn-muted)' }}>No revisions.</Td>
+              </tr>
+            )}
           </tbody>
-        </table>
-      </section>
-    </div>
-  );
-}
-
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
-function Num({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
-  return (
-    <div>
-      <label style={lbl}>{label}</label>
-      <input type="number" step="any" style={{ ...input, width: 90 }} value={v} onChange={(e) => on(e.target.value)} />
+        </Table>
+      </Card>
     </div>
   );
 }

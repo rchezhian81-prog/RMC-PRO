@@ -103,9 +103,19 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
 ];
 
 function currentLabel(pathname: string): string {
-  for (const g of GROUPS) for (const it of g.items) if (pathname === it.href) return it.label;
-  if (pathname.startsWith('/app/orders')) return 'Orders';
-  return 'Dashboard';
+  // Exact match wins; otherwise the longest nav href that prefixes the path
+  // (so detail routes like /app/billing/invoices/:id map to "Invoices").
+  let best = '';
+  let label = 'Dashboard';
+  for (const g of GROUPS)
+    for (const it of g.items) {
+      if (pathname === it.href) return it.label;
+      if (pathname.startsWith(it.href + '/') && it.href.length > best.length) {
+        best = it.href;
+        label = it.label;
+      }
+    }
+  return label;
 }
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -154,12 +164,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 {g.title}
               </div>
               <nav style={{ display: 'grid', gap: 2 }}>
-                {g.items.map((n) => (
-                  <Link key={n.href} href={n.href} className={`mn-nav ${pathname === n.href ? 'mn-nav-active' : ''}`}>
-                    {n.icon}
-                    {n.label}
-                  </Link>
-                ))}
+                {g.items.map((n) => {
+                  const active = pathname === n.href || pathname.startsWith(n.href + '/');
+                  return (
+                    <Link key={n.href} href={n.href} className={`mn-nav ${active ? 'mn-nav-active' : ''}`}>
+                      {n.icon}
+                      {n.label}
+                    </Link>
+                  );
+                })}
               </nav>
             </div>
           ))}

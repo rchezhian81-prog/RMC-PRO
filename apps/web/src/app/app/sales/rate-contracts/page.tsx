@@ -3,12 +3,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { crud, rateContractsApi, type Row } from '../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../lib/ui';
-
-const badge = (s: string): React.CSSProperties => {
-  const c: Record<string, string> = { draft: '#8aa0c6', submitted: '#e0b341', approved: '#6ee7a8', rejected: '#ff8080' };
-  return { color: c[s] ?? 'var(--text)', fontWeight: 600 };
-};
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 export default function RateContractsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -41,64 +41,76 @@ export default function RateContractsPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Rate Contracts</h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Rate Contracts</h1>
+      {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New Rate Contract</h3>
-        <form onSubmit={create} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-          <div>
-            <label style={lbl}>Customer</label>
-            <select style={{ ...input, width: 200 }} value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}>
-              <option value="">— select —</option>
-              {customers.map((c) => <option key={c.id} value={String(c.id)}>{String(c.customerName)}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={lbl}>Valid from</label>
-            <input type="date" style={input} value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} />
-          </div>
-          <div>
-            <label style={lbl}>Valid to</label>
-            <input type="date" style={input} value={form.validTo} onChange={(e) => setForm({ ...form, validTo: e.target.value })} />
-          </div>
-          <div>
-            <label style={lbl}>Payment terms</label>
-            <input style={{ ...input, width: 150 }} value={form.paymentTerms} onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })} />
-          </div>
-          <button style={button}>Create</button>
-        </form>
-      </section>
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New rate contract">
+          <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ minWidth: 200 }}>
+              <Field label="Customer">
+                <select className="mn-input" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}>
+                  <option value="">— select —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{String(c.customerName)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Valid from">
+                <Input type="date" value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Valid to">
+                <Input type="date" value={form.validTo} onChange={(e) => setForm({ ...form, validTo: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Payment terms">
+                <Input value={form.paymentTerms} onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit">Create</Button>
+            </div>
+          </form>
+        </Card>
+      </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Contract No</th>
-              <th style={th}>Valid from</th>
-              <th style={th}>Valid to</th>
-              <th style={th}>Status</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.rateContractNo ?? '')}</td>
-                <td style={td}>{String(r.validFrom ?? '—')}</td>
-                <td style={td}>{String(r.validTo ?? '—')}</td>
-                <td style={td}><span style={badge(String(r.approvalStatus))}>{String(r.approvalStatus)}</span></td>
-                <td style={td}>
-                  <Link href={`/app/sales/rate-contracts/${r.id}`} style={{ ...ghostButton, textDecoration: 'none' }}>Open</Link>
-                </td>
+      <Card title="Rate contracts" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Contract No</Th>
+                <Th>Valid from</Th>
+                <Th>Valid to</Th>
+                <Th>Status</Th>
+                <Th />
               </tr>
-            ))}
-            {!rows.length && <tr><td style={td} colSpan={5}>No rate contracts yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.rateContractNo ?? '')}</Td>
+                  <Td>{String(r.validFrom ?? '—')}</Td>
+                  <Td>{String(r.validTo ?? '—')}</Td>
+                  <Td><StatusBadge status={String(r.approvalStatus)} /></Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Link href={`/app/sales/rate-contracts/${r.id}`}>
+                      <Button variant="secondary" size="sm">Open</Button>
+                    </Link>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No rate contracts yet" description="Create your first rate contract above." />
+        )}
+      </Card>
     </div>
   );
 }
-
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;

@@ -2,7 +2,11 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ModuleRow, type PlanRow } from '../../../lib/api';
-import { button, card, input, table, td, th } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Table, Th, Td } from '../../../components/ui/Table';
+import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../components/ui/States';
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<PlanRow[]>([]);
@@ -35,11 +39,7 @@ export default function PlansPage() {
     e.preventDefault();
     setError(null);
     try {
-      const plan = await api.createPlan({
-        planCode: code,
-        planName: name,
-        monthlyPrice: Number(price) || 0,
-      });
+      const plan = await api.createPlan({ planCode: code, planName: name, monthlyPrice: Number(price) || 0 });
       if (selected.size) await api.setPlanModules(plan.id, [...selected]);
       setCode('');
       setName('');
@@ -53,80 +53,90 @@ export default function PlansPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Subscription Plans</h1>
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Subscription Plans</h1>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New Plan</h3>
-        <form onSubmit={create}>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, color: 'var(--muted)' }}>Code</label>
-              <input style={{ ...input, width: 140 }} value={code} onChange={(e) => setCode(e.target.value)} required />
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New plan">
+          <form onSubmit={create}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+              <div style={{ minWidth: 140 }}>
+                <Field label="Code" required>
+                  <Input value={code} onChange={(e) => setCode(e.target.value)} required />
+                </Field>
+              </div>
+              <div style={{ minWidth: 200 }}>
+                <Field label="Name" required>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                </Field>
+              </div>
+              <div style={{ minWidth: 120 }}>
+                <Field label="Monthly ₹">
+                  <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+                </Field>
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: 12, color: 'var(--muted)' }}>Name</label>
-              <input style={{ ...input, width: 200 }} value={name} onChange={(e) => setName(e.target.value)} required />
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--mn-muted)', margin: '4px 0 8px' }}>Included modules</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {catalog.map((m) => {
+                const on = selected.has(m.moduleKey);
+                return (
+                  <label
+                    key={m.moduleKey}
+                    style={{
+                      display: 'flex',
+                      gap: 6,
+                      alignItems: 'center',
+                      fontSize: 13,
+                      padding: '5px 11px',
+                      border: `1px solid ${on ? 'var(--mn-primary)' : 'var(--mn-border)'}`,
+                      background: on ? 'var(--mn-purple-50)' : 'var(--mn-surface)',
+                      color: on ? 'var(--mn-primary)' : 'var(--mn-text)',
+                      borderRadius: 'var(--mn-radius-pill)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input type="checkbox" checked={on} onChange={() => toggleModule(m.moduleKey)} />
+                    {m.name} <span style={{ opacity: 0.7 }}>P{m.phase}</span>
+                  </label>
+                );
+              })}
             </div>
-            <div>
-              <label style={{ fontSize: 12, color: 'var(--muted)' }}>Monthly ₹</label>
-              <input style={{ ...input, width: 120 }} type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
-            </div>
-          </div>
-          <label style={{ fontSize: 12, color: 'var(--muted)' }}>Included modules</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0 14px' }}>
-            {catalog.map((m) => (
-              <label
-                key={m.moduleKey}
-                style={{
-                  display: 'flex',
-                  gap: 6,
-                  alignItems: 'center',
-                  fontSize: 13,
-                  padding: '5px 9px',
-                  border: '1px solid #26314b',
-                  borderRadius: 8,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(m.moduleKey)}
-                  onChange={() => toggleModule(m.moduleKey)}
-                />
-                {m.name} <span style={{ color: 'var(--muted)' }}>P{m.phase}</span>
-              </label>
-            ))}
-          </div>
-          <button style={button}>Create plan</button>
-        </form>
-        {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      </section>
+            <Button type="submit">Create plan</Button>
+          </form>
+          {error && <div style={{ marginTop: 12 }}><ErrorState message={error} /></div>}
+        </Card>
+      </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Code</th>
-              <th style={th}>Name</th>
-              <th style={th}>Monthly ₹</th>
-              <th style={th}>Plants</th>
-              <th style={th}>Users</th>
-              <th style={th}>Modules</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plans.map((p) => (
-              <tr key={p.id}>
-                <td style={td}>{p.code}</td>
-                <td style={td}>{p.name}</td>
-                <td style={td}>{p.monthlyPrice}</td>
-                <td style={td}>{p.maxPlants}</td>
-                <td style={td}>{p.maxUsers}</td>
-                <td style={td}>{p.moduleCount}</td>
+      <Card title="Plans" padded={false}>
+        {plans.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Code</Th>
+                <Th>Name</Th>
+                <Th numeric>Monthly ₹</Th>
+                <Th numeric>Plants</Th>
+                <Th numeric>Users</Th>
+                <Th numeric>Modules</Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {plans.map((p) => (
+                <tr key={p.id}>
+                  <Td style={{ fontWeight: 600 }}>{p.code}</Td>
+                  <Td>{p.name}</Td>
+                  <Td numeric>{p.monthlyPrice}</Td>
+                  <Td numeric>{p.maxPlants}</Td>
+                  <Td numeric>{p.maxUsers}</Td>
+                  <Td numeric>{p.moduleCount}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No plans yet" description="Create your first subscription plan above." />
+        )}
+      </Card>
     </div>
   );
 }

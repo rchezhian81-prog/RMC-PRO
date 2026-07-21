@@ -1,10 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import { billingReportsApi, downloadTallyCsv, type Row } from '../../../../lib/api';
-import { button, card, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatCard } from '../../../../components/ui/StatCard';
+import { Button } from '../../../../components/ui/Button';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
-const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function BillingReportsPage() {
   const [gst, setGst] = useState<Row | null>(null);
@@ -16,74 +21,103 @@ export default function BillingReportsPage() {
   useEffect(() => {
     (async () => {
       const [g, s, r] = await Promise.all([billingReportsApi.gstSummary(), billingReportsApi.salesRegister(), billingReportsApi.receiptsRegister()]);
-      setGst(g); setSales(s); setReceipts(r);
+      setGst(g);
+      setSales(s);
+      setReceipts(r);
     })().catch((e) => setError(String(e)));
   }, []);
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Billing Reports</h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <h1 style={{ fontSize: 24, margin: 0 }}>Billing Reports</h1>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13, margin: 0 }}>
+          {msg}
+        </p>
+      )}
 
-      <section style={{ ...card, display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div>
-          <h3 style={{ margin: '0 0 6px', fontSize: 15 }}>Tally export</h3>
-          <p style={{ color: 'var(--muted)', fontSize: 12.5, margin: '0 0 8px' }}>Download a Tally-ready sales CSV (Phase-1 file export — no live Tally API).</p>
-          <button style={button} onClick={() => downloadTallyCsv().then(() => setMsg('Tally CSV downloaded.')).catch((e) => setError(String(e)))}>Download Tally CSV</button>
-        </div>
-      </section>
+      <Card title="Tally export">
+        <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px' }}>Download a Tally-ready sales CSV (Phase-1 file export — no live Tally API).</p>
+        <Button icon={<Download size={16} />} onClick={() => downloadTallyCsv().then(() => setMsg('Tally CSV downloaded.')).catch((e) => setError(String(e)))}>
+          Download Tally CSV
+        </Button>
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>GST summary (issued invoices)</h3>
+      <Card title="GST summary (issued invoices)">
         {gst && (
-          <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
             {(['taxable', 'cgst', 'sgst', 'igst', 'cess', 'total'] as const).map((k) => (
-              <div key={k}><div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase' }}>{k}</div><div style={{ fontSize: 16, fontWeight: 600 }}>{money(gst[k])}</div></div>
+              <StatCard key={k} label={k} value={money(gst[k])} tone={k === 'total' ? 'info' : 'neutral'} />
             ))}
           </div>
         )}
-      </section>
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Sales register{sales ? ` — ${sales.count} invoices · taxable ₹${money(sales.taxable)} · total ₹${money(sales.total)}` : ''}</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Invoice</th><th style={th}>Date</th><th style={th}>Taxable</th><th style={th}>CGST</th><th style={th}>SGST</th><th style={th}>IGST</th><th style={th}>Total</th></tr></thead>
-          <tbody>
-            {(sales?.rows ?? []).map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.invoiceNo)}</td>
-                <td style={td}>{String(r.invoiceDate ?? '—')}</td>
-                <td style={td}>{money(r.taxableAmount)}</td>
-                <td style={td}>{money(r.cgstAmount)}</td>
-                <td style={td}>{money(r.sgstAmount)}</td>
-                <td style={td}>{money(r.igstAmount)}</td>
-                <td style={td}>{money(r.totalAmount)}</td>
+      <Card
+        title={`Sales register${sales ? ` — ${sales.count} invoices · taxable ${money(sales.taxable)} · total ${money(sales.total)}` : ''}`}
+        padded={false}
+      >
+        {sales?.rows?.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Invoice</Th>
+                <Th>Date</Th>
+                <Th numeric>Taxable</Th>
+                <Th numeric>CGST</Th>
+                <Th numeric>SGST</Th>
+                <Th numeric>IGST</Th>
+                <Th numeric>Total</Th>
               </tr>
-            ))}
-            {!sales?.rows?.length && <tr><td style={td} colSpan={7}>No issued invoices.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {sales.rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.invoiceNo)}</Td>
+                  <Td>{String(r.invoiceDate ?? '—')}</Td>
+                  <Td numeric>{money(r.taxableAmount)}</Td>
+                  <Td numeric>{money(r.cgstAmount)}</Td>
+                  <Td numeric>{money(r.sgstAmount)}</Td>
+                  <Td numeric>{money(r.igstAmount)}</Td>
+                  <Td numeric>{money(r.totalAmount)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No issued invoices" />
+        )}
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Receipts register</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Receipt</th><th style={th}>Date</th><th style={th}>Mode</th><th style={th}>Amount</th><th style={th}>Allocated</th></tr></thead>
-          <tbody>
-            {receipts.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.receiptNo)}</td>
-                <td style={td}>{String(r.receiptDate ?? '—')}</td>
-                <td style={td}>{String(r.paymentMode ?? '')}</td>
-                <td style={td}>{money(r.amount)}</td>
-                <td style={td}>{money(r.allocatedAmount)}</td>
+      <Card title="Receipts register" padded={false}>
+        {receipts.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Receipt</Th>
+                <Th>Date</Th>
+                <Th>Mode</Th>
+                <Th numeric>Amount</Th>
+                <Th numeric>Allocated</Th>
               </tr>
-            ))}
-            {!receipts.length && <tr><td style={td} colSpan={5}>No receipts.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {receipts.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.receiptNo)}</Td>
+                  <Td>{String(r.receiptDate ?? '—')}</Td>
+                  <Td>{String(r.paymentMode ?? '')}</Td>
+                  <Td numeric>{money(r.amount)}</Td>
+                  <Td numeric>{money(r.allocatedAmount)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No receipts" />
+        )}
+      </Card>
     </div>
   );
 }

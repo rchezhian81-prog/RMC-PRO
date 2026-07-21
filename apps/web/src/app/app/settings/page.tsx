@@ -2,7 +2,11 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { settings, type Row } from '../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Table, Th, Td } from '../../../components/ui/Table';
+import { Button } from '../../../components/ui/Button';
+import { Field, Input } from '../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../components/ui/States';
 
 export default function SettingsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -43,58 +47,59 @@ export default function SettingsPage() {
   }
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Tenant Settings</h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <h1 style={{ fontSize: 24, margin: 0 }}>Tenant Settings</h1>
+      {error && <ErrorState message={error} />}
 
-      <section style={card}>
-        <table style={table}>
-          <thead>
-            <tr>
-              <th style={th}>Key</th>
-              <th style={th}>Value</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const key = String(r.settingKey);
-              return (
-                <tr key={r.id}>
-                  <td style={td}>{key}</td>
-                  <td style={td}>
-                    <input
-                      style={{ ...input, width: 260 }}
-                      value={edit[key] ?? ''}
-                      onChange={(e) => setEdit((p) => ({ ...p, [key]: e.target.value }))}
-                    />
-                  </td>
-                  <td style={td}>
-                    <button style={ghostButton} onClick={() => save(key)}>
-                      Save
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
+      <Card title="Settings" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Key</Th>
+                <Th>Value</Th>
+                <Th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const key = String(r.settingKey);
+                return (
+                  <tr key={r.id}>
+                    <Td style={{ fontWeight: 600 }}>{key}</Td>
+                    <Td>
+                      <Input style={{ maxWidth: 280 }} value={edit[key] ?? ''} onChange={(e) => setEdit((p) => ({ ...p, [key]: e.target.value }))} />
+                    </Td>
+                    <Td style={{ textAlign: 'right' }}>
+                      <Button variant="secondary" size="sm" onClick={() => save(key)}>Save</Button>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No settings yet" description="Add a tenant setting below." />
+        )}
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Add setting</h3>
-        <form onSubmit={add} style={{ display: 'flex', gap: 10, alignItems: 'end' }}>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Key</label>
-            <input style={{ ...input, width: 200 }} value={newKey} onChange={(e) => setNewKey(e.target.value)} required />
+      <Card title="Add setting">
+        <form onSubmit={add} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 200 }}>
+            <Field label="Key" required>
+              <Input value={newKey} onChange={(e) => setNewKey(e.target.value)} required />
+            </Field>
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Value</label>
-            <input style={{ ...input, width: 200 }} value={newVal} onChange={(e) => setNewVal(e.target.value)} />
+          <div style={{ minWidth: 200 }}>
+            <Field label="Value">
+              <Input value={newVal} onChange={(e) => setNewVal(e.target.value)} />
+            </Field>
           </div>
-          <button style={button}>Add</button>
+          <div style={{ marginBottom: 14 }}>
+            <Button type="submit">Add</Button>
+          </div>
         </form>
-      </section>
+      </Card>
     </div>
   );
 }

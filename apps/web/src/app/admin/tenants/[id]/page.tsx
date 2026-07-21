@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { api, type PlanRow, type TenantModuleRow } from '../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { Badge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { Field } from '../../../../components/ui/Field';
+import { ErrorState } from '../../../../components/ui/States';
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [name, setName] = useState('');
   const [planCode, setPlanCode] = useState<string | null>(null);
   const [modules, setModules] = useState<TenantModuleRow[]>([]);
@@ -49,65 +56,65 @@ export default function TenantDetailPage() {
   }
 
   return (
-    <div>
-      <Link href="/admin/tenants" style={{ color: 'var(--muted)', fontSize: 13 }}>
-        ← Tenants
-      </Link>
-      <h1 style={{ fontSize: 22, margin: '8px 0 4px' }}>{name}</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 0 }}>
-        Current plan: {planCode ?? '— none —'}
-      </p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} onClick={() => router.push('/admin/tenants')}>
+          Tenants
+        </Button>
+      </div>
+      <div>
+        <h1 style={{ fontSize: 24, margin: '0 0 4px' }}>{name}</h1>
+        <p style={{ color: 'var(--mn-muted)', fontSize: 14, margin: 0 }}>Current plan: {planCode ?? '— none —'}</p>
+      </div>
+      {error && <ErrorState message={error} />}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Assign / change plan</h3>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <select style={{ ...input, width: 220 }} value={planId} onChange={(e) => setPlanId(e.target.value)}>
-            <option value="">— select plan —</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button style={button} onClick={assign}>
-            Apply plan
-          </button>
+      <Card title="Assign / change plan">
+        <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 220 }}>
+            <Field label="Plan">
+              <select className="mn-input" value={planId} onChange={(e) => setPlanId(e.target.value)}>
+                <option value="">— select plan —</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <Button onClick={assign}>Apply plan</Button>
+          </div>
         </div>
-        <p style={{ color: 'var(--muted)', fontSize: 12 }}>
+        <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 0 }}>
           Applying a plan resets the tenant&apos;s modules to that plan&apos;s modules.
         </p>
-      </section>
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Modules</h3>
-        <table style={table}>
+      <Card title="Modules" padded={false}>
+        <Table>
           <thead>
             <tr>
-              <th style={th}>Module</th>
-              <th style={th}>Phase</th>
-              <th style={th}>Status</th>
-              <th style={th}></th>
+              <Th>Module</Th>
+              <Th>Phase</Th>
+              <Th>Status</Th>
+              <Th />
             </tr>
           </thead>
           <tbody>
             {modules.map((m) => (
               <tr key={m.moduleKey}>
-                <td style={td}>{m.name}</td>
-                <td style={td}>P{m.phase}</td>
-                <td style={{ ...td, color: m.isEnabled ? '#6ee7a8' : 'var(--muted)' }}>
-                  {m.isEnabled ? 'Enabled' : 'Disabled'}
-                </td>
-                <td style={td}>
-                  <button style={ghostButton} onClick={() => toggle(m.moduleKey, !m.isEnabled)}>
+                <Td style={{ fontWeight: 600 }}>{m.name}</Td>
+                <Td>P{m.phase}</Td>
+                <Td>{m.isEnabled ? <Badge tone="success">Enabled</Badge> : <Badge tone="neutral">Disabled</Badge>}</Td>
+                <Td style={{ textAlign: 'right' }}>
+                  <Button variant="secondary" size="sm" onClick={() => toggle(m.moduleKey, !m.isEnabled)}>
                     {m.isEnabled ? 'Disable' : 'Enable'}
-                  </button>
-                </td>
+                  </Button>
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
-      </section>
+        </Table>
+      </Card>
     </div>
   );
 }

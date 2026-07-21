@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { reportsCatalogApi } from '../../../lib/api';
-import { card, ghostButton } from '../../../lib/ui';
+import { Card } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
+import { ErrorState } from '../../../components/ui/States';
 
 // Map report keys to the in-app report pages where a UI exists.
 const PAGE: Record<string, string> = {
@@ -34,30 +36,31 @@ export default function ReportsCenterPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Reports Center</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>Phase-1 cross-module reports.</p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Reports Center</h1>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 18px' }}>Phase-1 cross-module reports.</p>
+      {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
 
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
         {groups.map((g) => (
-          <section key={g.module} style={{ ...card, minWidth: 260, flex: '1 1 260px' }}>
-            <h3 style={{ marginTop: 0, fontSize: 15 }}>{g.module}</h3>
-            <div style={{ display: 'grid', gap: 6 }}>
+          <Card key={g.module} title={g.module}>
+            <div style={{ display: 'grid', gap: 8 }}>
               {g.reports.map((r) => {
                 const page = PAGE[r.key];
                 return (
                   <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13.5 }}>{r.name}</span>
                     {page ? (
-                      <Link href={page} style={{ ...ghostButton, textDecoration: 'none' }}>Open</Link>
+                      <Link href={page}>
+                        <Button variant="secondary" size="sm">Open</Button>
+                      </Link>
                     ) : (
-                      <code style={{ fontSize: 11, color: 'var(--muted)' }}>{r.path}</code>
+                      <code style={{ fontSize: 11, color: 'var(--mn-subtle)' }}>{r.path}</code>
                     )}
                   </div>
                 );
               })}
             </div>
-          </section>
+          </Card>
         ))}
       </div>
     </div>

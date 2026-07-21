@@ -139,7 +139,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="mn-shell">
-      <div className={`mn-scrim ${open ? 'mn-open' : ''}`} onClick={() => setOpen(false)} />
+      <a href="#main" className="mn-skip">Skip to content</a>
+      <div className={`mn-scrim ${open ? 'mn-open' : ''}`} onClick={() => setOpen(false)} aria-hidden />
 
       <aside className={`mn-sidebar ${open ? 'mn-open' : ''}`}>
         <div style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -163,11 +164,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               >
                 {g.title}
               </div>
-              <nav style={{ display: 'grid', gap: 2 }}>
+              <nav aria-label={g.title} style={{ display: 'grid', gap: 2 }}>
                 {g.items.map((n) => {
                   const active = pathname === n.href || pathname.startsWith(n.href + '/');
                   return (
-                    <Link key={n.href} href={n.href} className={`mn-nav ${active ? 'mn-nav-active' : ''}`}>
+                    <Link
+                      key={n.href}
+                      href={n.href}
+                      aria-current={active ? 'page' : undefined}
+                      className={`mn-nav ${active ? 'mn-nav-active' : ''}`}
+                    >
                       {n.icon}
                       {n.label}
                     </Link>
@@ -204,7 +210,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             Logout
           </Button>
         </header>
-        <main style={{ padding: 28, maxWidth: 1120, width: '100%' }}>{children}</main>
+        <main id="main" tabIndex={-1} style={{ padding: 28, maxWidth: 1120, width: '100%' }}>
+          {children}
+        </main>
       </div>
     </div>
   );

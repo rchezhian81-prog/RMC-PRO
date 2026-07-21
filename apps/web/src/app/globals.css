@@ -54,9 +54,13 @@
   --mn-shadow-card: 0 1px 2px rgba(16, 17, 33, 0.04), 0 4px 16px rgba(16, 17, 33, 0.06);
   --mn-shadow-pop: 0 8px 30px rgba(16, 17, 33, 0.14);
 
-  /* ---- Typography (font vars wired by next/font in layout.tsx) ---- */
+  /* ---- Typography (font vars wired by next/font in layout.tsx) ----
+     Latin runs on Inter; Devanagari/Hindi + Tamil fall through to the loaded
+     Noto faces (self-hosted at build time), so Indian-language names render
+     with real glyphs on every OS. */
   --mn-font-display: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
-  --mn-font-body: var(--font-inter), 'Inter', 'Noto Sans', system-ui, -apple-system, 'Segoe UI',
+  --mn-font-body: var(--font-inter), 'Inter', var(--font-noto), var(--font-noto-tamil),
+    'Noto Sans', 'Noto Sans Tamil', 'Noto Sans Devanagari', system-ui, -apple-system, 'Segoe UI',
     Roboto, Arial, sans-serif;
 
   /* ---- Legacy Phase-1 tokens — now ALIAS the Mix Nova tokens ----
@@ -126,6 +130,44 @@ h3 {
 :where(a, button, input, select, textarea):focus-visible {
   outline: 2px solid var(--mn-focus);
   outline-offset: 2px;
+}
+/* Main content is focus-target for the skip link; never draw a ring on it. */
+main:focus,
+main:focus-visible {
+  outline: none;
+}
+
+/* ---- Accessibility helpers ---- */
+.mn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* Skip-to-content: hidden until keyboard-focused, then pinned top-left. */
+.mn-skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-primary);
+  color: var(--mn-on-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--mn-shadow-pop);
+  transform: translateY(-150%);
+  transition: transform 0.15s ease;
+}
+.mn-skip:focus {
+  transform: translateY(0);
 }
 
 /* ---- Mix Nova utilities (used by re-skinned surfaces, e.g. login) ---- */

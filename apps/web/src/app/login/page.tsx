@@ -76,6 +76,7 @@ export default function LoginPage() {
               style={field}
               value={login}
               onChange={(e) => setLogin(e.target.value)}
+              autoComplete="username"
               aria-label="login-identifier"
             />
             <label htmlFor="mn-password" style={label}>
@@ -87,10 +88,12 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               aria-label="password"
             />
             {error && (
               <p
+                role="alert"
                 style={{
                   color: 'var(--mn-danger)',
                   background: 'var(--mn-danger-tint)',

@@ -4,8 +4,12 @@ import { Loader2, Inbox, AlertTriangle } from 'lucide-react';
 /** Inline loading spinner + label. */
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--mn-muted)', padding: 16 }}>
-      <Loader2 size={18} className="mn-spin" />
+    <div
+      role="status"
+      aria-live="polite"
+      style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--mn-muted)', padding: 16 }}
+    >
+      <Loader2 size={18} className="mn-spin" aria-hidden />
       <span style={{ fontSize: 14 }}>{label}</span>
     </div>
   );
@@ -40,6 +44,7 @@ export function EmptyState({
           background: 'var(--mn-purple-50)',
           color: 'var(--mn-primary)',
         }}
+        aria-hidden
       >
         {icon ?? <Inbox size={22} />}
       </span>
@@ -56,6 +61,7 @@ export function EmptyState({
 export function ErrorState({ message, action }: { message: string; action?: ReactNode }) {
   return (
     <div
+      role="alert"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -68,7 +74,7 @@ export function ErrorState({ message, action }: { message: string; action?: Reac
         fontSize: 13,
       }}
     >
-      <AlertTriangle size={18} />
+      <AlertTriangle size={18} aria-hidden />
       <span style={{ flex: 1 }}>{message}</span>
       {action}
     </div>

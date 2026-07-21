@@ -59,14 +59,16 @@
   --mn-font-body: var(--font-inter), 'Inter', 'Noto Sans', system-ui, -apple-system, 'Segoe UI',
     Roboto, Arial, sans-serif;
 
-  /* ---- Legacy Phase-1 tokens (existing screens keep rendering as before) ----
-     Kept dark; brand swapped amber -> Mix Nova purple app-wide. */
-  --bg: #0b1020;
-  --panel: #141b2e;
-  --text: #e7ecf5;
-  --muted: #9aa6bd;
-  --brand: #6c2bd9; /* was #f2a33c (amber) → Mix Nova Primary Purple */
-  --brand-contrast: #ffffff; /* readable text on --brand */
+  /* ---- Legacy Phase-1 tokens — now ALIAS the Mix Nova tokens ----
+     Existing screens read these vars, so aliasing moves the whole app onto the
+     Mix Nova light theme (and the dark toggle) without editing each screen.
+     Per-screen visual polish still follows in Phases C–E. */
+  --bg: var(--mn-bg);
+  --panel: var(--mn-surface);
+  --text: var(--mn-text);
+  --muted: var(--mn-muted);
+  --brand: var(--mn-primary);
+  --brand-contrast: var(--mn-on-primary);
 }
 
 /* ---- Dark theme (opt-in): overrides the Mix Nova semantic tokens ---- */
@@ -140,4 +142,228 @@ h3 {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
+}
+
+/* ============================================================================
+   Mix Nova UI kit — component layer (Phase B)
+   ============================================================================ */
+@keyframes mn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.mn-spin {
+  animation: mn-spin 0.8s linear infinite;
+}
+@keyframes mn-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.mn-skel {
+  background: var(--mn-border);
+  border-radius: var(--mn-radius-sm);
+  animation: mn-pulse 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-spin,
+  .mn-skel {
+    animation: none;
+  }
+}
+
+.mn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--mn-font-body);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  padding: 10px 16px;
+  min-height: 40px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.mn-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.mn-btn-sm {
+  padding: 6px 11px;
+  min-height: 32px;
+  font-size: 13px;
+}
+.mn-btn-primary {
+  background: var(--mn-primary);
+  color: var(--mn-on-primary);
+}
+.mn-btn-primary:hover:not(:disabled) {
+  background: var(--mn-primary-hover);
+}
+.mn-btn-secondary {
+  background: var(--mn-surface);
+  color: var(--mn-text);
+  border-color: var(--mn-border-strong);
+}
+.mn-btn-secondary:hover:not(:disabled) {
+  background: var(--mn-surface-2);
+  border-color: var(--mn-primary);
+}
+.mn-btn-ghost {
+  background: transparent;
+  color: var(--mn-text);
+}
+.mn-btn-ghost:hover:not(:disabled) {
+  background: var(--mn-purple-50);
+  color: var(--mn-primary);
+}
+.mn-btn-danger {
+  background: var(--mn-danger);
+  color: #fff;
+}
+
+.mn-card {
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  box-shadow: var(--mn-shadow-card);
+}
+
+.mn-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border-strong);
+  background: var(--mn-surface);
+  color: var(--mn-text);
+  font-size: 14px;
+  font-family: var(--mn-font-body);
+}
+.mn-input:focus {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 1px;
+  border-color: var(--mn-primary);
+}
+
+.mn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--mn-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.mn-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 14px;
+  color: var(--mn-muted);
+  transition: background 0.12s, color 0.12s;
+}
+.mn-nav:hover {
+  background: var(--mn-purple-50);
+  color: var(--mn-text);
+}
+.mn-nav-active,
+.mn-nav-active:hover {
+  background: var(--mn-primary);
+  color: #fff;
+}
+.mn-nav svg {
+  flex: 0 0 auto;
+}
+
+/* ---- Responsive app shell ---- */
+.mn-shell {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+  background: var(--mn-bg);
+  color: var(--mn-text);
+}
+.mn-sidebar {
+  background: var(--mn-surface);
+  border-right: 1px solid var(--mn-border);
+  display: flex;
+  flex-direction: column;
+}
+.mn-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  background: var(--mn-surface);
+  border-bottom: 1px solid var(--mn-border);
+}
+.mn-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+  color: var(--mn-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.mn-iconbtn:hover {
+  background: var(--mn-purple-50);
+  color: var(--mn-primary);
+  border-color: var(--mn-primary);
+}
+.mn-hamburger {
+  display: none;
+}
+.mn-scrim {
+  display: none;
+}
+@media (max-width: 1024px) {
+  .mn-shell {
+    grid-template-columns: 1fr;
+  }
+  .mn-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 268px;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--mn-shadow-pop);
+  }
+  .mn-sidebar.mn-open {
+    transform: translateX(0);
+  }
+  .mn-hamburger {
+    display: inline-flex;
+  }
+  .mn-scrim.mn-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 17, 33, 0.4);
+    z-index: 35;
+  }
 }

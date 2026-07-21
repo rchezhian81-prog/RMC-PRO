@@ -1,9 +1,97 @@
+/* ============================================================================
+   Mix Nova RMC Software — design foundation (Phase A)
+   Brand: Mix Nova · "Smart Mix. Stronger Future."
+   Light is the default (long-hour plant/ops readability); dark is opt-in via
+   [data-theme="dark"]. New screens use the --mn-* tokens; existing Phase-1
+   screens keep the legacy tokens (below) so they render unchanged during the
+   incremental re-skin.
+   ============================================================================ */
+
 :root {
+  /* ---- Mix Nova brand ramp ---- */
+  --mn-purple-50: #f4eeff;
+  --mn-purple-100: #e9ddff;
+  --mn-purple-200: #d6c2ff;
+  --mn-purple-300: #b78cff; /* Soft Lavender */
+  --mn-purple-400: #9e6bff;
+  --mn-purple-500: #8a4fff; /* Electric Violet */
+  --mn-purple-600: #6c2bd9; /* Primary Purple */
+  --mn-purple-700: #5a1fb8;
+  --mn-purple-800: #481a90;
+  --mn-purple-900: #2e1160;
+  --mn-navy: #1e1e2e; /* Deep Dark/Navy */
+  --mn-grey: #8e8e9a; /* Neutral Grey */
+  --mn-gradient: linear-gradient(135deg, #6c2bd9 0%, #8a4fff 100%);
+
+  /* ---- Semantic tokens — LIGHT (default) ---- */
+  --mn-bg: #f7f7fb;
+  --mn-surface: #ffffff;
+  --mn-surface-2: #fbfbfe;
+  --mn-border: #e6e6ef;
+  --mn-border-strong: #d3d3df;
+  --mn-text: #1e1e2e;
+  --mn-muted: #5b5b6b; /* AA on white */
+  --mn-subtle: #8e8e9a; /* non-text / large only */
+  --mn-primary: #6c2bd9;
+  --mn-primary-hover: #5a1fb8;
+  --mn-on-primary: #ffffff;
+  --mn-focus: #b78cff;
+
+  --mn-success: #15803d;
+  --mn-success-tint: #dcfce7;
+  --mn-warning: #b45309;
+  --mn-warning-tint: #fef3c7;
+  --mn-danger: #b91c1c;
+  --mn-danger-tint: #fee2e2;
+  --mn-info: #6c2bd9;
+  --mn-info-tint: #f4eeff;
+
+  /* ---- Spacing / radius / elevation ---- */
+  --mn-radius-sm: 6px;
+  --mn-radius-md: 8px;
+  --mn-radius-lg: 12px;
+  --mn-radius-pill: 999px;
+  --mn-shadow-card: 0 1px 2px rgba(16, 17, 33, 0.04), 0 4px 16px rgba(16, 17, 33, 0.06);
+  --mn-shadow-pop: 0 8px 30px rgba(16, 17, 33, 0.14);
+
+  /* ---- Typography (font vars wired by next/font in layout.tsx) ---- */
+  --mn-font-display: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
+  --mn-font-body: var(--font-inter), 'Inter', 'Noto Sans', system-ui, -apple-system, 'Segoe UI',
+    Roboto, Arial, sans-serif;
+
+  /* ---- Legacy Phase-1 tokens (existing screens keep rendering as before) ----
+     Kept dark; brand swapped amber -> Mix Nova purple app-wide. */
   --bg: #0b1020;
   --panel: #141b2e;
   --text: #e7ecf5;
   --muted: #9aa6bd;
-  --brand: #f2a33c;
+  --brand: #6c2bd9; /* was #f2a33c (amber) → Mix Nova Primary Purple */
+  --brand-contrast: #ffffff; /* readable text on --brand */
+}
+
+/* ---- Dark theme (opt-in): overrides the Mix Nova semantic tokens ---- */
+:root[data-theme='dark'] {
+  --mn-bg: #14141f;
+  --mn-surface: #1e1e2e;
+  --mn-surface-2: #262636;
+  --mn-border: #33334a;
+  --mn-border-strong: #40405a;
+  --mn-text: #ececf3;
+  --mn-muted: #a9a9b8;
+  --mn-subtle: #8e8e9a;
+  --mn-primary: #8a4fff;
+  --mn-primary-hover: #9e6bff;
+  --mn-on-primary: #14141f;
+  --mn-focus: #b78cff;
+
+  --mn-success: #4ade80;
+  --mn-success-tint: #10371f;
+  --mn-warning: #fbbf24;
+  --mn-warning-tint: #3a2a08;
+  --mn-danger: #f87171;
+  --mn-danger-tint: #3a1414;
+  --mn-info: #b78cff;
+  --mn-info-tint: #241833;
 }
 
 * {
@@ -14,13 +102,42 @@ html,
 body {
   margin: 0;
   padding: 0;
+}
+
+body {
   background: var(--bg);
   color: var(--text);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    Arial,
-    sans-serif;
+  font-family: var(--mn-font-body);
+  font-feature-settings: 'tnum' 1; /* tabular figures — aligned qty/₹ columns */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--mn-font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 2px;
+}
+
+/* ---- Mix Nova utilities (used by re-skinned surfaces, e.g. login) ---- */
+.mn-app {
+  background: var(--mn-bg);
+  color: var(--mn-text);
+}
+.mn-gradient {
+  background: var(--mn-gradient);
+}
+.mn-gradient-text {
+  background: var(--mn-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }

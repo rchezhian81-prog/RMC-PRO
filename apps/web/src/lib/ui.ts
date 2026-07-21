@@ -23,7 +23,7 @@ export const button: CSSProperties = {
   borderRadius: 8,
   border: 'none',
   background: 'var(--brand)',
-  color: '#1a1205',
+  color: 'var(--brand-contrast)',
   fontWeight: 600,
   fontSize: 14,
   cursor: 'pointer',

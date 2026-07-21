@@ -6,6 +6,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { clearSession, getSession } from '../../lib/session';
 import { ghostButton } from '../../lib/ui';
+import { Logo } from '../../components/ui/Logo';
 
 const GROUPS = [
   {
@@ -116,7 +117,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr', minHeight: '100vh' }}>
       <aside style={{ background: '#0e1626', borderRight: '1px solid #26314b', padding: 18 }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>🏗️ RMC Tenant</div>
+        <div style={{ marginBottom: 6 }}>
+          <Logo size="sm" onDark />
+        </div>
         <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 16 }}>{email}</div>
         {GROUPS.map((g) => (
           <div key={g.title} style={{ marginBottom: 14 }}>
@@ -135,7 +138,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                       borderRadius: 7,
                       textDecoration: 'none',
                       fontSize: 13.5,
-                      color: active ? '#1a1205' : 'var(--text)',
+                      color: active ? 'var(--brand-contrast)' : 'var(--text)',
                       background: active ? 'var(--brand)' : 'transparent',
                     }}
                   >

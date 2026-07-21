@@ -4,11 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { crud, invoicesApi, type Row } from '../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-const badge = (s: string) => ({ color: ({ draft: '#8aa0c6', issued: '#6ee7a8', cancelled: '#ff8080' } as Record<string, string>)[s] ?? 'var(--text)', fontWeight: 600 });
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
 
 interface LineForm { challanId: string; challanNo: string; quantity: number; hsnSac: string; uom: string; rate: string; gstRate: string; }
 
@@ -21,23 +24,30 @@ export default function InvoicesPage() {
   const [invoiceDate, setInvoiceDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg] = useState<string | null>(null);
 
   async function reload() {
     const [inv, c] = await Promise.all([invoicesApi.list(), crud('customers').list()]);
-    setRows(inv); setCustomers(c);
+    setRows(inv);
+    setCustomers(c);
   }
-  useEffect(() => { reload().catch((e) => setError(String(e))); }, []);
+  useEffect(() => {
+    reload().catch((e) => setError(String(e)));
+  }, []);
 
   async function loadBillable(cid: string) {
     setCustomerId(cid);
     setLines([]);
-    setError(null); setMsg(null);
+    setError(null);
     if (!cid) return;
     try {
       const challans = await invoicesApi.billableChallans(cid);
-      setLines(challans.map((c) => ({ challanId: String(c.id), challanNo: String(c.challanNo), quantity: Number(c.quantityM3), hsnSac: '68109990', uom: 'm3', rate: '', gstRate: '18' })));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+      setLines(
+        challans.map((c) => ({ challanId: String(c.id), challanNo: String(c.challanNo), quantity: Number(c.quantityM3), hsnSac: '68109990', uom: 'm3', rate: '', gstRate: '18' })),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
   }
 
   function setLine(i: number, patch: Partial<LineForm>) {
@@ -45,82 +55,136 @@ export default function InvoicesPage() {
   }
 
   async function create() {
-    setError(null); setMsg(null);
+    setError(null);
     const use = lines.filter((l) => Number(l.rate) > 0);
-    if (!customerId || !use.length) { setError('Pick a customer and set a rate on at least one challan'); return; }
+    if (!customerId || !use.length) {
+      setError('Pick a customer and set a rate on at least one challan');
+      return;
+    }
     try {
       const inv = await invoicesApi.fromChallans({
-        customerId, invoiceDate: invoiceDate || undefined, dueDate: dueDate || undefined,
+        customerId,
+        invoiceDate: invoiceDate || undefined,
+        dueDate: dueDate || undefined,
         lines: use.map((l) => ({ challanId: l.challanId, hsnSac: l.hsnSac, uom: l.uom, rate: Number(l.rate), gstRate: Number(l.gstRate) })),
       });
       router.push(`/app/billing/invoices/${inv.id}`);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
   }
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Invoices</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>Generate a GST tax invoice from delivered challans. Challans flip to invoiced on creation.</p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Invoices</h1>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px', maxWidth: 760 }}>Generate a GST tax invoice from delivered challans. Challans flip to invoiced on creation.</p>
+      {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
+          {msg}
+        </p>
+      )}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New invoice from delivered challans</h3>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap', marginBottom: 12 }}>
-          <div><label style={lbl}>Customer</label>
-            <select style={{ ...input, width: 220 }} value={customerId} onChange={(e) => loadBillable(e.target.value)}>
-              <option value="">— select —</option>
-              {customers.map((c) => <option key={c.id} value={String(c.id)}>{String(c.customerName)}</option>)}
-            </select>
-          </div>
-          <div><label style={lbl}>Invoice date</label><input type="date" style={input} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} /></div>
-          <div><label style={lbl}>Due date</label><input type="date" style={input} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
-        </div>
-
-        {customerId && (
-          lines.length ? (
-            <>
-              <table style={table}>
-                <thead><tr><th style={th}>Challan</th><th style={th}>Qty</th><th style={th}>HSN/SAC</th><th style={th}>UOM</th><th style={th}>Rate</th><th style={th}>GST%</th></tr></thead>
-                <tbody>
-                  {lines.map((l, i) => (
-                    <tr key={l.challanId}>
-                      <td style={td}>{l.challanNo}</td>
-                      <td style={td}>{money(l.quantity)}</td>
-                      <td style={td}><input style={{ ...input, width: 100 }} value={l.hsnSac} onChange={(e) => setLine(i, { hsnSac: e.target.value })} /></td>
-                      <td style={td}><input style={{ ...input, width: 60 }} value={l.uom} onChange={(e) => setLine(i, { uom: e.target.value })} /></td>
-                      <td style={td}><input type="number" step="any" style={{ ...input, width: 90 }} value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} /></td>
-                      <td style={td}><input type="number" step="any" style={{ ...input, width: 70 }} value={l.gstRate} onChange={(e) => setLine(i, { gstRate: e.target.value })} /></td>
-                    </tr>
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New invoice from delivered challans">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: lines.length || customerId ? 14 : 0 }}>
+            <div style={{ minWidth: 220 }}>
+              <Field label="Customer">
+                <select className="mn-input" value={customerId} onChange={(e) => loadBillable(e.target.value)}>
+                  <option value="">— select —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{String(c.customerName)}</option>
                   ))}
-                </tbody>
-              </table>
-              <button style={{ ...button, marginTop: 12 }} onClick={create}>Create invoice</button>
-            </>
-          ) : <p style={{ color: 'var(--muted)', fontSize: 13 }}>No delivered, un-invoiced challans for this customer.</p>
-        )}
-      </section>
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Invoice date">
+                <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Due date">
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </Field>
+            </div>
+          </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead><tr><th style={th}>Invoice No</th><th style={th}>Date</th><th style={th}>Taxable</th><th style={th}>Total</th><th style={th}>Outstanding</th><th style={th}>Payment</th><th style={th}>Status</th><th style={th}></th></tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.invoiceNo ?? '')}</td>
-                <td style={td}>{String(r.invoiceDate ?? '—')}</td>
-                <td style={td}>{money(r.taxableAmount)}</td>
-                <td style={td}>{money(r.totalAmount)}</td>
-                <td style={td}>{money(r.outstandingAmount)}</td>
-                <td style={td}>{String(r.paymentStatus ?? '')}</td>
-                <td style={td}><span style={badge(String(r.invoiceStatus))}>{String(r.invoiceStatus)}</span></td>
-                <td style={td}><Link href={`/app/billing/invoices/${r.id}`} style={{ ...ghostButton, textDecoration: 'none' }}>Open</Link></td>
-              </tr>
+          {customerId &&
+            (lines.length ? (
+              <>
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>Challan</Th>
+                      <Th numeric>Qty</Th>
+                      <Th>HSN/SAC</Th>
+                      <Th>UOM</Th>
+                      <Th numeric>Rate</Th>
+                      <Th numeric>GST%</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((l, i) => (
+                      <tr key={l.challanId}>
+                        <Td>{l.challanNo}</Td>
+                        <Td numeric>{money(l.quantity)}</Td>
+                        <Td><Input style={{ width: 110 }} value={l.hsnSac} onChange={(e) => setLine(i, { hsnSac: e.target.value })} /></Td>
+                        <Td><Input style={{ width: 64 }} value={l.uom} onChange={(e) => setLine(i, { uom: e.target.value })} /></Td>
+                        <Td numeric><Input type="number" step="any" style={{ width: 96, textAlign: 'right' }} value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} /></Td>
+                        <Td numeric><Input type="number" step="any" style={{ width: 74, textAlign: 'right' }} value={l.gstRate} onChange={(e) => setLine(i, { gstRate: e.target.value })} /></Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+                <div style={{ marginTop: 14 }}>
+                  <Button onClick={create}>Create invoice</Button>
+                </div>
+              </>
+            ) : (
+              <p style={{ color: 'var(--mn-muted)', fontSize: 13 }}>No delivered, un-invoiced challans for this customer.</p>
             ))}
-            {!rows.length && <tr><td style={td} colSpan={8}>No invoices yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+        </Card>
+      </div>
+
+      <Card title="Invoices" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Invoice No</Th>
+                <Th>Date</Th>
+                <Th numeric>Taxable</Th>
+                <Th numeric>Total</Th>
+                <Th numeric>Outstanding</Th>
+                <Th>Payment</Th>
+                <Th>Status</Th>
+                <Th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.invoiceNo ?? '')}</Td>
+                  <Td>{String(r.invoiceDate ?? '—')}</Td>
+                  <Td numeric>₹{money(r.taxableAmount)}</Td>
+                  <Td numeric>₹{money(r.totalAmount)}</Td>
+                  <Td numeric>₹{money(r.outstandingAmount)}</Td>
+                  <Td><StatusBadge status={String(r.paymentStatus ?? '')} /></Td>
+                  <Td><StatusBadge status={String(r.invoiceStatus)} /></Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Link href={`/app/billing/invoices/${r.id}`}>
+                      <Button variant="secondary" size="sm">Open</Button>
+                    </Link>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No invoices yet" description="Create an invoice from delivered challans above." />
+        )}
+      </Card>
     </div>
   );
 }

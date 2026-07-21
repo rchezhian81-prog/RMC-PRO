@@ -2,10 +2,13 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { crud, stockApi, type Row } from '../../../../lib/api';
-import { button, card, input, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
 
 export default function StockPage() {
   const [balances, setBalances] = useState<Row[]>([]);
@@ -17,91 +20,141 @@ export default function StockPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
-    const [b, l, m, p] = await Promise.all([stockApi.balances(), stockApi.ledger(), crud('materials').list(), crud('plants').list()]);
+    const [b, l, m, p] = await Promise.all([
+      stockApi.balances(),
+      stockApi.ledger(),
+      crud('materials').list(),
+      crud('plants').list(),
+    ]);
     setBalances(b);
     setLedger(l);
     setMaterials(m);
     setPlants(p);
   }
-  useEffect(() => { reload().catch((e) => setError(String(e))); }, []);
+  useEffect(() => {
+    reload().catch((e) => setError(String(e)));
+  }, []);
 
   async function setOpening(e: FormEvent) {
     e.preventDefault();
-    setError(null); setMsg(null);
+    setError(null);
+    setMsg(null);
     try {
       await stockApi.setOpening({ plantId: form.plantId || undefined, materialId: form.materialId, quantity: Number(form.quantity || 0) });
       setForm({ plantId: '', materialId: '', quantity: '' });
       setMsg('Opening balance set.');
       await reload();
-    } catch (e2) { setError(e2 instanceof Error ? e2.message : 'Failed'); }
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : 'Failed');
+    }
   }
 
   return (
-    <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Stock</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
-        Material balances per plant. Reduced automatically by batch consumption. Opening balance is a
-        bootstrap until material inward (a later sprint).
-      </p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Stock</h1>
+        <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0, maxWidth: 760 }}>
+          Material balances per plant. Reduced automatically by batch consumption; opening balance is a bootstrap
+          until material inward.
+        </p>
+      </div>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13, margin: 0 }}>
+          {msg}
+        </p>
+      )}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Set opening balance</h3>
-        <form onSubmit={setOpening} style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-          <div><label style={lbl}>Plant</label>
-            <select style={{ ...input, width: 150 }} value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
-              <option value="">—</option>
-              {plants.map((p) => <option key={p.id} value={String(p.id)}>{String(p.plantName ?? p.plantCode)}</option>)}
-            </select>
+      <Card title="Set opening balance">
+        <form onSubmit={setOpening} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 160 }}>
+            <Field label="Plant">
+              <select className="mn-input" value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
+                <option value="">—</option>
+                {plants.map((p) => (
+                  <option key={p.id} value={String(p.id)}>{String(p.plantName ?? p.plantCode)}</option>
+                ))}
+              </select>
+            </Field>
           </div>
-          <div><label style={lbl}>Material</label>
-            <select style={{ ...input, width: 170 }} value={form.materialId} onChange={(e) => setForm({ ...form, materialId: e.target.value })} required>
-              <option value="">— pick —</option>
-              {materials.map((m) => <option key={m.id} value={String(m.id)}>{String(m.materialName)}</option>)}
-            </select>
+          <div style={{ minWidth: 180 }}>
+            <Field label="Material" required>
+              <select className="mn-input" value={form.materialId} onChange={(e) => setForm({ ...form, materialId: e.target.value })} required>
+                <option value="">— pick —</option>
+                {materials.map((m) => (
+                  <option key={m.id} value={String(m.id)}>{String(m.materialName)}</option>
+                ))}
+              </select>
+            </Field>
           </div>
-          <div><label style={lbl}>Quantity</label><input type="number" step="any" style={{ ...input, width: 120 }} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required /></div>
-          <button style={button}>Set opening</button>
+          <div style={{ minWidth: 130 }}>
+            <Field label="Quantity" required>
+              <Input type="number" step="any" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
+            </Field>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <Button type="submit">Set opening</Button>
+          </div>
         </form>
-      </section>
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Balances</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>Material</th><th style={th}>Current qty</th><th style={th}>UOM</th></tr></thead>
-          <tbody>
-            {balances.map((b) => (
-              <tr key={b.id}>
-                <td style={td}>{String(b.materialLabel ?? '')}</td>
-                <td style={{ ...td, color: Number(b.currentQuantity) < 0 ? '#ff8080' : 'var(--text)' }}>{fmt(b.currentQuantity)}</td>
-                <td style={td}>{String(b.uom ?? '')}</td>
+      <Card title="Balances" padded={false}>
+        {balances.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Material</Th>
+                <Th numeric>Current qty</Th>
+                <Th>UOM</Th>
               </tr>
-            ))}
-            {!balances.length && <tr><td style={td} colSpan={3}>No stock yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {balances.map((b) => (
+                <tr key={b.id}>
+                  <Td>{String(b.materialLabel ?? '')}</Td>
+                  <Td numeric style={{ color: Number(b.currentQuantity) < 0 ? 'var(--mn-danger)' : 'var(--mn-text)', fontWeight: 600 }}>
+                    {fmt(b.currentQuantity)}
+                  </Td>
+                  <Td>{String(b.uom ?? '')}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No stock yet" description="Set an opening balance to begin." />
+        )}
+      </Card>
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Recent ledger</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>When</th><th style={th}>Material</th><th style={th}>Type</th><th style={th}>In</th><th style={th}>Out</th><th style={th}>Balance</th></tr></thead>
-          <tbody>
-            {ledger.slice(0, 30).map((l) => (
-              <tr key={l.id}>
-                <td style={td}>{String(l.createdAt ?? '').slice(0, 19).replace('T', ' ')}</td>
-                <td style={td}>{String(l.materialLabel ?? '')}</td>
-                <td style={td}>{String(l.transactionType)}</td>
-                <td style={td}>{fmt(l.inQuantity)}</td>
-                <td style={td}>{fmt(l.outQuantity)}</td>
-                <td style={td}>{fmt(l.balanceAfter)}</td>
+      <Card title="Recent ledger" padded={false}>
+        {ledger.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>When</Th>
+                <Th>Material</Th>
+                <Th>Type</Th>
+                <Th numeric>In</Th>
+                <Th numeric>Out</Th>
+                <Th numeric>Balance</Th>
               </tr>
-            ))}
-            {!ledger.length && <tr><td style={td} colSpan={6}>No transactions yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {ledger.slice(0, 30).map((l) => (
+                <tr key={l.id}>
+                  <Td>{String(l.createdAt ?? '').slice(0, 19).replace('T', ' ')}</Td>
+                  <Td>{String(l.materialLabel ?? '')}</Td>
+                  <Td>{String(l.transactionType)}</Td>
+                  <Td numeric>{fmt(l.inQuantity)}</Td>
+                  <Td numeric>{fmt(l.outQuantity)}</Td>
+                  <Td numeric>{fmt(l.balanceAfter)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No transactions yet" />
+        )}
+      </Card>
     </div>
   );
 }

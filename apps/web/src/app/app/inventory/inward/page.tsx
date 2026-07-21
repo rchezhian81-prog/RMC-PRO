@@ -2,11 +2,14 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { crud, materialInwardApi, type Row } from '../../../../lib/api';
-import { button, card, ghostButton, input, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
-const badge = (s: string) => ({ color: ({ draft: '#8aa0c6', posted: '#6ee7a8', cancelled: '#ff8080' } as Record<string, string>)[s] ?? 'var(--text)', fontWeight: 600 });
-const lbl = { fontSize: 12, color: 'var(--muted)' } as const;
 
 export default function MaterialInwardPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -19,21 +22,36 @@ export default function MaterialInwardPage() {
 
   async function reload() {
     const [i, m, s, p] = await Promise.all([materialInwardApi.list(), crud('materials').list(), crud('suppliers').list(), crud('plants').list()]);
-    setRows(i); setMaterials(m); setSuppliers(s); setPlants(p);
+    setRows(i);
+    setMaterials(m);
+    setSuppliers(s);
+    setPlants(p);
   }
-  useEffect(() => { reload().catch((e) => setError(String(e))); }, []);
+  useEffect(() => {
+    reload().catch((e) => setError(String(e)));
+  }, []);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
-    setError(null); setMsg(null);
-    try { await fn(); await reload(); if (okMsg) setMsg(okMsg); } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    setError(null);
+    setMsg(null);
+    try {
+      await fn();
+      await reload();
+      if (okMsg) setMsg(okMsg);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
   }
 
   async function create(e: FormEvent) {
     e.preventDefault();
     await run(async () => {
       await materialInwardApi.create({
-        plantId: form.plantId || undefined, supplierId: form.supplierId || undefined, materialId: form.materialId,
-        vehicleNo: form.vehicleNo || undefined, supplierChallanNo: form.supplierChallanNo || undefined,
+        plantId: form.plantId || undefined,
+        supplierId: form.supplierId || undefined,
+        materialId: form.materialId,
+        vehicleNo: form.vehicleNo || undefined,
+        supplierChallanNo: form.supplierChallanNo || undefined,
         quantityReceived: Number(form.quantityReceived || 0),
         quantityAccepted: form.quantityAccepted ? Number(form.quantityAccepted) : undefined,
         rate: Number(form.rate || 0),
@@ -42,67 +60,97 @@ export default function MaterialInwardPage() {
     }, 'Inward created');
   }
 
+  const Sel = ({ label, v, on, opts, ov, req }: { label: string; v: string; on: (v: string) => void; opts: Row[]; ov: (o: Row) => string; req?: boolean }) => (
+    <div style={{ minWidth: 150 }}>
+      <Field label={label} required={req}>
+        <select className="mn-input" value={v} onChange={(e) => on(e.target.value)} required={req}>
+          <option value="">—</option>
+          {opts.map((o) => (
+            <option key={o.id} value={String(o.id)}>{ov(o)}</option>
+          ))}
+        </select>
+      </Field>
+    </div>
+  );
+  const Num = ({ label, v, on, req }: { label: string; v: string; on: (v: string) => void; req?: boolean }) => (
+    <div style={{ minWidth: 110 }}>
+      <Field label={label} required={req}>
+        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} required={req} />
+      </Field>
+    </div>
+  );
+
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>Material Inward</h1>
-      <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>Receive material (GRN). Posting adds accepted quantity to stock.</p>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Material Inward</h1>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px' }}>Receive material (GRN). Posting adds accepted quantity to stock.</p>
+      {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
+          {msg}
+        </p>
+      )}
 
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>New inward</h3>
-        <form onSubmit={create} style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-          <Sel label="Plant" v={form.plantId} on={(x) => setForm({ ...form, plantId: x })} opts={plants} ov={(o) => String(o.plantName ?? o.plantCode)} w={130} />
-          <Sel label="Supplier" v={form.supplierId} on={(x) => setForm({ ...form, supplierId: x })} opts={suppliers} ov={(o) => String(o.supplierName)} w={150} />
-          <Sel label="Material *" v={form.materialId} on={(x) => setForm({ ...form, materialId: x })} opts={materials} ov={(o) => String(o.materialName)} w={150} req />
-          <Num label="Received" v={form.quantityReceived} on={(x) => setForm({ ...form, quantityReceived: x })} req />
-          <Num label="Accepted" v={form.quantityAccepted} on={(x) => setForm({ ...form, quantityAccepted: x })} />
-          <Num label="Rate" v={form.rate} on={(x) => setForm({ ...form, rate: x })} />
-          <div><label style={lbl}>Vehicle</label><input style={{ ...input, width: 120 }} value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} /></div>
-          <button style={button}>Create</button>
-        </form>
-      </section>
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New inward">
+          <form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+            <Sel label="Plant" v={form.plantId} on={(x) => setForm({ ...form, plantId: x })} opts={plants} ov={(o) => String(o.plantName ?? o.plantCode)} />
+            <Sel label="Supplier" v={form.supplierId} on={(x) => setForm({ ...form, supplierId: x })} opts={suppliers} ov={(o) => String(o.supplierName)} />
+            <Sel label="Material" v={form.materialId} on={(x) => setForm({ ...form, materialId: x })} opts={materials} ov={(o) => String(o.materialName)} req />
+            <Num label="Received" v={form.quantityReceived} on={(x) => setForm({ ...form, quantityReceived: x })} req />
+            <Num label="Accepted" v={form.quantityAccepted} on={(x) => setForm({ ...form, quantityAccepted: x })} />
+            <Num label="Rate" v={form.rate} on={(x) => setForm({ ...form, rate: x })} />
+            <div style={{ minWidth: 130 }}>
+              <Field label="Vehicle">
+                <Input value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit">Create</Button>
+            </div>
+          </form>
+        </Card>
+      </div>
 
-      <section style={card}>
-        <table style={table}>
-          <thead><tr><th style={th}>Inward No</th><th style={th}>Material</th><th style={th}>Received</th><th style={th}>Accepted</th><th style={th}>Amount</th><th style={th}>Status</th><th style={th}></th></tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td style={td}>{String(r.inwardNo ?? '')}</td>
-                <td style={td}>{String(r.materialLabel ?? '')}</td>
-                <td style={td}>{money(r.quantityReceived)}</td>
-                <td style={td}>{money(r.quantityAccepted)}</td>
-                <td style={td}>{money(r.amount)}</td>
-                <td style={td}><span style={badge(String(r.status))}>{String(r.status)}</span></td>
-                <td style={td}>
-                  {r.status === 'draft' && (
-                    <span style={{ display: 'flex', gap: 6 }}>
-                      <button style={button} onClick={() => run(() => materialInwardApi.post(String(r.id)), 'Posted to stock')}>Post</button>
-                      <button style={ghostButton} onClick={() => run(() => materialInwardApi.cancel(String(r.id)))}>Cancel</button>
-                    </span>
-                  )}
-                </td>
+      <Card title="Inwards" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Inward No</Th>
+                <Th>Material</Th>
+                <Th numeric>Received</Th>
+                <Th numeric>Accepted</Th>
+                <Th numeric>Amount</Th>
+                <Th>Status</Th>
+                <Th />
               </tr>
-            ))}
-            {!rows.length && <tr><td style={td} colSpan={7}>No inwards yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.inwardNo ?? '')}</Td>
+                  <Td>{String(r.materialLabel ?? '')}</Td>
+                  <Td numeric>{money(r.quantityReceived)}</Td>
+                  <Td numeric>{money(r.quantityAccepted)}</Td>
+                  <Td numeric>₹{money(r.amount)}</Td>
+                  <Td><StatusBadge status={String(r.status)} /></Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    {r.status === 'draft' && (
+                      <span style={{ display: 'inline-flex', gap: 6 }}>
+                        <Button size="sm" onClick={() => run(() => materialInwardApi.post(String(r.id)), 'Posted to stock')}>Post</Button>
+                        <Button variant="secondary" size="sm" onClick={() => run(() => materialInwardApi.cancel(String(r.id)))}>Cancel</Button>
+                      </span>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No inwards yet" description="Receive material to create a GRN." />
+        )}
+      </Card>
     </div>
   );
-}
-
-function Sel({ label, v, on, opts, ov, w, req }: { label: string; v: string; on: (v: string) => void; opts: Row[]; ov: (o: Row) => string; w: number; req?: boolean }) {
-  return (
-    <div><label style={lbl}>{label}</label>
-      <select style={{ ...input, width: w }} value={v} onChange={(e) => on(e.target.value)} required={req}>
-        <option value="">—</option>
-        {opts.map((o) => <option key={o.id} value={String(o.id)}>{ov(o)}</option>)}
-      </select>
-    </div>
-  );
-}
-function Num({ label, v, on, req }: { label: string; v: string; on: (v: string) => void; req?: boolean }) {
-  return (<div><label style={lbl}>{label}</label><input type="number" step="any" style={{ ...input, width: 90 }} value={v} onChange={(e) => on(e.target.value)} required={req} /></div>);
 }

@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { ordersApi, type Row } from '../../../../lib/api';
-import { button, card, ghostButton, table, td, th } from '../../../../lib/ui';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { StatusBadge } from '../../../../components/ui/Badge';
+import { Button } from '../../../../components/ui/Button';
+import { StatCard } from '../../../../components/ui/StatCard';
+import { Loading, ErrorState } from '../../../../components/ui/States';
 
-const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-const statusColor: Record<string, string> = {
-  draft: '#8aa0c6', confirmed: '#6ee7a8', credit_hold: '#e0b341', cancelled: '#ff8080',
-};
+const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -44,146 +47,170 @@ export default function OrderDetail() {
     }
   }
 
-  if (!o) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
+  if (!o) return <Loading label="Loading order…" />;
   const items = (o.items as Row[]) ?? [];
   const history = (o.history as Row[]) ?? [];
   const holds = (o.creditHolds as Row[]) ?? [];
   const status = String(o.orderStatus);
 
   return (
-    <div>
-      <button style={{ ...ghostButton, marginBottom: 12 }} onClick={() => router.push('/app/orders')}>← Orders</button>
-      <h1 style={{ fontSize: 22, marginTop: 0 }}>
-        {String(o.orderNo)}{' '}
-        <span style={{ fontSize: 13, color: statusColor[status] ?? 'var(--muted)' }}>
-          {status} · credit {String(o.creditStatus)}
-        </span>
-      </h1>
-      {error && <p style={{ color: '#ff8080', fontSize: 13 }}>{error}</p>}
-      {msg && <p style={{ color: '#6ee7a8', fontSize: 13 }}>{msg}</p>}
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} onClick={() => router.push('/app/orders')}>
+          Orders
+        </Button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 24, margin: 0 }}>{String(o.orderNo)}</h1>
+        <StatusBadge status={status} />
+        <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>credit {String(o.creditStatus)}</span>
+      </div>
+      {error && <ErrorState message={error} />}
+      {msg && (
+        <div style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
+          {msg}
+        </div>
+      )}
 
-      {/* Credit assessment (draft only) */}
       {credit && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>Credit check at booking</h3>
+        <Card title="Credit check at booking">
           {credit.enforced ? (
-            <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', fontSize: 13.5 }}>
-              <Stat label="Credit limit" val={money(credit.creditLimit)} />
-              <Stat label="Outstanding" val={money(credit.outstandingBefore)} />
-              <Stat label="This order" val={money(credit.requestedAmount)} />
-              <Stat label="Exposure after" val={money(credit.exposureAfter)} />
-              <Stat
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+              <StatCard label="Credit limit" value={money(credit.creditLimit)} />
+              <StatCard label="Outstanding" value={money(credit.outstandingBefore)} />
+              <StatCard label="This order" value={money(credit.requestedAmount)} />
+              <StatCard label="Exposure after" value={money(credit.exposureAfter)} />
+              <StatCard
                 label="Result"
-                val={credit.withinLimit ? 'Within limit' : 'Exceeds limit'}
-                color={credit.withinLimit ? '#6ee7a8' : '#e0b341'}
+                value={credit.withinLimit ? 'Within limit' : 'Exceeds limit'}
+                tone={credit.withinLimit ? 'success' : 'warning'}
               />
             </div>
           ) : (
-            <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
+            <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>
               No credit limit configured for this customer — credit control not enforced.
             </p>
           )}
-        </section>
+        </Card>
       )}
 
-      {/* Actions */}
-      <section style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {status === 'draft' && (
-          <button style={button} onClick={() => run(() => ordersApi.confirm(id), 'Order processed')}>
-            Confirm order
-          </button>
-        )}
-        {status !== 'cancelled' && (
-          <button style={ghostButton} onClick={() => run(async () => {
-            const reason = window.prompt('Cancel reason', '');
-            if (reason !== null) await ordersApi.cancel(id, reason);
-          }, 'Order cancelled')}>Cancel order</button>
-        )}
-        {status === 'credit_hold' && (
-          <span style={{ alignSelf: 'center', color: '#e0b341', fontSize: 13 }}>
-            Awaiting credit approval — see Credit Holds.
-          </span>
-        )}
-      </section>
+      <Card title="Actions">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {status === 'draft' && (
+            <Button onClick={() => run(() => ordersApi.confirm(id), 'Order processed')}>Confirm order</Button>
+          )}
+          {status !== 'cancelled' && (
+            <Button
+              variant="secondary"
+              onClick={() =>
+                run(async () => {
+                  const reason = window.prompt('Cancel reason', '');
+                  if (reason !== null) await ordersApi.cancel(id, reason);
+                }, 'Order cancelled')
+              }
+            >
+              Cancel order
+            </Button>
+          )}
+          {status === 'credit_hold' && (
+            <span style={{ color: 'var(--mn-warning)', fontSize: 13 }}>Awaiting credit approval — see Credit Holds.</span>
+          )}
+        </div>
+      </Card>
 
-      {/* Lines */}
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Lines</h3>
-        <table style={table}>
+      <Card title="Lines" padded={false}>
+        <Table>
           <thead>
             <tr>
-              <th style={th}>Grade</th><th style={th}>Qty m³</th><th style={th}>Rate/m³</th>
-              <th style={th}>Transport</th><th style={th}>Pump</th><th style={th}>Waiting</th><th style={th}>Line</th>
+              <Th>Grade</Th>
+              <Th numeric>Qty m³</Th>
+              <Th numeric>Rate/m³</Th>
+              <Th numeric>Transport</Th>
+              <Th numeric>Pump</Th>
+              <Th numeric>Waiting</Th>
+              <Th>Line</Th>
             </tr>
           </thead>
           <tbody>
             {items.map((it) => (
               <tr key={it.id}>
-                <td style={td}>{String(it.gradeLabel ?? '')}</td>
-                <td style={td}>{money(it.quantityM3)}</td>
-                <td style={td}>{money(it.ratePerM3)}</td>
-                <td style={td}>{money(it.transportCharge)}</td>
-                <td style={td}>{money(it.pumpCharge)}</td>
-                <td style={td}>{money(it.waitingCharge)}</td>
-                <td style={td}>{String(it.lineStatus ?? '')}</td>
+                <Td>{String(it.gradeLabel ?? '')}</Td>
+                <Td numeric>{money(it.quantityM3)}</Td>
+                <Td numeric>{money(it.ratePerM3)}</Td>
+                <Td numeric>{money(it.transportCharge)}</Td>
+                <Td numeric>{money(it.pumpCharge)}</Td>
+                <Td numeric>{money(it.waitingCharge)}</Td>
+                <Td>{String(it.lineStatus ?? '')}</Td>
               </tr>
             ))}
-            {!items.length && <tr><td style={td} colSpan={7}>No lines.</td></tr>}
+            {!items.length && (
+              <tr>
+                <Td colSpan={7} style={{ color: 'var(--mn-muted)' }}>No lines.</Td>
+              </tr>
+            )}
           </tbody>
-        </table>
-        <p style={{ textAlign: 'right', margin: '10px 4px 0', fontWeight: 600 }}>
-          Estimated value: ₹{money(o.estimatedOrderValue)}
+        </Table>
+        <p style={{ textAlign: 'right', margin: '12px 16px', fontWeight: 700, fontFamily: 'var(--mn-font-display)' }}>
+          Estimated value: {money(o.estimatedOrderValue)}
         </p>
-      </section>
+      </Card>
 
-      {/* Credit holds */}
       {holds.length > 0 && (
-        <section style={card}>
-          <h3 style={{ marginTop: 0, fontSize: 15 }}>Credit holds</h3>
-          <table style={table}>
-            <thead><tr><th style={th}>Requested</th><th style={th}>Limit</th><th style={th}>Exposure</th><th style={th}>Status</th><th style={th}>Note</th></tr></thead>
+        <Card title="Credit holds" padded={false}>
+          <Table>
+            <thead>
+              <tr>
+                <Th numeric>Requested</Th>
+                <Th numeric>Limit</Th>
+                <Th numeric>Exposure</Th>
+                <Th>Status</Th>
+                <Th>Note</Th>
+              </tr>
+            </thead>
             <tbody>
               {holds.map((h) => (
                 <tr key={h.id}>
-                  <td style={td}>{money(h.requestedAmount)}</td>
-                  <td style={td}>{money(h.creditLimit)}</td>
-                  <td style={td}>{money(h.exposureAfter)}</td>
-                  <td style={td}>{String(h.status)}</td>
-                  <td style={td}>{String(h.decisionNote ?? '—')}</td>
+                  <Td numeric>{money(h.requestedAmount)}</Td>
+                  <Td numeric>{money(h.creditLimit)}</Td>
+                  <Td numeric>{money(h.exposureAfter)}</Td>
+                  <Td><StatusBadge status={String(h.status)} /></Td>
+                  <Td>{String(h.decisionNote ?? '—')}</Td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </section>
+          </Table>
+        </Card>
       )}
 
-      {/* Status history */}
-      <section style={card}>
-        <h3 style={{ marginTop: 0, fontSize: 15 }}>Status history</h3>
-        <table style={table}>
-          <thead><tr><th style={th}>When</th><th style={th}>Action</th><th style={th}>From → To</th><th style={th}>Note</th></tr></thead>
+      <Card title="Status history" padded={false}>
+        <Table>
+          <thead>
+            <tr>
+              <Th>When</Th>
+              <Th>Action</Th>
+              <Th>From → To</Th>
+              <Th>Note</Th>
+            </tr>
+          </thead>
           <tbody>
             {history.map((h) => (
               <tr key={h.id}>
-                <td style={td}>{String(h.createdAt ?? '').slice(0, 19).replace('T', ' ')}</td>
-                <td style={td}>{String(h.action)}</td>
-                <td style={td}>{String(h.fromStatus ?? '—')} → {String(h.toStatus)}</td>
-                <td style={td}>{String(h.note ?? '—')}</td>
+                <Td>{String(h.createdAt ?? '').slice(0, 19).replace('T', ' ')}</Td>
+                <Td>{String(h.action)}</Td>
+                <Td>
+                  {String(h.fromStatus ?? '—')} → {String(h.toStatus)}
+                </Td>
+                <Td>{String(h.note ?? '—')}</Td>
               </tr>
             ))}
-            {!history.length && <tr><td style={td} colSpan={4}>No history.</td></tr>}
+            {!history.length && (
+              <tr>
+                <Td colSpan={4} style={{ color: 'var(--mn-muted)' }}>No history.</Td>
+              </tr>
+            )}
           </tbody>
-        </table>
-      </section>
-    </div>
-  );
-}
-
-function Stat({ label, val, color }: { label: string; val: string; color?: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 600, color: color ?? 'var(--text)' }}>{val}</div>
+        </Table>
+      </Card>
     </div>
   );
 }

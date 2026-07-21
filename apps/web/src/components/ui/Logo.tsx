@@ -1,13 +1,48 @@
-import type { CSSProperties } from 'react';
+'use client';
+
+import { useEffect, useState, type CSSProperties } from 'react';
 
 /**
  * Mix Nova brand lockup.
  *
- * PLACEHOLDER: renders the product wordmark in the brand font + Nova gradient.
- * We intentionally do NOT recreate the supplied logo artwork. When the official
- * logo is dropped into `apps/web/public/brand/` (see README there), swap the
- * `mark` below for `<img src="/brand/mix-nova-logo.svg" alt="Mix Nova" />`.
+ * Uses the REAL logo the moment a file exists in `apps/web/public/brand/`
+ * (see README there) — no code change needed. Until then it renders a
+ * typographic wordmark placeholder. We never recreate the supplied artwork.
+ *
+ * Expected files (first that loads wins):
+ *   light surfaces → /brand/mix-nova-logo.svg | .png
+ *   dark surfaces  → /brand/mix-nova-logo-white.svg | .png (falls back to the above)
  */
+const LIGHT = ['/brand/mix-nova-logo.svg', '/brand/mix-nova-logo.png'];
+const DARK = ['/brand/mix-nova-logo-white.svg', '/brand/mix-nova-logo-white.png', ...LIGHT];
+
+function useLogoSrc(onDark: boolean): string | null {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const candidates = onDark ? DARK : LIGHT;
+    (async () => {
+      for (const c of candidates) {
+        const ok = await new Promise<boolean>((res) => {
+          const img = new window.Image();
+          img.onload = () => res(true);
+          img.onerror = () => res(false);
+          img.src = c;
+        });
+        if (cancelled) return;
+        if (ok) {
+          setSrc(c);
+          return;
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onDark]);
+  return src;
+}
+
 export function Logo({
   size = 'md',
   showTagline = false,
@@ -17,12 +52,17 @@ export function Logo({
   showTagline?: boolean;
   onDark?: boolean;
 }) {
+  const src = useLogoSrc(onDark);
+  const imgH = size === 'lg' ? 42 : size === 'sm' ? 26 : 32;
+
+  // Real asset present → use it (the supplied lockup already includes wordmark/tagline).
+  if (src) {
+    return <img src={src} alt="Mix Nova RMC Software" style={{ height: imgH, width: 'auto', display: 'block' }} />;
+  }
+
+  // Placeholder wordmark until the asset lands.
   const s = size === 'lg' ? 34 : size === 'sm' ? 24 : 28;
   const word = size === 'lg' ? 24 : size === 'sm' ? 16 : 19;
-
-  // On dark/gradient surfaces invert the mark (white tile, gradient "M") and use
-  // light wordmark colors so the lockup stays legible; on light surfaces use the
-  // gradient tile + gradient "Nova".
   const mark: CSSProperties = {
     width: s,
     height: s,
@@ -55,11 +95,7 @@ export function Logo({
           }}
         >
           Mix{' '}
-          {onDark ? (
-            <span style={{ color: '#E9DDFF' }}>Nova</span>
-          ) : (
-            <span className="mn-gradient-text">Nova</span>
-          )}
+          {onDark ? <span style={{ color: '#E9DDFF' }}>Nova</span> : <span className="mn-gradient-text">Nova</span>}
         </span>
         {showTagline && (
           <span

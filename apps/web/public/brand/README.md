@@ -1,20 +1,25 @@
 # Mix Nova — brand assets
 
-Drop the official Mix Nova logo files here. They are **not** in the repo yet, so the
-UI currently renders a typographic wordmark placeholder (`src/components/ui/Logo.tsx`).
-We do not recreate or redesign the supplied logo — this folder is only for the real asset.
+Drop the official Mix Nova logo file(s) here. **The `Logo` component auto-detects and
+uses them the moment they exist — no code change needed.** Until then it renders a
+typographic wordmark placeholder. We do not recreate or redesign the supplied logo.
 
-Expected files (SVG preferred for crispness at any size):
+## Files the app looks for (first that loads wins)
 
-| File | Use |
-|------|-----|
-| `mix-nova-logo.svg` | full horizontal lockup (mark + wordmark) — login, sidebar header |
-| `mix-nova-mark.svg` | square mark only — collapsed sidebar, avatars |
-| `favicon.ico` / `icon.svg` | browser tab icon (wire via `app/icon`) |
-| `mix-nova-logo-dark.svg` *(optional)* | variant tuned for dark surfaces |
+| Surface | Filenames (in priority order) |
+|---------|-------------------------------|
+| Light backgrounds (sidebar, admin) | `mix-nova-logo.svg` → `mix-nova-logo.png` |
+| Dark / gradient backgrounds (login header) | `mix-nova-logo-white.svg` → `mix-nova-logo-white.png` → the light ones |
 
-Once added, update `src/components/ui/Logo.tsx` to render the SVG via `<img>` (or
-`next/image`) instead of the placeholder wordmark, preserving the same size props.
+- **SVG preferred** (crisp at any size). A high-res **PNG (transparent, ~2× ≈ 400–600px tall)** also works.
+- Use the **horizontal lockup** (mark + "MIX NOVA / RMC SOFTWARE" wordmark) — the tagline is optional (the component won't add a second one).
+- For dark surfaces, export a **white/light** version so it stays legible on the purple gradient.
+- *(Optional)* `mix-nova-mark.svg` (square mark only) and `icon.svg` / `favicon.ico` for the browser tab.
+
+## How to add it
+1. Save/export the logo from your design source as `mix-nova-logo.svg` (or `.png`) — the standalone logo, **not** the full brand board.
+2. Put it in this folder (`apps/web/public/brand/`) and commit it to the branch.
+3. Reload — the login, sidebar, and admin portal will show it automatically.
 
 **Brand:** Mix Nova · *Smart Mix. Stronger Future.*
 **Palette:** Primary Purple `#6C2BD9` · Electric Violet `#8A4FFF` · Soft Lavender `#B78CFF`

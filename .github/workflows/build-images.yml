@@ -1,0 +1,93 @@
+name: Build images
+
+# Builds the API + Web production images OFF the pilot server and pushes them to
+# GHCR, tagged by git SHA. VM3 then only PULLS pre-built images — it never runs
+# `docker build` (which can OOM the 4 GB host). Code quality is gated separately
+# by ci.yml (lint · typecheck · build) on every push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      next_public_api_url:
+        description: 'Public API origin baked into the web bundle (build-time)'
+        required: false
+        default: 'https://api.mixnovas.com'
+  push:
+    tags: ['v*'] # release tags cut an image set
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write # push to GHCR via GITHUB_TOKEN — no extra secrets needed
+
+jobs:
+  images:
+    name: build · push (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      # Baked into the WEB client bundle at build time — must be the public API
+      # origin. Order: manual input -> repo variable -> mixnovas.com default.
+      NEXT_PUBLIC_API_URL: ${{ github.event.inputs.next_public_api_url || vars.NEXT_PUBLIC_API_URL || 'https://api.mixnovas.com' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: api, dockerfile: apps/api/Dockerfile }
+          - { image: web, dockerfile: apps/web/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR image names must be lowercase; the repo slug contains uppercase.
+      - name: Compute lowercase repo slug
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags & labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.REPO_LC }}/rmc-${{ matrix.image }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # NEXT_PUBLIC_API_URL is consumed only by the web Dockerfile.
+          build-args: ${{ matrix.image == 'web' && format('NEXT_PUBLIC_API_URL={0}', env.NEXT_PUBLIC_API_URL) || '' }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Deploy hint (job summary)
+        run: |
+          SHA_SHORT="$(git rev-parse --short HEAD)"
+          {
+            echo "### rmc-${{ matrix.image }} pushed to GHCR"
+            echo ""
+            echo "Immutable ref (deploy this, not \`latest\`):"
+            echo '```'
+            echo "${REGISTRY}/${REPO_LC}/rmc-${{ matrix.image }}:${SHA_SHORT}"
+            echo '```'
+            echo "On VM3: set \`IMAGE_TAG=${SHA_SHORT}\` + \`IMAGE_REPO_${{ matrix.image }}\` in .env.production, then \`docker compose ... pull && up -d\`."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -45,14 +45,33 @@ Use certbot on the host to obtain a cert covering the three names (webroot
 is confirmed working. *(TLS is not issued by this repo.)*
 
 ## 3. Build images
-In CI (recommended) or on the VPS, from the repo root:
+**Recommended — build OFF the pilot host (VM3 is 4 GB / no swap; an on-box `docker build`
+can OOM the live stack).** Run the CI workflow `.github/workflows/build-images.yml`
+(GitHub → Actions → “Build images” → Run, or push a `v*` tag). It builds both images and
+pushes them to GHCR tagged by git SHA, baking `NEXT_PUBLIC_API_URL` for the web image.
+
+Then on VM3, pull instead of build — set in `.env.production`:
+```bash
+IMAGE_TAG=<the-built-short-sha>          # e.g. 9463c1d (immutable; not 'latest')
+IMAGE_REPO_API=ghcr.io/rchezhian81-prog/rmc-pro/rmc-api
+IMAGE_REPO_WEB=ghcr.io/rchezhian81-prog/rmc-pro/rmc-web
+```
+```bash
+echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u <user> --password-stdin  # read:packages
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml pull
+```
+> `IMAGE_REPO_*` unset = the legacy on-VPS build path (fallback below). The web image
+> bakes `NEXT_PUBLIC_API_URL` at build time — rebuild (re-run CI) to change it.
+
+<details><summary>Fallback: build on the VPS (only if CI is unavailable)</summary>
+
 ```bash
 export IMAGE_TAG=$(git rev-parse --short HEAD)
 docker build -f apps/api/Dockerfile -t rmc-api:$IMAGE_TAG .
 docker build -f apps/web/Dockerfile \
   --build-arg NEXT_PUBLIC_API_URL=https://api.<DOMAIN> -t rmc-web:$IMAGE_TAG .
 ```
-> The web image bakes `NEXT_PUBLIC_API_URL` at build time — rebuild to change it.
+</details>
 
 ## 4. Database migrate + production bootstrap (one-shot)
 The `migrate` service applies migrations as the **owner** role, then runs the

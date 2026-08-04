@@ -4,8 +4,9 @@
 Companion to `DEPLOY-PLAN-01-phase1-pilot.md`. Do **not** run any step until the real
 registered domain is confirmed and execution is approved.
 
-**Scheme (Option A):** `app.<DOMAIN>` = web portal · `rmc.<DOMAIN>` = API ·
-`pilot.<DOMAIN>` → 301 to `app.<DOMAIN>`. `<DOMAIN>` is a **placeholder** everywhere.
+**Scheme (5 hosts):** `app.<DOMAIN>` = web portal · `api.<DOMAIN>` = API ·
+`admin.<DOMAIN>` = super-admin alias → web · apex + `www.<DOMAIN>` → 301 to `app.<DOMAIN>`.
+`<DOMAIN>` is a **placeholder** everywhere (e.g. `mixnovas.com`).
 
 ## Artifacts this runbook uses
 | File | Purpose |
@@ -21,18 +22,19 @@ registered domain is confirmed and execution is approved.
 
 ## 0. Prerequisites (operator, on your infra — NOT done here)
 - VPS (Ubuntu LTS) with Docker Engine + Compose plugin; firewall allows 22/80/443 only.
-- DNS `A` records: `app.<DOMAIN>`, `rmc.<DOMAIN>`, `pilot.<DOMAIN>` → VPS IP.
+- DNS: apex `A` → VPS IP; `www`, `app`, `api`, `admin` `CNAME` → apex (see plan §3).
 - The repo checked out on the VPS (or images built in CI and pulled).
 
 ## 1. Prepare env and domain
 ```bash
 cp .env.production.example .env.production
 # Replace EVERY __REPLACE__ with a CSPRNG secret (openssl rand -base64 36),
-# and set DOMAIN + both host URLs. Owner and app DB passwords MUST differ.
-# Ensure: CORS_ORIGINS=https://app.<DOMAIN>  and  NEXT_PUBLIC_API_URL=https://rmc.<DOMAIN>
+# and set DOMAIN + host URLs. Owner and app DB passwords MUST differ.
+# Ensure: CORS_ORIGINS=https://app.<DOMAIN>,https://admin.<DOMAIN>
+#    and: NEXT_PUBLIC_API_URL=https://api.<DOMAIN>
 
 # Replace the placeholder token in the nginx template with your real domain:
-sed -i 's/<DOMAIN>/example.in/g' docker/nginx/rmc.conf   # use your domain
+sed -i 's/<DOMAIN>/mixnovas.com/g' docker/nginx/rmc.conf   # use your domain
 ```
 Never commit `.env.production` (git-ignored). Only `*.example` files are tracked.
 
@@ -48,7 +50,7 @@ In CI (recommended) or on the VPS, from the repo root:
 export IMAGE_TAG=$(git rev-parse --short HEAD)
 docker build -f apps/api/Dockerfile -t rmc-api:$IMAGE_TAG .
 docker build -f apps/web/Dockerfile \
-  --build-arg NEXT_PUBLIC_API_URL=https://rmc.<DOMAIN> -t rmc-web:$IMAGE_TAG .
+  --build-arg NEXT_PUBLIC_API_URL=https://api.<DOMAIN> -t rmc-web:$IMAGE_TAG .
 ```
 > The web image bakes `NEXT_PUBLIC_API_URL` at build time — rebuild to change it.
 
@@ -74,18 +76,21 @@ Order is enforced by `depends_on`: postgres(healthy) → migrate(completed) → 
 with nginx last. Reload nginx after TLS is in place.
 
 ## 6. Smoke tests (see plan §10 for the full list)
-- `https://rmc.<DOMAIN>/health` → 200 `{status:"ok"}`.
-- `https://app.<DOMAIN>` loads over valid HTTPS; `http://…` redirects to HTTPS;
-  `https://pilot.<DOMAIN>` → 301 to `app.<DOMAIN>`.
+- `https://api.<DOMAIN>/health` → 200 `{status:"ok"}`.
+- `https://app.<DOMAIN>` and `https://admin.<DOMAIN>` load over valid HTTPS; `http://…`
+  redirects to HTTPS; apex + `https://www.<DOMAIN>` → 301 to `app.<DOMAIN>`.
 - Postgres/Redis/MinIO NOT reachable from the public internet.
-- CORS: a request with `Origin: https://app.<DOMAIN>` is allowed; a foreign origin is not.
+- CORS: a request with `Origin: https://app.<DOMAIN>` (or `admin.`) is allowed; a foreign origin is not.
 - Super-admin login; create a pilot tenant + plan; tenant isolation spot-check.
 - Order-to-cash happy path (quotation → … → receipt); offline plant-app sync; dashboards.
 
 ## 7. Rollback (see plan §11)
 - App: redeploy the previous `IMAGE_TAG` (`docker compose ... up -d`).
-- DB: restore the pre-deploy `pg_dump`. The index migration's `down` is safe (drops
-  indexes only); prefer a snapshot restore when data may have changed.
+- DB: restore the pre-deploy snapshot taken with
+  `./scripts/backup/pg-backup.sh --label pre-migrate` — recover it via
+  `./scripts/backup/pg-restore.sh --file <dump> --into rmc --confirm` (see
+  `scripts/backup/README.md`). The index migration's `down` is safe (drops indexes only);
+  prefer a snapshot restore when data may have changed.
 - Keep the previous `rmc.conf`; `nginx -t` before every reload.
 
 ---
@@ -93,8 +98,8 @@ with nginx last. Reload nginx after TLS is in place.
 ## Verification performed in-repo (no deployment)
 - `docker compose --env-file .env.production.example -f docker/docker-compose.prod.yml
   config` resolves cleanly: `api` depends on `migrate`(completed) + `postgres`(healthy);
-  `CORS_ORIGINS=https://app.<DOMAIN>`; web build arg `NEXT_PUBLIC_API_URL=https://rmc.<DOMAIN>`;
-  only nginx publishes 80/443.
+  `CORS_ORIGINS=https://app.<DOMAIN>,https://admin.<DOMAIN>`; web build arg
+  `NEXT_PUBLIC_API_URL=https://api.<DOMAIN>`; only nginx publishes 80/443.
 - The compiled one-shot commands were run locally against Postgres:
   `typeorm migration:run -d dist/core/database/data-source.js` → "No migrations are
   pending"; `node dist/core/database/seed-prod.js` → idempotent bootstrap. This is

@@ -21,6 +21,9 @@ coverage/
 !.env.example
 !.env.production.example
 
+# database backups (never commit dump contents)
+backups/
+
 # logs
 *.log
 npm-debug.log*

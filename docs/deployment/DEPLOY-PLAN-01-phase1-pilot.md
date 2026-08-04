@@ -93,22 +93,27 @@ of pilot tenants with light concurrency; revisit with load testing before scale-
 
 ## 3. Domain / subdomain plan
 
-Two subdomains under the pilot domain (placeholder `rmcpro.example.in` — to be
-confirmed):
+Confirmed domain: **`mixnovas.com`** (GoDaddy). Five hosts, one SAN TLS cert covering all:
 
-| Host | Points to | Purpose |
-|---|---|---|
-| `app.rmcpro.example.in` | Nginx → web:3000 | Tenant + super-admin web portal |
-| `api.rmcpro.example.in` | Nginx → api:4000 | REST API (`/api/v1`, `/health`) |
+| Host | Type | Points to | Purpose |
+|---|---|---|---|
+| `mixnovas.com` (apex) | `A` → VPS IP | Nginx → 301 | redirect to `app.mixnovas.com` |
+| `www.mixnovas.com` | `CNAME` → apex | Nginx → 301 | redirect to `app.mixnovas.com` |
+| `app.mixnovas.com` | `CNAME` → apex | Nginx → web:3000 | Tenant + super-admin web portal |
+| `api.mixnovas.com` | `CNAME` → apex | Nginx → api:4000 | REST API (`/api/v1`, `/health`) |
+| `admin.mixnovas.com` | `CNAME` → apex | Nginx → web:3000 | Super-admin alias (same app, `/admin`) |
 
-- DNS: two `A` records → VPS public IP (or one `A` + one `CNAME`).
-- Super-admin portal is served from the same web app under a route (no separate host in
-  Phase 1).
-- Reasoning for a dedicated `api.` host: the web client reads `NEXT_PUBLIC_API_URL`
-  directly from the browser, so the API must be publicly reachable and CORS-scoped. A
-  path-based split (`app.<domain>/api`) is an alternative that avoids cross-origin; if
-  chosen, it changes CORS/build config. **Decision needed at execution:** subdomain
-  (default, above) vs path-based. Default = subdomain.
+- DNS: apex holds the only `A` record; subdomains `CNAME` to the apex so a future IP
+  change is a single edit. (All-`A` per host is an equivalent alternative.)
+- Add a `CAA` record `0 issue "letsencrypt.org"` to restrict cert issuance (hardening).
+- Preserve any existing `MX`/`TXT` records when editing DNS.
+- Super-admin portal is served from the same web app under `/admin`; `admin.` is a
+  convenience host, not a separate deployment.
+- Dedicated `api.` host: the web client reads `NEXT_PUBLIC_API_URL` from the browser, so
+  the API must be publicly reachable and CORS-scoped (`app.` + `admin.` are the allowed
+  browser origins).
+- **DNS is not applied until cutover is approved** — the domain currently resolves to
+  GoDaddy parking; do not change it during the audit/hardening steps.
 
 ---
 
@@ -135,13 +140,13 @@ committed**, with **every secret replaced**. Checklist (✅ = must set a real va
 ✅ `JWT_ACCESS_SECRET` (32+ random bytes), ✅ `JWT_REFRESH_SECRET` (distinct 32+ random),
 `JWT_ACCESS_TTL=900`, `JWT_REFRESH_TTL=1209600`.
 
-**Web (build-time)** — ✅ `NEXT_PUBLIC_API_URL=https://api.rmcpro.example.in` (must be
+**Web (build-time)** — ✅ `NEXT_PUBLIC_API_URL=https://api.mixnovas.com` (must be
 present at `pnpm build`, not just runtime).
 
 **CORS (implemented — pre-go-live fix):**
-- ✅ `CORS_ORIGINS=https://app.rmcpro.example.in,https://api.rmcpro.example.in`
-  — comma-separated browser-origin allowlist. Open `enableCors()` has been replaced;
-  unset = localhost-only (dev). The API is never opened to `*`.
+- ✅ `CORS_ORIGINS=https://app.mixnovas.com,https://admin.mixnovas.com`
+  — comma-separated browser-origin allowlist (both portal hosts). Open `enableCors()` has
+  been replaced; unset = localhost-only (dev). The API is never opened to `*`.
 
 **Production bootstrap (implemented — `pnpm seed:prod`):**
 - `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD` (strong, non-demo), optional
@@ -165,24 +170,25 @@ secret manager / a vault, not in shell history.
    exist; confirm `rmc_app` is `rolsuper=false, rolbypassrls=false`.
 4. Never run `synchronize`; schema changes only via new timestamped migrations.
 
-**Backups:**
-- Nightly `pg_dump` (custom format) to the VPS, then off-VPS (S3 bucket / provider
-  snapshot). Retain 7 daily + 4 weekly for the pilot.
-- Pre-deploy backup: **always `pg_dump` immediately before running new migrations** so
-  rollback (§11) has a restore point.
+**Backups:** implemented ✅ in `scripts/backup/` (independent of Acronis' 7-day whole-VM image).
+- Nightly `pg_dump` (custom format) via `scripts/backup/pg-backup.sh` — checksummed, GFS
+  pruning (7 daily / 4 weekly / 3 monthly). Configure the commented **off-box copy** so a
+  copy survives loss of VM3.
+- Pre-deploy backup: **always** `./scripts/backup/pg-backup.sh --label pre-migrate`
+  immediately before running new migrations so rollback (§11) has a restore point.
+- Restore/verify with `scripts/backup/pg-restore.sh` — defaults to a **scratch DB**;
+  overwriting the live DB needs `--into rmc --confirm`. Run a restore drill monthly.
 - Object storage: enable MinIO bucket versioning; include the MinIO data volume in
   volume snapshots.
-- Quarterly (at minimum, once during the pilot) **restore drill** into a scratch DB to
-  prove backups are usable.
 - Document RPO/RTO targets for the pilot: RPO ≤ 24 h (nightly) / ≤ deploy for migrations;
-  RTO ≤ a few hours (single-VPS manual restore).
+  RTO ≤ a few hours (single-VPS manual restore). See `scripts/backup/README.md`.
 
 ---
 
 ## 6. Docker / Nginx deployment plan
 
-**Authored ✅ (repo artifacts — not yet executed).** Option A host scheme
-(`app.`/`rmc.`/`pilot.`); step-by-step usage in `DEPLOY-RUNBOOK-01-phase1-pilot.md`.
+**Authored ✅ (repo artifacts — not yet executed).** Host scheme
+(`app.`/`api.`/`admin.` + apex/`www.`); step-by-step usage in `DEPLOY-RUNBOOK-01-phase1-pilot.md`.
 1. ✅ `apps/api/Dockerfile` — multi-stage; runtime is dev-dep-free (`pnpm deploy --prod`)
    and runs compiled JS; non-root `node` user; `/health` healthcheck.
 2. ✅ `apps/web/Dockerfile` — Next.js **standalone** build with `NEXT_PUBLIC_API_URL` as
@@ -205,8 +211,9 @@ blocked in the dev sandbox).
 
 ## 7. SSL / HTTPS plan
 
-- **Let's Encrypt** via certbot for `app.` and `api.` (two names; or a wildcard
-  `*.rmcpro.example.in` via DNS-01 if preferred).
+- **Let's Encrypt** via certbot — one SAN cert covering all five names (apex, `www.`,
+  `app.`, `api.`, `admin.`), issued apex-first so the lineage dir is
+  `/etc/letsencrypt/live/mixnovas.com/` (or a wildcard `*.mixnovas.com` + apex via DNS-01).
 - TLS terminates at Nginx. Redirect all `:80` → `:443`.
 - Auto-renewal (certbot systemd timer / cron); post-renew Nginx reload hook.
 - HSTS enabled after HTTPS is confirmed working end-to-end (not before, to avoid

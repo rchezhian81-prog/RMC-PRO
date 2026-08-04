@@ -7,9 +7,9 @@
 #   3. Run from the repo root:
 #        docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d
 #
-# Topology (Option A): only nginx is published. app.<DOMAIN> -> web:3000,
-# rmc.<DOMAIN> -> api:4000, pilot.<DOMAIN> -> 301 app.<DOMAIN>. Postgres/Redis/
-# MinIO are NOT published to the host — internal network only.
+# Topology: only nginx is published. app.<DOMAIN> + admin.<DOMAIN> -> web:3000,
+# api.<DOMAIN> -> api:4000, apex + www.<DOMAIN> -> 301 app.<DOMAIN>. Postgres/
+# Redis/MinIO are NOT published to the host — internal network only.
 
 name: rmc-pilot
 
@@ -117,7 +117,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-1209600}
-      # Browser-origin allowlist (Option A: the web portal host).
+      # Browser-origin allowlist (app + admin portal hosts; comma-separated).
       CORS_ORIGINS: ${CORS_ORIGINS}
     expose: ['4000']
     depends_on:

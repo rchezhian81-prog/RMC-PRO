@@ -25,6 +25,8 @@ export default function LoginPage() {
         refreshToken: r.refresh_token,
         userType: r.user.userType,
         email: r.user.email,
+        permissions: r.permissions,
+        roles: r.roles,
       });
       router.push(r.user.userType === 'super_admin' ? '/admin/tenants' : '/app');
     } catch (err) {

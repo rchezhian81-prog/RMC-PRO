@@ -85,6 +85,7 @@ export interface LoginResult {
   user: { email: string; userType: string };
   tenant: { code: string } | null;
   permissions: string[];
+  roles: string[];
 }
 export interface TenantRow {
   id: string;
@@ -180,6 +181,7 @@ export function crud(path: string) {
       apiFetch<Row>(`/${path}`, { method: 'POST', body: JSON.stringify(b) }),
     update: (id: string, b: Record<string, unknown>) =>
       apiFetch<Row>(`/${path}/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+    remove: (id: string) => apiFetch<Row>(`/${path}/${id}`, { method: 'DELETE' }),
   };
 }
 
@@ -208,6 +210,9 @@ export const rolesApi = {
   list: () => apiFetch<Row[]>('/roles'),
   create: (b: Record<string, unknown>) =>
     apiFetch<Row>('/roles', { method: 'POST', body: JSON.stringify(b) }),
+  update: (id: string, b: Record<string, unknown>) =>
+    apiFetch<Row>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  remove: (id: string) => apiFetch<{ deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
   catalog: () => apiFetch<Row[]>('/roles/permissions-catalog'),
   getPerms: (id: string) => apiFetch<string[]>(`/roles/${id}/permissions`),
   setPerms: (id: string, permissionIds: string[]) =>

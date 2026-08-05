@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Tenant, User } from '../core/database/entities';
+import { loadUserAccess } from '../rbac/access';
 
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET ?? 'change-me-access';
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'change-me-refresh';
@@ -26,11 +27,17 @@ export class AuthService {
     }
     await repo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.issueTokens(user);
-    const [tenant, permissions] = await Promise.all([
+    const [tenant, access] = await Promise.all([
       this.loadTenant(user.tenantId),
-      this.loadPermissions(user),
+      this.loadAccess(user),
     ]);
-    return { ...tokens, user: this.publicUser(user), tenant, permissions };
+    return {
+      ...tokens,
+      user: this.publicUser(user),
+      tenant,
+      permissions: access.permissions,
+      roles: access.roleKeys,
+    };
   }
 
   async refresh(refreshToken: string) {
@@ -51,11 +58,16 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.db.ds.getRepository(User).findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    const [tenant, permissions] = await Promise.all([
+    const [tenant, access] = await Promise.all([
       this.loadTenant(user.tenantId),
-      this.loadPermissions(user),
+      this.loadAccess(user),
     ]);
-    return { user: this.publicUser(user), tenant, permissions };
+    return {
+      user: this.publicUser(user),
+      tenant,
+      permissions: access.permissions,
+      roles: access.roleKeys,
+    };
   }
 
   private async issueTokens(user: User) {
@@ -77,19 +89,9 @@ export class AuthService {
     return t ? { id: t.id, code: t.tenantCode, name: t.tenantName, status: t.status } : null;
   }
 
-  async loadPermissions(user: Pick<User, 'id' | 'tenantId'>): Promise<string[]> {
-    if (!user.tenantId) return [];
-    return this.db.runInTenant(user.tenantId, async (m) => {
-      const rows: Array<{ key: string }> = await m.query(
-        `SELECT DISTINCT p.permission_key AS key
-         FROM user_roles ur
-         JOIN role_permissions rp ON rp.role_id = ur.role_id
-         JOIN permissions p ON p.id = rp.permission_id
-         WHERE ur.user_id = $1`,
-        [user.id],
-      );
-      return rows.map((r) => r.key);
-    });
+  private loadAccess(user: Pick<User, 'id' | 'tenantId'>): Promise<{ roleKeys: string[]; permissions: string[] }> {
+    if (!user.tenantId) return Promise.resolve({ roleKeys: [], permissions: [] });
+    return loadUserAccess(this.db, user.tenantId, user.id);
   }
 
   private publicUser(user: User) {

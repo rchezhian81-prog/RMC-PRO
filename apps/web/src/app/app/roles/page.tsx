@@ -14,6 +14,8 @@ export default function RolesPage() {
   const [selRole, setSelRole] = useState<Row | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [form, setForm] = useState({ roleKey: '', roleName: '' });
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -61,6 +63,39 @@ export default function RolesPage() {
     }
   }
 
+  function startRename(r: Row) {
+    setEditingRoleId(String(r.id));
+    setEditName(String(r.roleName ?? ''));
+    setError(null);
+  }
+  async function saveRename() {
+    if (!editingRoleId) return;
+    setError(null);
+    try {
+      await rolesApi.update(editingRoleId, { roleName: editName });
+      setEditingRoleId(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+  async function deleteRole(r: Row) {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Delete role "${String(r.roleName)}"? This cannot be undone.`)
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await rolesApi.remove(String(r.id));
+      if (selRole && selRole.id === r.id) setSelRole(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: 18 }}>
       <h1 style={{ fontSize: 24, margin: 0 }}>Roles &amp; Permissions</h1>
@@ -91,19 +126,61 @@ export default function RolesPage() {
               <tr>
                 <Th>Role</Th>
                 <Th>Key</Th>
-                <Th />
+                <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
-              {roles.map((r) => (
-                <tr key={r.id}>
-                  <Td style={{ fontWeight: 600 }}>{String(r.roleName ?? '')}</Td>
-                  <Td>{String(r.roleKey ?? '')}</Td>
-                  <Td style={{ textAlign: 'right' }}>
-                    <Button variant="secondary" size="sm" onClick={() => selectRole(r)}>Permissions</Button>
-                  </Td>
-                </tr>
-              ))}
+              {roles.map((r) => {
+                const isEditing = editingRoleId === String(r.id);
+                const system = Boolean(r.isSystemRole);
+                return (
+                  <tr key={r.id}>
+                    <Td style={{ fontWeight: 600 }}>
+                      {isEditing ? (
+                        <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                      ) : (
+                        <>
+                          {String(r.roleName ?? '')}
+                          {system && (
+                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--mn-muted)' }}>
+                              system
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </Td>
+                    <Td>{String(r.roleKey ?? '')}</Td>
+                    <Td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                        {isEditing ? (
+                          <>
+                            <Button size="sm" onClick={saveRename}>Save</Button>
+                            <Button variant="secondary" size="sm" onClick={() => setEditingRoleId(null)}>
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="secondary" size="sm" onClick={() => selectRole(r)}>
+                              Permissions
+                            </Button>
+                            {!system && (
+                              <Button variant="ghost" size="sm" onClick={() => startRename(r)}>
+                                Rename
+                              </Button>
+                            )}
+                            {!system && (
+                              <Button variant="danger" size="sm" onClick={() => deleteRole(r)}>
+                                Delete
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         ) : (

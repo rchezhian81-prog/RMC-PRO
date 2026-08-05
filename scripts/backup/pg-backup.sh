@@ -83,11 +83,30 @@ SIZE="$(du -h "$OUT" | cut -f1)"
 ( cd "$BACKUP_DIR" && sha256sum "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
 log "done: $(basename "$OUT") ($SIZE) + .sha256"
 
-# ---- OPTIONAL off-box copy (uncomment + configure one; keep dumps off VM3 too) ----
-# rclone copy "$OUT" remote:rmc-backups/            # rclone to S3/Drive/etc.
-# mc cp "$OUT" myminio/rmc-backups/                 # to a SEPARATE MinIO/S3 (not VM3's)
-# scp "$OUT" backup@offsite:/srv/rmc-backups/       # to another host
-log "reminder: configure an OFF-BOX copy (see commented block) — on-box alone is not a backup"
+# ---- OFF-BOX copy (config toggle — on-box alone is not a backup) -------------
+# Set ONE of these to auto-copy every dump off VM3. Read from the environment
+# first, else from .env.production, so it also works from cron. Leave both unset
+# to skip (Acronis still images the whole VM separately).
+#   RMC_OFFBOX_RCLONE=remote:rmc-backups         # an rclone remote (S3/Drive/B2/…)
+#   RMC_OFFBOX_SCP=backup@host:/srv/rmc-backups  # another host over SSH
+RMC_OFFBOX_RCLONE="${RMC_OFFBOX_RCLONE:-$(getenv RMC_OFFBOX_RCLONE)}"
+RMC_OFFBOX_SCP="${RMC_OFFBOX_SCP:-$(getenv RMC_OFFBOX_SCP)}"
+if [ -n "$RMC_OFFBOX_RCLONE" ]; then
+  if command -v rclone >/dev/null 2>&1 \
+     && rclone copy "$OUT" "$RMC_OFFBOX_RCLONE" && rclone copy "$OUT.sha256" "$RMC_OFFBOX_RCLONE"; then
+    log "off-box copy ok -> rclone:$RMC_OFFBOX_RCLONE"
+  else
+    log "WARN: off-box rclone copy FAILED or rclone missing (local dump kept)"
+  fi
+elif [ -n "$RMC_OFFBOX_SCP" ]; then
+  if scp -q "$OUT" "$OUT.sha256" "$RMC_OFFBOX_SCP"/; then
+    log "off-box copy ok -> scp:$RMC_OFFBOX_SCP"
+  else
+    log "WARN: off-box scp copy FAILED (local dump kept)"
+  fi
+else
+  log "note: no off-box target set (RMC_OFFBOX_RCLONE / RMC_OFFBOX_SCP) — on-box copy only"
+fi
 
 # ---- GFS pruning: keep newest N of each label ----
 prune() {

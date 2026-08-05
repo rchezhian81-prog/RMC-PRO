@@ -51,13 +51,18 @@ async function api(method, path, body) {
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const text = await res.text();
-  let data;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!res.ok) {
-    const detail = data && typeof data === 'object' ? (data.message || data.error || JSON.stringify(data)) : String(data || '');
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+  // The API wraps everything in a global envelope: success -> { success:true, data },
+  // failure -> { success:false, error:{ code, message } }. Treat both as errors here.
+  if (!res.ok || (json && typeof json === 'object' && json.success === false)) {
+    const err = json && typeof json === 'object' ? (json.error ?? json) : { message: String(json || res.statusText) };
+    const detail = err.message ?? err.code ?? JSON.stringify(err);
     throw new Error(`${method} ${path} → HTTP ${res.status} ${Array.isArray(detail) ? detail.join('; ') : detail}`);
   }
-  return data;
+  // Unwrap the success envelope so callers get the payload directly.
+  if (json && typeof json === 'object' && json.success === true && 'data' in json) return json.data;
+  return json;
 }
 
 async function login() {

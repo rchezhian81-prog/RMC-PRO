@@ -70,13 +70,22 @@ else
   die "pg_dump failed (backup removed; nothing partial kept)"
 fi
 
-# Integrity: non-empty + valid custom-format archive (pg_restore --list parses it).
+# Integrity. Custom-format (-Fc) archives begin with the 5-byte magic "PGDMP";
+# that host-side header check always works and is authoritative — a file that
+# fails it is corrupt and must not be kept. pg_restore --list is a deeper TOC
+# check (bonus; needs the archive on stdin, no "-" filename).
 [ -s "$OUT" ] || die "backup file is empty"
-if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T "$PG_SERVICE" \
-      pg_restore --list - < "$OUT" >/dev/null 2>&1; then
-  log "archive verified (pg_restore --list ok)"
+if [ "$(head -c5 "$OUT" 2>/dev/null)" = "PGDMP" ]; then
+  log "archive header ok (PGDMP custom format)"
 else
-  log "WARN: could not verify archive with pg_restore --list (kept anyway)"
+  rm -f "$OUT"
+  die "archive is not a valid custom-format dump (missing PGDMP header) — removed"
+fi
+if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T "$PG_SERVICE" \
+      pg_restore --list < "$OUT" >/dev/null 2>&1; then
+  log "archive TOC verified (pg_restore --list ok)"
+else
+  log "note: deeper pg_restore --list check unavailable here (header check passed)"
 fi
 
 SIZE="$(du -h "$OUT" | cut -f1)"

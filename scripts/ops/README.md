@@ -116,3 +116,19 @@ closing the current one**. Rollback:
 ```bash
 sudo rm /etc/ssh/sshd_config.d/99-rmc-hardening.conf && sudo systemctl reload ssh
 ```
+
+## Simpler alternative: fail2ban (server-only, no key needed)
+
+Key-only SSH needs a key generated on *your* computer. If you'd rather not do
+that, `install-fail2ban.sh` gets most of the security benefit with **zero
+client-side steps** — it bans IPs that fail SSH login repeatedly, stopping
+password brute-force. You keep logging in with your password.
+
+```bash
+sudo ./scripts/ops/install-fail2ban.sh
+# optional: whitelist your home IP so a fat-fingered password can't ban you
+IGNORE_IP="203.0.113.4" sudo -E ./scripts/ops/install-fail2ban.sh
+```
+
+Server-only, idempotent, reversible (`sudo systemctl disable --now fail2ban`).
+Use this *or* key-only hardening — either closes the brute-force gap.

@@ -8,6 +8,7 @@ import {
   Store, Truck, IdCard, Layers, UserPlus, FileText, FileSignature, FilePlus, ClipboardList,
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
+  Sparkles,
 } from 'lucide-react';
 import { clearSession, getSession } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
@@ -16,7 +17,13 @@ import { Button } from '../../components/ui/Button';
 
 const IS = 18;
 const GROUPS: { title: string; items: { href: string; label: string; icon: ReactNode }[] }[] = [
-  { title: 'Overview', items: [{ href: '/app/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={IS} /> }] },
+  {
+    title: 'Overview',
+    items: [
+      { href: '/app/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={IS} /> },
+      { href: '/app/assistant', label: 'Assistant', icon: <Sparkles size={IS} /> },
+    ],
+  },
   {
     title: 'Setup',
     items: [

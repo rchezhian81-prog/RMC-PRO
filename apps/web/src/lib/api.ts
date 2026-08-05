@@ -432,6 +432,20 @@ export const reportsCatalogApi = {
   catalog: () => apiFetch<{ groups: { module: string; reports: { key: string; name: string; path: string }[] }[] }>('/reports/catalog'),
 };
 
+// ---- AI assistant (Phase 4) ----
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+export const aiApi = {
+  status: () => apiFetch<{ enabled: boolean }>('/ai/status'),
+  chat: (messages: ChatTurn[]) =>
+    apiFetch<{ reply: string }>('/ai/assistant/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    }),
+};
+
 export const syncApi = {
   devices: () => apiFetch<Row[]>('/sync/devices'),
   reservations: () => apiFetch<Row[]>('/sync/number-reservations'),

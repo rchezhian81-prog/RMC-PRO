@@ -1,33 +1,37 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  Mix Nova RMC — safe redeploy of web + nginx  (quiet-window step)
+#  Mix Nova RMC — safe full redeploy  (quiet-window step)
 # =============================================================================
-#  Activates the pending web-only auth fix and the nginx envsubst cleanup. The
-#  API, Postgres, Redis and MinIO are NOT touched (nothing changed there), so
-#  this is a light recreate, not a full-stack rebuild.
+#  Rebuilds the app images from the current checkout and rolls them out with the
+#  database migrate+seed step, gated end-to-end. Postgres/Redis/MinIO data
+#  volumes are untouched.
 #
 #  Order of operations, each gated:
-#    0. take a pre-redeploy DB snapshot (safety net)
-#    1. render-check the nginx template in a THROWAWAY container (nginx -t) so a
+#    0. pre-redeploy DB snapshot (safety net)
+#    1. render-check the nginx template in a one-off container (nginx -t) so a
 #       bad config can never reach the live proxy
-#    2. build the new web image (api image is unchanged)
-#    3. recreate web then nginx
-#    4. health-check api + app; report clearly
+#    2. build the api + web images
+#    3. run the migrate one-shot (migrations + idempotent seed: catalogs,
+#       permissions, plans) — safe to re-run
+#    4. recreate api, web, nginx
+#    5. health-check api + app
 #
-#  Run this in a quiet window: recreating nginx is a few seconds of blip.
+#  Run in a quiet window: recreating api/nginx is a few seconds of blip.
 #
 #  USAGE (on the VPS, from the repo root, after `git pull`):
 #     ./scripts/ops/redeploy.sh
+#     WEB_ONLY=1 ./scripts/ops/redeploy.sh   # skip api build + migrate (web/nginx only)
 #
-#  4 GB / no swap: the web build (next build) is the only memory-heavy step. If
-#  it OOMs, nothing running is affected (builds are isolated) — retry, or build
-#  the image in CI and pull it (see docs/deployment runbook).
+#  4 GB / no swap: the image builds (esp. web's `next build`) are the only
+#  memory-heavy steps. If one OOMs, nothing running is affected (builds are
+#  isolated) — retry, or build in CI and pull (see docs/deployment runbook).
 # =============================================================================
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.production}"
 COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"
+WEB_ONLY="${WEB_ONLY:-0}"
 DC=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 log() { printf '\n=== [redeploy %s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -40,11 +44,14 @@ getenv() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- ; }
 command -v docker >/dev/null 2>&1 || die "docker not on PATH"
 DOMAIN="$(getenv DOMAIN)"; DOMAIN="${DOMAIN:-mixnovas.com}"
 
-log "target domain: $DOMAIN | compose: $COMPOSE_FILE"
+# What we build/recreate. WEB_ONLY trims to a web+nginx-only change.
+if [ "$WEB_ONLY" = "1" ]; then BUILD_SVCS=(web); RECREATE_SVCS=(web nginx); else BUILD_SVCS=(api web); RECREATE_SVCS=(api web nginx); fi
+
+log "target domain: $DOMAIN | build: ${BUILD_SVCS[*]} | recreate: ${RECREATE_SVCS[*]}"
 "${DC[@]}" config >/dev/null || die "compose config is invalid — aborting before any change"
 
 # ---- 0. Pre-redeploy DB snapshot ----
-log "0/4 pre-redeploy DB snapshot"
+log "0/5 pre-redeploy DB snapshot"
 if [ -x "$REPO_ROOT/scripts/backup/pg-backup.sh" ]; then
   "$REPO_ROOT/scripts/backup/pg-backup.sh" --label pre-redeploy || die "pre-redeploy backup failed — not proceeding"
 else
@@ -52,28 +59,33 @@ else
 fi
 
 # ---- 1. Render-check nginx template BEFORE touching the live proxy ----
-# Use a one-off container from the compose `nginx` service (not a bare
-# `docker run`) so it inherits the real env, volumes AND the app network. That
-# matters because `nginx -t` resolves the api/web upstream hostnames at test
-# time — an isolated container can't and fails with "host not found in upstream".
-# --no-deps: api/web are already running, don't restart them.
-log "1/4 validating nginx config render (compose one-off on app network, nginx -t)"
+# One-off from the compose `nginx` service (not a bare `docker run`) so it
+# inherits the real env, volumes AND the app network — `nginx -t` resolves the
+# api/web upstream hostnames, which an isolated container can't.
+log "1/5 validating nginx config render (compose one-off on app network, nginx -t)"
 if ! "${DC[@]}" run --rm --no-deps -T nginx nginx -t; then
   die "nginx -t FAILED on the rendered template — live nginx untouched. Fix the template first."
 fi
 log "nginx config renders and passes -t ✓"
 
-# ---- 2. Build the new web image (api unchanged) ----
-log "2/4 building web image (this is the memory-heavy step)"
-"${DC[@]}" build web || die "web image build failed (nothing recreated yet). If OOM: retry or build in CI."
+# ---- 2. Build images ----
+log "2/5 building images: ${BUILD_SVCS[*]} (memory-heavy step)"
+"${DC[@]}" build "${BUILD_SVCS[@]}" || die "image build failed (nothing recreated yet). If OOM: retry or build in CI."
 
-# ---- 3. Recreate web then nginx ----
-log "3/4 recreating web, then nginx"
-"${DC[@]}" up -d web  || die "web recreate failed"
-"${DC[@]}" up -d nginx || die "nginx recreate failed — check: ${DC[*]} logs nginx"
+# ---- 3. Migrate + seed (skipped in WEB_ONLY) ----
+if [ "$WEB_ONLY" = "1" ]; then
+  log "3/5 migrate: skipped (WEB_ONLY)"
+else
+  log "3/5 running migrate one-shot (migrations + idempotent seed)"
+  "${DC[@]}" run --rm migrate || die "migrate/seed failed — api NOT recreated. Check: ${DC[*]} logs. DB unchanged beyond any applied migration; restore the pre-redeploy snapshot if needed."
+fi
 
-# ---- 4. Health checks ----
-log "4/4 health checks"
+# ---- 4. Recreate services ----
+log "4/5 recreating: ${RECREATE_SVCS[*]}"
+"${DC[@]}" up -d "${RECREATE_SVCS[@]}" || die "recreate failed — check: ${DC[*]} logs ${RECREATE_SVCS[*]}"
+
+# ---- 5. Health checks ----
+log "5/5 health checks"
 ok=1
 for i in 1 2 3 4 5 6; do
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 12 "https://api.${DOMAIN}/health" || echo 000)"
@@ -87,8 +99,7 @@ case "$appcode" in 200|3??) log "app portal: HTTP $appcode ✓" ;; *) log "app p
 "${DC[@]}" ps
 
 if [ "$ok" = 1 ]; then
-  log "REDEPLOY OK — auth fix + nginx envsubst are live."
-  log "verify in a browser: sign in at https://app.${DOMAIN} (no demo creds prefilled), leave it idle 20 min, confirm you're NOT kicked out."
+  log "REDEPLOY OK — current build is live."
 else
-  die "post-redeploy health check FAILED. Rollback: previous web image is still in Docker — \`${DC[*]} logs web nginx\` to diagnose; if needed redeploy the prior IMAGE_TAG or restore the pre-redeploy snapshot (scripts/backup/pg-restore.sh)."
+  die "post-redeploy health check FAILED. Diagnose with \`${DC[*]} logs ${RECREATE_SVCS[*]}\`; if needed redeploy the prior IMAGE_TAG or restore the pre-redeploy snapshot (scripts/backup/pg-restore.sh)."
 fi

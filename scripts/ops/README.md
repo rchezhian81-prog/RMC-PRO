@@ -57,3 +57,62 @@ is what reaches your phone.
 ```bash
 ./scripts/ops/health-check.sh
 ```
+
+---
+
+# Ops — redeploy (quiet-window step)
+
+`redeploy.sh` activates the pending **web-only auth fix** and the **nginx
+envsubst cleanup**. The API/DB/Redis/MinIO are unchanged, so it only rebuilds
+the web image and recreates web + nginx.
+
+It is gated end-to-end: a pre-redeploy DB snapshot → a render-check of the nginx
+template in a **throwaway** container (`nginx -t`) so a bad config can't reach
+the live proxy → build web → recreate web then nginx → health-check api + app.
+Recreating nginx is a few-seconds blip, so run it when traffic is low.
+
+```bash
+cd /opt/rmc
+git pull --ff-only origin claude/rmc-plant-saas-requirements-6df8ur
+./scripts/ops/redeploy.sh
+```
+
+If the health check fails it stops loudly with rollback guidance (previous image
+still present; pre-redeploy snapshot taken in step 0). On 4 GB/no-swap, the only
+memory-heavy step is the web build — if it OOMs, nothing running is affected;
+retry or build the image in CI and pull it.
+
+After it succeeds, confirm the auth fix by hand: sign in at `app.mixnovas.com`
+(no demo creds prefilled), leave the tab idle ~20 min, and confirm you are **not**
+kicked out — the session now refreshes silently.
+
+---
+
+# Ops — SSH key-only hardening
+
+`ssh-hardening.sh` disables SSH password login (key-only) and forbids root
+password login — it stops password brute-force outright.
+
+**Do the key setup first, from your own computer:**
+
+```bash
+ssh-keygen -t ed25519 -C "mixnova-admin"   # if you don't already have a key
+ssh-copy-id root@65.20.69.69               # install your PUBLIC key on the box
+ssh root@65.20.69.69                       # confirm key login works
+```
+
+**Then, on the VPS:**
+
+```bash
+sudo ./scripts/ops/ssh-hardening.sh            # dry run — shows what it will do
+sudo ./scripts/ops/ssh-hardening.sh --confirm  # apply (your session stays open)
+```
+
+The script **refuses** to disable passwords unless a usable key is already
+installed, validates with `sshd -t`, and only *reloads* sshd (never restarts) so
+your current session survives. After applying, **test a new SSH session before
+closing the current one**. Rollback:
+
+```bash
+sudo rm /etc/ssh/sshd_config.d/99-rmc-hardening.conf && sudo systemctl reload ssh
+```

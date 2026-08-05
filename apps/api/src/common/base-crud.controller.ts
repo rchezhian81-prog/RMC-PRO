@@ -1,4 +1,4 @@
-import { Body, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import type { ObjectLiteral } from 'typeorm';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { TenantCrudService } from './tenant-crud.service';
@@ -33,5 +33,11 @@ export abstract class BaseCrudController<T extends ObjectLiteral> {
     @Body() dto: Record<string, unknown>,
   ) {
     return this.service.update(u.tenantId as string, id, dto);
+  }
+
+  /** Soft delete (deactivate) — see TenantCrudService.deactivate. */
+  @Delete(':id')
+  remove(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.service.deactivate(u.tenantId as string, id);
   }
 }

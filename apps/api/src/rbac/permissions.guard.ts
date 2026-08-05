@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { PERMISSIONS_KEY } from './permissions.decorator';
+import { isTenantOwner, loadUserAccess } from './access';
 import type { AuthUser } from '../auth/auth-user';
 
 /**
@@ -28,19 +29,10 @@ export class PermissionsGuard implements CanActivate {
     if (user.userType === 'super_admin') return true;
     if (!user.tenantId) throw new ForbiddenException({ code: 'PERMISSION_DENIED' });
 
-    const perms = await this.db.runInTenant(user.tenantId, async (m) => {
-      const rows: Array<{ key: string }> = await m.query(
-        `SELECT DISTINCT p.permission_key AS key
-         FROM user_roles ur
-         JOIN role_permissions rp ON rp.role_id = ur.role_id
-         JOIN permissions p ON p.id = rp.permission_id
-         WHERE ur.user_id = $1`,
-        [user.userId],
-      );
-      return rows.map((r) => r.key);
-    });
+    const access = await loadUserAccess(this.db, user.tenantId, user.userId);
+    if (isTenantOwner(access)) return true;
 
-    if (!required.every((r) => perms.includes(r))) {
+    if (!required.every((r) => access.permissions.includes(r))) {
       throw new ForbiddenException({
         code: 'PERMISSION_DENIED',
         message: 'Missing required permission',

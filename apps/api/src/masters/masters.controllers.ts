@@ -2,6 +2,8 @@ import { Controller, UseGuards } from '@nestjs/common';
 import { BaseCrudController } from '../common/base-crud.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { CrudPermissionsGuard } from '../rbac/crud-permissions.guard';
+import { CrudResource } from '../rbac/crud-resource.decorator';
 import {
   ConcreteGrade,
   Customer,
@@ -22,7 +24,8 @@ import {
 } from './masters.services';
 
 @Controller('customers')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class CustomersController extends BaseCrudController<Customer> {
   constructor(protected readonly service: CustomersService) {
     super();
@@ -30,7 +33,8 @@ export class CustomersController extends BaseCrudController<Customer> {
 }
 
 @Controller('sites')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class SitesController extends BaseCrudController<Site> {
   constructor(protected readonly service: SitesService) {
     super();
@@ -38,7 +42,8 @@ export class SitesController extends BaseCrudController<Site> {
 }
 
 @Controller('materials')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class MaterialsController extends BaseCrudController<Material> {
   constructor(protected readonly service: MaterialsService) {
     super();
@@ -46,7 +51,8 @@ export class MaterialsController extends BaseCrudController<Material> {
 }
 
 @Controller('suppliers')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class SuppliersController extends BaseCrudController<Supplier> {
   constructor(protected readonly service: SuppliersService) {
     super();
@@ -54,7 +60,8 @@ export class SuppliersController extends BaseCrudController<Supplier> {
 }
 
 @Controller('vehicles')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class VehiclesController extends BaseCrudController<Vehicle> {
   constructor(protected readonly service: VehiclesService) {
     super();
@@ -62,7 +69,8 @@ export class VehiclesController extends BaseCrudController<Vehicle> {
 }
 
 @Controller('drivers')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class DriversController extends BaseCrudController<Driver> {
   constructor(protected readonly service: DriversService) {
     super();
@@ -70,7 +78,8 @@ export class DriversController extends BaseCrudController<Driver> {
 }
 
 @Controller('concrete-grades')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@CrudResource('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class GradesController extends BaseCrudController<ConcreteGrade> {
   constructor(protected readonly service: GradesService) {
     super();

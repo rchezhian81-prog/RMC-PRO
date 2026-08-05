@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { PermissionsGuard } from '../rbac/permissions.guard';
 import {
   CompanyController,
   NumberSeriesController,
@@ -30,6 +31,7 @@ import {
     UsersService,
     RolesService,
     TenantGuard,
+    PermissionsGuard,
   ],
 })
 export class SetupModule {}

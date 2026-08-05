@@ -11,6 +11,12 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 export interface CrudOpts {
   orderBy?: string;
   required?: string[];
+  /**
+   * Field/value written on a soft delete (deactivate). Defaults to
+   * status='inactive'; entities without a `status` column (e.g. number series)
+   * override it, e.g. { field: 'isActive', value: false }.
+   */
+  softDelete?: { field: string; value: unknown };
 }
 
 /**
@@ -67,6 +73,23 @@ export class TenantCrudService<T extends ObjectLiteral> {
       delete rest.tenantId;
       delete rest.id;
       await repo.update(id, rest as any);
+      return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
+    });
+  }
+
+  /**
+   * Soft delete: mark the record inactive rather than removing it, so records
+   * referenced by transactions (a material used in a mix, a customer with
+   * invoices) are never orphaned. Reversible by editing the record's status.
+   */
+  deactivate(tenantId: string, id: string): Promise<T> {
+    const field = this.opts.softDelete?.field ?? 'status';
+    const value = this.opts.softDelete?.value ?? 'inactive';
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(this.entity);
+      const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
+      if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
+      await repo.update(id, { [field]: value } as any);
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });
   }

@@ -66,7 +66,12 @@ export class SettingsService {
 @Injectable()
 export class NumberSeriesService extends TenantCrudService<NumberSeries> {
   constructor(db: TenantDbService) {
-    super(db, NumberSeries, { orderBy: 'documentType', required: ['documentType'] });
+    super(db, NumberSeries, {
+      orderBy: 'documentType',
+      required: ['documentType'],
+      // NumberSeries has no `status` column — deactivate via isActive.
+      softDelete: { field: 'isActive', value: false },
+    });
   }
 }
 
@@ -160,6 +165,43 @@ export class RolesService {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(Role).save(m.getRepository(Role).create({ tenantId, roleKey, roleName })),
     );
+  }
+
+  /** Rename a role. System roles (owner/admin/etc.) are protected. */
+  update(tenantId: string, id: string, dto: Record<string, unknown>) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Role);
+      const role = await repo.findOne({ where: { id } });
+      if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
+      if (role.isSystemRole) {
+        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'System roles cannot be modified' });
+      }
+      const roleName = String(dto.roleName ?? '').trim();
+      if (!roleName) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'roleName required' });
+      await repo.update(id, { roleName });
+      return repo.findOne({ where: { id } });
+    });
+  }
+
+  /** Delete a role. Blocked for system roles and roles still assigned to users. */
+  remove(tenantId: string, id: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const role = await m.getRepository(Role).findOne({ where: { id } });
+      if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
+      if (role.isSystemRole) {
+        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'System roles cannot be deleted' });
+      }
+      const assigned = await m.getRepository(UserRole).count({ where: { roleId: id } });
+      if (assigned > 0) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: `Role is assigned to ${assigned} user(s); remove those assignments first`,
+        });
+      }
+      await m.getRepository(RolePermission).delete({ roleId: id });
+      await m.getRepository(Role).delete(id);
+      return { deleted: true };
+    });
   }
 
   getPermissions(tenantId: string, roleId: string) {

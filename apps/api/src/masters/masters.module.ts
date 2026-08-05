@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { CrudPermissionsGuard } from '../rbac/crud-permissions.guard';
 import {
   CustomersController,
   DriversController,
@@ -38,6 +39,7 @@ import {
     DriversService,
     GradesService,
     TenantGuard,
+    CrudPermissionsGuard,
   ],
 })
 export class MastersModule {}

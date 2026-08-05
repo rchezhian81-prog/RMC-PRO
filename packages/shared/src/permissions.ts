@@ -19,7 +19,13 @@ export const PERMISSIONS = {
   NUMBER_SERIES_MANAGE: 'number_series.manage',
   INTEGRATIONS_MANAGE: 'integrations.manage',
 
-  // Masters
+  // Masters (all master lists: customers, sites, materials, suppliers,
+  // vehicles, drivers, concrete grades, plants). Granular CRUD so roles can be
+  // restricted to view-only, or allowed to create/edit but not delete.
+  MASTERS_VIEW: 'masters.view',
+  MASTERS_CREATE: 'masters.create',
+  MASTERS_EDIT: 'masters.edit',
+  MASTERS_DELETE: 'masters.delete',
   CUSTOMERS_VIEW: 'customers.view',
   CUSTOMERS_CREATE: 'customers.create',
   CUSTOMERS_EDIT: 'customers.edit',

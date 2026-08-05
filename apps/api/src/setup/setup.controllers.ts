@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { BaseCrudController } from '../common/base-crud.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { PermissionsGuard } from '../rbac/permissions.guard';
+import { RequirePermissions } from '../rbac/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { NumberSeries } from '../core/database/entities';
 import {
@@ -13,25 +15,29 @@ import {
 } from './setup.services';
 
 @Controller('company')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class CompanyController {
   constructor(private readonly svc: CompanyService) {}
   @Get() get(@CurrentUser() u: AuthUser) {
     return this.svc.get(u.tenantId as string);
   }
-  @Patch() update(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
+  @Patch()
+  @RequirePermissions('settings.manage')
+  update(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
     return this.svc.update(u.tenantId as string, dto);
   }
 }
 
 @Controller('settings')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class SettingsController {
   constructor(private readonly svc: SettingsService) {}
   @Get() list(@CurrentUser() u: AuthUser) {
     return this.svc.list(u.tenantId as string);
   }
-  @Put(':key') set(
+  @Put(':key')
+  @RequirePermissions('settings.manage')
+  set(
     @CurrentUser() u: AuthUser,
     @Param('key') key: string,
     @Body() dto: Record<string, unknown>,
@@ -46,7 +52,8 @@ export class SettingsController {
 }
 
 @Controller('number-series')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+@RequirePermissions('number_series.manage')
 export class NumberSeriesController extends BaseCrudController<NumberSeries> {
   constructor(protected readonly service: NumberSeriesService) {
     super();
@@ -54,7 +61,8 @@ export class NumberSeriesController extends BaseCrudController<NumberSeries> {
 }
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+@RequirePermissions('users.manage')
 export class UsersController {
   constructor(private readonly svc: UsersService) {}
   @Get() list(@CurrentUser() u: AuthUser) {
@@ -73,7 +81,8 @@ export class UsersController {
 }
 
 @Controller('roles')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+@RequirePermissions('roles.manage')
 export class RolesController {
   constructor(private readonly svc: RolesService) {}
   @Get() list(@CurrentUser() u: AuthUser) {
@@ -81,6 +90,16 @@ export class RolesController {
   }
   @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
     return this.svc.create(u.tenantId as string, dto);
+  }
+  @Patch(':id') update(
+    @CurrentUser() u: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: Record<string, unknown>,
+  ) {
+    return this.svc.update(u.tenantId as string, id, dto);
+  }
+  @Delete(':id') remove(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.svc.remove(u.tenantId as string, id);
   }
   @Get('permissions-catalog') catalog() {
     return this.svc.permissionCatalog();

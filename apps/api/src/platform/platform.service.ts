@@ -1,16 +1,23 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { MODULE_KEYS } from '@rmc/shared';
+import * as bcrypt from 'bcryptjs';
+import { MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
   ModuleEntity,
+  Permission,
   PlanModule,
+  Role,
+  RolePermission,
   SubscriptionPlan,
   Tenant,
   TenantModule,
+  User,
+  UserRole,
 } from '../core/database/entities';
 import type {
   CreatePlanDto,
   CreateTenantDto,
+  CreateTenantUserDto,
   UpdatePlanDto,
   UpdateTenantDto,
 } from './dto/platform.dto';
@@ -57,6 +64,88 @@ export class PlatformService {
     );
     if (dto.planId) await this.assignPlan(tenant.id, dto.planId);
     return this.getTenant(tenant.id);
+  }
+
+  // ---- Tenant users (bootstrap the first login for a plant) ----
+  async listTenantUsers(tenantId: string) {
+    await this.getTenant(tenantId); // 404 if the tenant does not exist
+    const users = await this.ds.getRepository(User).find({
+      where: { tenantId },
+      order: { email: 'ASC' },
+    });
+    return users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      userType: u.userType,
+      status: u.status,
+      lastLoginAt: u.lastLoginAt ?? null,
+    }));
+  }
+
+  /**
+   * Create a login user for a tenant. Used to bootstrap the FIRST user of a new
+   * plant (the tenant portal's own user screen needs an existing tenant user to
+   * open). The first user is given the Company Owner role (full access); after
+   * that, the tenant manages its own users from inside the portal. Tenant-scoped
+   * rows are written through `runInTenant` so PostgreSQL RLS accepts them.
+   */
+  async createTenantUser(tenantId: string, dto: CreateTenantUserDto) {
+    await this.getTenant(tenantId);
+    const email = dto.email.trim().toLowerCase();
+    if (await this.ds.getRepository(User).findOne({ where: { email } })) {
+      throw new BadRequestException({
+        code: 'DUPLICATE_RECORD',
+        message: 'A user with this email already exists',
+      });
+    }
+    const passwordHash = bcrypt.hashSync(dto.password, 10);
+
+    return this.db.runInTenant(tenantId, async (m) => {
+      // createTenant does not seed roles, so ensure the tenant's system roles exist.
+      let ownerRole = await m.findOne(Role, {
+        where: { tenantId, roleKey: ROLE_KEYS.COMPANY_OWNER },
+      });
+      if (!ownerRole) {
+        const allPerms = await m.find(Permission);
+        ownerRole = await m.save(
+          m.create(Role, {
+            tenantId,
+            roleKey: ROLE_KEYS.COMPANY_OWNER,
+            roleName: 'Company Owner',
+            isSystemRole: true,
+          }),
+        );
+        const adminRole = await m.save(
+          m.create(Role, {
+            tenantId,
+            roleKey: ROLE_KEYS.COMPANY_ADMIN,
+            roleName: 'Company Admin',
+            isSystemRole: true,
+          }),
+        );
+        for (const role of [ownerRole, adminRole]) {
+          await m.save(
+            allPerms.map((p) =>
+              m.create(RolePermission, { tenantId, roleId: role.id, permissionId: p.id }),
+            ),
+          );
+        }
+      }
+
+      const user = await m.save(
+        m.create(User, {
+          tenantId,
+          name: dto.name.trim(),
+          email,
+          passwordHash,
+          userType: 'tenant_user',
+          status: 'active',
+        }),
+      );
+      await m.save(m.create(UserRole, { tenantId, userId: user.id, roleId: ownerRole.id }));
+      return { id: user.id, name: user.name, email: user.email, userType: user.userType };
+    });
   }
 
   async getTenant(id: string) {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { api, type PlanRow, type TenantModuleRow } from '../../../../lib/api';
+import { api, type PlanRow, type TenantModuleRow, type TenantUserRow } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Badge } from '../../../../components/ui/Badge';
@@ -20,14 +20,26 @@ export default function TenantDetailPage() {
   const [modules, setModules] = useState<TenantModuleRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [planId, setPlanId] = useState('');
+  const [users, setUsers] = useState<TenantUserRow[]>([]);
+  const [uName, setUName] = useState('');
+  const [uEmail, setUEmail] = useState('');
+  const [uPassword, setUPassword] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [userMsg, setUserMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
-    const [t, mods, pl] = await Promise.all([api.tenant(id), api.tenantModules(id), api.plans()]);
+    const [t, mods, pl, us] = await Promise.all([
+      api.tenant(id),
+      api.tenantModules(id),
+      api.plans(),
+      api.tenantUsers(id),
+    ]);
     setName(t.name);
     setPlanCode(t.planCode ?? null);
     setModules(mods);
     setPlans(pl);
+    setUsers(us);
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e)));
@@ -52,6 +64,28 @@ export default function TenantDetailPage() {
       setModules(updated);
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  async function createUser() {
+    if (uName.trim().length < 2 || !uEmail.includes('@') || uPassword.length < 8) {
+      setError('Enter a name, a valid email, and a password of at least 8 characters.');
+      return;
+    }
+    setError(null);
+    setUserMsg(null);
+    setCreating(true);
+    try {
+      await api.createTenantUser(id, { name: uName.trim(), email: uEmail.trim(), password: uPassword });
+      setUserMsg(`User ${uEmail.trim()} created — share the login with them securely.`);
+      setUName('');
+      setUEmail('');
+      setUPassword('');
+      await reload();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -114,6 +148,58 @@ export default function TenantDetailPage() {
             ))}
           </tbody>
         </Table>
+      </Card>
+
+      <Card title="Users">
+        {users.length > 0 ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Name</Th>
+                <Th>Email</Th>
+                <Th>Type</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <Td style={{ fontWeight: 600 }}>{u.name}</Td>
+                  <Td>{u.email}</Td>
+                  <Td>{u.userType}</Td>
+                  <Td>
+                    {u.status === 'active' ? (
+                      <Badge tone="success">Active</Badge>
+                    ) : (
+                      <Badge tone="neutral">{u.status}</Badge>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 4px' }}>
+            No users yet. Create the first login for this plant below — they get the Company
+            Owner role (full access) and can add the rest of the team from inside the portal.
+          </p>
+        )}
+
+        <div style={{ display: 'grid', gap: 12, maxWidth: 440, marginTop: 16 }}>
+          <Field label="Full name">
+            <input className="mn-input" value={uName} onChange={(e) => setUName(e.target.value)} placeholder="e.g. Plant Manager" />
+          </Field>
+          <Field label="Email (their login)">
+            <input className="mn-input" type="email" value={uEmail} onChange={(e) => setUEmail(e.target.value)} placeholder="name@company.com" />
+          </Field>
+          <Field label="Temporary password (≥ 8 characters)">
+            <input className="mn-input" value={uPassword} onChange={(e) => setUPassword(e.target.value)} placeholder="share this with them, then have them change it" />
+          </Field>
+          <div>
+            <Button onClick={createUser} loading={creating}>Create user</Button>
+          </div>
+          {userMsg && <p style={{ color: 'var(--mn-success)', fontSize: 13, margin: 0 }}>{userMsg}</p>}
+        </div>
       </Card>
     </div>
   );

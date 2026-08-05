@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -10,6 +11,12 @@ import {
 } from 'class-validator';
 
 const STATUSES = ['trial', 'active', 'grace', 'suspended', 'cancelled'];
+
+export class CreateTenantUserDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsEmail() email!: string;
+  @IsString() @MinLength(8) password!: string;
+}
 
 export class CreateTenantDto {
   @IsString() @MinLength(2) tenantCode!: string;

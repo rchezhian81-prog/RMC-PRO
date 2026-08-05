@@ -54,6 +54,14 @@ export interface ModuleRow {
   name: string;
   phase: number;
 }
+export interface TenantUserRow {
+  id: string;
+  name: string;
+  email: string;
+  userType: string;
+  status: string;
+  lastLoginAt: string | null;
+}
 
 export const api = {
   login: (login: string, password: string) =>
@@ -71,6 +79,12 @@ export const api = {
       body: JSON.stringify({ planId }),
     }),
   tenantModules: (id: string) => apiFetch<TenantModuleRow[]>(`/platform/tenants/${id}/modules`),
+  tenantUsers: (id: string) => apiFetch<TenantUserRow[]>(`/platform/tenants/${id}/users`),
+  createTenantUser: (id: string, b: { name: string; email: string; password: string }) =>
+    apiFetch<{ id: string; email: string }>(`/platform/tenants/${id}/users`, {
+      method: 'POST',
+      body: JSON.stringify(b),
+    }),
   setTenantModule: (id: string, key: string, isEnabled: boolean) =>
     apiFetch<TenantModuleRow[]>(`/platform/tenants/${id}/modules/${key}`, {
       method: 'PUT',

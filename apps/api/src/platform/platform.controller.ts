@@ -6,6 +6,7 @@ import {
   AssignPlanDto,
   CreatePlanDto,
   CreateTenantDto,
+  CreateTenantUserDto,
   SetPlanModulesDto,
   SetTenantModuleDto,
   UpdatePlanDto,
@@ -46,6 +47,16 @@ export class PlatformController {
   @Get('tenants/:id/modules')
   tenantModules(@Param('id') id: string) {
     return this.svc.getTenantModules(id);
+  }
+
+  @Get('tenants/:id/users')
+  listTenantUsers(@Param('id') id: string) {
+    return this.svc.listTenantUsers(id);
+  }
+
+  @Post('tenants/:id/users')
+  createTenantUser(@Param('id') id: string, @Body() dto: CreateTenantUserDto) {
+    return this.svc.createTenantUser(id, dto);
   }
 
   @Put('tenants/:id/modules/:moduleKey')

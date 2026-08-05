@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Download, Upload, FileText } from 'lucide-react';
 import { crud, type Row } from '../lib/api';
 import type { EntityConfig } from '../lib/entity-config';
 import { getAccess } from '../lib/session';
+import { toCsv, downloadCsv, parseCsv } from '../lib/csv';
 import { Card } from './ui/Card';
 import { Table, Th, Td } from './ui/Table';
 import { Button } from './ui/Button';
@@ -26,11 +28,14 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const [access, setAccess] = useState<Access>(NO_ACCESS);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const isNumberSeries = config.path === 'number-series';
   const can = (action: 'create' | 'edit' | 'delete') =>
     isNumberSeries ? access.has('number_series.manage') : access.has(`masters.${action}`);
+  const fieldKeys = config.fields.map((f) => f.key);
 
   async function reload() {
     setRows(await client.list());
@@ -100,6 +105,54 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     }
   }
 
+  function exportCsv() {
+    const cols = Array.from(new Set([...config.columns, ...fieldKeys]));
+    downloadCsv(`${config.path}-${new Date().toISOString().slice(0, 10)}`, toCsv(rows, cols));
+  }
+
+  function downloadTemplate() {
+    downloadCsv(`${config.path}-template`, toCsv([], fieldKeys));
+  }
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setError(null);
+    setImportMsg(null);
+    setBusy(true);
+    try {
+      const records = parseCsv(await file.text());
+      if (!records.length) {
+        setError('That CSV has no data rows.');
+        return;
+      }
+      let ok = 0;
+      const errs: string[] = [];
+      for (let i = 0; i < records.length; i++) {
+        const rec = records[i] ?? {};
+        const body: Record<string, unknown> = {};
+        for (const f of config.fields) {
+          const v = rec[f.key];
+          if (v !== undefined && v !== '') body[f.key] = f.type === 'number' ? Number(v) : v;
+        }
+        try {
+          await client.create(body);
+          ok++;
+        } catch (err) {
+          errs.push(`Row ${i + 2}: ${err instanceof Error ? err.message : 'failed'}`);
+        }
+      }
+      await reload();
+      setImportMsg(`Imported ${ok} of ${records.length} row(s)${errs.length ? `, ${errs.length} failed` : ''}.`);
+      if (errs.length) setError(errs.slice(0, 8).join(' · ') + (errs.length > 8 ? ' · …' : ''));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const singular = config.title.replace(/s$/, '');
   const showForm = can('create') || editingId !== null;
   const showActions = can('edit') || can('delete');
@@ -145,7 +198,48 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
         </div>
       )}
 
-      <Card title={config.title} padded={false}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={onImportFile}
+        style={{ display: 'none' }}
+      />
+
+      <Card
+        title={config.title}
+        padded={false}
+        actions={
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {importMsg && <span style={{ color: 'var(--mn-success)', fontSize: 12 }}>{importMsg}</span>}
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Download size={15} />}
+              onClick={exportCsv}
+              disabled={!rows.length}
+            >
+              Export CSV
+            </Button>
+            {can('create') && (
+              <>
+                <Button variant="ghost" size="sm" icon={<FileText size={15} />} onClick={downloadTemplate}>
+                  Template
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Upload size={15} />}
+                  onClick={() => fileRef.current?.click()}
+                  loading={busy}
+                >
+                  Import CSV
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      >
         {rows.length ? (
           <Table>
             <thead>

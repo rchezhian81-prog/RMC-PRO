@@ -38,7 +38,7 @@
 #
 # Flags:
 #   --confirm            REQUIRED. Without it the script only prints a preview.
-#   --tenant-code CODE   Target the tenant with this code (tenants.code).
+#   --tenant-code CODE   Target the tenant with this code (tenants.tenant_code).
 #   --tenant-id UUID     Target this tenant id directly.
 #   --skip-backup        Skip the pre-reset dump (NOT recommended).
 #   --backup-dir DIR     Where to write the dump (default: ./backups).
@@ -130,7 +130,7 @@ echo "Resolving target tenant…"
 if [ -n "$TENANT_ID" ]; then
   RESOLVE="SELECT id FROM tenants WHERE id = '${TENANT_ID//\'/}'::uuid;"
 elif [ -n "$TENANT_CODE" ]; then
-  RESOLVE="SELECT id FROM tenants WHERE code = '${TENANT_CODE//\'/}';"
+  RESOLVE="SELECT id FROM tenants WHERE tenant_code = '${TENANT_CODE//\'/}';"
 else
   RESOLVE="SELECT id FROM tenants;"
 fi
@@ -145,7 +145,7 @@ if [ "${#TIDS[@]}" -eq 0 ]; then
   exit 1
 elif [ "${#TIDS[@]}" -gt 1 ]; then
   echo "✗ Multiple tenants exist — refusing to guess. Re-run with --tenant-code <CODE>:" >&2
-  printf '%s\n' "SELECT code, name FROM tenants ORDER BY code;" | psql_owner -X >&2 || true
+  printf '%s\n' "SELECT tenant_code, tenant_name FROM tenants ORDER BY tenant_code;" | psql_owner -X >&2 || true
   exit 1
 fi
 TID="${TIDS[0]}"
@@ -153,7 +153,7 @@ TID="${TIDS[0]}"
 # Show what we're about to hit (name + row counts) so the operator can confirm.
 echo
 echo "Target tenant:"
-printf '%s\n' "SELECT code, name FROM tenants WHERE id = '$TID'::uuid;" | psql_owner -X
+printf '%s\n' "SELECT tenant_code, tenant_name FROM tenants WHERE id = '$TID'::uuid;" | psql_owner -X
 echo
 echo "Rows to be deleted for this tenant:"
 COUNT_SQL="SELECT '  '||rpad(t.name,26)||lpad(t.n::text,8) AS \"table / rows\" FROM ("

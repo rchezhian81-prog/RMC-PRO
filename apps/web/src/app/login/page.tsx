@@ -9,8 +9,8 @@ import { Logo } from '../../components/ui/Logo';
 /** Functional login (Design Doc 5 §3) wired to the live API — Mix Nova branded. */
 export default function LoginPage() {
   const router = useRouter();
-  const [login, setLogin] = useState('super@platform.test');
-  const [password, setPassword] = useState('Passw0rd!');
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,7 +20,12 @@ export default function LoginPage() {
     setError(null);
     try {
       const r = await api.login(login, password);
-      saveSession({ token: r.access_token, userType: r.user.userType, email: r.user.email });
+      saveSession({
+        token: r.access_token,
+        refreshToken: r.refresh_token,
+        userType: r.user.userType,
+        email: r.user.email,
+      });
       router.push(r.user.userType === 'super_admin' ? '/admin/tenants' : '/app');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -78,6 +83,7 @@ export default function LoginPage() {
               onChange={(e) => setLogin(e.target.value)}
               autoComplete="username"
               aria-label="login-identifier"
+              required
             />
             <label htmlFor="mn-password" style={label}>
               Password
@@ -90,6 +96,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               aria-label="password"
+              required
             />
             {error && (
               <p
@@ -125,9 +132,6 @@ export default function LoginPage() {
               {busy ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-          <p style={{ marginTop: 16, fontSize: 12, color: 'var(--mn-subtle)' }}>
-            Demo: super@platform.test / Passw0rd!
-          </p>
         </div>
       </section>
     </main>

@@ -1,10 +1,46 @@
-import { getSession } from './session';
+import { clearSession, getSession, updateTokens } from './session';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = getSession()?.token;
-  const res = await fetch(`${BASE}/api/v1${path}`, {
+/**
+ * Single-flight refresh: many requests can fail with 401 at the same moment
+ * (the access token is short-lived). They all await one shared refresh call so
+ * we mint exactly one new token, then each retries. Returns the new access
+ * token, or null if the refresh token is missing/expired.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getSession()?.refreshToken;
+  if (!refreshToken) return null;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${BASE}/api/v1/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) return null;
+        const { access_token, refresh_token } = json.data as {
+          access_token: string;
+          refresh_token?: string;
+        };
+        updateTokens(access_token, refresh_token);
+        return access_token;
+      } catch {
+        return null;
+      }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+function request(path: string, opts: RequestInit, token: string | undefined): Promise<Response> {
+  return fetch(`${BASE}/api/v1${path}`, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
@@ -12,6 +48,29 @@ async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
       ...(opts.headers ?? {}),
     },
   });
+}
+
+async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  let res = await request(path, opts, getSession()?.token);
+
+  // Access token expired mid-session: refresh once and retry the request. If we
+  // have no refresh token (e.g. the login call itself), skip straight to the
+  // normal error path so bad credentials surface as-is.
+  if (res.status === 401 && getSession()?.refreshToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await request(path, opts, newToken);
+    } else {
+      // Refresh token is gone or expired — end the session cleanly instead of
+      // showing a cryptic error, and send the user back to sign in.
+      clearSession();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+      throw new Error('Your session has expired. Please sign in again.');
+    }
+  }
+
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) {
     const err = json?.error ?? { message: res.statusText };
@@ -22,6 +81,7 @@ async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
 export interface LoginResult {
   access_token: string;
+  refresh_token: string;
   user: { email: string; userType: string };
   tenant: { code: string } | null;
   permissions: string[];

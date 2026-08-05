@@ -150,10 +150,16 @@ services:
     ports:
       - '80:80'
       - '443:443'
+    # The nginx image expands rmc.conf.template at start: ${DOMAIN} -> $DOMAIN,
+    # writing /etc/nginx/conf.d/rmc.conf. No host-side sed; the tree never drifts.
+    # NGINX_ENVSUBST_FILTER limits substitution to DOMAIN only (nginx's own $host,
+    # $scheme, etc. are left intact). '$$' is compose escaping -> the container
+    # receives the literal filter '^DOMAIN$'.
+    environment:
+      DOMAIN: ${DOMAIN}
+      NGINX_ENVSUBST_FILTER: '^DOMAIN$$'
     volumes:
-      # rmc.conf still contains the literal <DOMAIN> token — the operator must
-      # replace it with the real domain before starting nginx (see runbook).
-      - ./nginx/rmc.conf:/etc/nginx/conf.d/rmc.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
       # TLS material + ACME webroot are provisioned on the host (see runbook).
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - rmc_acme:/var/www/certbot

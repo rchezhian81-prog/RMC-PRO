@@ -14,7 +14,7 @@ registered domain is confirmed and execution is approved.
 | `apps/api/Dockerfile` | API image (multi-stage; runtime is dev-dep-free, runs compiled JS) |
 | `apps/web/Dockerfile` | Web image (Next.js standalone; `NEXT_PUBLIC_API_URL` baked at build) |
 | `docker/docker-compose.prod.yml` | Prod topology; only nginx is published |
-| `docker/nginx/rmc.conf` | Reverse proxy + TLS (literal `<DOMAIN>` token to replace) |
+| `docker/nginx/templates/rmc.conf.template` | Reverse proxy + TLS; `${DOMAIN}` expanded from env at container start (envsubst) |
 | `.env.production.example` | Env sample — copy to `.env.production` and fill in |
 | `apps/api` scripts | `migration:run:compiled`, `seed:prod:compiled` (no ts-node) |
 
@@ -30,19 +30,20 @@ registered domain is confirmed and execution is approved.
 cp .env.production.example .env.production
 # Replace EVERY __REPLACE__ with a CSPRNG secret (openssl rand -base64 36),
 # and set DOMAIN + host URLs. Owner and app DB passwords MUST differ.
-# Ensure: CORS_ORIGINS=https://app.<DOMAIN>,https://admin.<DOMAIN>
-#    and: NEXT_PUBLIC_API_URL=https://api.<DOMAIN>
-
-# Replace the placeholder token in the nginx template with your real domain:
-sed -i 's/<DOMAIN>/mixnovas.com/g' docker/nginx/rmc.conf   # use your domain
+# Ensure: DOMAIN=mixnovas.com  (nginx reads this at start — no file edits)
+#         CORS_ORIGINS=https://app.<DOMAIN>,https://admin.<DOMAIN>
+#         NEXT_PUBLIC_API_URL=https://api.<DOMAIN>
 ```
-Never commit `.env.production` (git-ignored). Only `*.example` files are tracked.
+The nginx config is an **envsubst template** (`docker/nginx/templates/rmc.conf.template`):
+the container expands `${DOMAIN}` from `DOMAIN` at start. **No `sed`, no host-side edit
+of a tracked file** — the checkout never drifts. Never commit `.env.production`
+(git-ignored). Only `*.example` files are tracked.
 
 ## 2. Issue TLS certificates (operator)
-Use certbot on the host to obtain a cert covering the three names (webroot
-`/var/www/certbot`, or DNS-01 for a wildcard). Point the nginx cert paths in
-`rmc.conf` at the issued `fullchain.pem`/`privkey.pem`. Enable HSTS only after HTTPS
-is confirmed working. *(TLS is not issued by this repo.)*
+Use certbot on the host to obtain one SAN cert covering all five names (webroot
+`/var/www/certbot`, or DNS-01 for a wildcard). The template already points at
+`/etc/letsencrypt/live/${DOMAIN}/fullchain.pem`/`privkey.pem`, so no path edit is
+needed. Enable HSTS only after HTTPS is confirmed working. *(TLS is not issued by this repo.)*
 
 ## 3. Build images
 **Recommended — build OFF the pilot host (VM3 is 4 GB / no swap; an on-box `docker build`
@@ -111,7 +112,8 @@ with nginx last. Reload nginx after TLS is in place.
   `./scripts/backup/pg-restore.sh --file <dump> --into rmc --confirm` (see
   `scripts/backup/README.md`). The index migration's `down` is safe (drops indexes only);
   prefer a snapshot restore when data may have changed.
-- Keep the previous `rmc.conf`; `nginx -t` before every reload.
+- Nginx config is generated from `templates/rmc.conf.template` at start; `nginx -t`
+  before every reload. To change the domain, edit `DOMAIN` in `.env.production` and recreate.
 
 ---
 

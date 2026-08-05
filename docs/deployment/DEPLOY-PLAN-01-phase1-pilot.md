@@ -196,10 +196,11 @@ secret manager / a vault, not in shell history.
 3. ✅ `docker/docker-compose.prod.yml` — `postgres`, `redis`, `minio`, one-shot
    `migrate` (owner role → migrations + `seed:prod`), `api`, `web`, `nginx`.
    **DB/Redis/MinIO NOT published**; only nginx exposes 80/443. Named volumes.
-4. ✅ `docker/nginx/rmc.conf` — server blocks for `app.` (→web:3000), `rmc.` (→api:4000)
-   and `pilot.` (301→app), TLS, HTTP→HTTPS redirect, security headers (HSTS,
-   X-Content-Type-Options, X-Frame-Options, Referrer-Policy), `client_max_body_size`
-   for PDF/CSV, proxy timeouts, WebSocket-upgrade map. Literal `<DOMAIN>` to replace.
+4. ✅ `docker/nginx/templates/rmc.conf.template` — server blocks for apex+`www` (301→app),
+   `app.`/`admin.` (→web:3000), `api.` (→api:4000), TLS, HTTP→HTTPS redirect, security
+   headers (HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy),
+   `client_max_body_size` for PDF/CSV, proxy timeouts, WebSocket-upgrade map. `${DOMAIN}`
+   is expanded from env at container start (nginx envsubst) — no host-side file edit.
 5. Build strategy: **build images in CI**, push to a registry, `docker compose pull` +
    `up -d` on the VPS (keeps the VPS clean of build toolchain). Fallback: build on VPS.
 

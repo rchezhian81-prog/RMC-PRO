@@ -444,6 +444,12 @@ export const aiApi = {
       method: 'POST',
       body: JSON.stringify({ messages }),
     }),
+  insights: () => apiFetch<{ insights: string; generatedAt: string }>('/ai/insights'),
+  draft: (kind: string, context: Record<string, unknown>, instructions?: string) =>
+    apiFetch<{ text: string }>('/ai/draft', {
+      method: 'POST',
+      body: JSON.stringify({ kind, context, instructions }),
+    }),
 };
 
 export const syncApi = {

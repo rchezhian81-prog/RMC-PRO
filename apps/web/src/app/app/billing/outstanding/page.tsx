@@ -6,6 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { ExportButton } from '../../../../components/ExportButton';
+import { AiDraftButton } from '../../../../components/AiDraftButton';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -62,6 +63,7 @@ export default function OutstandingPage() {
                 <Th numeric>61–90</Th>
                 <Th numeric>90+</Th>
                 <Th numeric>Total</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
@@ -73,6 +75,14 @@ export default function OutstandingPage() {
                   <Td numeric>{money(r.b61_90)}</Td>
                   <Td numeric style={{ color: Number(r.b90) > 0 ? 'var(--mn-danger)' : 'var(--mn-text)' }}>{money(r.b90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(r.total)}</Td>
+                  <Td>
+                    <AiDraftButton
+                      kind="payment_reminder"
+                      title="Payment reminder"
+                      label="Reminder"
+                      context={{ customerName: r.customerName, outstanding: r.total }}
+                    />
+                  </Td>
                 </tr>
               ))}
             </tbody>
@@ -85,6 +95,7 @@ export default function OutstandingPage() {
                   <Td numeric style={{ fontWeight: 700 }}>{money(totals.b61_90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(totals.b90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(totals.total)}</Td>
+                  <Td />
                 </tr>
               </tfoot>
             )}

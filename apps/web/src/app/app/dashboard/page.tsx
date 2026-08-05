@@ -8,6 +8,7 @@ import {
 import { dashboardApi, type Row } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { StatCard } from '../../../components/ui/StatCard';
+import { InsightsCard } from '../../../components/InsightsCard';
 import { Loading, ErrorState } from '../../../components/ui/States';
 import type { Tone } from '../../../components/ui/Badge';
 
@@ -70,6 +71,10 @@ export default function DashboardPage() {
       <p style={{ margin: '0 0 22px', color: 'var(--mn-muted)', fontSize: 14 }}>
         Live operations overview — Mix Nova RMC Software
       </p>
+
+      <div style={{ marginBottom: 22 }}>
+        <InsightsCard />
+      </div>
 
       <div
         style={{

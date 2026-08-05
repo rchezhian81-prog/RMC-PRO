@@ -55,3 +55,57 @@ unset RMC_PASSWORD
 ## Requirements
 
 Node 18+ (the VPS runs Node 22 — uses the built-in `fetch`, no dependencies).
+
+---
+
+# End-to-end test cycle
+
+`test-order-cycle.mjs` drives the live API through a full business flow
+(quotation → order → batch → dispatch → challan → invoice → receipt) using the
+seeded masters, so you can watch the whole thing work before real customers.
+Each run creates a **new** set of test documents and consumes opening stock.
+
+```bash
+read -rs RMC_PASSWORD; export RMC_PASSWORD
+API_URL=https://api.mixnovas.com LOGIN='<tenant owner>' \
+  node scripts/setup/test-order-cycle.mjs
+unset RMC_PASSWORD
+```
+
+---
+
+# Reset transactions (clean slate)
+
+`reset-transactions.sh` wipes the **transactional** data for one tenant
+(quotations, orders, batches, dispatches, challans, invoices, receipts, stock,
+leads, notifications) and resets document numbering back to `0001`, while
+**keeping** all masters, mix designs, users, roles, and settings. Use it to
+clear out test documents (like those from `test-order-cycle.mjs`) before going
+live.
+
+It runs on the VPS from the repo root, talks to the Postgres **container** as
+the DB owner over the local socket (no password on the CLI, nothing secret
+printed), and always takes a verified full backup first.
+
+```bash
+# Preview only — shows the target tenant and row counts, changes nothing:
+bash scripts/setup/reset-transactions.sh
+
+# Perform the reset (destructive):
+bash scripts/setup/reset-transactions.sh --confirm
+```
+
+If more than one tenant exists it refuses to guess — name one with
+`--tenant-code <CODE>` (or `--tenant-id <uuid>`).
+
+Opening stock lives in the stock tables it clears, so **re-run the seeder
+afterwards** to restore it (the seeder sets opening stock absolutely):
+
+```bash
+API_URL=https://api.mixnovas.com LOGIN='<tenant owner>' \
+  RMC_PASSWORD='<password>' node scripts/setup/seed-plant-master.mjs
+```
+
+Flags: `--confirm` (required to write), `--tenant-code` / `--tenant-id`
+(target selection), `--skip-backup` (not recommended), `--backup-dir DIR`
+(default `./backups`).

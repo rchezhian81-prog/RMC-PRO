@@ -6,6 +6,7 @@ import { AiDataService } from './ai-data.service';
 import { AssistantService } from './assistant.service';
 import { InsightsService } from './insights.service';
 import { DraftingService } from './drafting.service';
+import { VisionService } from './vision.service';
 
 /**
  * AI features (Phase-4), all on one Anthropic client read from the server env
@@ -17,6 +18,14 @@ import { DraftingService } from './drafting.service';
  */
 @Module({
   controllers: [AiController],
-  providers: [AnthropicService, AiDataService, AssistantService, InsightsService, DraftingService, TenantGuard],
+  providers: [
+    AnthropicService,
+    AiDataService,
+    AssistantService,
+    InsightsService,
+    DraftingService,
+    VisionService,
+    TenantGuard,
+  ],
 })
 export class AiModule {}

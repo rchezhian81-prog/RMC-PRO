@@ -108,7 +108,7 @@ export class AssistantService {
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         tools: TOOLS,
-        output_config: { effort: 'low' },
+        output_config: this.ai.effort('low'),
         messages,
       });
 

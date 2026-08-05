@@ -54,6 +54,7 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
       { href: '/app/sales/quotations', label: 'Quotations', icon: <FileText size={IS} /> },
       { href: '/app/sales/rate-contracts', label: 'Rate Contracts', icon: <FileSignature size={IS} /> },
       { href: '/app/sales/order-drafts', label: 'Order Drafts', icon: <FilePlus size={IS} /> },
+      { href: '/app/sales/import-po', label: 'Import PO (AI)', icon: <Sparkles size={IS} /> },
     ],
   },
   {

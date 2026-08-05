@@ -450,7 +450,23 @@ export const aiApi = {
       method: 'POST',
       body: JSON.stringify({ kind, context, instructions }),
     }),
+  extractPo: (fileBase64: string, mediaType: string) =>
+    apiFetch<{ extracted: PoExtract }>('/ai/extract-po', {
+      method: 'POST',
+      body: JSON.stringify({ fileBase64, mediaType }),
+    }),
 };
+
+export interface PoExtract {
+  customerName: string | null;
+  siteName: string | null;
+  poNumber: string | null;
+  orderDate: string | null;
+  deliveryDate: string | null;
+  contactMobile: string | null;
+  items: { grade: string | null; quantityM3: number | null; rate: number | null }[];
+  notes: string | null;
+}
 
 export const syncApi = {
   devices: () => apiFetch<Row[]>('/sync/devices'),

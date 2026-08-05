@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
 
@@ -20,7 +21,12 @@ function corsOrigins(): string[] {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+
+  // Larger JSON limit so a base64 PO (PDF/image) fits the AI extract endpoint;
+  // nginx caps the upstream at 25m. Non-AI payloads are tiny.
+  app.useBodyParser('json', { limit: '25mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '25mb' });
 
   // Versioned API base path (Design Doc 7 §2.2); health stays unprefixed.
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });

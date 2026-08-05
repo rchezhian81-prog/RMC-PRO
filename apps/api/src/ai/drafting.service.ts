@@ -36,7 +36,7 @@ export class DraftingService {
       max_tokens: 800,
       system:
         'You draft short business documents and messages for an Indian ready-mix concrete plant. Use only the details provided; do not invent names, amounts, or dates. Output only the requested text, ready to copy — no preamble, no explanation, no markdown code fences.',
-      output_config: { effort: 'low' },
+      output_config: this.ai.effort('low'),
       messages: [{ role: 'user', content: parts.join('\n\n') }],
     });
     return { text: AnthropicService.textOf(res) };

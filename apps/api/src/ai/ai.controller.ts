@@ -7,6 +7,7 @@ import { AnthropicService } from './anthropic.service';
 import { AssistantService, type ChatTurn } from './assistant.service';
 import { InsightsService } from './insights.service';
 import { DraftingService, type DraftKind } from './drafting.service';
+import { VisionService } from './vision.service';
 
 @Controller('ai')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -16,6 +17,7 @@ export class AiController {
     private readonly assistant: AssistantService,
     private readonly insights: InsightsService,
     private readonly drafting: DraftingService,
+    private readonly vision: VisionService,
   ) {}
 
   /** Whether the AI features are switched on (an API key is configured). */
@@ -45,5 +47,12 @@ export class AiController {
     @Body() body: { kind?: DraftKind; context?: Record<string, unknown>; instructions?: string },
   ) {
     return this.drafting.draft(body?.kind ?? 'custom', body?.context ?? {}, body?.instructions);
+  }
+
+  /** Extract order details from an uploaded PO (PDF or image, base64). */
+  @Post('extract-po')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  extractPo(@Body() body: { fileBase64?: string; mediaType?: string }) {
+    return this.vision.extractPurchaseOrder(String(body?.fileBase64 ?? ''), String(body?.mediaType ?? ''));
   }
 }

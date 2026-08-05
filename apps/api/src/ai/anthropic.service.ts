@@ -9,11 +9,21 @@ import Anthropic from '@anthropic-ai/sdk';
 @Injectable()
 export class AnthropicService {
   readonly model = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
+  /**
+   * The `effort` control is rejected (400) on Haiku 4.5 and Sonnet 4.5. Gate it
+   * so switching ANTHROPIC_MODEL to a cheaper model doesn't break the features.
+   */
+  readonly supportsEffort = !/(haiku|sonnet-4-5)/i.test(this.model);
   private readonly instance: Anthropic | null;
 
   constructor() {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     this.instance = apiKey ? new Anthropic({ apiKey }) : null;
+  }
+
+  /** `{ effort }` when the model supports it, else undefined (param omitted). */
+  effort(level: 'low' | 'medium' | 'high' = 'low'): { effort: 'low' | 'medium' | 'high' } | undefined {
+    return this.supportsEffort ? { effort: level } : undefined;
   }
 
   isConfigured(): boolean {

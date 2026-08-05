@@ -26,7 +26,7 @@ export class InsightsService {
       model: this.ai.model,
       max_tokens: 1024,
       system: SYSTEM,
-      output_config: { effort: 'low' },
+      output_config: this.ai.effort('low'),
       messages: [{ role: 'user', content: `Live snapshot of the plant (JSON):\n${JSON.stringify(snapshot)}` }],
     });
     return { insights: AnthropicService.textOf(res), generatedAt: new Date().toISOString() };

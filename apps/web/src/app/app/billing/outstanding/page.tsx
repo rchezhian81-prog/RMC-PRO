@@ -5,6 +5,7 @@ import { billingReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
+import { ExportButton } from '../../../../components/ExportButton';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -40,7 +41,17 @@ export default function OutstandingPage() {
         </div>
       )}
 
-      <Card title="Ageing by customer" padded={false}>
+      <Card
+        title="Ageing by customer"
+        padded={false}
+        actions={
+          <ExportButton
+            rows={rows}
+            columns={['customerName', 'b0_30', 'b31_60', 'b61_90', 'b90', 'total']}
+            filename="customer-outstanding"
+          />
+        }
+      >
         {rows.length ? (
           <Table>
             <thead>

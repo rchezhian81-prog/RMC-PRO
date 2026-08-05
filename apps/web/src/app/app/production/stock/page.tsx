@@ -6,6 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { Field, Input } from '../../../../components/ui/Field';
+import { ExportButton } from '../../../../components/ExportButton';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
@@ -98,7 +99,17 @@ export default function StockPage() {
         </form>
       </Card>
 
-      <Card title="Balances" padded={false}>
+      <Card
+        title="Balances"
+        padded={false}
+        actions={
+          <ExportButton
+            rows={balances}
+            columns={['materialLabel', 'currentQuantity', 'uom']}
+            filename="stock-balances"
+          />
+        }
+      >
         {balances.length ? (
           <Table>
             <thead>
@@ -125,7 +136,17 @@ export default function StockPage() {
         )}
       </Card>
 
-      <Card title="Recent ledger" padded={false}>
+      <Card
+        title="Recent ledger"
+        padded={false}
+        actions={
+          <ExportButton
+            rows={ledger}
+            columns={['createdAt', 'materialLabel', 'transactionType', 'inQuantity', 'outQuantity', 'balanceAfter']}
+            filename="stock-ledger"
+          />
+        }
+      >
         {ledger.length ? (
           <Table>
             <thead>

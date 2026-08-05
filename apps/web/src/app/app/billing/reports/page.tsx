@@ -7,6 +7,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Button } from '../../../../components/ui/Button';
+import { ExportButton } from '../../../../components/ExportButton';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -57,6 +58,13 @@ export default function BillingReportsPage() {
       <Card
         title={`Sales register${sales ? ` — ${sales.count} invoices · taxable ${money(sales.taxable)} · total ${money(sales.total)}` : ''}`}
         padded={false}
+        actions={
+          <ExportButton
+            rows={sales?.rows ?? []}
+            columns={['invoiceNo', 'invoiceDate', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'igstAmount', 'totalAmount']}
+            filename="sales-register"
+          />
+        }
       >
         {sales?.rows?.length ? (
           <Table>
@@ -90,7 +98,17 @@ export default function BillingReportsPage() {
         )}
       </Card>
 
-      <Card title="Receipts register" padded={false}>
+      <Card
+        title="Receipts register"
+        padded={false}
+        actions={
+          <ExportButton
+            rows={receipts}
+            columns={['receiptNo', 'receiptDate', 'paymentMode', 'amount', 'allocatedAmount']}
+            filename="receipts-register"
+          />
+        }
+      >
         {receipts.length ? (
           <Table>
             <thead>

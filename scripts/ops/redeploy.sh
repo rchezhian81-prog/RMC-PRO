@@ -51,13 +51,14 @@ else
   log "WARN: pg-backup.sh not found; continuing WITHOUT a fresh snapshot"
 fi
 
-# ---- 1. Render-check nginx template in a throwaway container ----
-log "1/4 validating nginx config render (throwaway container, nginx -t)"
-if ! docker run --rm \
-      -e DOMAIN="$DOMAIN" -e NGINX_ENVSUBST_FILTER='^DOMAIN$' \
-      -v "$REPO_ROOT/docker/nginx/templates:/etc/nginx/templates:ro" \
-      -v /etc/letsencrypt:/etc/letsencrypt:ro \
-      nginx:1.27-alpine nginx -t; then
+# ---- 1. Render-check nginx template BEFORE touching the live proxy ----
+# Use a one-off container from the compose `nginx` service (not a bare
+# `docker run`) so it inherits the real env, volumes AND the app network. That
+# matters because `nginx -t` resolves the api/web upstream hostnames at test
+# time — an isolated container can't and fails with "host not found in upstream".
+# --no-deps: api/web are already running, don't restart them.
+log "1/4 validating nginx config render (compose one-off on app network, nginx -t)"
+if ! "${DC[@]}" run --rm --no-deps -T nginx nginx -t; then
   die "nginx -t FAILED on the rendered template — live nginx untouched. Fix the template first."
 fi
 log "nginx config renders and passes -t ✓"

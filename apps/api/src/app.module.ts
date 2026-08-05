@@ -16,6 +16,7 @@ import { DispatchModule } from './dispatch/dispatch.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { BillingModule } from './billing/billing.module';
 import { SyncModule } from './sync/sync.module';
+import { AiModule } from './ai/ai.module';
 import { DemoModule } from './demo/demo.module';
 
 /**
@@ -40,6 +41,7 @@ import { DemoModule } from './demo/demo.module';
     BillingModule,
     SyncModule,
     PlantsModule,
+    AiModule,
     DemoModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -119,6 +119,9 @@ services:
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-1209600}
       # Browser-origin allowlist (app + admin portal hosts; comma-separated).
       CORS_ORIGINS: ${CORS_ORIGINS}
+      # AI features (optional). Empty key => AI stays off; app runs normally.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
     expose: ['4000']
     depends_on:
       postgres:

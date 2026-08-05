@@ -16,6 +16,7 @@
     "seed:prod:compiled": "node dist/core/database/seed-prod.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",
@@ -28,9 +29,9 @@
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
-    "pdfkit": "^0.15.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdfkit": "^0.15.1",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

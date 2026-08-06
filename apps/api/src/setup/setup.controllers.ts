@@ -85,7 +85,7 @@ export class UsersController {
     return this.svc.list(u.tenantId as string);
   }
   @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.svc.create(u.tenantId as string, dto);
+    return this.svc.create(u.tenantId as string, dto, u.userId);
   }
   @Patch(':id') update(
     @CurrentUser() u: AuthUser,

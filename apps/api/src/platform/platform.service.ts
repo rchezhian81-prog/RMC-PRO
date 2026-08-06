@@ -5,6 +5,7 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { provisionTenantRoles } from '../core/database/provision-tenant-roles';
 import { TenantAccessService } from '../rbac/tenant-access.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import {
   ModuleEntity,
   PlanModule,
@@ -38,6 +39,7 @@ export class PlatformService {
     private readonly db: TenantDbService,
     private readonly access: TenantAccessService,
     private readonly planLimits: PlanLimitsService,
+    private readonly audit: AuditService,
   ) {}
   private get ds() {
     return this.db.ds;
@@ -195,7 +197,7 @@ export class PlatformService {
     };
   }
 
-  async updateTenant(id: string, dto: UpdateTenantDto) {
+  async updateTenant(id: string, dto: UpdateTenantDto, actorUserId?: string) {
     const repo = this.ds.getRepository(Tenant);
     const t = await repo.findOne({ where: { id } });
     if (!t) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Tenant not found' });
@@ -207,10 +209,24 @@ export class PlatformService {
     // Guards read a short-lived cache; drop it so a suspension takes hold now
     // rather than when the entry happens to expire.
     this.access.invalidate(id);
+    // A status change — suspend, restore, cancel — is a platform decision that
+    // stops or restarts a whole company, so it belongs in that company's trail.
+    if (dto.status !== undefined && dto.status !== t.status) {
+      await this.audit.record({
+        tenantId: id,
+        actorUserId: actorUserId ?? null,
+        action: AUDIT_ACTIONS.TENANT_STATUS_CHANGE,
+        entityType: 'tenant',
+        entityId: id,
+        entityLabel: t.tenantName,
+        summary: `Changed company status from ${t.status} to ${dto.status}`,
+        details: { from: t.status, to: dto.status },
+      });
+    }
     return this.getTenant(id);
   }
 
-  async assignPlan(tenantId: string, planId: string) {
+  async assignPlan(tenantId: string, planId: string, actorUserId?: string) {
     const tenantRepo = this.ds.getRepository(Tenant);
     const t = await tenantRepo.findOne({ where: { id: tenantId } });
     if (!t) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Tenant not found' });
@@ -232,6 +248,18 @@ export class PlatformService {
       );
     }
     this.access.invalidate(tenantId);
+    if (actorUserId) {
+      await this.audit.record({
+        tenantId,
+        actorUserId,
+        action: AUDIT_ACTIONS.TENANT_PLAN_ASSIGN,
+        entityType: 'tenant',
+        entityId: tenantId,
+        entityLabel: t.tenantName,
+        summary: `Assigned the ${plan.planName} plan`,
+        details: { planCode: plan.planCode },
+      });
+    }
     return this.getTenantModules(tenantId);
   }
 
@@ -249,7 +277,7 @@ export class PlatformService {
     }));
   }
 
-  async setTenantModule(tenantId: string, moduleKey: string, isEnabled: boolean) {
+  async setTenantModule(tenantId: string, moduleKey: string, isEnabled: boolean, actorUserId?: string) {
     if (!MODULE_KEYS.includes(moduleKey)) {
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown module' });
     }
@@ -258,6 +286,17 @@ export class PlatformService {
     if (existing) await repo.update(existing.id, { isEnabled });
     else await repo.save(repo.create({ tenantId, moduleKey, isEnabled }));
     this.access.invalidate(tenantId);
+    if (actorUserId) {
+      await this.audit.record({
+        tenantId,
+        actorUserId,
+        action: AUDIT_ACTIONS.TENANT_MODULE_CHANGE,
+        entityType: 'tenant_module',
+        entityLabel: moduleKey,
+        summary: `${isEnabled ? 'Enabled' : 'Disabled'} the ${moduleKey} module`,
+        details: { moduleKey, isEnabled },
+      });
+    }
     return this.getTenantModules(tenantId);
   }
 

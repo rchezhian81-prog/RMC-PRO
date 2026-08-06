@@ -7,6 +7,7 @@ import {
   OrderItem,
   OrderStatusHistory,
 } from '../core/database/entities';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { CreditService, type CreditAssessment } from './credit.service';
 import { recordHistory } from './history.util';
 
@@ -23,6 +24,7 @@ export class OrdersService {
   constructor(
     private readonly db: TenantDbService,
     private readonly credit: CreditService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string, status?: string) {
@@ -106,8 +108,8 @@ export class OrdersService {
   }
 
   /** Cancel an order (any non-cancelled state); closes any pending hold. */
-  cancel(tenantId: string, id: string, userId: string, reason?: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async cancel(tenantId: string, id: string, userId: string, reason?: string) {
+    const { result, orderNo } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Order);
       const order = await repo.findOne({ where: { id } });
       if (!order) throw notFound();
@@ -118,7 +120,18 @@ export class OrdersService {
         .getRepository(CreditHoldRequest)
         .update({ orderId: id, status: 'pending' }, { status: 'cancelled', decidedBy: userId, decidedAt: new Date() });
       await recordHistory(m, tenantId, id, from, 'cancelled', 'cancel', userId, reason ?? null);
-      return this.loadFull(m, id);
+      return { result: await this.loadFull(m, id), orderNo: order.orderNo, from };
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.ORDER_CANCEL,
+      entityType: 'order',
+      entityId: id,
+      entityLabel: orderNo ?? null,
+      summary: `Cancelled order ${orderNo ?? ''}${reason ? ` — ${reason}` : ''}`.trim(),
+      details: { reason: reason ?? null },
+    });
+    return result;
   }
 }

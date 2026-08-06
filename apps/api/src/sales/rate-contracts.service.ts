@@ -3,6 +3,7 @@ import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { RateContract, RateContractItem } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
@@ -25,6 +26,7 @@ export class RateContractsService {
   constructor(
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string) {
@@ -140,11 +142,32 @@ export class RateContractsService {
     return this.transition(tenantId, id, ['draft', 'rejected'], 'submitted');
   }
 
-  approve(tenantId: string, id: string) {
-    return this.transition(tenantId, id, ['submitted'], 'approved');
+  async approve(tenantId: string, id: string, userId: string) {
+    const full = await this.transition(tenantId, id, ['submitted'], 'approved');
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.RATE_CONTRACT_APPROVE,
+      entityType: 'rate_contract',
+      entityId: id,
+      entityLabel: full.rateContractNo,
+      summary: `Approved rate contract ${full.rateContractNo}`,
+    });
+    return full;
   }
 
-  reject(tenantId: string, id: string, reason?: string) {
-    return this.transition(tenantId, id, ['submitted'], 'rejected', { remarks: reason ?? null });
+  async reject(tenantId: string, id: string, userId: string, reason?: string) {
+    const full = await this.transition(tenantId, id, ['submitted'], 'rejected', { remarks: reason ?? null });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.RATE_CONTRACT_REJECT,
+      entityType: 'rate_contract',
+      entityId: id,
+      entityLabel: full.rateContractNo,
+      summary: `Rejected rate contract ${full.rateContractNo}${reason ? ` — ${reason}` : ''}`,
+      details: { reason: reason ?? null },
+    });
+    return full;
   }
 }

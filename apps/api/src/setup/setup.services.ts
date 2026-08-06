@@ -5,6 +5,7 @@ import { ROLE_KEYS, passwordProblemMessage } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import {
   Company,
   NumberSeries,
@@ -83,6 +84,7 @@ export class UsersService {
   constructor(
     private readonly db: TenantDbService,
     private readonly planLimits: PlanLimitsService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(tenantId: string) {
@@ -117,7 +119,7 @@ export class UsersService {
     });
   }
 
-  async create(tenantId: string, dto: Record<string, unknown>) {
+  async create(tenantId: string, dto: Record<string, unknown>, actingUserId?: string) {
     const name = String(dto.name ?? '').trim();
     const email = String(dto.email ?? '').trim();
     const password = String(dto.password ?? '');
@@ -153,6 +155,15 @@ export class UsersService {
           .save(m.getRepository(UserRole).create({ tenantId, userId: user.id, roleId: String(dto.roleId) })),
       );
     }
+    await this.audit.record({
+      tenantId,
+      actorUserId: actingUserId ?? null,
+      action: AUDIT_ACTIONS.USER_CREATE,
+      entityType: 'user',
+      entityId: user.id,
+      entityLabel: user.email,
+      summary: `Created user ${user.email}`,
+    });
     return { id: user.id, name: user.name, email: user.email, status: user.status };
   }
 
@@ -234,6 +245,7 @@ export class UsersService {
     // Role change: a user holds one role here, so replace rather than append.
     // An empty roleId clears the role, which leaves the user with no access —
     // the honest way to suspend someone without deleting their history.
+    let newRoleName: string | null = null;
     if (dto.roleId !== undefined) {
       const roleId = String(dto.roleId ?? '').trim();
       await this.db.runInTenant(tenantId, async (m) => {
@@ -242,6 +254,7 @@ export class UsersService {
           if (!role) {
             throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
           }
+          newRoleName = role.roleName;
         }
         await m.getRepository(UserRole).delete({ userId: id });
         if (roleId) {
@@ -251,7 +264,45 @@ export class UsersService {
         }
       });
     }
+
+    // One record per kind of change, so the trail reads as distinct events —
+    // "reset the password", "deactivated", "changed the role" — rather than a
+    // single opaque "updated user".
+    await this.recordUserChanges(tenantId, actingUserId ?? null, user, dto, newRoleName);
     return this.list(tenantId).then((rows) => rows.find((r) => r.id === id));
+  }
+
+  /** Emit an audit event for each consequential field the update touched. */
+  private async recordUserChanges(
+    tenantId: string,
+    actorUserId: string | null,
+    before: User,
+    dto: Record<string, unknown>,
+    newRoleName: string | null,
+  ): Promise<void> {
+    const target = before.email;
+    const base = { tenantId, actorUserId, entityType: 'user', entityId: before.id, entityLabel: target };
+
+    if (dto.password !== undefined) {
+      // The action is recorded; the password itself is never part of the trail.
+      await this.audit.record({ ...base, action: AUDIT_ACTIONS.USER_PASSWORD_RESET, summary: `Reset the password for ${target}` });
+    }
+    if (dto.status !== undefined && String(dto.status) !== before.status) {
+      const activating = String(dto.status) === 'active';
+      await this.audit.record({
+        ...base,
+        action: activating ? AUDIT_ACTIONS.USER_REACTIVATE : AUDIT_ACTIONS.USER_DEACTIVATE,
+        summary: `${activating ? 'Reactivated' : 'Deactivated'} ${target}`,
+      });
+    }
+    if (dto.roleId !== undefined) {
+      await this.audit.record({
+        ...base,
+        action: AUDIT_ACTIONS.USER_ROLE_CHANGE,
+        summary: newRoleName ? `Changed ${target}'s role to ${newRoleName}` : `Removed ${target}'s role`,
+        details: { role: newRoleName },
+      });
+    }
   }
 }
 

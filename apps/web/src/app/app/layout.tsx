@@ -8,7 +8,7 @@ import {
   Store, Truck, IdCard, Layers, UserPlus, FileText, FileSignature, FilePlus, ClipboardList,
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
-  Sparkles, UserCog,
+  Sparkles, UserCog, ScrollText,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
@@ -130,6 +130,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Control',
     items: [
       { href: '/app/reports', label: 'Reports Center', icon: <BarChart3 size={IS} />, module: 'reports' },
+      { href: '/app/audit', label: 'Audit Trail', icon: <ScrollText size={IS} />, perm: 'audit_logs.view' },
       { href: '/app/devices', label: 'Devices & Sync', icon: <MonitorSmartphone size={IS} />, perm: 'sync.manage', module: 'offline_sync' },
     ],
   },

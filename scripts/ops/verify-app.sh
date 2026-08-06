@@ -429,6 +429,36 @@ else:
       *)    bad  "plan limits" "could not read /plan-usage" ;;
     esac
 
+    # Audit trail: the endpoint must exist and answer with a list. Its most
+    # important property — that the app role cannot alter or delete entries — is
+    # a database grant, not something an API call can see, so that is asserted in
+    # the migration and proven in the change's own tests; here we confirm the
+    # trail is reachable and reports whether anything has been recorded yet.
+    aud=$(curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/audit-logs?limit=1" 2>/dev/null)
+    aud_out=$(printf '%s' "$aud" | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("BAD|unreadable /audit-logs response"); raise SystemExit
+if not d.get("success"):
+    err = (d.get("error") or {})
+    # A viewer without audit_logs.view is a role config issue, not a fault here.
+    if err.get("code") == "PERMISSION_DENIED":
+        print("WARN|this login lacks audit_logs.view — sign in as owner to see the trail"); raise SystemExit
+    print("BAD|" + str(err.get("message") or "audit trail not reachable")); raise SystemExit
+rows = d.get("data")
+if not isinstance(rows, list):
+    print("BAD|audit trail did not return a list — is this API build current?"); raise SystemExit
+print("OK|reachable" + (", entries present" if rows else ", none recorded yet"))
+' 2>/dev/null)
+    case "${aud_out%%|*}" in
+      OK)   ok   "audit trail" "${aud_out#*|}" ;;
+      WARN) warn "audit trail" "${aud_out#*|}" ;;
+      BAD)  bad  "audit trail" "${aud_out#*|}" ;;
+      *)    bad  "audit trail" "could not read /audit-logs" ;;
+    esac
+
     # A refusal must be machine-readable, or the web app cannot tell a role
     # problem from a subscription problem and shows the wrong advice.
     envl=$(curl -sS --max-time 20 "${API}/api/v1/dashboard/summary" \

@@ -14,3 +14,4 @@ export * from './dispatch.entities';
 export * from './billing.entities';
 export * from './sync.entities';
 export * from './notification.entities';
+export * from './audit.entities';

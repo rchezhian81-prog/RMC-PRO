@@ -10,6 +10,7 @@ import {
   Site,
 } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
 import { WhatsAppService } from './whatsapp.service';
 import type { QuotationPdfData } from './pdf.service';
@@ -37,6 +38,7 @@ export class QuotationsService {
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
     private readonly whatsapp: WhatsAppService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string) {
@@ -163,14 +165,35 @@ export class QuotationsService {
     return this.transition(tenantId, id, ['draft', 'rejected'], 'submitted');
   }
 
-  approve(tenantId: string, id: string) {
-    return this.transition(tenantId, id, ['submitted'], 'approved');
+  async approve(tenantId: string, id: string, userId: string) {
+    const full = await this.transition(tenantId, id, ['submitted'], 'approved');
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.QUOTATION_APPROVE,
+      entityType: 'quotation',
+      entityId: id,
+      entityLabel: full.quotationNo,
+      summary: `Approved quotation ${full.quotationNo}`,
+    });
+    return full;
   }
 
-  reject(tenantId: string, id: string, reason?: string) {
-    return this.transition(tenantId, id, ['submitted'], 'rejected', {
+  async reject(tenantId: string, id: string, userId: string, reason?: string) {
+    const full = await this.transition(tenantId, id, ['submitted'], 'rejected', {
       remarks: reason ?? null,
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.QUOTATION_REJECT,
+      entityType: 'quotation',
+      entityId: id,
+      entityLabel: full.quotationNo,
+      summary: `Rejected quotation ${full.quotationNo}${reason ? ` — ${reason}` : ''}`,
+      details: { reason: reason ?? null },
+    });
+    return full;
   }
 
   // ---- Revision history --------------------------------------------------

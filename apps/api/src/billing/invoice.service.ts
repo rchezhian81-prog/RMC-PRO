@@ -12,6 +12,7 @@ import {
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import type { InvoicePdfData } from '../sales/pdf.service';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeLineTax, round2 } from './tax.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
@@ -30,6 +31,7 @@ export class InvoiceService {
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
     private readonly whatsapp: WhatsAppService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string, status?: string) {
@@ -146,8 +148,8 @@ export class InvoiceService {
     });
   }
 
-  cancel(tenantId: string, id: string, _reason?: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async cancel(tenantId: string, id: string, userId: string, reason?: string) {
+    const { result, invoiceNo, total } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Invoice);
       const invoice = await repo.findOne({ where: { id } });
       if (!invoice) throw notFound();
@@ -158,8 +160,19 @@ export class InvoiceService {
       const challanRepo = m.getRepository(DeliveryChallan);
       for (const l of links) await challanRepo.update(l.challanId, { invoiceStatus: 'not_invoiced' });
       await repo.update(id, { invoiceStatus: 'cancelled', paymentStatus: 'cancelled' });
-      return this.loadFull(m, id);
+      return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, total: invoice.totalAmount };
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.INVOICE_CANCEL,
+      entityType: 'invoice',
+      entityId: id,
+      entityLabel: invoiceNo ?? null,
+      summary: `Cancelled invoice ${invoiceNo ?? ''} (₹${total ?? 0})${reason ? ` — ${reason}` : ''}`.trim(),
+      details: { reason: reason ?? null, totalAmount: total },
+    });
+    return result;
   }
 
   async pdfData(tenantId: string, id: string): Promise<{ data: InvoicePdfData; invoice: Invoice }> {

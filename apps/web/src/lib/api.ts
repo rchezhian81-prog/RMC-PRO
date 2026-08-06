@@ -367,6 +367,33 @@ export const planUsageApi = {
   get: () => apiFetch<PlanUsage>('/plan-usage'),
 };
 
+/** One entry in the audit trail — who did what, and when. */
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: string;
+  actorEmail: string | null;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  entityLabel: string | null;
+  summary: string;
+  details: Record<string, unknown> | null;
+}
+
+/** Read-only view of the audit trail. */
+export const auditApi = {
+  list: (params: { search?: string; action?: string; limit?: number; offset?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.set('search', params.search);
+    if (params.action) q.set('action', params.action);
+    if (params.limit) q.set('limit', String(params.limit));
+    if (params.offset) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return apiFetch<AuditEntry[]>(`/audit-logs${qs ? `?${qs}` : ''}`);
+  },
+};
+
 export const rolesApi = {
   list: () => apiFetch<Row[]>('/roles'),
   create: (b: Record<string, unknown>) =>

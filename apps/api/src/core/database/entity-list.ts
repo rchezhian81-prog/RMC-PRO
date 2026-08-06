@@ -56,6 +56,7 @@ import {
   LocalNumberReservation,
   SyncConflict,
   NotificationLog,
+  AuditLog,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -117,4 +118,5 @@ export const ENTITIES = [
   LocalNumberReservation,
   SyncConflict,
   NotificationLog,
+  AuditLog,
 ];

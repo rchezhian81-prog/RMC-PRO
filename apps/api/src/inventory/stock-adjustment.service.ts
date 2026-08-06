@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Material, NegativeStockRequest } from '../core/database/entities';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { StockService } from '../production/stock.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Request not found' });
@@ -67,6 +68,7 @@ export class NegativeStockService {
   constructor(
     private readonly db: TenantDbService,
     private readonly stock: StockService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string, status?: string) {
@@ -78,8 +80,8 @@ export class NegativeStockService {
     );
   }
 
-  approve(tenantId: string, id: string, userId: string, remarks?: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async approve(tenantId: string, id: string, userId: string, remarks?: string) {
+    const { result, label, qty } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(NegativeStockRequest);
       const req = await repo.findOne({ where: { id } });
       if (!req) throw notFound();
@@ -94,18 +96,40 @@ export class NegativeStockService {
         remarks: `Approved negative stock: ${req.requestReason ?? ''}`, createdBy: userId,
       });
       await repo.update(id, { approvalStatus: 'approved', approvedBy: userId, approvedAt: new Date(), approvalRemarks: remarks ?? null });
-      return repo.findOne({ where: { id } });
+      return { result: await repo.findOne({ where: { id } }), label: req.materialLabel, qty: req.requiredQuantity };
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.NEGATIVE_STOCK_APPROVE,
+      entityType: 'negative_stock_request',
+      entityId: id,
+      entityLabel: label,
+      summary: `Approved a negative-stock issue of ${qty} ${label ?? 'material'}`,
+      details: { remarks: remarks ?? null, requiredQuantity: qty },
+    });
+    return result;
   }
 
-  reject(tenantId: string, id: string, userId: string, remarks?: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async reject(tenantId: string, id: string, userId: string, remarks?: string) {
+    const { result, label } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(NegativeStockRequest);
       const req = await repo.findOne({ where: { id } });
       if (!req) throw notFound();
       if (req.approvalStatus !== 'pending') throw badReq(`Request already ${req.approvalStatus}`);
       await repo.update(id, { approvalStatus: 'rejected', approvedBy: userId, approvedAt: new Date(), approvalRemarks: remarks ?? null });
-      return repo.findOne({ where: { id } });
+      return { result: await repo.findOne({ where: { id } }), label: req.materialLabel };
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.NEGATIVE_STOCK_REJECT,
+      entityType: 'negative_stock_request',
+      entityId: id,
+      entityLabel: label,
+      summary: `Rejected a negative-stock request for ${label ?? 'material'}`,
+      details: { remarks: remarks ?? null },
+    });
+    return result;
   }
 }

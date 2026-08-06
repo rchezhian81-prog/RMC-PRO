@@ -105,11 +105,11 @@ export class QuotationsController {
   }
   @Post(':id/approve') @RequirePermissions('quotations.approve')
   approve(@CurrentUser() u: AuthUser, @Param('id') id: string) {
-    return this.service.approve(tid(u), id);
+    return this.service.approve(tid(u), id, u.userId);
   }
   @Post(':id/reject') @RequirePermissions('quotations.approve')
   reject(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
-    return this.service.reject(tid(u), id, dto.reason as string);
+    return this.service.reject(tid(u), id, u.userId, dto.reason as string);
   }
 
   // Revisions
@@ -181,11 +181,11 @@ export class RateContractsController {
   // Approving a rate contract locks in customer pricing — manager-level only.
   @Post(':id/approve') @RequirePermissions('rate_contracts.approve')
   approve(@CurrentUser() u: AuthUser, @Param('id') id: string) {
-    return this.service.approve(tid(u), id);
+    return this.service.approve(tid(u), id, u.userId);
   }
   @Post(':id/reject') @RequirePermissions('rate_contracts.approve')
   reject(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
-    return this.service.reject(tid(u), id, dto.reason as string);
+    return this.service.reject(tid(u), id, u.userId, dto.reason as string);
   }
 }
 

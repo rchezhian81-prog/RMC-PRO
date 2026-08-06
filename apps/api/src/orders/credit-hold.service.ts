@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { CreditHoldRequest, Order } from '../core/database/entities';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { recordHistory } from './history.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Credit hold not found' });
@@ -14,7 +15,10 @@ const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_
  */
 @Injectable()
 export class CreditHoldService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly audit: AuditService,
+  ) {}
 
   /** Hold requests with order + customer labels for the approver queue. */
   list(tenantId: string, status?: string) {
@@ -46,14 +50,14 @@ export class CreditHoldService {
     });
   }
 
-  private decide(
+  private async decide(
     tenantId: string,
     id: string,
     userId: string,
     approve: boolean,
     note?: string,
   ) {
-    return this.db.runInTenant(tenantId, async (m) => {
+    const { result, orderNo, orderId, amount } = await this.db.runInTenant(tenantId, async (m) => {
       const holdRepo = m.getRepository(CreditHoldRequest);
       const hold = await holdRepo.findOne({ where: { id } });
       if (!hold) throw notFound();
@@ -83,8 +87,27 @@ export class CreditHoldService {
         await recordHistory(m, tenantId, order.id, 'credit_hold', 'credit_hold', 'credit_reject', userId, note ?? 'Credit hold rejected');
       }
 
-      return holdRepo.findOne({ where: { id } });
+      return {
+        result: await holdRepo.findOne({ where: { id } }),
+        orderNo: order.orderNo,
+        orderId: order.id,
+        amount: hold.requestedAmount,
+      };
     });
+
+    // Recorded after the decision has committed, so a trail failure can never
+    // undo an approval or block the approver.
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: approve ? AUDIT_ACTIONS.CREDIT_HOLD_RELEASE : AUDIT_ACTIONS.CREDIT_HOLD_REJECT,
+      entityType: 'order',
+      entityId: orderId ?? null,
+      entityLabel: orderNo ?? null,
+      summary: `${approve ? 'Released the credit hold on' : 'Rejected the credit hold for'} order ${orderNo ?? ''} (₹${amount ?? 0})`.trim(),
+      details: { note: note ?? null, requestedAmount: amount },
+    });
+    return result;
   }
 
   approve(tenantId: string, id: string, userId: string, note?: string) {

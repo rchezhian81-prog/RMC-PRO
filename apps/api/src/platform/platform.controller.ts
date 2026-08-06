@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SuperAdminGuard } from '../rbac/super-admin.guard';
+import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { PlatformService } from './platform.service';
 import {
   AssignPlanDto,
@@ -35,13 +36,13 @@ export class PlatformController {
   }
 
   @Patch('tenants/:id')
-  updateTenant(@Param('id') id: string, @Body() dto: UpdateTenantDto) {
-    return this.svc.updateTenant(id, dto);
+  updateTenant(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: UpdateTenantDto) {
+    return this.svc.updateTenant(id, dto, u.userId);
   }
 
   @Post('tenants/:id/assign-plan')
-  assignPlan(@Param('id') id: string, @Body() dto: AssignPlanDto) {
-    return this.svc.assignPlan(id, dto.planId);
+  assignPlan(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: AssignPlanDto) {
+    return this.svc.assignPlan(id, dto.planId, u.userId);
   }
 
   @Get('tenants/:id/modules')
@@ -61,11 +62,12 @@ export class PlatformController {
 
   @Put('tenants/:id/modules/:moduleKey')
   setTenantModule(
+    @CurrentUser() u: AuthUser,
     @Param('id') id: string,
     @Param('moduleKey') moduleKey: string,
     @Body() dto: SetTenantModuleDto,
   ) {
-    return this.svc.setTenantModule(id, moduleKey, dto.isEnabled);
+    return this.svc.setTenantModule(id, moduleKey, dto.isEnabled, u.userId);
   }
 
   // ---- Plans ----

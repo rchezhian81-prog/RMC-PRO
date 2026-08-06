@@ -169,7 +169,7 @@ skipped, so it is safe to run with no credentials at hand.
 | Edge & TLS | app/api/admin hosts reachable, certificate expiry, http→https redirect |
 | Web app | login page, app shell, admin portal, unknown route returns 404 |
 | API | `/health`, and that protected routes reject missing/invalid tokens |
-| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, **subscription & modules**, **plan limits**, **error envelope**, AI state, RBAC permission catalogue |
+| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, **subscription & modules**, **plan limits**, **audit trail**, **error envelope**, AI state, RBAC permission catalogue |
 | Containers | all services running/healthy, API errors in the last hour, disk usage |
 
 ### Stock balances
@@ -230,6 +230,15 @@ stops a plant hiring. Being over the cap is what a downgrade leaves behind: the
 people already there keep working and only new additions are refused, because
 silently disabling someone's login to fit a plan change is not a decision
 software should make on its own.
+
+### Audit trail
+
+Confirms the trail is reachable and returns a list. The property that makes it
+worth keeping — that the application role can insert and read entries but **not**
+update or delete them — is a database grant, not something an API call can
+observe, so it is asserted in the migration and proven in that change's tests
+rather than here. Signed in as a role without `audit_logs.view` it warns rather
+than fails, since that is a role-configuration matter, not a broken trail.
 
 ### Error envelope
 

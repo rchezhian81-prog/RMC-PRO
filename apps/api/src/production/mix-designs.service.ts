@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { MixDesign, MixDesignMaterial } from '../core/database/entities';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { nullifyEmpty } from '../common/sanitize';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Mix design not found' });
@@ -12,7 +13,10 @@ const MAT_FIELDS = ['materialId', 'materialLabel', 'targetQuantity', 'uom', 'tol
 /** Mix design master + approval (Design Doc 6 §7.7/§7.8). */
 @Injectable()
 export class MixDesignsService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly audit: AuditService,
+  ) {}
 
   list(tenantId: string) {
     return this.db.runInTenant(tenantId, (m) =>
@@ -90,25 +94,45 @@ export class MixDesignsService {
     });
   }
 
-  approve(tenantId: string, id: string, userId: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async approve(tenantId: string, id: string, userId: string) {
+    const { result, label } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(MixDesign);
       const design = await repo.findOne({ where: { id } });
       if (!design) throw notFound();
       const materials = await m.getRepository(MixDesignMaterial).count({ where: { mixDesignId: id } });
       if (!materials) throw badReq('Add at least one material before approving');
       await repo.update(id, { approvalStatus: 'approved', approvedBy: userId, approvedAt: new Date() });
-      return this.loadFull(m, id);
+      return { result: await this.loadFull(m, id), label: `${design.mixCode} v${design.versionNo}` };
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.MIX_DESIGN_APPROVE,
+      entityType: 'mix_design',
+      entityId: id,
+      entityLabel: label,
+      summary: `Approved mix design ${label}`,
+    });
+    return result;
   }
 
-  reject(tenantId: string, id: string, userId: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async reject(tenantId: string, id: string, userId: string) {
+    const { result, label } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(MixDesign);
       const design = await repo.findOne({ where: { id } });
       if (!design) throw notFound();
       await repo.update(id, { approvalStatus: 'rejected', approvedBy: userId, approvedAt: new Date() });
-      return this.loadFull(m, id);
+      return { result: await this.loadFull(m, id), label: `${design.mixCode} v${design.versionNo}` };
     });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.MIX_DESIGN_REJECT,
+      entityType: 'mix_design',
+      entityId: id,
+      entityLabel: label,
+      summary: `Rejected mix design ${label}`,
+    });
+    return result;
   }
 }

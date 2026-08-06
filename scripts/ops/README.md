@@ -163,14 +163,32 @@ marks the rest as skipped, so it is safe to run with no credentials at hand.
 | Web app | login page, app shell, admin portal, unknown route returns 404 |
 | API | `/health`, and that protected routes reject missing/invalid tokens |
 | Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, AI state, RBAC permission catalogue |
-
-The stock check matters most **after a reset**: the reset clears stock balances
-and the seeder puts them back. It fails on zero rows ("opening stock has not
-been seeded"), fails on negative stock, warns when any material sits at zero,
-and otherwise reports the count and the lowest material. Note that an absent
-low-stock *alert* proves nothing here — no rows at all looks identical to full
-shelves — which is exactly why this asserts on the rows themselves.
 | Containers | all services running/healthy, API errors in the last hour, disk usage |
+
+### Stock balances
+
+Matters most **after a reset**: the reset clears stock balances and the seeder
+puts them back. It fails on zero rows ("opening stock has not been seeded"),
+fails on negative stock, warns when any material sits at zero, and otherwise
+reports the count and the lowest material.
+
+An absent low-stock *alert* proves nothing here — the alert rule joins
+`stock_balances`, so no rows at all looks identical to full shelves. That is
+exactly why this asserts on the rows themselves.
+
+### Roles & separation of duties
+
+Matters for **staff onboarding**: a role that exists but holds no permissions
+silently locks its holders out of everything, and a role holding too many
+quietly removes a control the business depends on. Neither is visible from the
+outside, so this resolves every role to the permission keys it actually holds
+and asserts the contents, not the names.
+
+It fails when any of the twelve roles is missing, when an operational role is
+empty, and when a separation of duty has broken — a sales executive able to
+approve quotations or rate contracts, mix-design approval outside QC,
+credit-hold release outside the plant manager, or users / roles / settings /
+`platform.*` reaching an operational role.
 
 ## Exit codes
 

@@ -175,6 +175,40 @@ else
     probe "reports catalog"     "/reports/catalog"             'data.groups.0.module'       'group'
     probe "customers master"    "/customers"                   'data.0.customerCode'        'code'
 
+    # Stock is the thing most likely to be wrong after a reset: the reset clears
+    # the balances and the seeder is what puts them back. "No low-stock alert"
+    # is NOT evidence of healthy stock — zero rows looks identical to full
+    # shelves — so assert on the rows themselves.
+    stock=$(curl -sS --max-time 25 "${auth[@]}" "${API}/api/v1/stock/balances" 2>/dev/null)
+    stock_out=$(printf '%s' "$stock" | python3 -c '
+import sys, json
+try:
+    rows = json.load(sys.stdin).get("data", [])
+except Exception:
+    print("BAD|unreadable response"); raise SystemExit
+if not isinstance(rows, list) or not rows:
+    print("BAD|no stock rows — opening stock has not been seeded"); raise SystemExit
+neg  = [r for r in rows if float(r.get("currentQuantity") or 0) < 0]
+zero = [r for r in rows if float(r.get("currentQuantity") or 0) == 0]
+low  = min(rows, key=lambda r: float(r.get("currentQuantity") or 0))
+label = low.get("materialLabel") or low.get("materialId")
+qty   = float(low.get("currentQuantity") or 0)
+uom   = low.get("uom") or ""
+summary = f"{len(rows)} material(s), lowest {label} {qty:g} {uom}".strip()
+if neg:
+    print(f"BAD|{len(neg)} material(s) at NEGATIVE stock — {summary}")
+elif zero:
+    print(f"WARN|{len(zero)} material(s) at zero — {summary}")
+else:
+    print(f"OK|{summary}")
+' 2>/dev/null)
+    case "${stock_out%%|*}" in
+      OK)   ok   "stock balances" "${stock_out#*|}" ;;
+      WARN) warn "stock balances" "${stock_out#*|}" ;;
+      BAD)  bad  "stock balances" "${stock_out#*|}" ;;
+      *)    bad  "stock balances" "could not read /stock/balances" ;;
+    esac
+
     # AI is optional — report its state rather than failing on it.
     ai=$(curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/ai/status" 2>/dev/null)
     case "$(json_field "$ai" 'data.enabled')" in

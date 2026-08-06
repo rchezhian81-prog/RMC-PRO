@@ -153,3 +153,49 @@ unset RMC_PASSWORD
 - **Creating new records.** This edits the starter set. Add further customers,
   sites, vehicles or drivers in the app, or with the CSV import on each Masters
   screen (Import → download the template first).
+
+---
+
+# Create a staff login from the command line
+
+`create-staff-user.mjs` does what *Setup → Users* does, without the clicking:
+resolves the role, creates the user, assigns the role, and prints the exact
+command to verify what the server then allows them.
+
+Neither password is ever printed, logged, or written to disk — both are read
+from the environment only.
+
+```bash
+cd /opt/rmc
+
+# See what roles exist (owner password only)
+read -rs RMC_PASSWORD; export RMC_PASSWORD          # run this line ALONE
+LOGIN='owner@example.com' node scripts/setup/create-staff-user.mjs --list-roles
+
+# Create the person
+read -rs NEW_PASSWORD; export NEW_PASSWORD          # run this line ALONE
+LOGIN='owner@example.com' \
+NEW_NAME='Ravi Kumar' NEW_EMAIL='ravi@plant.com' NEW_MOBILE='9000000000' \
+NEW_ROLE='batching_operator' \
+  node scripts/setup/create-staff-user.mjs
+
+unset RMC_PASSWORD NEW_PASSWORD
+```
+
+`NEW_ROLE` accepts the role key (`batching_operator`) or the display name
+(`Batching Operator`), case-insensitively.
+
+## Behaviour
+
+- **Idempotent.** If the email already exists the person is never duplicated:
+  the role is corrected if it differs, otherwise nothing changes.
+- **`--dry-run`** validates everything and reports what would happen.
+- **`--list-roles`** prints the tenant's roles and exits.
+- **Password policy**: at least 10 characters with a letter and a digit, and not
+  starting with an obvious word (`password`, `admin`, `demo`, …). A weak one is
+  refused before anything is created.
+- A role change takes effect at that person's **next sign-in**, because the
+  sidebar reads the permissions captured when they logged in.
+
+Then confirm what the server actually permits — see `scripts/ops/README.md`
+→ *verify one user's role*.

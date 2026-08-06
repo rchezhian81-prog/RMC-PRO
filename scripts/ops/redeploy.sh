@@ -87,14 +87,28 @@ log "4/5 recreating: ${RECREATE_SVCS[*]}"
 # ---- 5. Health checks ----
 log "5/5 health checks"
 ok=1
-for i in 1 2 3 4 5 6; do
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 12 "https://api.${DOMAIN}/health" || echo 000)"
-  [ "$code" = "200" ] && { log "api https health: 200 ✓"; break; }
-  log "api health attempt $i: HTTP $code — retrying in 5s"; sleep 5
-  [ "$i" = 6 ] && ok=0
-done
-appcode="$(curl -s -o /dev/null -w '%{http_code}' --max-time 12 "https://app.${DOMAIN}/" || echo 000)"
-case "$appcode" in 200|3??) log "app portal: HTTP $appcode ✓" ;; *) log "app portal: HTTP $appcode (check web logs)"; ok=0 ;; esac
+
+# Both checks retry. A freshly recreated container answers 502 through nginx
+# for the first few seconds while the process boots — that is startup, not
+# failure. Checking once made a healthy web-only redeploy report FAILED purely
+# because Next.js had not finished starting when the check ran.
+wait_for() { # name url accept-regex
+  local name="$1" url="$2" want="$3" code
+  for i in 1 2 3 4 5 6 7 8; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 12 "$url" || echo 000)"
+    if [[ "$code" =~ $want ]]; then
+      log "$name: HTTP $code ✓"
+      return 0
+    fi
+    log "$name attempt $i: HTTP $code — retrying in 5s"
+    sleep 5
+  done
+  log "$name: still failing after 8 attempts (check the logs)"
+  return 1
+}
+
+wait_for "api https health" "https://api.${DOMAIN}/health" '^200$' || ok=0
+wait_for "app portal" "https://app.${DOMAIN}/" '^(200|3[0-9][0-9])$' || ok=0
 
 "${DC[@]}" ps
 

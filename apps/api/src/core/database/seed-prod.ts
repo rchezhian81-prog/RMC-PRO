@@ -1,7 +1,13 @@
 import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
 import { In, type EntityManager } from 'typeorm';
-import { MODULE_CATALOG, PERMISSIONS, ROLE_KEYS } from '@rmc/shared';
+import {
+  MODULE_CATALOG,
+  PERMISSIONS,
+  ROLE_KEYS,
+  ROLE_LABELS,
+  ROLE_PERMISSION_DEFAULTS,
+} from '@rmc/shared';
 import { AppDataSource } from './data-source';
 import {
   ModuleEntity,
@@ -10,6 +16,7 @@ import {
   Role,
   RolePermission,
   SubscriptionPlan,
+  Tenant,
   User,
 } from './entities';
 
@@ -119,6 +126,59 @@ async function grantToSystemRoles(m: EntityManager, perms: Permission[]): Promis
   return rows.length;
 }
 
+/**
+ * Ensure every tenant has the operational roles staff are actually assigned to
+ * (Plant Manager, Sales Executive, Batching Operator, …), each with a starting
+ * permission set sized to the job.
+ *
+ * Without these a tenant has only Company Owner and Company Admin, so onboarding
+ * a batching operator means either hand-building a role and ticking permissions
+ * one by one, or making them a Company Admin — which hands a plant operator the
+ * billing, users and settings screens.
+ *
+ * A role is seeded only if it does not already exist, and its permissions are
+ * written only at that moment. Re-running never touches a role an owner has
+ * since edited.
+ */
+async function seedOperationalRoles(m: EntityManager): Promise<string> {
+  const tenants = await m.find(Tenant);
+  if (!tenants.length) return 'no tenants yet';
+
+  const permIdByKey = new Map((await m.find(Permission)).map((p) => [p.permissionKey, p.id]));
+  let rolesAdded = 0;
+  let grantsAdded = 0;
+
+  for (const tenant of tenants) {
+    const existing = new Set(
+      (await m.find(Role, { where: { tenantId: tenant.id } })).map((r) => r.roleKey),
+    );
+    for (const [roleKey, perms] of Object.entries(ROLE_PERMISSION_DEFAULTS)) {
+      if (existing.has(roleKey)) continue;
+      const role = await m.save(
+        m.create(Role, {
+          tenantId: tenant.id,
+          roleKey,
+          roleName: ROLE_LABELS[roleKey] ?? roleKey,
+          // System roles: protected from rename/delete, permissions still editable.
+          isSystemRole: true,
+        }),
+      );
+      rolesAdded += 1;
+      const rows = perms
+        .map((k) => permIdByKey.get(k))
+        .filter((id): id is string => Boolean(id))
+        .map((permissionId) => m.create(RolePermission, { tenantId: tenant.id, roleId: role.id, permissionId }));
+      if (rows.length) {
+        await m.save(rows);
+        grantsAdded += rows.length;
+      }
+    }
+  }
+  return rolesAdded
+    ? `+${rolesAdded} role(s), +${grantsAdded} grant(s) across ${tenants.length} tenant(s)`
+    : `none needed (${tenants.length} tenant(s) already have them)`;
+}
+
 async function main() {
   await AppDataSource.initialize();
   const m = AppDataSource.manager;
@@ -155,6 +215,9 @@ async function main() {
     const repaired = await grantToSystemRoles(m, allPerms);
     summary.push(`system-role backfill: +${repaired} grant(s) [BACKFILL_SYSTEM_ROLE_PERMISSIONS=true]`);
   }
+
+  // 2d. Operational roles, so staff can be given a login scoped to their job.
+  summary.push(`operational roles: ${await seedOperationalRoles(m)}`);
 
   // 3. Default subscription plans (+ their module grants) — create if missing, then
   //    ensure each plan grants all its modules.

@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 
 /** Labelled form field with optional help/error text. */
 export function Field({
@@ -39,4 +39,14 @@ export function Field({
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { className = '', ...rest } = props;
   return <input className={`mn-input ${className}`.trim()} {...rest} />;
+}
+
+/** Mix Nova dropdown — same surface treatment as Input. */
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  const { className = '', children, ...rest } = props;
+  return (
+    <select className={`mn-input ${className}`.trim()} {...rest}>
+      {children}
+    </select>
+  );
 }

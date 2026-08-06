@@ -99,3 +99,117 @@ export const ROLE_KEYS = {
 } as const;
 
 export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
+
+const P = PERMISSIONS;
+
+/** Every permission a tenant user can hold (i.e. excluding the platform ones). */
+const TENANT_PERMISSIONS: Permission[] = Object.values(P).filter(
+  (k) => !k.startsWith('platform.'),
+) as Permission[];
+
+/** Read-only access across the business — the base an auditor gets. */
+const VIEW_ONLY: Permission[] = [
+  P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.LEADS_VIEW, P.QUOTATIONS_VIEW,
+  P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW, P.REPORTS_VIEW,
+];
+
+/**
+ * Default permissions for each operational role.
+ *
+ * These are starting points sized to the job, not a straitjacket: an owner can
+ * retick anything in Setup → Roles, and those edits are never overwritten (the
+ * bootstrap only seeds a role the first time it appears).
+ *
+ * The separations that matter commercially are deliberate:
+ *   - A sales executive drafts quotations; only a manager approves them, and
+ *     only a manager approves rate contracts (both commit pricing).
+ *   - Credit-hold release sits with the plant manager, not with sales.
+ *   - Mix-design approval sits with QC alone.
+ *   - Nobody but the owner/admin gets users, roles, or settings.
+ */
+export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
+  // Runs the plant day to day: everything operational, no company admin.
+  [ROLE_KEYS.PLANT_MANAGER]: [
+    P.MASTERS_VIEW, P.CUSTOMERS_VIEW,
+    P.LEADS_VIEW, P.QUOTATIONS_VIEW, P.QUOTATIONS_CREATE, P.QUOTATIONS_APPROVE,
+    P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW, P.ORDERS_CREATE, P.ORDERS_CONFIRM,
+    P.CREDIT_HOLD_APPROVE, P.APPROVALS_ACT,
+    P.BATCH_TICKETS_CREATE, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
+    P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE,
+    P.INVOICES_CREATE, P.RECEIPTS_CREATE,
+    P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
+  ],
+
+  // Owns pricing: can approve what an executive drafts.
+  [ROLE_KEYS.SALES_MANAGER]: [
+    P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.CUSTOMERS_CREATE, P.CUSTOMERS_EDIT,
+    P.LEADS_VIEW, P.LEADS_MANAGE,
+    P.QUOTATIONS_VIEW, P.QUOTATIONS_CREATE, P.QUOTATIONS_APPROVE, P.QUOTATION_DISCOUNT_APPROVE,
+    P.RATE_CONTRACTS_VIEW, P.RATE_CONTRACTS_CREATE, P.RATE_CONTRACTS_APPROVE,
+    P.ORDERS_VIEW, P.ORDERS_CREATE,
+    P.REPORTS_VIEW, P.WHATSAPP_SEND,
+  ],
+
+  // Drafts and follows up; cannot approve its own pricing.
+  [ROLE_KEYS.SALES_EXECUTIVE]: [
+    P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.CUSTOMERS_CREATE,
+    P.LEADS_VIEW, P.LEADS_MANAGE,
+    P.QUOTATIONS_VIEW, P.QUOTATIONS_CREATE,
+    P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW,
+    P.REPORTS_VIEW, P.WHATSAPP_SEND,
+  ],
+
+  [ROLE_KEYS.DISPATCH_MANAGER]: [
+    P.MASTERS_VIEW, P.ORDERS_VIEW,
+    P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
+    P.REPORTS_VIEW, P.WHATSAPP_SEND,
+  ],
+
+  // At the batching panel: needs the order, the mix and the materials.
+  [ROLE_KEYS.BATCHING_OPERATOR]: [
+    P.MASTERS_VIEW, P.ORDERS_VIEW, P.BATCH_TICKETS_CREATE, P.REPORTS_VIEW,
+  ],
+
+  // Receives material and keeps the stock straight.
+  [ROLE_KEYS.STORE_STAFF]: [
+    P.MASTERS_VIEW, P.STOCK_ADJUST, P.REPORTS_VIEW,
+  ],
+
+  // Owns the recipe: the only role that can approve a mix design.
+  [ROLE_KEYS.QC_ENGINEER]: [
+    P.MASTERS_VIEW, P.MIX_DESIGN_APPROVE, P.ORDERS_VIEW, P.REPORTS_VIEW,
+  ],
+
+  [ROLE_KEYS.ACCOUNTS_MANAGER]: [
+    P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.ORDERS_VIEW,
+    P.INVOICES_CREATE, P.INVOICE_CANCELLATION_APPROVE, P.RECEIPTS_CREATE,
+    P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
+  ],
+
+  [ROLE_KEYS.FLEET_MANAGER]: [
+    P.MASTERS_VIEW, P.MASTERS_EDIT, P.DISPATCH_UPDATE_STATUS, P.REPORTS_VIEW,
+  ],
+
+  // Looks, never touches.
+  [ROLE_KEYS.AUDITOR]: [
+    ...VIEW_ONLY, P.REPORTS_EXPORT, P.AUDIT_LOGS_VIEW, P.AUDIT_LOGS_EXPORT,
+  ],
+};
+
+/** Human-readable names for the roles seeded into every tenant. */
+export const ROLE_LABELS: Record<string, string> = {
+  [ROLE_KEYS.COMPANY_OWNER]: 'Company Owner',
+  [ROLE_KEYS.COMPANY_ADMIN]: 'Company Admin',
+  [ROLE_KEYS.PLANT_MANAGER]: 'Plant Manager',
+  [ROLE_KEYS.SALES_MANAGER]: 'Sales Manager',
+  [ROLE_KEYS.SALES_EXECUTIVE]: 'Sales Executive',
+  [ROLE_KEYS.DISPATCH_MANAGER]: 'Dispatch Manager',
+  [ROLE_KEYS.BATCHING_OPERATOR]: 'Batching Operator',
+  [ROLE_KEYS.STORE_STAFF]: 'Store Staff',
+  [ROLE_KEYS.QC_ENGINEER]: 'QC Engineer',
+  [ROLE_KEYS.ACCOUNTS_MANAGER]: 'Accounts Manager',
+  [ROLE_KEYS.FLEET_MANAGER]: 'Fleet Manager',
+  [ROLE_KEYS.AUDITOR]: 'Auditor',
+};
+
+export { TENANT_PERMISSIONS };

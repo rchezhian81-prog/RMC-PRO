@@ -253,6 +253,8 @@ export const usersApi = {
   list: () => apiFetch<Row[]>('/users'),
   create: (b: Record<string, unknown>) =>
     apiFetch<Row>('/users', { method: 'POST', body: JSON.stringify(b) }),
+  update: (id: string, b: Record<string, unknown>) =>
+    apiFetch<Row>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
 };
 
 export const rolesApi = {

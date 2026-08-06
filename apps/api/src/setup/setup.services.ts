@@ -84,14 +84,32 @@ export class UsersService {
     const users = await this.db.ds
       .getRepository(User)
       .find({ where: { tenantId }, order: { name: 'ASC' } });
-    return users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      mobile: u.mobile,
-      status: u.status,
-      userType: u.userType,
-    }));
+
+    // Carry each user's role, so the list shows who can do what. A user with no
+    // role has no permissions at all, which the UI needs to be able to flag.
+    const assignments: Array<{ user_id: string; role_id: string; role_key: string; role_name: string }> =
+      await this.db.runInTenant(tenantId, (m) =>
+        m.query(
+          `SELECT ur.user_id, r.id AS role_id, r.role_key, r.role_name
+             FROM user_roles ur JOIN roles r ON r.id = ur.role_id`,
+        ),
+      );
+    const roleOf = new Map(assignments.map((a) => [a.user_id, a]));
+
+    return users.map((u) => {
+      const r = roleOf.get(u.id);
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        mobile: u.mobile,
+        status: u.status,
+        userType: u.userType,
+        roleId: r?.role_id ?? null,
+        roleKey: r?.role_key ?? null,
+        roleName: r?.role_name ?? null,
+      };
+    });
   }
 
   async create(tenantId: string, dto: Record<string, unknown>) {
@@ -137,6 +155,27 @@ export class UsersService {
       ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
       ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
     });
+
+    // Role change: a user holds one role here, so replace rather than append.
+    // An empty roleId clears the role, which leaves the user with no access —
+    // the honest way to suspend someone without deleting their history.
+    if (dto.roleId !== undefined) {
+      const roleId = String(dto.roleId ?? '').trim();
+      await this.db.runInTenant(tenantId, async (m) => {
+        if (roleId) {
+          const role = await m.getRepository(Role).findOne({ where: { id: roleId } });
+          if (!role) {
+            throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
+          }
+        }
+        await m.getRepository(UserRole).delete({ userId: id });
+        if (roleId) {
+          await m.getRepository(UserRole).save(
+            m.getRepository(UserRole).create({ tenantId, userId: id, roleId }),
+          );
+        }
+      });
+    }
     return this.list(tenantId).then((rows) => rows.find((r) => r.id === id));
   }
 }

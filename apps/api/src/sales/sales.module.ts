@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { PermissionsGuard } from '../rbac/permissions.guard';
 import {
   LeadsController,
   NotificationsController,
@@ -37,6 +38,7 @@ import { WhatsAppService } from './whatsapp.service';
     PdfService,
     WhatsAppService,
     TenantGuard,
+    PermissionsGuard,
   ],
 })
 export class SalesModule {}

@@ -30,9 +30,18 @@ export const PERMISSIONS = {
   CUSTOMERS_CREATE: 'customers.create',
   CUSTOMERS_EDIT: 'customers.edit',
 
-  // Sales & orders
+  // Sales & orders. Approving a quotation or a rate contract commits pricing to
+  // a customer, so those are separate keys from creating one — a sales
+  // executive can draft, only a manager can approve.
+  LEADS_VIEW: 'leads.view',
+  LEADS_MANAGE: 'leads.manage',
+  QUOTATIONS_VIEW: 'quotations.view',
   QUOTATIONS_CREATE: 'quotations.create',
+  QUOTATIONS_APPROVE: 'quotations.approve',
   QUOTATION_DISCOUNT_APPROVE: 'quotation_discount.approve',
+  RATE_CONTRACTS_VIEW: 'rate_contracts.view',
+  RATE_CONTRACTS_CREATE: 'rate_contracts.create',
+  RATE_CONTRACTS_APPROVE: 'rate_contracts.approve',
   ORDERS_VIEW: 'orders.view',
   ORDERS_CREATE: 'orders.create',
   ORDERS_CONFIRM: 'orders.confirm',

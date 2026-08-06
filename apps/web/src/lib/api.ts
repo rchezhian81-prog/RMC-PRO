@@ -3,6 +3,33 @@ import { clearSession, getSession, updateTokens } from './session';
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 /**
+ * Error carrying a message that is already fit to show a plant operator.
+ *
+ * `toString()` returns the bare message instead of Node's `"Error: <message>"`,
+ * so the many screens that render `String(e)` show "Cannot reach the server"
+ * rather than "Error: Failed to fetch". Every throw below uses this class.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+
+  override toString(): string {
+    return this.message;
+  }
+}
+
+/** Map a transport-level failure to something a non-technical user can act on. */
+function networkError(): ApiError {
+  return new ApiError('Cannot reach the server. Check your internet connection and try again.');
+}
+
+/**
  * Single-flight refresh: many requests can fail with 401 at the same moment
  * (the access token is short-lived). They all await one shared refresh call so
  * we mint exactly one new token, then each retries. Returns the new access
@@ -51,7 +78,12 @@ function request(path: string, opts: RequestInit, token: string | undefined): Pr
 }
 
 async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  let res = await request(path, opts, getSession()?.token);
+  let res: Response;
+  try {
+    res = await request(path, opts, getSession()?.token);
+  } catch {
+    throw networkError();
+  }
 
   // Access token expired mid-session: refresh once and retry the request. If we
   // have no refresh token (e.g. the login call itself), skip straight to the
@@ -59,7 +91,11 @@ async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
   if (res.status === 401 && getSession()?.refreshToken) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      res = await request(path, opts, newToken);
+      try {
+        res = await request(path, opts, newToken);
+      } catch {
+        throw networkError();
+      }
     } else {
       // Refresh token is gone or expired — end the session cleanly instead of
       // showing a cryptic error, and send the user back to sign in.
@@ -67,14 +103,27 @@ async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
-      throw new Error('Your session has expired. Please sign in again.');
+      throw new ApiError('Your session has expired. Please sign in again.', 401);
     }
   }
 
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) {
-    const err = json?.error ?? { message: res.statusText };
-    throw new Error(err.message ?? err.code ?? 'Request failed');
+    const err = json?.error ?? {};
+    // A 403 from the permissions guard reads as "Missing required permission";
+    // say what that means for the person looking at the screen.
+    if (res.status === 403) {
+      throw new ApiError(
+        'You do not have permission to do that. Ask your administrator to update your role.',
+        403,
+        err.code,
+      );
+    }
+    if (res.status >= 500) {
+      throw new ApiError('The server had a problem completing that. Please try again.', res.status, err.code);
+    }
+    const message = err.message ?? err.code ?? res.statusText ?? 'Request failed';
+    throw new ApiError(Array.isArray(message) ? message.join('; ') : String(message), res.status, err.code);
   }
   return json.data as T;
 }

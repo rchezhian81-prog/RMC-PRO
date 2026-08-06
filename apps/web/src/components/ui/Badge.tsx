@@ -11,16 +11,39 @@ const TONE: Record<Tone, { fg: string; bg: string }> = {
   processing: { fg: 'var(--mn-info)', bg: 'var(--mn-info-tint)' },
 };
 
-/** Map a domain status string to a semantic tone (color + label always). */
+/**
+ * Map a domain status string to a semantic tone.
+ *
+ * Every status the API can emit should appear here — an unmapped status falls
+ * back to neutral grey, which makes a blocking state (credit hold, unpaid,
+ * uninvoiced) look as harmless as a routine one. Keep this in sync with the
+ * status defaults in the API migrations.
+ */
 export function statusTone(status: string): Tone {
   const s = (status || '').toLowerCase();
-  if (['approved', 'confirmed', 'delivered', 'paid', 'posted', 'active', 'completed'].includes(s))
+  if (
+    ['approved', 'confirmed', 'delivered', 'paid', 'posted', 'active', 'completed', 'done', 'available', 'resolved'].includes(s)
+  )
     return 'success';
-  if (['partially_paid', 'on_hold', 'hold', 'low_stock', 'pending_approval'].includes(s)) return 'warning';
-  if (['cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed'].includes(s))
+  if (
+    [
+      'partially_paid', 'on_hold', 'hold', 'low_stock', 'pending_approval',
+      // Blocking or money-at-risk states — must not read as routine.
+      'credit_hold', 'unpaid', 'not_invoiced', 'not_checked', 'expired',
+    ].includes(s)
+  )
+    return 'warning';
+  if (['cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed', 'inactive'].includes(s))
     return 'danger';
-  if (['submitted', 'pending', 'batching', 'in_progress', 'in_transit', 'dispatched', 'invoiced'].includes(s))
+  if (
+    [
+      'submitted', 'pending', 'batching', 'in_progress', 'in_transit', 'dispatched', 'invoiced',
+      'issued', 'waiting', 'queued', 'planned', 'open', 'scheduled', 'partially_delivered',
+    ].includes(s)
+  )
     return 'info';
+  // Genuinely neutral: not started / nothing to act on yet.
+  if (['draft', 'new', 'not_generated', 'none'].includes(s)) return 'neutral';
   return 'neutral';
 }
 

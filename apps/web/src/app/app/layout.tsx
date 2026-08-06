@@ -10,58 +10,75 @@ import {
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Sparkles,
 } from 'lucide-react';
-import { clearSession, getSession } from '../../lib/session';
+import { aiApi } from '../../lib/api';
+import { clearSession, getAccess, getSession } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
 
 const IS = 18;
-const GROUPS: { title: string; items: { href: string; label: string; icon: ReactNode }[] }[] = [
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  /**
+   * Permission key required to see this item. Set it ONLY where the API
+   * actually enforces that key — a hidden link the user could in fact open is
+   * as misleading as a visible one that 403s. Modules whose read endpoints are
+   * open to any tenant user are intentionally left ungated.
+   */
+  perm?: string;
+  /** Hidden while the AI features are switched off, so there are no dead ends. */
+  ai?: boolean;
+}
+
+const GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Overview',
     items: [
       { href: '/app/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={IS} /> },
-      { href: '/app/assistant', label: 'Assistant', icon: <Sparkles size={IS} /> },
+      { href: '/app/assistant', label: 'Assistant', icon: <Sparkles size={IS} />, ai: true },
     ],
   },
   {
     title: 'Setup',
     items: [
-      { href: '/app/company', label: 'Company', icon: <Building2 size={IS} /> },
-      { href: '/app/entity/plants', label: 'Plants', icon: <Factory size={IS} /> },
-      { href: '/app/users', label: 'Users', icon: <Users size={IS} /> },
-      { href: '/app/roles', label: 'Roles', icon: <ShieldCheck size={IS} /> },
-      { href: '/app/entity/number-series', label: 'Number Series', icon: <Hash size={IS} /> },
-      { href: '/app/settings', label: 'Settings', icon: <Settings size={IS} /> },
+      { href: '/app/company', label: 'Company', icon: <Building2 size={IS} />, perm: 'settings.manage' },
+      { href: '/app/entity/plants', label: 'Plants', icon: <Factory size={IS} />, perm: 'masters.view' },
+      { href: '/app/users', label: 'Users', icon: <Users size={IS} />, perm: 'users.manage' },
+      { href: '/app/roles', label: 'Roles', icon: <ShieldCheck size={IS} />, perm: 'roles.manage' },
+      { href: '/app/entity/number-series', label: 'Number Series', icon: <Hash size={IS} />, perm: 'number_series.manage' },
+      { href: '/app/settings', label: 'Settings', icon: <Settings size={IS} />, perm: 'settings.manage' },
     ],
   },
   {
     title: 'Masters',
     items: [
-      { href: '/app/entity/customers', label: 'Customers', icon: <Building2 size={IS} /> },
-      { href: '/app/entity/sites', label: 'Sites / Projects', icon: <MapPin size={IS} /> },
-      { href: '/app/entity/materials', label: 'Materials', icon: <Package size={IS} /> },
-      { href: '/app/entity/suppliers', label: 'Suppliers', icon: <Store size={IS} /> },
-      { href: '/app/entity/vehicles', label: 'Vehicles', icon: <Truck size={IS} /> },
-      { href: '/app/entity/drivers', label: 'Drivers', icon: <IdCard size={IS} /> },
-      { href: '/app/entity/concrete-grades', label: 'Grades', icon: <Layers size={IS} /> },
+      { href: '/app/entity/customers', label: 'Customers', icon: <Building2 size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/sites', label: 'Sites / Projects', icon: <MapPin size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/materials', label: 'Materials', icon: <Package size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/suppliers', label: 'Suppliers', icon: <Store size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/vehicles', label: 'Vehicles', icon: <Truck size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/drivers', label: 'Drivers', icon: <IdCard size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/concrete-grades', label: 'Grades', icon: <Layers size={IS} />, perm: 'masters.view' },
     ],
   },
   {
     title: 'Sales',
     items: [
-      { href: '/app/sales/leads', label: 'Leads', icon: <UserPlus size={IS} /> },
-      { href: '/app/sales/quotations', label: 'Quotations', icon: <FileText size={IS} /> },
-      { href: '/app/sales/rate-contracts', label: 'Rate Contracts', icon: <FileSignature size={IS} /> },
-      { href: '/app/sales/order-drafts', label: 'Order Drafts', icon: <FilePlus size={IS} /> },
-      { href: '/app/sales/import-po', label: 'Import PO (AI)', icon: <Sparkles size={IS} /> },
+      { href: '/app/sales/leads', label: 'Leads', icon: <UserPlus size={IS} />, perm: 'leads.view' },
+      { href: '/app/sales/quotations', label: 'Quotations', icon: <FileText size={IS} />, perm: 'quotations.view' },
+      { href: '/app/sales/rate-contracts', label: 'Rate Contracts', icon: <FileSignature size={IS} />, perm: 'rate_contracts.view' },
+      { href: '/app/sales/order-drafts', label: 'Order Drafts', icon: <FilePlus size={IS} />, perm: 'orders.view' },
+      { href: '/app/sales/import-po', label: 'Import PO (AI)', icon: <Sparkles size={IS} />, perm: 'orders.create', ai: true },
     ],
   },
   {
     title: 'Orders',
     items: [
-      { href: '/app/orders', label: 'Orders', icon: <ClipboardList size={IS} /> },
-      { href: '/app/credit-holds', label: 'Credit Holds', icon: <Lock size={IS} /> },
+      { href: '/app/orders', label: 'Orders', icon: <ClipboardList size={IS} />, perm: 'orders.view' },
+      { href: '/app/credit-holds', label: 'Credit Holds', icon: <Lock size={IS} />, perm: 'credit_hold.approve' },
     ],
   },
   {
@@ -105,7 +122,7 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
     title: 'Control',
     items: [
       { href: '/app/reports', label: 'Reports Center', icon: <BarChart3 size={IS} /> },
-      { href: '/app/devices', label: 'Devices & Sync', icon: <MonitorSmartphone size={IS} /> },
+      { href: '/app/devices', label: 'Devices & Sync', icon: <MonitorSmartphone size={IS} />, perm: 'sync.manage' },
     ],
   },
 ];
@@ -131,6 +148,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [open, setOpen] = useState(false); // mobile drawer
+  const [aiEnabled, setAiEnabled] = useState(false);
 
   useEffect(() => {
     const s = getSession();
@@ -139,11 +157,29 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     else setEmail(s.email);
   }, [router]);
 
+  // Ask once whether AI is switched on. Failure means "off" — the AI links stay
+  // hidden rather than leading to a screen that cannot work.
+  useEffect(() => {
+    if (!email) return;
+    aiApi
+      .status()
+      .then((r) => setAiEnabled(Boolean(r.enabled)))
+      .catch(() => setAiEnabled(false));
+  }, [email]);
+
   useEffect(() => {
     setOpen(false); // close drawer on navigation
   }, [pathname]);
 
   if (!email) return null;
+
+  // Show only what this user can actually reach. The company owner and super
+  // admin bypass permission checks, matching the server.
+  const access = getAccess();
+  const groups = GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((it) => (!it.perm || access.has(it.perm)) && (!it.ai || aiEnabled)),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <div className="mn-shell">
@@ -158,7 +194,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
         <div style={{ overflowY: 'auto', padding: '4px 12px 16px', flex: 1 }}>
-          {GROUPS.map((g) => (
+          {groups.map((g) => (
             <div key={g.title} style={{ marginBottom: 14 }}>
               <div
                 style={{

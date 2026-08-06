@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Sparkles, Upload } from 'lucide-react';
 import { aiApi, type PoExtract } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -25,7 +25,17 @@ export default function ImportPoPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PoExtract | null>(null);
   const [fileName, setFileName] = useState('');
+  const [enabled, setEnabled] = useState<boolean | null>(null); // null = still checking
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Check up front rather than letting someone pick a file, wait for the
+  // upload, and only then be told the feature is off.
+  useEffect(() => {
+    aiApi
+      .status()
+      .then((r) => setEnabled(Boolean(r.enabled)))
+      .catch(() => setEnabled(false));
+  }, []);
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -72,17 +82,31 @@ export default function ImportPoPage() {
       </div>
 
       <Card>
-        <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} style={{ display: 'none' }} />
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Button icon={<Upload size={16} />} onClick={() => fileRef.current?.click()} loading={busy}>
-            {busy ? 'Reading…' : 'Choose PO file'}
-          </Button>
-          {fileName && <span style={{ color: 'var(--mn-muted)', fontSize: 13 }}>{fileName}</span>}
-        </div>
-        {error && (
-          <div style={{ marginTop: 12 }}>
-            <ErrorState message={error} />
-          </div>
+        {enabled === false ? (
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--mn-muted)' }}>
+            PO reading isn&apos;t switched on yet. An administrator can enable it by setting an Anthropic API key on
+            the server. Until then, enter orders from the Order Drafts screen.
+          </p>
+        ) : (
+          <>
+            <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} style={{ display: 'none' }} />
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button
+                icon={<Upload size={16} />}
+                onClick={() => fileRef.current?.click()}
+                loading={busy}
+                disabled={enabled === null}
+              >
+                {busy ? 'Reading…' : 'Choose PO file'}
+              </Button>
+              {fileName && <span style={{ color: 'var(--mn-muted)', fontSize: 13 }}>{fileName}</span>}
+            </div>
+            {error && (
+              <div style={{ marginTop: 12 }}>
+                <ErrorState message={error} />
+              </div>
+            )}
+          </>
         )}
       </Card>
 

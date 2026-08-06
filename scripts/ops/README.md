@@ -162,7 +162,7 @@ marks the rest as skipped, so it is safe to run with no credentials at hand.
 | Edge & TLS | app/api/admin hosts reachable, certificate expiry, http→https redirect |
 | Web app | login page, app shell, admin portal, unknown route returns 404 |
 | API | `/health`, and that protected routes reject missing/invalid tokens |
-| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, AI state, RBAC permission catalogue |
+| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, AI state, RBAC permission catalogue |
 
 The stock check matters most **after a reset**: the reset clears stock balances
 and the seeder puts them back. It fails on zero rows ("opening stock has not

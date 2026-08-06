@@ -209,6 +209,113 @@ else:
       *)    bad  "stock balances" "could not read /stock/balances" ;;
     esac
 
+    # Roles: staff onboarding depends on these existing AND carrying the right
+    # permissions. A role that exists but is empty silently locks its holders
+    # out of everything, so assert the contents, not just the names — including
+    # the separations of duty the business relies on.
+    tmp=$(mktemp -d)
+    curl -sS --max-time 25 "${auth[@]}" "${API}/api/v1/roles" -o "$tmp/roles.json" 2>/dev/null
+    curl -sS --max-time 25 "${auth[@]}" "${API}/api/v1/roles/permissions-catalog" -o "$tmp/catalog.json" 2>/dev/null
+    # Fetch each role's granted permission ids into its own file.
+    while IFS=$'\t' read -r rkey rid; do
+      [ -n "${rid:-}" ] || continue
+      curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/roles/${rid}/permissions" \
+        -o "$tmp/perm_${rkey}.json" 2>/dev/null
+    done < <(python3 - "$tmp/roles.json" 2>/dev/null <<'PY'
+import sys, json
+try:
+    rows = json.load(open(sys.argv[1])).get("data", [])
+except Exception:
+    raise SystemExit
+for r in rows:
+    if isinstance(r, dict) and r.get("roleKey") and r.get("id"):
+        print(r["roleKey"] + "\t" + r["id"])
+PY
+)
+
+    roles_out=$(python3 - "$tmp" 2>/dev/null <<'PY'
+import sys, json, os
+tmp = sys.argv[1]
+
+def load(p, default=None):
+    try:
+        return json.load(open(p)).get("data", default)
+    except Exception:
+        return default
+
+roles = load(os.path.join(tmp, "roles.json"))
+catalog = load(os.path.join(tmp, "catalog.json"))
+if roles is None or catalog is None:
+    print("BAD|could not read the roles endpoints"); raise SystemExit
+
+key_of = {p["id"]: p["permissionKey"] for p in catalog if isinstance(p, dict) and p.get("id")}
+have = {r["roleKey"]: r for r in roles if isinstance(r, dict) and r.get("roleKey")}
+
+OPERATIONAL = ["plant_manager","sales_manager","sales_executive","dispatch_manager",
+               "batching_operator","store_staff","qc_engineer","accounts_manager",
+               "fleet_manager","auditor"]
+EXPECTED = ["company_owner","company_admin"] + OPERATIONAL
+
+missing = [k for k in EXPECTED if k not in have]
+if missing:
+    print("BAD|%d role(s) missing: %s" % (len(missing), ",".join(missing)))
+    raise SystemExit
+
+# Resolve each role to the permission KEYS it actually holds.
+perms = {}
+for k in EXPECTED:
+    ids = load(os.path.join(tmp, f"perm_{k}.json"), [])
+    perms[k] = {key_of.get(i) for i in (ids or []) if key_of.get(i)}
+
+empty = [k for k in OPERATIONAL if not perms[k]]
+if empty:
+    print("BAD|role(s) with no permissions - holders locked out: %s" % ",".join(empty))
+    raise SystemExit
+
+problems = []
+def deny(role, key, why):
+    if key in perms[role]:
+        problems.append(why)
+def need(role, key, why):
+    if key not in perms[role]:
+        problems.append(why)
+
+need("sales_manager", "quotations.approve", "sales manager cannot approve quotations")
+need("sales_manager", "rate_contracts.approve", "sales manager cannot approve rate contracts")
+deny("sales_executive", "quotations.approve", "SALES EXECUTIVE CAN APPROVE QUOTATIONS")
+deny("sales_executive", "rate_contracts.approve", "SALES EXECUTIVE CAN APPROVE RATE CONTRACTS")
+need("plant_manager", "credit_hold.approve", "plant manager cannot release credit holds")
+need("qc_engineer", "mix_design.approve", "QC engineer cannot approve mix designs")
+
+extra_qc = [k for k in OPERATIONAL if k != "qc_engineer" and "mix_design.approve" in perms[k]]
+if extra_qc:
+    problems.append("mix approval leaked to " + ",".join(extra_qc))
+
+for admin_key in ("users.manage", "roles.manage", "settings.manage"):
+    leaked = [k for k in OPERATIONAL if admin_key in perms[k]]
+    if leaked:
+        problems.append(admin_key + " leaked to " + ",".join(leaked))
+
+plat = [k for k in OPERATIONAL if any(p.startswith("platform.") for p in perms[k])]
+if plat:
+    problems.append("platform.* leaked to " + ",".join(plat))
+
+if problems:
+    print("BAD|" + "; ".join(problems))
+else:
+    total = sum(len(perms[k]) for k in OPERATIONAL)
+    print("OK|%d roles, all populated (%d operational grants), duties separated"
+          % (len(EXPECTED), total))
+PY
+)
+    rm -rf "$tmp"
+    case "${roles_out%%|*}" in
+      OK)   ok   "roles & separation of duties" "${roles_out#*|}" ;;
+      WARN) warn "roles & separation of duties" "${roles_out#*|}" ;;
+      BAD)  bad  "roles & separation of duties" "${roles_out#*|}" ;;
+      *)    bad  "roles & separation of duties" "could not evaluate roles" ;;
+    esac
+
     # AI is optional — report its state rather than failing on it.
     ai=$(curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/ai/status" 2>/dev/null)
     case "$(json_field "$ai" 'data.enabled')" in

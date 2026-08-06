@@ -213,11 +213,12 @@ directly, so it works when nobody can get in.
 cd /opt/rmc
 bash scripts/setup/recover-login.sh                      # read-only: show every account
 bash scripts/setup/recover-login.sh --activate a@b.com   # undo a deactivation
-
-read -rs NEW_PASSWORD; export NEW_PASSWORD               # run this line ALONE
 bash scripts/setup/recover-login.sh --set-password a@b.com
-unset NEW_PASSWORD
 ```
+
+Use a real address from the `email` column, not the example above. Pass anything
+that is not one and the tool prints the account list so you can copy the right
+one, rather than making you go and look.
 
 ## Reading the status table
 
@@ -239,9 +240,10 @@ discover which emails exist.
 
 ## About the password
 
-Read from the environment only. It is never printed, never logged, never written
-to disk, and never passed as a command argument — it is piped to the hasher on
-stdin, so it does not appear in `ps`. Only a bcrypt hash reaches the database,
+`--set-password` asks for it and does not echo it, then asks again to confirm.
+It is never printed, never logged, never written to disk, and never passed as a
+command argument — it is piped to the hasher on stdin, so it does not appear in
+`ps`. Set `NEW_PASSWORD` in the environment instead if you need it unattended. Only a bcrypt hash reaches the database,
 which is what the API stores anyway. Hashing happens inside the API container
 using the same shared policy the app enforces, so this cannot set a password the
 app would later reject.

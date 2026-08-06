@@ -12,15 +12,15 @@
 #   cd /opt/rmc
 #   bash scripts/setup/recover-login.sh                       # show every account
 #   bash scripts/setup/recover-login.sh --activate a@b.com    # let them sign in again
-#
-#   read -rs NEW_PASSWORD; export NEW_PASSWORD                # run this line ALONE
 #   bash scripts/setup/recover-login.sh --set-password a@b.com
-#   unset NEW_PASSWORD
 #
-# The password is read from the environment only. It is never printed, never
-# logged, never written to disk, and never passed as a command argument (which
-# would show up in `ps`) — it is piped to the hasher on stdin. Only a bcrypt
-# hash reaches the database, which is what the API stores anyway.
+# Use a real address from the email column, not the example above.
+#
+# --set-password asks for the password and does not echo it. It is never
+# printed, never logged, never written to disk, and never passed as a command
+# argument (which would show up in `ps`) — it is piped to the hasher on stdin.
+# Only a bcrypt hash reaches the database, which is what the API stores anyway.
+# Set NEW_PASSWORD in the environment instead if you need it unattended.
 #
 # Env overrides: ENV_FILE (default .env.production),
 #                COMPOSE_FILE (default docker/docker-compose.prod.yml),
@@ -59,16 +59,6 @@ psql_owner() {
     'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' _ "$@"
 }
 
-if [ "$MODE" != "status" ]; then
-  case "$EMAIL" in
-    '')       echo "✗ give the email: --$MODE someone@company.com" >&2; exit 1 ;;
-    *[\'\"\\]*|*' '*)
-              echo "✗ that email contains characters this tool will not pass to SQL." >&2; exit 1 ;;
-    *@*.*)    ;;
-    *)        echo "✗ '$EMAIL' does not look like an email address." >&2; exit 1 ;;
-  esac
-fi
-
 # ------------------------------------------------------------------ status --
 # Always shown: after any change you want to see the result, and on its own it
 # answers "why can this person not sign in" without touching anything.
@@ -96,6 +86,25 @@ show_status() {
      GROUP BY u.email, u.status, u.user_type, t.status, u.last_login_at
      ORDER BY u.email;" | psql_owner -X
 }
+
+# Validate the email AFTER show_status exists, so a wrong one can answer itself:
+# the tool knows every address that would have worked, and withholding them just
+# forces another round trip.
+if [ "$MODE" != "status" ]; then
+  bad_email() {
+    echo "✗ $1" >&2
+    echo "  Copy an address from the email column below and run it again." >&2
+    show_status >&2
+    exit 1
+  }
+  case "$EMAIL" in
+    '')       bad_email "give the email: --$MODE someone@company.com" ;;
+    *[\'\"\\]*|*' '*)
+              bad_email "that email contains characters this tool will not pass to SQL." ;;
+    *@*.*)    ;;
+    *)        bad_email "'$EMAIL' does not look like an email address." ;;
+  esac
+fi
 
 case "$MODE" in
   status)
@@ -135,11 +144,25 @@ NOTE
     ;;
 
   set_password)
-    [ -n "${NEW_PASSWORD:-}" ] || {
-      echo "✗ NEW_PASSWORD is not set. Run this line on its own, then re-run:" >&2
-      echo "    read -rs NEW_PASSWORD; export NEW_PASSWORD" >&2
-      exit 1
-    }
+    # Ask for it here rather than making you export it first. A `read -rs` line
+    # pasted together with the lines below it silently swallows the next line as
+    # the password — a trap that has no upside, so it is removed. NEW_PASSWORD
+    # from the environment still works for unattended use.
+    if [ -z "${NEW_PASSWORD:-}" ]; then
+      if [ -t 0 ]; then
+        printf 'New password for %s (not shown as you type): ' "$EMAIL" >&2
+        IFS= read -rs NEW_PASSWORD; echo >&2
+        printf 'Type it again to confirm: ' >&2
+        IFS= read -rs CONFIRM; echo >&2
+        [ "$NEW_PASSWORD" = "$CONFIRM" ] || {
+          echo "✗ The two passwords do not match. Nothing changed." >&2; exit 1; }
+      else
+        echo "✗ No password given. Run this on a terminal, or set NEW_PASSWORD." >&2
+        exit 1
+      fi
+    fi
+    [ -n "$NEW_PASSWORD" ] || { echo "✗ The password was empty. Nothing changed." >&2; exit 1; }
+
     exists=$(printf '%s\n' "SELECT count(*) FROM users WHERE lower(email)=lower('$EMAIL');" \
              | psql_owner -tAX | tr -dc '0-9')
     if [ "${exists:-0}" = "0" ]; then
@@ -151,6 +174,10 @@ NOTE
     # Hash inside the API container: it already carries bcryptjs and the shared
     # password policy, so this cannot accept a password the app would reject.
     # The password goes in on stdin — never as an argument, which `ps` can read.
+    # Holds only the policy message from stderr — never the password. mktemp
+    # rather than a predictable name, so nothing can be pre-created in its path.
+    errf=$(mktemp)
+    trap 'rm -f "$errf"' EXIT
     set +e
     hash=$(printf '%s' "$NEW_PASSWORD" | dc exec -T "$API_SERVICE" node -e '
       let pw = "";
@@ -161,11 +188,11 @@ NOTE
         if (problem) { console.error(problem); process.exit(2); }
         process.stdout.write(bcrypt.hashSync(pw, 10));
       });
-    ' 2>/tmp/rmc-pwcheck.$$)
+    ' 2>"$errf")
     rc=$?
     set -e
-    problem=$(cat "/tmp/rmc-pwcheck.$$" 2>/dev/null || true)
-    rm -f "/tmp/rmc-pwcheck.$$"
+    problem=$(cat "$errf" 2>/dev/null || true)
+    rm -f "$errf"; trap - EXIT
     if [ "$rc" -eq 2 ]; then
       # passwordProblemMessage returns a complete sentence — print it as it is
       # rather than wrapping it in another one.

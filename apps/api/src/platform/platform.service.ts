@@ -4,6 +4,7 @@ import { MODULE_CATALOG, MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { provisionTenantRoles } from '../core/database/provision-tenant-roles';
 import { TenantAccessService } from '../rbac/tenant-access.service';
+import { PlanLimitsService } from '../rbac/plan-limits.service';
 import {
   ModuleEntity,
   PlanModule,
@@ -36,6 +37,7 @@ export class PlatformService {
   constructor(
     private readonly db: TenantDbService,
     private readonly access: TenantAccessService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
   private get ds() {
     return this.db.ds;
@@ -132,6 +134,9 @@ export class PlatformService {
         message: 'A user with this email already exists',
       });
     }
+    // The plan's seat count binds here too. A fresh tenant has none in use, so
+    // this only ever bites when a tenant that is already full is given another.
+    await this.planLimits.assertCanAddUser(tenantId);
     const passwordHash = bcrypt.hashSync(dto.password, 10);
 
     return this.db.runInTenant(tenantId, async (m) => {
@@ -184,6 +189,9 @@ export class PlatformService {
       status: t.status,
       currentPlanId: t.currentPlanId,
       planCode,
+      // Shown on the tenant screen so support can see how close a company is to
+      // its caps before it calls to ask why a login was refused.
+      usage: await this.planLimits.usage(t.id),
     };
   }
 

@@ -212,6 +212,13 @@ export interface LoginResult {
   /** Module keys the company's subscription includes. */
   modules: string[];
 }
+/** Seats and plants a plan allows, against what the tenant is using. */
+export interface PlanUsage {
+  planName: string | null;
+  /** `limit: null` means no plan is assigned, so nothing is capped. */
+  users: { used: number; limit: number | null };
+  plants: { used: number; limit: number | null };
+}
 export interface MeResult {
   user: { email: string; userType: string };
   tenant: { code: string; name: string; status: string } | null;
@@ -273,7 +280,8 @@ export const api = {
   tenants: () => apiFetch<TenantRow[]>('/platform/tenants'),
   createTenant: (b: { tenantCode: string; tenantName: string; planId?: string }) =>
     apiFetch<{ id: string }>('/platform/tenants', { method: 'POST', body: JSON.stringify(b) }),
-  tenant: (id: string) => apiFetch<TenantRow & { planCode: string | null }>(`/platform/tenants/${id}`),
+  tenant: (id: string) =>
+    apiFetch<TenantRow & { planCode: string | null; usage: PlanUsage }>(`/platform/tenants/${id}`),
   /**
    * Change a tenant's subscription status. Suspending one stops every user of
    * that company signing in, and stops the sessions they already hold.
@@ -352,6 +360,11 @@ export const usersApi = {
     apiFetch<Row>('/users', { method: 'POST', body: JSON.stringify(b) }),
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+};
+
+/** What the tenant's plan allows, and how much of it is already used. */
+export const planUsageApi = {
+  get: () => apiFetch<PlanUsage>('/plan-usage'),
 };
 
 export const rolesApi = {

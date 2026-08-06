@@ -5,13 +5,19 @@ import { useParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { TENANT_USABLE_STATUSES } from '@rmc/shared';
-import { api, type PlanRow, type TenantModuleRow, type TenantUserRow } from '../../../../lib/api';
+import { api, type PlanRow, type PlanUsage, type TenantModuleRow, type TenantUserRow } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState } from '../../../../components/ui/States';
+
+/** "3 of 5 users", or just "3 users" when no plan caps it. */
+function describeUsage(u: { used: number; limit: number | null }, noun: string): string {
+  const plural = `${noun}${u.used === 1 ? '' : 's'}`;
+  return u.limit === null ? `${u.used} ${plural}` : `${u.used} of ${u.limit} ${plural}`;
+}
 
 /** Every status the platform can set, worded as an outcome rather than a flag. */
 const STATUS_OPTIONS = [
@@ -28,6 +34,7 @@ export default function TenantDetailPage() {
   const [name, setName] = useState('');
   const [status, setStatus] = useState('');
   const [planCode, setPlanCode] = useState<string | null>(null);
+  const [usage, setUsage] = useState<PlanUsage | null>(null);
   const [modules, setModules] = useState<TenantModuleRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [planId, setPlanId] = useState('');
@@ -50,6 +57,7 @@ export default function TenantDetailPage() {
     setName(t.name);
     setStatus(t.status);
     setPlanCode(t.planCode ?? null);
+    setUsage(t.usage ?? null);
     setModules(mods);
     setPlans(pl);
     setUsers(us);
@@ -185,6 +193,13 @@ export default function TenantDetailPage() {
         <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 0 }}>
           Applying a plan resets the tenant&apos;s modules to that plan&apos;s modules.
         </p>
+        {usage && (
+          <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '10px 0 0' }}>
+            In use: <strong>{describeUsage(usage.users, 'user')}</strong> ·{' '}
+            <strong>{describeUsage(usage.plants, 'plant')}</strong>
+            {usage.users.limit === null && ' — no plan assigned, so neither is capped.'}
+          </p>
+        )}
       </Card>
 
       <Card title="Modules" padded={false}>

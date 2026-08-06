@@ -169,7 +169,7 @@ skipped, so it is safe to run with no credentials at hand.
 | Edge & TLS | app/api/admin hosts reachable, certificate expiry, http→https redirect |
 | Web app | login page, app shell, admin portal, unknown route returns 404 |
 | API | `/health`, and that protected routes reject missing/invalid tokens |
-| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, **subscription & modules**, **error envelope**, AI state, RBAC permission catalogue |
+| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, **subscription & modules**, **plan limits**, **error envelope**, AI state, RBAC permission catalogue |
 | Containers | all services running/healthy, API errors in the last hour, disk usage |
 
 ### Stock balances
@@ -217,6 +217,19 @@ those through deliberately, so a provisioning gap never takes a live plant off
 the air — but it also means nothing is being enforced. Fix it by assigning the
 tenant a plan, or by re-running the production seed, which provisions any tenant
 that has no rows and leaves configured ones untouched.
+
+### Plan limits
+
+How many seats and plants the subscription sells, against what is in use. Seats
+count **active** users only, so deactivating someone who has left frees their
+place rather than forcing an upgrade to replace them.
+
+It **warns**, rather than failing, in two cases. No plan assigned means nothing
+is capped — the same deliberate choice as modules, so a provisioning gap never
+stops a plant hiring. Being over the cap is what a downgrade leaves behind: the
+people already there keep working and only new additions are refused, because
+silently disabling someone's login to fit a plan change is not a decision
+software should make on its own.
 
 ### Error envelope
 

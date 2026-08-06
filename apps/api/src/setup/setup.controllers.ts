@@ -5,6 +5,7 @@ import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
+import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { NumberSeries } from '../core/database/entities';
 import {
   CompanyService,
@@ -48,6 +49,21 @@ export class SettingsController {
       String(dto.value ?? ''),
       dto.dataType ? String(dto.dataType) : 'string',
     );
+  }
+}
+
+/**
+ * What the tenant's plan allows and what it is using. Ungated beyond being a
+ * tenant user: it is two counts and two caps, and both the Users and Plants
+ * screens need it to say "3 of 5" before someone fills in a form that would be
+ * refused on submit.
+ */
+@Controller('plan-usage')
+@UseGuards(JwtAuthGuard, TenantGuard)
+export class PlanUsageController {
+  constructor(private readonly planLimits: PlanLimitsService) {}
+  @Get() get(@CurrentUser() u: AuthUser) {
+    return this.planLimits.usage(u.tenantId as string);
   }
 }
 

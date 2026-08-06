@@ -4,6 +4,7 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import {
   CompanyController,
   NumberSeriesController,
+  PlanUsageController,
   RolesController,
   SettingsController,
   UsersController,
@@ -21,6 +22,7 @@ import {
     CompanyController,
     SettingsController,
     NumberSeriesController,
+    PlanUsageController,
     UsersController,
     RolesController,
   ],

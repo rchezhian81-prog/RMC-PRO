@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { ROLE_KEYS, passwordProblemMessage } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { PlanLimitsService } from '../rbac/plan-limits.service';
 import {
   Company,
   NumberSeries,
@@ -79,7 +80,10 @@ export class NumberSeriesService extends TenantCrudService<NumberSeries> {
 /** Tenant-side user management (Design Doc 6 §6.1). users has no RLS — scope by tenant_id. */
 @Injectable()
 export class UsersService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly planLimits: PlanLimitsService,
+  ) {}
 
   async list(tenantId: string) {
     const users = await this.db.ds
@@ -129,6 +133,9 @@ export class UsersService {
     if (await repo.findOne({ where: { email } })) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Email already exists' });
     }
+    // Checked after the duplicate test, so retrying an email that already exists
+    // does not report a seat problem the administrator cannot act on.
+    await this.planLimits.assertCanAddUser(tenantId);
     const user = await repo.save(
       repo.create({
         tenantId,
@@ -201,6 +208,13 @@ export class UsersService {
         code: 'VALIDATION_ERROR',
         message: 'You cannot remove your own role — you would lose access immediately.',
       });
+    }
+
+    // Reactivating someone takes a seat back, so it is bounded by the plan the
+    // same way creating one is. Only checked on the inactive → active edge; a
+    // no-op update on an already-active user must not fail when seats are full.
+    if (dto.status !== undefined && String(dto.status) === 'active' && user.status !== 'active') {
+      await this.planLimits.assertCanAddUser(tenantId);
     }
 
     let passwordHash: string | undefined;

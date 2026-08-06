@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { PlanLimitsService } from './plan-limits.service';
 import { TenantAccessService } from './tenant-access.service';
 
 /**
@@ -10,7 +11,7 @@ import { TenantAccessService } from './tenant-access.service';
  */
 @Global()
 @Module({
-  providers: [TenantAccessService],
-  exports: [TenantAccessService],
+  providers: [TenantAccessService, PlanLimitsService],
+  exports: [TenantAccessService, PlanLimitsService],
 })
 export class RbacModule {}

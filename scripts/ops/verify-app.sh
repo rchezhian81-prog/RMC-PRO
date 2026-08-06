@@ -395,6 +395,40 @@ else:
       *)    bad  "subscription & modules" "could not read /auth/me" ;;
     esac
 
+    # Plan limits: how many seats and plants the subscription sells, against
+    # what is in use. A tenant with no plan is unlimited by design — the same
+    # reasoning as modules — so that is reported, not treated as healthy.
+    lim=$(curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/plan-usage" 2>/dev/null)
+    lim_out=$(printf '%s' "$lim" | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin).get("data") or {}
+except Exception:
+    print("BAD|unreadable /plan-usage response"); raise SystemExit
+u, p = d.get("users") or {}, d.get("plants") or {}
+if "used" not in u:
+    print("BAD|/plan-usage did not report usage — the API predates plan limits"); raise SystemExit
+plan = d.get("planName")
+def fmt(x, noun):
+    used, cap = x.get("used", 0), x.get("limit")
+    # Nested quotes inside an f-string expression need Python 3.12; build the
+    # parts first so this parses on the 3.9/3.11 a server is likely to have.
+    return "%d %s (uncapped)" % (used, noun) if cap is None else "%d/%d %s" % (used, cap, noun)
+summary = fmt(u, "users") + ", " + fmt(p, "plants")
+if u.get("limit") is None:
+    print(f"WARN|no plan assigned — nothing is capped ({summary})")
+elif u["used"] > u["limit"] or (p.get("limit") is not None and p["used"] > p["limit"]):
+    print(f"WARN|over the plan on {plan} ({summary}) — existing users keep working, no more can be added")
+else:
+    print(f"OK|{plan}: {summary}")
+' 2>/dev/null)
+    case "${lim_out%%|*}" in
+      OK)   ok   "plan limits" "${lim_out#*|}" ;;
+      WARN) warn "plan limits" "${lim_out#*|}" ;;
+      BAD)  bad  "plan limits" "${lim_out#*|}" ;;
+      *)    bad  "plan limits" "could not read /plan-usage" ;;
+    esac
+
     # A refusal must be machine-readable, or the web app cannot tell a role
     # problem from a subscription problem and shows the wrong advice.
     envl=$(curl -sS --max-time 20 "${API}/api/v1/dashboard/summary" \

@@ -432,6 +432,34 @@ export const reportsCatalogApi = {
   catalog: () => apiFetch<{ groups: { module: string; reports: { key: string; name: string; path: string }[] }[] }>('/reports/catalog'),
 };
 
+// ---- Alerts & message templates (no external service required) ----
+export interface Alert {
+  key: string;
+  severity: 'danger' | 'warning' | 'info';
+  title: string;
+  detail: string;
+  href: string;
+  count?: number;
+  amount?: number;
+}
+
+export interface MessageTemplate {
+  key: string;
+  name: string;
+  description: string;
+  channel: 'whatsapp' | 'email' | 'note';
+  fields: string[];
+  body: string;
+}
+
+export const alertsApi = {
+  list: () => apiFetch<{ alerts: Alert[]; generatedAt: string }>('/alerts'),
+};
+
+export const templatesApi = {
+  list: () => apiFetch<{ companyName: string; templates: MessageTemplate[] }>('/message-templates'),
+};
+
 // ---- AI assistant (Phase 4) ----
 export interface ChatTurn {
   role: 'user' | 'assistant';

@@ -8,6 +8,7 @@ import {
 import { dashboardApi, type Row } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { StatCard } from '../../../components/ui/StatCard';
+import { AlertsCard } from '../../../components/AlertsCard';
 import { InsightsCard } from '../../../components/InsightsCard';
 import { Loading, ErrorState } from '../../../components/ui/States';
 import type { Tone } from '../../../components/ui/Badge';
@@ -72,7 +73,10 @@ export default function DashboardPage() {
         Live operations overview — Mix Nova RMC Software
       </p>
 
-      <div style={{ marginBottom: 22 }}>
+      {/* Rule-based alerts always show. AI insights sit below as an optional
+          extra and hide themselves entirely when AI isn't available. */}
+      <div style={{ marginBottom: 22, display: 'grid', gap: 14 }}>
+        <AlertsCard />
         <InsightsCard />
       </div>
 

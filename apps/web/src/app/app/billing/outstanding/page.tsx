@@ -6,7 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { ExportButton } from '../../../../components/ExportButton';
-import { AiDraftButton } from '../../../../components/AiDraftButton';
+import { TemplateButton } from '../../../../components/TemplateButton';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -76,11 +76,22 @@ export default function OutstandingPage() {
                   <Td numeric style={{ color: Number(r.b90) > 0 ? 'var(--mn-danger)' : 'var(--mn-text)' }}>{money(r.b90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(r.total)}</Td>
                   <Td>
-                    <AiDraftButton
-                      kind="payment_reminder"
+                    <TemplateButton
+                      // Lead with the firmer wording once anything has aged past 60 days.
+                      templateKeys={
+                        Number(r.b61_90) + Number(r.b90) > 0
+                          ? ['payment_reminder_overdue', 'payment_reminder']
+                          : ['payment_reminder', 'payment_reminder_overdue']
+                      }
                       title="Payment reminder"
                       label="Reminder"
-                      context={{ customerName: r.customerName, outstanding: r.total }}
+                      mobile={r.mobile}
+                      context={{
+                        customerName: r.customerName,
+                        contactPerson: r.contactPerson,
+                        amount: money(r.total),
+                        outstanding: money(r.total),
+                      }}
                     />
                   </Td>
                 </tr>

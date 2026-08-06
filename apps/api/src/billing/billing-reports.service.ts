@@ -22,15 +22,25 @@ export class BillingReportsService {
     return this.db.runInTenant(tenantId, async (m) => {
       const invoices = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } });
       const customers = await m.getRepository(Customer).find();
-      const nameOf = new Map(customers.map((c) => [c.id, c.customerName]));
-      const byCustomer = new Map<string, { customerName: string; total: number; b0_30: number; b31_60: number; b61_90: number; b90: number }>();
+      // Contact details ride along so the UI can send a reminder without a second lookup.
+      const infoOf = new Map(customers.map((c) => [c.id, c]));
+      const byCustomer = new Map<
+        string,
+        { customerName: string; contactPerson: string; mobile: string; total: number; b0_30: number; b31_60: number; b61_90: number; b90: number }
+      >();
       const totals = { total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0 };
 
       for (const inv of invoices) {
         const out = num(inv.outstandingAmount);
         if (out <= 0) continue;
         const key = inv.customerId ?? 'unknown';
-        const row = byCustomer.get(key) ?? { customerName: nameOf.get(key) ?? 'Unknown', total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0 };
+        const c = infoOf.get(key);
+        const row = byCustomer.get(key) ?? {
+          customerName: c?.customerName ?? 'Unknown',
+          contactPerson: c?.contactPerson ?? '',
+          mobile: c?.mobile ?? '',
+          total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0,
+        };
         const bucket = bucketOf(daysBetween(inv.invoiceDate));
         row.total = round2(row.total + out);
         if (bucket === '0-30') { row.b0_30 = round2(row.b0_30 + out); totals.b0_30 = round2(totals.b0_30 + out); }

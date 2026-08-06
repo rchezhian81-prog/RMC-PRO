@@ -6,9 +6,15 @@ import { aiApi } from '../lib/api';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 
-const NOT_CONFIGURED = /not set up|not configured|AI_NOT_CONFIGURED/i;
-
-/** Dashboard card of AI-written insights. Renders nothing if AI is switched off. */
+/**
+ * Dashboard card of AI-written insights — an optional extra on top of the
+ * rule-based alerts card.
+ *
+ * Any failure hides the card outright rather than showing an error: AI is not
+ * required for the plant to run, and the alerts card above already covers the
+ * same ground from the database. A missing key, an unfunded account, or an
+ * outage should therefore be invisible to the operator, not a red banner.
+ */
 export function InsightsCard() {
   const [text, setText] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -21,13 +27,11 @@ export function InsightsCard() {
     try {
       const r = await aiApi.insights();
       setText(r.insights);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
-      if (NOT_CONFIGURED.test(msg)) {
-        setHidden(true);
-        return;
-      }
-      setError('Could not load insights.');
+    } catch {
+      // Only surface an error if insights had previously loaded — otherwise the
+      // feature is simply unavailable and the card should not appear at all.
+      if (text) setError('Could not refresh insights.');
+      else setHidden(true);
     } finally {
       setBusy(false);
     }

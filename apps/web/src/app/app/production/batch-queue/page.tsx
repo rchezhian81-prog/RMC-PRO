@@ -7,6 +7,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -75,7 +76,7 @@ export default function BatchQueuePage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="Send confirmed order to queue">
-          <form onSubmit={enqueue} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <Form onSubmit={enqueue} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 280 }}>
               <Field label="Confirmed order" required>
                 <select className="mn-input" value={orderId} onChange={(e) => setOrderId(e.target.value)} required>
@@ -91,7 +92,7 @@ export default function BatchQueuePage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Send to queue</Button>
             </div>
-          </form>
+          </Form>
         </Card>
       </div>
 

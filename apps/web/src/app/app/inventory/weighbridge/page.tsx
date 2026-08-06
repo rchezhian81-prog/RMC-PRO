@@ -6,6 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -100,7 +101,7 @@ export default function WeighbridgePage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New weighbridge entry">
-          <form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <Form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
             <Sel label="Plant" v={form.plantId} on={(x) => setForm({ ...form, plantId: x })} opts={plants} ov={(o) => String(o.plantName ?? o.plantCode)} />
             <Sel label="Supplier" v={form.supplierId} on={(x) => setForm({ ...form, supplierId: x })} opts={suppliers} ov={(o) => String(o.supplierName)} />
             <Sel label="Material" v={form.materialId} on={(x) => setForm({ ...form, materialId: x })} opts={materials} ov={(o) => String(o.materialName)} />
@@ -119,7 +120,7 @@ export default function WeighbridgePage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Create</Button>
             </div>
-          </form>
+          </Form>
         </Card>
       </div>
 

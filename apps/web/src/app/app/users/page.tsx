@@ -7,6 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Badge, StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { Field, Input, Select } from '../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
 
@@ -80,7 +81,7 @@ export default function UsersPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New user">
-          <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+          <Form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <div style={{ minWidth: 170 }}>
               <Field label="Name" required>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -116,7 +117,7 @@ export default function UsersPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit" loading={busy}>Create</Button>
             </div>
-          </form>
+          </Form>
         </Card>
       </div>
 

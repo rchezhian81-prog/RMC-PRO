@@ -5,6 +5,7 @@ import { crud, stockApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ExportButton } from '../../../../components/ExportButton';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
@@ -67,7 +68,7 @@ export default function StockPage() {
       )}
 
       <Card title="Set opening balance">
-        <form onSubmit={setOpening} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Form onSubmit={setOpening} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 160 }}>
             <Field label="Plant">
               <select className="mn-input" value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
@@ -96,7 +97,7 @@ export default function StockPage() {
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Set opening</Button>
           </div>
-        </form>
+        </Form>
       </Card>
 
       <Card

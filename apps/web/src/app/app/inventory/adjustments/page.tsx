@@ -5,6 +5,7 @@ import { crud, stockAdjustApi, stockApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -69,7 +70,7 @@ export default function StockAdjustmentsPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New adjustment">
-          <form onSubmit={adjust} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <Form onSubmit={adjust} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 140 }}>
               <Field label="Plant">
                 <select className="mn-input" value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
@@ -111,7 +112,7 @@ export default function StockAdjustmentsPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Apply</Button>
             </div>
-          </form>
+          </Form>
         </Card>
       </div>
 

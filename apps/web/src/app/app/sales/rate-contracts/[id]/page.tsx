@@ -8,6 +8,7 @@ import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
 import { Button } from '../../../../../components/ui/Button';
+import { Form } from '../../../../../components/ui/Form';
 import { Field, Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
 
@@ -153,7 +154,7 @@ export default function RateContractDetail() {
           </tbody>
         </Table>
         {!locked && (
-          <form onSubmit={addItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
+          <Form onSubmit={addItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
             <div style={{ minWidth: 130 }}>
               <Field label="Grade">
                 <select className="mn-input" value={item.gradeId} onChange={(e) => setItem({ ...item, gradeId: e.target.value })}>
@@ -171,7 +172,7 @@ export default function RateContractDetail() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit" variant="secondary">Add rate</Button>
             </div>
-          </form>
+          </Form>
         )}
       </Card>
 

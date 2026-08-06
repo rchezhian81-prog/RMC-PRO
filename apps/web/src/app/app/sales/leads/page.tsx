@@ -6,6 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -71,7 +72,7 @@ export default function LeadsPage() {
       {error && <ErrorState message={error} />}
 
       <Card title="New lead">
-        <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+        <Form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
           <F label="Customer name" v={form.customerName} on={(v) => setForm({ ...form, customerName: v })} w={190} req />
           <F label="Contact" v={form.contactPerson} on={(v) => setForm({ ...form, contactPerson: v })} w={140} />
           <F label="Mobile" v={form.mobile} on={(v) => setForm({ ...form, mobile: v })} w={130} />
@@ -80,7 +81,7 @@ export default function LeadsPage() {
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Create</Button>
           </div>
-        </form>
+        </Form>
       </Card>
 
       <Card title="Leads" padded={false}>
@@ -118,7 +119,7 @@ export default function LeadsPage() {
 
       {sel && (
         <Card title={`${String(sel.leadNo)} — ${String(sel.customerName)}`} actions={<StatusBadge status={String(sel.leadStage)} />}>
-          <form onSubmit={addFollowup} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 16 }}>
+          <Form onSubmit={addFollowup} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 16 }}>
             <F label="Notes" v={fu.notes} on={(v) => setFu({ ...fu, notes: v })} w={220} />
             <F label="Outcome" v={fu.outcome} on={(v) => setFu({ ...fu, outcome: v })} w={130} />
             <div style={{ minWidth: 150 }}>
@@ -139,7 +140,7 @@ export default function LeadsPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Add follow-up</Button>
             </div>
-          </form>
+          </Form>
 
           <Table>
             <thead>

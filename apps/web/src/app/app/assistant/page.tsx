@@ -5,6 +5,7 @@ import { Send, Sparkles } from 'lucide-react';
 import { aiApi, type ChatTurn } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { ErrorState } from '../../../components/ui/States';
 
 const SUGGESTIONS = [
@@ -138,7 +139,7 @@ export default function AssistantPage() {
             </div>
           )}
 
-          <form onSubmit={onSubmit} style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--mn-border)' }}>
+          <Form onSubmit={onSubmit} style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--mn-border)' }}>
             <input
               className="mn-input"
               style={{ flex: 1 }}
@@ -151,7 +152,7 @@ export default function AssistantPage() {
             <Button type="submit" icon={<Send size={16} />} loading={busy} disabled={!input.trim()}>
               Send
             </Button>
-          </form>
+          </Form>
         </Card>
       )}
 

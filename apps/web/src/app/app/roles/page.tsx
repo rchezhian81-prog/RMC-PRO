@@ -5,6 +5,7 @@ import { rolesApi, type Row } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
 
@@ -102,7 +103,7 @@ export default function RolesPage() {
       {error && <ErrorState message={error} />}
 
       <Card title="New role">
-        <form onSubmit={createRole} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Form onSubmit={createRole} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 180 }}>
             <Field label="Role key" required>
               <Input value={form.roleKey} onChange={(e) => setForm({ ...form, roleKey: e.target.value })} required />
@@ -116,7 +117,7 @@ export default function RolesPage() {
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Create</Button>
           </div>
-        </form>
+        </Form>
       </Card>
 
       <Card title="Roles" padded={false}>

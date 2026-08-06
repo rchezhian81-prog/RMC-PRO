@@ -5,6 +5,7 @@ import { settings, type Row } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
 
@@ -84,7 +85,7 @@ export default function SettingsPage() {
       </Card>
 
       <Card title="Add setting">
-        <form onSubmit={add} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Form onSubmit={add} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 200 }}>
             <Field label="Key" required>
               <Input value={newKey} onChange={(e) => setNewKey(e.target.value)} required />
@@ -98,7 +99,7 @@ export default function SettingsPage() {
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Add</Button>
           </div>
-        </form>
+        </Form>
       </Card>
     </div>
   );

@@ -6,6 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -77,7 +78,7 @@ export default function ProductionPlansPage() {
       )}
 
       <Card title="New plan">
-        <form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+        <Form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 160 }}>
             <Field label="Plant">
               <select className="mn-input" value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
@@ -104,7 +105,7 @@ export default function ProductionPlansPage() {
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Create</Button>
           </div>
-        </form>
+        </Form>
       </Card>
 
       <Card title="Plans" padded={false}>
@@ -166,7 +167,7 @@ export default function ProductionPlansPage() {
             </tbody>
           </Table>
 
-          <form onSubmit={addItem} style={{ display: 'flex', gap: 12, alignItems: 'end', marginTop: 14, flexWrap: 'wrap' }}>
+          <Form onSubmit={addItem} style={{ display: 'flex', gap: 12, alignItems: 'end', marginTop: 14, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 240 }}>
               <Field label="Confirmed order" required>
                 <select className="mn-input" value={item.orderId} onChange={(e) => setItem({ ...item, orderId: e.target.value })} required>
@@ -185,7 +186,7 @@ export default function ProductionPlansPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit" variant="secondary">Add item</Button>
             </div>
-          </form>
+          </Form>
 
           <div style={{ marginTop: 6 }}>
             <Button

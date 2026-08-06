@@ -6,6 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -98,7 +99,7 @@ export default function MixDesignsPage() {
       )}
 
       <Card title="New mix design">
-        <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+        <Form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
           <div style={{ minWidth: 150 }}>
             <Field label="Mix code" required>
               <Input value={form.mixCode} onChange={(e) => setForm({ ...form, mixCode: e.target.value })} required />
@@ -132,7 +133,7 @@ export default function MixDesignsPage() {
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Create</Button>
           </div>
-        </form>
+        </Form>
       </Card>
 
       <Card title="Mix designs" padded={false}>
@@ -203,7 +204,7 @@ export default function MixDesignsPage() {
           </Table>
 
           {!locked && (
-            <form onSubmit={addMaterial} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginTop: 14 }}>
+            <Form onSubmit={addMaterial} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginTop: 14 }}>
               <div style={{ minWidth: 160 }}>
                 <Field label="Material" required>
                   <select className="mn-input" value={mat.materialId} onChange={(e) => setMat({ ...mat, materialId: e.target.value })} required>
@@ -227,7 +228,7 @@ export default function MixDesignsPage() {
               <div style={{ marginBottom: 14 }}>
                 <Button type="submit" variant="secondary">Add material</Button>
               </div>
-            </form>
+            </Form>
           )}
 
           <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>

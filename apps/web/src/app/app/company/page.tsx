@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { company } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
 import { ErrorState } from '../../../components/ui/States';
 
@@ -49,7 +50,7 @@ export default function CompanyPage() {
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Company Profile</h1>
       <div style={{ maxWidth: 440 }}>
         <Card title="Company details">
-          <form onSubmit={save}>
+          <Form onSubmit={save}>
             {FIELDS.map(([k, label]) => (
               <Field key={k} label={label}>
                 <Input value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))} />
@@ -60,7 +61,7 @@ export default function CompanyPage() {
               {msg && <span style={{ color: 'var(--mn-success)', fontSize: 13 }}>{msg}</span>}
             </div>
             {error && <div style={{ marginTop: 12 }}><ErrorState message={error} /></div>}
-          </form>
+          </Form>
         </Card>
       </div>
     </div>

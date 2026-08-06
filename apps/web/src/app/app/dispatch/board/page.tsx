@@ -7,6 +7,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -89,7 +90,7 @@ export default function DispatchBoardPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New dispatch">
-          <form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <Form onSubmit={create} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
             <div style={{ minWidth: 240 }}>
               <Field label="Confirmed batch" required>
                 <select className="mn-input" value={form.batchTicketId} onChange={(e) => setForm({ ...form, batchTicketId: e.target.value })} required>
@@ -125,7 +126,7 @@ export default function DispatchBoardPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Create dispatch</Button>
             </div>
-          </form>
+          </Form>
         </Card>
       </div>
 

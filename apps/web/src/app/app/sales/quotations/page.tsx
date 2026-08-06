@@ -7,6 +7,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
+import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
@@ -49,7 +50,7 @@ export default function QuotationsPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New quotation">
-          <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+          <Form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <div style={{ minWidth: 200 }}>
               <Field label="Customer">
                 <select className="mn-input" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })}>
@@ -88,7 +89,7 @@ export default function QuotationsPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Create</Button>
             </div>
-          </form>
+          </Form>
         </Card>
       </div>
 

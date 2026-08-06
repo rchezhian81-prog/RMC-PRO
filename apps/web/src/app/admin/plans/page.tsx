@@ -5,6 +5,7 @@ import { api, type ModuleRow, type PlanRow } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
 
@@ -57,7 +58,7 @@ export default function PlansPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New plan">
-          <form onSubmit={create}>
+          <Form onSubmit={create}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
               <div style={{ minWidth: 140 }}>
                 <Field label="Code" required>
@@ -102,7 +103,7 @@ export default function PlansPage() {
               })}
             </div>
             <Button type="submit">Create plan</Button>
-          </form>
+          </Form>
           {error && <div style={{ marginTop: 12 }}><ErrorState message={error} /></div>}
         </Card>
       </div>

@@ -7,6 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
+import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
 
@@ -47,7 +48,7 @@ export default function TenantsPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="New tenant">
-          <form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+          <Form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <div style={{ minWidth: 140 }}>
               <Field label="Code" required>
                 <Input value={code} onChange={(e) => setCode(e.target.value)} required />
@@ -71,7 +72,7 @@ export default function TenantsPage() {
             <div style={{ marginBottom: 14 }}>
               <Button type="submit">Create</Button>
             </div>
-          </form>
+          </Form>
           {error && <div style={{ marginTop: 4 }}><ErrorState message={error} /></div>}
         </Card>
       </div>

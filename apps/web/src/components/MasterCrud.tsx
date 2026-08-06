@@ -9,6 +9,7 @@ import { toCsv, downloadCsv, parseCsv } from '../lib/csv';
 import { Card } from './ui/Card';
 import { Table, Th, Td } from './ui/Table';
 import { Button } from './ui/Button';
+import { Form } from './ui/Form';
 import { Field, Input } from './ui/Field';
 import { ErrorState, EmptyState } from './ui/States';
 
@@ -170,7 +171,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
       {showForm && (
         <div style={{ marginBottom: 18 }}>
           <Card title={editingId ? `Edit ${singular}` : `New ${singular}`}>
-            <form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <Form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
               {config.fields.map((f) => (
                 <div key={f.key} style={{ minWidth: 150 }}>
                   <Field label={f.label} required={f.required}>
@@ -193,7 +194,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                   </Button>
                 )}
               </div>
-            </form>
+            </Form>
           </Card>
         </div>
       )}

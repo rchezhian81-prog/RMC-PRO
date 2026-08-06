@@ -77,7 +77,39 @@ function request(path: string, opts: RequestInit, token: string | undefined): Pr
   });
 }
 
+/**
+ * Creates that are currently in flight, keyed by method + path + body.
+ *
+ * A slow save shows no feedback for a second or two, so the natural reaction is
+ * to click again — which would post a second quotation, order or challan into
+ * the live ledger. While an identical create is still running, a repeat call
+ * joins the first instead of starting another.
+ *
+ * Only concurrent duplicates collapse: once the first request settles its entry
+ * is removed, so deliberately creating the same thing twice still works.
+ */
+const inFlightCreates = new Map<string, Promise<unknown>>();
+
 async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const method = (opts.method ?? 'GET').toUpperCase();
+  if (method !== 'POST') return performFetch<T>(path, opts);
+
+  const key = `${method} ${path} ${typeof opts.body === 'string' ? opts.body : ''}`;
+  const existing = inFlightCreates.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const pending = performFetch<T>(path, opts);
+  inFlightCreates.set(key, pending);
+  // Settle-either-way cleanup. Both handlers are supplied so this derived
+  // promise never rejects on its own; the caller still sees the real rejection.
+  void pending.then(
+    () => inFlightCreates.delete(key),
+    () => inFlightCreates.delete(key),
+  );
+  return pending;
+}
+
+async function performFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await request(path, opts, getSession()?.token);

@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
+import { ErrorFilter } from './common/error.filter';
 
 /**
  * Build the CORS origin allowlist. Browser origins are read from `CORS_ORIGINS`
@@ -32,6 +33,9 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalInterceptors(new ResponseInterceptor());
+  // Failures get the same envelope as successes, so the web client can read the
+  // error code rather than guessing from the status alone.
+  app.useGlobalFilters(new ErrorFilter());
   app.enableCors({
     origin: corsOrigins(),
     credentials: true,

@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { passwordProblemMessage } from '@rmc/shared';
+import { MODULE_KEYS, passwordProblemMessage } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Tenant, User } from '../core/database/entities';
 import { loadUserAccess } from '../rbac/access';
+import { TenantAccessService } from '../rbac/tenant-access.service';
 
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET ?? 'change-me-access';
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'change-me-refresh';
@@ -18,6 +19,7 @@ export class AuthService {
   constructor(
     private readonly db: TenantDbService,
     private readonly jwt: JwtService,
+    private readonly access: TenantAccessService,
   ) {}
 
   async login(login: string, password: string) {
@@ -26,11 +28,18 @@ export class AuthService {
     if (!user || user.status !== 'active' || !bcrypt.compareSync(password, user.passwordHash)) {
       throw new UnauthorizedException(INVALID);
     }
+    // Credentials are good, so say plainly that it is the company account that
+    // is blocked. Answering "invalid login" here would send a plant clerk
+    // hunting for a password problem that does not exist. Checked after the
+    // password so the message cannot be used to probe which companies exist.
+    if (user.tenantId) await this.access.assertUsable(user.tenantId);
+
     await repo.update(user.id, { lastLoginAt: new Date() });
     const tokens = await this.issueTokens(user);
-    const [tenant, access] = await Promise.all([
+    const [tenant, access, modules] = await Promise.all([
       this.loadTenant(user.tenantId),
       this.loadAccess(user),
+      this.loadModules(user.tenantId),
     ]);
     return {
       ...tokens,
@@ -38,6 +47,7 @@ export class AuthService {
       tenant,
       permissions: access.permissions,
       roles: access.roleKeys,
+      modules,
     };
   }
 
@@ -53,6 +63,9 @@ export class AuthService {
     }
     const user = await this.db.ds.getRepository(User).findOne({ where: { id: sub } });
     if (!user || user.status !== 'active') throw new UnauthorizedException(INVALID);
+    // A suspension must also close the door on refresh, or a session started
+    // before it would renew itself indefinitely.
+    if (user.tenantId) await this.access.assertUsable(user.tenantId);
     return this.issueTokens(user);
   }
 
@@ -87,15 +100,17 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.db.ds.getRepository(User).findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
-    const [tenant, access] = await Promise.all([
+    const [tenant, access, modules] = await Promise.all([
       this.loadTenant(user.tenantId),
       this.loadAccess(user),
+      this.loadModules(user.tenantId),
     ]);
     return {
       user: this.publicUser(user),
       tenant,
       permissions: access.permissions,
       roles: access.roleKeys,
+      modules,
     };
   }
 
@@ -116,6 +131,18 @@ export class AuthService {
     if (!tenantId) return null;
     const t = await this.db.ds.getRepository(Tenant).findOne({ where: { id: tenantId } });
     return t ? { id: t.id, code: t.tenantCode, name: t.tenantName, status: t.status } : null;
+  }
+
+  /**
+   * The module keys this tenant is entitled to, so the web app can leave out
+   * menu entries the server would refuse. An unprovisioned tenant reports the
+   * whole catalogue, matching what the guard actually allows — the menu must
+   * never be stricter than the API, or a plant loses a screen it can still use.
+   */
+  private async loadModules(tenantId: string | null): Promise<string[]> {
+    if (!tenantId) return [...MODULE_KEYS];
+    const { modules, provisioned } = await this.access.entitlements(tenantId);
+    return provisioned ? [...modules] : [...MODULE_KEYS];
   }
 
   private loadAccess(user: Pick<User, 'id' | 'tenantId'>): Promise<{ roleKeys: string[]; permissions: string[] }> {

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@n
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { MixDesignsService } from './mix-designs.service';
@@ -14,6 +15,7 @@ import { ProductionReportsService } from './production-reports.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('mix-designs')
+@RequireModule('production')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class MixDesignsController {
   constructor(private readonly service: MixDesignsService) {}
@@ -34,6 +36,7 @@ export class MixDesignsController {
 }
 
 @Controller('production-plans')
+@RequireModule('production')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ProductionPlansController {
   constructor(private readonly service: ProductionPlansService) {}
@@ -48,6 +51,7 @@ export class ProductionPlansController {
 }
 
 @Controller('batch-queue')
+@RequireModule('production')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class BatchQueueController {
   constructor(private readonly service: BatchQueueService) {}
@@ -65,6 +69,7 @@ export class BatchQueueController {
 }
 
 @Controller('batch-tickets')
+@RequireModule('production')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class BatchTicketsController {
   constructor(private readonly service: BatchTicketsService) {}
@@ -90,6 +95,7 @@ export class BatchTicketsController {
 }
 
 @Controller('stock')
+@RequireModule('inventory')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class StockController {
   constructor(private readonly service: StockService) {}
@@ -103,6 +109,7 @@ export class StockController {
 }
 
 @Controller('production-reports')
+@RequireModule('production')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ProductionReportsController {
   constructor(private readonly service: ProductionReportsService) {}

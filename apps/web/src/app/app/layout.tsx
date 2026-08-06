@@ -10,8 +10,8 @@ import {
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Sparkles, UserCog,
 } from 'lucide-react';
-import { aiApi } from '../../lib/api';
-import { clearSession, getAccess, getSession } from '../../lib/session';
+import { aiApi, api } from '../../lib/api';
+import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
@@ -29,6 +29,12 @@ interface NavItem {
    * open to any tenant user are intentionally left ungated.
    */
   perm?: string;
+  /**
+   * Subscription module this screen belongs to, matching the `@RequireModule`
+   * on the controller behind it. Left out when the company's plan does not
+   * include it — the API would refuse every request the screen makes.
+   */
+  module?: string;
   /** Hidden while the AI features are switched off, so there are no dead ends. */
   ai?: boolean;
 }
@@ -47,84 +53,84 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Setup',
     items: [
       { href: '/app/company', label: 'Company', icon: <Building2 size={IS} />, perm: 'settings.manage' },
-      { href: '/app/entity/plants', label: 'Plants', icon: <Factory size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/plants', label: 'Plants', icon: <Factory size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/users', label: 'Users', icon: <Users size={IS} />, perm: 'users.manage' },
       { href: '/app/roles', label: 'Roles', icon: <ShieldCheck size={IS} />, perm: 'roles.manage' },
-      { href: '/app/entity/number-series', label: 'Number Series', icon: <Hash size={IS} />, perm: 'number_series.manage' },
+      { href: '/app/entity/number-series', label: 'Number Series', icon: <Hash size={IS} />, perm: 'number_series.manage', module: 'masters' },
       { href: '/app/settings', label: 'Settings', icon: <Settings size={IS} />, perm: 'settings.manage' },
     ],
   },
   {
     title: 'Masters',
     items: [
-      { href: '/app/entity/customers', label: 'Customers', icon: <Building2 size={IS} />, perm: 'masters.view' },
-      { href: '/app/entity/sites', label: 'Sites / Projects', icon: <MapPin size={IS} />, perm: 'masters.view' },
-      { href: '/app/entity/materials', label: 'Materials', icon: <Package size={IS} />, perm: 'masters.view' },
-      { href: '/app/entity/suppliers', label: 'Suppliers', icon: <Store size={IS} />, perm: 'masters.view' },
-      { href: '/app/entity/vehicles', label: 'Vehicles', icon: <Truck size={IS} />, perm: 'masters.view' },
-      { href: '/app/entity/drivers', label: 'Drivers', icon: <IdCard size={IS} />, perm: 'masters.view' },
-      { href: '/app/entity/concrete-grades', label: 'Grades', icon: <Layers size={IS} />, perm: 'masters.view' },
+      { href: '/app/entity/customers', label: 'Customers', icon: <Building2 size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/sites', label: 'Sites / Projects', icon: <MapPin size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/materials', label: 'Materials', icon: <Package size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/suppliers', label: 'Suppliers', icon: <Store size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/vehicles', label: 'Vehicles', icon: <Truck size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/drivers', label: 'Drivers', icon: <IdCard size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/concrete-grades', label: 'Grades', icon: <Layers size={IS} />, perm: 'masters.view', module: 'masters' },
     ],
   },
   {
     title: 'Sales',
     items: [
-      { href: '/app/sales/leads', label: 'Leads', icon: <UserPlus size={IS} />, perm: 'leads.view' },
-      { href: '/app/sales/quotations', label: 'Quotations', icon: <FileText size={IS} />, perm: 'quotations.view' },
-      { href: '/app/sales/rate-contracts', label: 'Rate Contracts', icon: <FileSignature size={IS} />, perm: 'rate_contracts.view' },
-      { href: '/app/sales/order-drafts', label: 'Order Drafts', icon: <FilePlus size={IS} />, perm: 'orders.view' },
-      { href: '/app/sales/import-po', label: 'Import PO (AI)', icon: <Sparkles size={IS} />, perm: 'orders.create', ai: true },
+      { href: '/app/sales/leads', label: 'Leads', icon: <UserPlus size={IS} />, perm: 'leads.view', module: 'sales' },
+      { href: '/app/sales/quotations', label: 'Quotations', icon: <FileText size={IS} />, perm: 'quotations.view', module: 'sales' },
+      { href: '/app/sales/rate-contracts', label: 'Rate Contracts', icon: <FileSignature size={IS} />, perm: 'rate_contracts.view', module: 'sales' },
+      { href: '/app/sales/order-drafts', label: 'Order Drafts', icon: <FilePlus size={IS} />, perm: 'orders.view', module: 'sales' },
+      { href: '/app/sales/import-po', label: 'Import PO (AI)', icon: <Sparkles size={IS} />, perm: 'orders.create', ai: true, module: 'sales' },
     ],
   },
   {
     title: 'Orders',
     items: [
-      { href: '/app/orders', label: 'Orders', icon: <ClipboardList size={IS} />, perm: 'orders.view' },
-      { href: '/app/credit-holds', label: 'Credit Holds', icon: <Lock size={IS} />, perm: 'credit_hold.approve' },
+      { href: '/app/orders', label: 'Orders', icon: <ClipboardList size={IS} />, perm: 'orders.view', module: 'orders' },
+      { href: '/app/credit-holds', label: 'Credit Holds', icon: <Lock size={IS} />, perm: 'credit_hold.approve', module: 'orders' },
     ],
   },
   {
     title: 'Production',
     items: [
-      { href: '/app/production/mix-designs', label: 'Mix Designs', icon: <FlaskConical size={IS} /> },
-      { href: '/app/production/plans', label: 'Production Plans', icon: <CalendarRange size={IS} /> },
-      { href: '/app/production/batch-queue', label: 'Batch Queue', icon: <ListOrdered size={IS} /> },
-      { href: '/app/production/batch-tickets', label: 'Batch Tickets', icon: <Ticket size={IS} /> },
-      { href: '/app/production/stock', label: 'Stock', icon: <Boxes size={IS} /> },
-      { href: '/app/production/reports', label: 'Prod. Reports', icon: <BarChart3 size={IS} /> },
+      { href: '/app/production/mix-designs', label: 'Mix Designs', icon: <FlaskConical size={IS} />, module: 'production' },
+      { href: '/app/production/plans', label: 'Production Plans', icon: <CalendarRange size={IS} />, module: 'production' },
+      { href: '/app/production/batch-queue', label: 'Batch Queue', icon: <ListOrdered size={IS} />, module: 'production' },
+      { href: '/app/production/batch-tickets', label: 'Batch Tickets', icon: <Ticket size={IS} />, module: 'production' },
+      { href: '/app/production/stock', label: 'Stock', icon: <Boxes size={IS} />, module: 'inventory' },
+      { href: '/app/production/reports', label: 'Prod. Reports', icon: <BarChart3 size={IS} />, module: 'production' },
     ],
   },
   {
     title: 'Dispatch',
     items: [
-      { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} /> },
-      { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} /> },
+      { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, module: 'dispatch' },
+      { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, module: 'dispatch' },
     ],
   },
   {
     title: 'Inventory',
     items: [
-      { href: '/app/inventory/inward', label: 'Material Inward', icon: <PackagePlus size={IS} /> },
-      { href: '/app/inventory/weighbridge', label: 'Weighbridge', icon: <Scale size={IS} /> },
-      { href: '/app/inventory/adjustments', label: 'Stock Adjustments', icon: <SlidersHorizontal size={IS} /> },
-      { href: '/app/inventory/negative-stock', label: 'Negative Stock', icon: <TrendingDown size={IS} /> },
-      { href: '/app/inventory/reports', label: 'Inventory Reports', icon: <BarChart3 size={IS} /> },
+      { href: '/app/inventory/inward', label: 'Material Inward', icon: <PackagePlus size={IS} />, module: 'inventory' },
+      { href: '/app/inventory/weighbridge', label: 'Weighbridge', icon: <Scale size={IS} />, module: 'weighbridge' },
+      { href: '/app/inventory/adjustments', label: 'Stock Adjustments', icon: <SlidersHorizontal size={IS} />, module: 'inventory' },
+      { href: '/app/inventory/negative-stock', label: 'Negative Stock', icon: <TrendingDown size={IS} />, module: 'inventory' },
+      { href: '/app/inventory/reports', label: 'Inventory Reports', icon: <BarChart3 size={IS} />, module: 'inventory' },
     ],
   },
   {
     title: 'Billing',
     items: [
-      { href: '/app/billing/invoices', label: 'Invoices', icon: <ReceiptText size={IS} /> },
-      { href: '/app/billing/receipts', label: 'Receipts', icon: <Wallet size={IS} /> },
-      { href: '/app/billing/outstanding', label: 'Outstanding', icon: <Clock size={IS} /> },
-      { href: '/app/billing/reports', label: 'Billing Reports', icon: <BarChart3 size={IS} /> },
+      { href: '/app/billing/invoices', label: 'Invoices', icon: <ReceiptText size={IS} />, module: 'billing' },
+      { href: '/app/billing/receipts', label: 'Receipts', icon: <Wallet size={IS} />, module: 'billing' },
+      { href: '/app/billing/outstanding', label: 'Outstanding', icon: <Clock size={IS} />, module: 'billing' },
+      { href: '/app/billing/reports', label: 'Billing Reports', icon: <BarChart3 size={IS} />, module: 'billing' },
     ],
   },
   {
     title: 'Control',
     items: [
-      { href: '/app/reports', label: 'Reports Center', icon: <BarChart3 size={IS} /> },
-      { href: '/app/devices', label: 'Devices & Sync', icon: <MonitorSmartphone size={IS} />, perm: 'sync.manage' },
+      { href: '/app/reports', label: 'Reports Center', icon: <BarChart3 size={IS} />, module: 'reports' },
+      { href: '/app/devices', label: 'Devices & Sync', icon: <MonitorSmartphone size={IS} />, perm: 'sync.manage', module: 'offline_sync' },
     ],
   },
 ];
@@ -151,6 +157,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const [open, setOpen] = useState(false); // mobile drawer
   const [aiEnabled, setAiEnabled] = useState(false);
+  // Bumped when the stored access changes, so the menu re-renders against it.
+  const [accessVersion, setAccessVersion] = useState(0);
 
   useEffect(() => {
     const s = getSession();
@@ -158,6 +166,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     else if (s.userType === 'super_admin') router.replace('/admin/tenants');
     else setEmail(s.email);
   }, [router]);
+
+  // Re-read roles, permissions and subscription modules from the server. A plan
+  // upgrade or a role change otherwise stays invisible until the next sign-in,
+  // which for a plant that works one long shift can be the next day.
+  useEffect(() => {
+    if (!email) return;
+    api
+      .me()
+      .then((r) => {
+        updateAccess({ permissions: r.permissions, roles: r.roles, modules: r.modules });
+        setAccessVersion((v) => v + 1);
+      })
+      .catch(() => {
+        // Offline or a blocked account — keep the menu we already had rather
+        // than emptying it. A request the server refuses still says so.
+      });
+  }, [email]);
 
   // Ask once whether AI is switched on. Failure means "off" — the AI links stay
   // hidden rather than leading to a screen that cannot work.
@@ -177,10 +202,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   // Show only what this user can actually reach. The company owner and super
   // admin bypass permission checks, matching the server.
+  void accessVersion; // recomputed whenever the stored access is refreshed
   const access = getAccess();
   const groups = GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((it) => (!it.perm || access.has(it.perm)) && (!it.ai || aiEnabled)),
+    items: g.items.filter(
+      (it) =>
+        (!it.perm || access.has(it.perm)) &&
+        // The owner bypasses permissions but not the subscription: a module
+        // outside the plan is refused for them too.
+        (!it.module || access.hasModule(it.module)) &&
+        (!it.ai || aiEnabled),
+    ),
   })).filter((g) => g.items.length > 0);
 
   return (

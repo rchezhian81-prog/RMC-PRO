@@ -22,6 +22,10 @@ export const ERROR_CODES = {
   INTEGRATION_FAILED: 'INTEGRATION_FAILED',
   WHATSAPP_SEND_FAILED: 'WHATSAPP_SEND_FAILED',
   PLAN_LIMIT_EXCEEDED: 'PLAN_LIMIT_EXCEEDED',
+  /** Throttled: too many attempts in the window (e.g. repeated sign-ins). */
+  RATE_LIMITED: 'RATE_LIMITED',
+  /** Unexpected server-side failure; details are logged, never returned. */
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

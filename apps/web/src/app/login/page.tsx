@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '../../lib/api';
+import { api, BLOCKED_REASON_KEY } from '../../lib/api';
 import { saveSession } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
 
@@ -13,6 +13,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // If we were signed out because the company was blocked, say so — otherwise
+  // arriving back at a blank sign-in form looks like the session simply expired,
+  // and the operator retypes a password that was never the problem.
+  useEffect(() => {
+    const reason = window.sessionStorage.getItem(BLOCKED_REASON_KEY);
+    if (!reason) return;
+    window.sessionStorage.removeItem(BLOCKED_REASON_KEY);
+    setError(reason);
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,6 +37,7 @@ export default function LoginPage() {
         email: r.user.email,
         permissions: r.permissions,
         roles: r.roles,
+        modules: r.modules,
       });
       router.push(r.user.userType === 'super_admin' ? '/admin/tenants' : '/app');
     } catch (err) {

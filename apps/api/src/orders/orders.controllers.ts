@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/co
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { OrdersService } from './orders.service';
@@ -10,6 +11,7 @@ import { CreditHoldService } from './credit-hold.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('orders')
+@RequireModule('orders')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class OrdersController {
   constructor(private readonly service: OrdersService) {}
@@ -46,6 +48,7 @@ export class OrdersController {
 }
 
 @Controller('credit-holds')
+@RequireModule('orders')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class CreditHoldsController {
   constructor(private readonly service: CreditHoldService) {}

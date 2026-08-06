@@ -17,6 +17,7 @@ import {
   RolePermission,
   SubscriptionPlan,
   Tenant,
+  TenantModule,
   User,
 } from './entities';
 
@@ -32,12 +33,18 @@ import {
  *     module grants) — and, optionally, ONE platform Super Admin.
  *   - Running it repeatedly is safe: every step inserts only what is missing.
  *
- * One tenant-level exception: when a NEW permission key is added to the
- * catalog, it is also granted to each tenant's system roles (Company Owner /
- * Company Admin). Otherwise the API would start enforcing a key that had been
- * granted to nobody, silently removing access for every non-owner user. Only
- * keys created in the same run are granted, so a deliberately revoked
- * permission is never restored.
+ * Three tenant-level steps exist, all following the same rule — fill in what was
+ * never decided, never overwrite what was:
+ *   - When a NEW permission key is added to the catalog it is granted to each
+ *     tenant's system roles (Company Owner / Company Admin), or the API would
+ *     enforce a key granted to nobody and silently remove access for every
+ *     non-owner user. Only keys created in the same run are granted, so a
+ *     deliberately revoked permission is never restored.
+ *   - Operational roles (Plant Manager, Batching Operator, …) are created for
+ *     tenants that lack them, and only at creation.
+ *   - Tenants with no `tenant_modules` rows are provisioned, so subscription
+ *     enforcement has something to enforce. A tenant that already has rows is
+ *     left exactly as the super admin configured it.
  *
  * The Super Admin is created only when `SUPERADMIN_EMAIL` is provided and no user
  * with that email exists yet. Its password comes from `SUPERADMIN_PASSWORD`
@@ -53,7 +60,12 @@ const DEFAULT_PLANS = [
     yearlyPrice: 29990,
     maxPlants: 1,
     maxUsers: 5,
-    modules: ['masters', 'sales', 'orders', 'dispatch', 'inventory', 'billing', 'reports'],
+    // 'production' is not an upsell: an RMC plant that cannot batch concrete has
+    // no reason to buy the software. Weighbridge and offline sync are the paid
+    // steps up from here.
+    modules: [
+      'masters', 'sales', 'orders', 'production', 'dispatch', 'inventory', 'billing', 'reports',
+    ],
   },
   {
     planCode: 'PRO',
@@ -179,6 +191,50 @@ async function seedOperationalRoles(m: EntityManager): Promise<string> {
     : `none needed (${tenants.length} tenant(s) already have them)`;
 }
 
+/**
+ * Make sure every tenant actually has module rows.
+ *
+ * The API now refuses a request whose module is not enabled for the tenant. A
+ * tenant created before that existed — or created without a plan — has no rows
+ * in `tenant_modules` at all, which is not the same as "nothing is allowed"; it
+ * means nobody ever decided. The guard treats that state as unenforced so a live
+ * plant is never taken off the air by a provisioning gap, and this step closes
+ * the gap so enforcement is real rather than skipped.
+ *
+ * A tenant that already has rows is left completely alone: whatever the super
+ * admin ticked on the Modules screen stands.
+ */
+async function provisionTenantModules(m: EntityManager): Promise<string> {
+  const tenants = await m.find(Tenant);
+  if (!tenants.length) return 'no tenants yet';
+
+  const phase1 = MODULE_CATALOG.filter((mod) => mod.phase === 1).map((mod) => mod.key);
+  let provisioned = 0;
+  let rowsAdded = 0;
+
+  for (const tenant of tenants) {
+    if (await m.findOne(TenantModule, { where: { tenantId: tenant.id } })) continue;
+
+    // Follow the tenant's plan when it has one; otherwise fall back to the
+    // shipped Phase-1 set, which is what the product does today.
+    let keys = phase1;
+    if (tenant.currentPlanId) {
+      const planMods = await m.find(PlanModule, {
+        where: { planId: tenant.currentPlanId, isEnabled: true },
+      });
+      if (planMods.length) keys = planMods.map((pm) => pm.moduleKey);
+    }
+    await m.save(
+      keys.map((moduleKey) => m.create(TenantModule, { tenantId: tenant.id, moduleKey, isEnabled: true })),
+    );
+    provisioned += 1;
+    rowsAdded += keys.length;
+  }
+  return provisioned
+    ? `+${provisioned} tenant(s) provisioned, +${rowsAdded} module row(s)`
+    : `none needed (all ${tenants.length} tenant(s) already provisioned)`;
+}
+
 async function main() {
   await AppDataSource.initialize();
   const m = AppDataSource.manager;
@@ -246,6 +302,10 @@ async function main() {
     }
   }
   summary.push(`plans: +${plansCreated} new plan(s), +${planModulesAdded} module grant(s)`);
+
+  // 3b. Every tenant needs module rows now that the API enforces them. Runs
+  //     after the plans step so a tenant on a plan is provisioned from it.
+  summary.push(`tenant modules: ${await provisionTenantModules(m)}`);
 
   // 4. One platform Super Admin — only if configured and not already present.
   const email = process.env.SUPERADMIN_EMAIL?.trim();

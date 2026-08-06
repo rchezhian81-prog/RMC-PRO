@@ -1,25 +1,21 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-  SetMetadata,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { TenantDbService } from '../core/database/tenant-db.service';
-import { TenantModule } from '../core/database/entities';
 import type { AuthUser } from '../auth/auth-user';
+import { MODULE_KEY, moduleBlockedMessage } from './module.decorator';
+import { TenantAccessService } from './tenant-access.service';
 
-export const MODULE_KEY = 'required_module';
+export { MODULE_KEY, RequireModule, moduleBlockedMessage } from './module.decorator';
 
-/** Require a subscription module to be enabled for the tenant (Design Doc 9 §8.3). */
-export const RequireModule = (moduleKey: string) => SetMetadata(MODULE_KEY, moduleKey);
-
+/**
+ * Standalone module check for controllers that do not go through `TenantGuard`.
+ * The rule itself lives in `TenantAccessService`, so both entry points agree —
+ * including on the unprovisioned-tenant safety net documented there.
+ */
 @Injectable()
 export class ModuleGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly db: TenantDbService,
+    private readonly access: TenantAccessService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -34,15 +30,9 @@ export class ModuleGuard implements CanActivate {
     if (user.userType === 'super_admin') return true;
     if (!user.tenantId) throw new ForbiddenException({ code: 'MODULE_NOT_ENABLED' });
 
-    // tenant_modules is platform-managed (no RLS) — scope by the JWT tenant_id.
-    const row = await this.db.ds.getRepository(TenantModule).findOne({
-      where: { tenantId: user.tenantId, moduleKey: required, isEnabled: true },
-    });
-    if (!row) {
-      throw new ForbiddenException({
-        code: 'MODULE_NOT_ENABLED',
-        message: `Module '${required}' is not enabled for this tenant`,
-      });
+    await this.access.assertUsable(user.tenantId);
+    if (!(await this.access.isModuleEnabled(user.tenantId, required))) {
+      throw new ForbiddenException({ code: 'MODULE_NOT_ENABLED', message: moduleBlockedMessage(required) });
     }
     return true;
   }

@@ -90,6 +90,36 @@ function request(path: string, opts: RequestInit, token: string | undefined): Pr
  */
 const inFlightCreates = new Map<string, Promise<unknown>>();
 
+/**
+ * 403 codes whose server message is shown as-is. These are subscription
+ * decisions ("your plan does not include this", "your account is suspended"),
+ * not role decisions, so the generic permission wording would misdirect.
+ */
+const PASS_THROUGH_403 = new Set(['MODULE_NOT_ENABLED', 'TENANT_SUSPENDED', 'SUBSCRIPTION_EXPIRED']);
+
+/**
+ * Where the reason for a forced sign-out is left for the login screen to pick
+ * up. Deliberately not a query parameter: a link anyone can craft would put
+ * arbitrary text on the sign-in page.
+ */
+export const BLOCKED_REASON_KEY = 'rmc_blocked_reason';
+
+/**
+ * A suspended company cannot do anything, so leaving the operator inside an app
+ * where every click fails would be worse than signing them out. End the session
+ * and carry the reason to the login screen.
+ */
+function endSessionAsBlocked(message: string): void {
+  clearSession();
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(BLOCKED_REASON_KEY, message);
+  } catch {
+    // Private-browsing modes can refuse storage; the redirect still matters.
+  }
+  if (window.location.pathname !== '/login') window.location.href = '/login';
+}
+
 async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase();
   if (method !== 'POST') return performFetch<T>(path, opts);
@@ -144,7 +174,19 @@ async function performFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
     const err = json?.error ?? {};
     // A 403 from the permissions guard reads as "Missing required permission";
     // say what that means for the person looking at the screen.
-    if (res.status === 403) {
+    //
+    // The subscription refusals are the exception: they already carry a message
+    // written for a plant operator, and replacing it would send someone to their
+    // administrator over something only Mix Nova can change.
+    // The company itself has been blocked — nothing in the app will work, so
+    // sign out rather than let every screen fail one at a time. Not applied to
+    // the login call: there is no session to end and the form shows the reason.
+    if (res.status === 403 && err.code === 'TENANT_SUSPENDED' && getSession()?.token) {
+      const message = String(err.message ?? 'Your company account is not active.');
+      endSessionAsBlocked(message);
+      throw new ApiError(message, 403, err.code);
+    }
+    if (res.status === 403 && !PASS_THROUGH_403.has(String(err.code ?? ''))) {
       throw new ApiError(
         'You do not have permission to do that. Ask your administrator to update your role.',
         403,
@@ -167,6 +209,15 @@ export interface LoginResult {
   tenant: { code: string } | null;
   permissions: string[];
   roles: string[];
+  /** Module keys the company's subscription includes. */
+  modules: string[];
+}
+export interface MeResult {
+  user: { email: string; userType: string };
+  tenant: { code: string; name: string; status: string } | null;
+  permissions: string[];
+  roles: string[];
+  modules: string[];
 }
 export interface TenantRow {
   id: string;
@@ -217,10 +268,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
+  /** Who am I, and what does this company's subscription currently include. */
+  me: () => apiFetch<MeResult>('/auth/me'),
   tenants: () => apiFetch<TenantRow[]>('/platform/tenants'),
   createTenant: (b: { tenantCode: string; tenantName: string; planId?: string }) =>
     apiFetch<{ id: string }>('/platform/tenants', { method: 'POST', body: JSON.stringify(b) }),
   tenant: (id: string) => apiFetch<TenantRow & { planCode: string | null }>(`/platform/tenants/${id}`),
+  /**
+   * Change a tenant's subscription status. Suspending one stops every user of
+   * that company signing in, and stops the sessions they already hold.
+   */
+  updateTenant: (id: string, b: { status?: string; tenantName?: string; legalName?: string }) =>
+    apiFetch<TenantRow>(`/platform/tenants/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   assignPlan: (id: string, planId: string) =>
     apiFetch<TenantModuleRow[]>(`/platform/tenants/${id}/assign-plan`, {
       method: 'POST',

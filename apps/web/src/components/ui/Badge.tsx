@@ -30,15 +30,23 @@ export function statusTone(status: string): Tone {
       'partially_paid', 'on_hold', 'hold', 'low_stock', 'pending_approval',
       // Blocking or money-at-risk states — must not read as routine.
       'credit_hold', 'unpaid', 'not_invoiced', 'not_checked', 'expired',
+      // Subscription is overdue but the plant is still allowed to work.
+      'grace',
     ].includes(s)
   )
     return 'warning';
-  if (['cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed', 'inactive'].includes(s))
+  if (
+    [
+      'cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed', 'inactive',
+      // Subscription blocked: nobody at this company can sign in.
+      'suspended',
+    ].includes(s)
+  )
     return 'danger';
   if (
     [
       'submitted', 'pending', 'batching', 'in_progress', 'in_transit', 'dispatched', 'invoiced',
-      'issued', 'waiting', 'queued', 'planned', 'open', 'scheduled', 'partially_delivered',
+      'issued', 'waiting', 'queued', 'planned', 'open', 'scheduled', 'partially_delivered', 'trial',
     ].includes(s)
   )
     return 'info';

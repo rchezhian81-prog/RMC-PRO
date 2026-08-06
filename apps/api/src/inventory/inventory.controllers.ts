@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { MaterialInwardService } from './material-inward.service';
@@ -14,6 +15,7 @@ import { PdfService } from '../sales/pdf.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('material-inwards')
+@RequireModule('inventory')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class MaterialInwardController {
   constructor(private readonly service: MaterialInwardService) {}
@@ -32,6 +34,7 @@ export class MaterialInwardController {
 }
 
 @Controller('weighbridge')
+@RequireModule('weighbridge')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class WeighbridgeController {
   constructor(
@@ -63,6 +66,7 @@ export class WeighbridgeController {
 }
 
 @Controller('stock-adjustments')
+@RequireModule('inventory')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class StockAdjustmentController {
   constructor(private readonly service: StockAdjustmentService) {}
@@ -72,6 +76,7 @@ export class StockAdjustmentController {
 }
 
 @Controller('negative-stock-requests')
+@RequireModule('inventory')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class NegativeStockController {
   constructor(private readonly service: NegativeStockService) {}
@@ -86,6 +91,7 @@ export class NegativeStockController {
 }
 
 @Controller('inventory-reports')
+@RequireModule('inventory')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class InventoryReportsController {
   constructor(private readonly service: InventoryReportsService) {}

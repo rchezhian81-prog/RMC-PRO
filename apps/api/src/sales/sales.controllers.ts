@@ -13,6 +13,7 @@ import type { Response } from 'express';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { LeadsService } from './leads.service';
@@ -25,6 +26,7 @@ import { WhatsAppService } from './whatsapp.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('leads')
+@RequireModule('sales')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class LeadsController {
   constructor(private readonly service: LeadsService) {}
@@ -56,6 +58,7 @@ export class LeadsController {
 }
 
 @Controller('quotations')
+@RequireModule('sales')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class QuotationsController {
   constructor(
@@ -138,6 +141,7 @@ export class QuotationsController {
 }
 
 @Controller('rate-contracts')
+@RequireModule('sales')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class RateContractsController {
   constructor(private readonly service: RateContractsService) {}
@@ -186,6 +190,7 @@ export class RateContractsController {
 }
 
 @Controller('order-drafts')
+@RequireModule('sales')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class OrdersDraftController {
   constructor(private readonly service: OrdersDraftService) {}
@@ -208,6 +213,8 @@ export class OrdersDraftController {
   }
 }
 
+// Deliberately not module-gated: the send history spans every module, and the
+// 'whatsapp.send' permission is already the real control on who can use it.
 @Controller('notifications')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class NotificationsController {

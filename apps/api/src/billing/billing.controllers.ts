@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { InvoiceService } from './invoice.service';
@@ -13,6 +14,7 @@ import { PdfService } from '../sales/pdf.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('invoices')
+@RequireModule('billing')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class InvoiceController {
   constructor(
@@ -48,6 +50,7 @@ export class InvoiceController {
 }
 
 @Controller('receipts')
+@RequireModule('billing')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ReceiptController {
   constructor(private readonly service: ReceiptService) {}
@@ -63,6 +66,7 @@ export class ReceiptController {
 }
 
 @Controller('billing-reports')
+@RequireModule('billing')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class BillingReportsController {
   constructor(private readonly service: BillingReportsService) {}

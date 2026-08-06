@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { DispatchService } from './dispatch.service';
@@ -12,6 +13,7 @@ import { PdfService } from '../sales/pdf.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('dispatches')
+@RequireModule('dispatch')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class DispatchController {
   constructor(private readonly service: DispatchService) {}
@@ -33,6 +35,7 @@ export class DispatchController {
 }
 
 @Controller('delivery-challans')
+@RequireModule('dispatch')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class DeliveryChallanController {
   constructor(

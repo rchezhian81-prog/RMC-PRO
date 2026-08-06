@@ -162,7 +162,7 @@ marks the rest as skipped, so it is safe to run with no credentials at hand.
 | Edge & TLS | app/api/admin hosts reachable, certificate expiry, http→https redirect |
 | Web app | login page, app shell, admin portal, unknown route returns 404 |
 | API | `/health`, and that protected routes reject missing/invalid tokens |
-| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, AI state, RBAC permission catalogue |
+| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, **stock balances**, **roles & separation of duties**, **subscription & modules**, **error envelope**, AI state, RBAC permission catalogue |
 | Containers | all services running/healthy, API errors in the last hour, disk usage |
 
 ### Stock balances
@@ -189,6 +189,27 @@ empty, and when a separation of duty has broken — a sales executive able to
 approve quotations or rate contracts, mix-design approval outside QC,
 credit-hold release outside the plant manager, or users / roles / settings /
 `platform.*` reaching an operational role.
+
+### Subscription & modules
+
+Matters because the API now refuses any request whose module the tenant is not
+entitled to, and blocks every user of a suspended company outright. This reads
+`/auth/me` — the same entitlements the guard itself uses — and fails when the
+tenant is suspended or cancelled, or when a core module (masters, sales, orders,
+production, dispatch, inventory, billing, reports) is switched off.
+
+It **warns** when every module in the catalogue comes back enabled. That is the
+signature of a tenant with no `tenant_modules` rows at all: the guard passes
+those through deliberately, so a provisioning gap never takes a live plant off
+the air — but it also means nothing is being enforced. Fix it by assigning the
+tenant a plan, or by re-running the production seed, which provisions any tenant
+that has no rows and leaves configured ones untouched.
+
+### Error envelope
+
+Every refusal must carry `error.code`. Without it the web app cannot tell a role
+problem from a subscription problem, and tells a plant operator to "ask your
+administrator" about something only Mix Nova can change.
 
 ## Exit codes
 

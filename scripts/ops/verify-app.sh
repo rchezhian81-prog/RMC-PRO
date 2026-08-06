@@ -316,6 +316,53 @@ PY
       *)    bad  "roles & separation of duties" "could not evaluate roles" ;;
     esac
 
+    # Subscription: the API now refuses a module the tenant is not entitled to.
+    # The dangerous state is a tenant with NO module rows at all — the guard
+    # lets that through on purpose (a provisioning gap must not take a plant off
+    # the air) but it means nothing is actually being enforced, so say so
+    # loudly. The module list comes from /auth/me, which reports what the guard
+    # itself would use.
+    subs=$(curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/auth/me" 2>/dev/null)
+    subs_out=$(printf '%s' "$subs" | python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin).get("data") or {}
+except Exception:
+    print("BAD|unreadable /auth/me response"); raise SystemExit
+tenant = d.get("tenant") or {}
+status = tenant.get("status") or "?"
+mods = d.get("modules")
+if mods is None:
+    print("BAD|/auth/me did not report modules — the API predates module gating"); raise SystemExit
+CORE = ["masters","sales","orders","production","dispatch","inventory","billing","reports"]
+missing = [m for m in CORE if m not in mods]
+if status not in ("active","trial","grace"):
+    print(f"BAD|tenant status is {status} — every user of this company is blocked"); raise SystemExit
+gap = ", ".join(missing)
+if len(mods) >= 19:
+    print(f"WARN|status {status}, every module reported enabled — check the tenant has real module rows")
+elif missing:
+    print(f"BAD|status {status}, core module(s) not enabled: {gap}")
+else:
+    print(f"OK|status {status}, {len(mods)} module(s) enabled")
+' 2>/dev/null)
+    case "${subs_out%%|*}" in
+      OK)   ok   "subscription & modules" "${subs_out#*|}" ;;
+      WARN) warn "subscription & modules" "${subs_out#*|}" ;;
+      BAD)  bad  "subscription & modules" "${subs_out#*|}" ;;
+      *)    bad  "subscription & modules" "could not read /auth/me" ;;
+    esac
+
+    # A refusal must be machine-readable, or the web app cannot tell a role
+    # problem from a subscription problem and shows the wrong advice.
+    envl=$(curl -sS --max-time 20 "${API}/api/v1/dashboard/summary" \
+             -H 'authorization: Bearer not-a-real-token' 2>/dev/null)
+    case "$(json_field "$envl" 'error.code')" in
+      AUTH_REQUIRED|INVALID_TOKEN) ok "error envelope" "refusals carry a code" ;;
+      '')   bad  "error envelope" "errors have no error.code — the web shows generic wording" ;;
+      *)    warn "error envelope" "unexpected code $(json_field "$envl" 'error.code')" ;;
+    esac
+
     # AI is optional — report its state rather than failing on it.
     ai=$(curl -sS --max-time 20 "${auth[@]}" "${API}/api/v1/ai/status" 2>/dev/null)
     case "$(json_field "$ai" 'data.enabled')" in

@@ -4,18 +4,29 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { TENANT_USABLE_STATUSES } from '@rmc/shared';
 import { api, type PlanRow, type TenantModuleRow, type TenantUserRow } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
-import { Badge } from '../../../../components/ui/Badge';
+import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState } from '../../../../components/ui/States';
+
+/** Every status the platform can set, worded as an outcome rather than a flag. */
+const STATUS_OPTIONS = [
+  { value: 'trial', label: 'Trial — full access, not paying yet' },
+  { value: 'active', label: 'Active — paying, full access' },
+  { value: 'grace', label: 'Grace — payment overdue, still working' },
+  { value: 'suspended', label: 'Suspended — blocked, can be restored' },
+  { value: 'cancelled', label: 'Cancelled — blocked, subscription ended' },
+];
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [name, setName] = useState('');
+  const [status, setStatus] = useState('');
   const [planCode, setPlanCode] = useState<string | null>(null);
   const [modules, setModules] = useState<TenantModuleRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([]);
@@ -26,6 +37,7 @@ export default function TenantDetailPage() {
   const [uPassword, setUPassword] = useState('');
   const [creating, setCreating] = useState(false);
   const [userMsg, setUserMsg] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
@@ -36,6 +48,7 @@ export default function TenantDetailPage() {
       api.tenantUsers(id),
     ]);
     setName(t.name);
+    setStatus(t.status);
     setPlanCode(t.planCode ?? null);
     setModules(mods);
     setPlans(pl);
@@ -44,6 +57,34 @@ export default function TenantDetailPage() {
   useEffect(() => {
     reload().catch((e) => setError(String(e)));
   }, [id]);
+
+  /**
+   * Change what the company is allowed to do. Suspending is the one action here
+   * that stops a plant mid-shift, so it is confirmed rather than applied on the
+   * first click.
+   */
+  async function changeStatus(next: string) {
+    if (next === status) return;
+    if (!TENANT_USABLE_STATUSES.includes(next as never)) {
+      const ok = confirm(
+        `Set ${name} to "${next}"?\n\nEveryone at this company is signed out immediately and cannot sign in again until you restore it.`,
+      );
+      if (!ok) return;
+    }
+    setError(null);
+    setStatusMsg(null);
+    try {
+      await api.updateTenant(id, { status: next });
+      setStatus(next);
+      setStatusMsg(
+        TENANT_USABLE_STATUSES.includes(next as never)
+          ? `${name} can use Mix Nova again.`
+          : `${name} is now ${next}. Their sessions stop working within a minute.`,
+      );
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   async function assign() {
     if (!planId) return;
@@ -97,10 +138,33 @@ export default function TenantDetailPage() {
         </Button>
       </div>
       <div>
-        <h1 style={{ fontSize: 24, margin: '0 0 4px' }}>{name}</h1>
+        <h1 style={{ fontSize: 24, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {name}
+          {status && <StatusBadge status={status} />}
+        </h1>
         <p style={{ color: 'var(--mn-muted)', fontSize: 14, margin: 0 }}>Current plan: {planCode ?? '— none —'}</p>
       </div>
       {error && <ErrorState message={error} />}
+
+      <Card title="Subscription status">
+        <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 220 }}>
+            <Field label="Status">
+              <select className="mn-input" value={status} onChange={(e) => changeStatus(e.target.value)}>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </div>
+        <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 0 }}>
+          Trial, Active and Grace can all use the system — a late payment does not strand a plant
+          mid-pour. Suspended and Cancelled block every user of this company, including their
+          company owner.
+        </p>
+        {statusMsg && <p style={{ color: 'var(--mn-success)', fontSize: 13, margin: '10px 0 0' }}>{statusMsg}</p>}
+      </Card>
 
       <Card title="Assign / change plan">
         <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>

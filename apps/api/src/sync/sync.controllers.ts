@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/co
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { SyncService } from './sync.service';
@@ -11,6 +12,7 @@ import { ReportsService } from './reports.service';
 const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('sync')
+@RequireModule('offline_sync')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class SyncController {
   constructor(private readonly service: SyncService) {}
@@ -42,6 +44,9 @@ export class SyncController {
   }
 }
 
+// Deliberately not module-gated. This is the screen every user lands on after
+// signing in; it summarises whatever modules the tenant does have, so refusing
+// it would mean a blank front door rather than a smaller dashboard.
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard, TenantGuard)
 export class DashboardController {
@@ -52,6 +57,7 @@ export class DashboardController {
 }
 
 @Controller('reports')
+@RequireModule('reports')
 @UseGuards(JwtAuthGuard, TenantGuard)
 export class ReportsCatalogController {
   constructor(private readonly service: ReportsService) {}

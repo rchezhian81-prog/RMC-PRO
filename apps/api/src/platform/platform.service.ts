@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
+import { MODULE_CATALOG, MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { TenantAccessService } from '../rbac/tenant-access.service';
 import {
   ModuleEntity,
   Permission,
@@ -22,9 +23,21 @@ import type {
   UpdateTenantDto,
 } from './dto/platform.dto';
 
+/**
+ * What a tenant gets when it is created without a plan. Enforcement reads
+ * `tenant_modules`, so a tenant with no rows would either be locked out of
+ * everything or (as the guard actually decides) unenforced — neither is a state
+ * to leave a paying plant in. Phase 1 is the shipped product, so that is the
+ * honest default until the platform assigns a real plan.
+ */
+const DEFAULT_TENANT_MODULES = MODULE_CATALOG.filter((m) => m.phase === 1).map((m) => m.key);
+
 @Injectable()
 export class PlatformService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly access: TenantAccessService,
+  ) {}
   private get ds() {
     return this.db.ds;
   }
@@ -63,7 +76,23 @@ export class PlatformService {
       }),
     );
     if (dto.planId) await this.assignPlan(tenant.id, dto.planId);
+    else await this.provisionDefaultModules(tenant.id);
     return this.getTenant(tenant.id);
+  }
+
+  /**
+   * Give a tenant the Phase-1 module set. Used when a tenant is created without
+   * a plan, so it never starts life with an empty `tenant_modules` table. Only
+   * ever writes when there is nothing there — it must not undo a super admin's
+   * deliberate choices.
+   */
+  private async provisionDefaultModules(tenantId: string): Promise<void> {
+    const repo = this.ds.getRepository(TenantModule);
+    if (await repo.findOne({ where: { tenantId } })) return;
+    await repo.save(
+      DEFAULT_TENANT_MODULES.map((moduleKey) => repo.create({ tenantId, moduleKey, isEnabled: true })),
+    );
+    this.access.invalidate(tenantId);
   }
 
   // ---- Tenant users (bootstrap the first login for a plant) ----
@@ -178,6 +207,9 @@ export class PlatformService {
       ...(dto.legalName !== undefined ? { legalName: dto.legalName } : {}),
       ...(dto.status !== undefined ? { status: dto.status as Tenant['status'] } : {}),
     });
+    // Guards read a short-lived cache; drop it so a suspension takes hold now
+    // rather than when the entry happens to expire.
+    this.access.invalidate(id);
     return this.getTenant(id);
   }
 
@@ -202,6 +234,7 @@ export class PlatformService {
         ),
       );
     }
+    this.access.invalidate(tenantId);
     return this.getTenantModules(tenantId);
   }
 
@@ -227,6 +260,7 @@ export class PlatformService {
     const existing = await repo.findOne({ where: { tenantId, moduleKey } });
     if (existing) await repo.update(existing.id, { isEnabled });
     else await repo.save(repo.create({ tenantId, moduleKey, isEnabled }));
+    this.access.invalidate(tenantId);
     return this.getTenantModules(tenantId);
   }
 

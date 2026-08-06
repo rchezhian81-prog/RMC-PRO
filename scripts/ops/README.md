@@ -202,3 +202,43 @@ Suitable for a cron job or CI step.
 
 The password is read from the environment only — never printed, never logged,
 never written to disk. The access token is never displayed either.
+
+---
+
+# Ops — verify one user's role (read-only)
+
+`verify-role.sh` signs in as a staff member and probes each guarded endpoint,
+checking the API's answer against the permissions that user actually holds — a
+200 where they have the permission, a 403 where they do not.
+
+This is stronger evidence than clicking through the menu: the sidebar only shows
+what the UI chose to draw, whereas this proves what the **server** would allow
+if someone typed the URL directly.
+
+```bash
+cd /opt/rmc
+read -rs RMC_PASSWORD; export RMC_PASSWORD          # run this line ALONE
+LOGIN='operator@plant.com' bash scripts/ops/verify-role.sh
+
+# optionally assert which role they should hold
+LOGIN='operator@plant.com' EXPECT_ROLE=batching_operator bash scripts/ops/verify-role.sh
+unset RMC_PASSWORD
+```
+
+**Read-only:** every probe is a GET, plus the one login POST. Nothing is created
+or changed, so it is safe to run against production at any time.
+
+## What it reports
+
+- The role and permission count the login actually returns.
+- `EXPECT_ROLE` mismatch, if you asserted one.
+- A no-role warning — that user cannot use the app at all.
+- Per endpoint: allowed where the permission is held, **403 where it is not**.
+  A 200 on something the user lacks permission for is a failure, and so is a 403
+  on something they do hold.
+- The endpoints open to every signed-in user (dashboard, alerts, templates).
+
+The company owner bypasses permission checks by design, so every probe allows
+for that login; the script says so rather than pretending it proved anything.
+
+Exit `0` when access matches the user's permissions exactly, `1` otherwise.

@@ -144,7 +144,19 @@ else
           -d "{\"login\":$(printf '%s' "$LOGIN" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),\"password\":$(printf '%s' "$PASSWORD" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))')}" 2>/dev/null)
   TOKEN=$(json_field "$body" 'data.access_token')
   if [ -z "$TOKEN" ]; then
-    bad "login" "no token returned — check the login/password"
+    # Say WHY. "Check the login/password" is only one of the reasons a login can
+    # fail, and it sends someone hunting for a typo when the server may have
+    # said the account is inactive or the company is suspended. The server's own
+    # code and message are shown; neither contains anything secret.
+    why=$(json_field "$body" 'error.code')
+    what=$(json_field "$body" 'error.message' | head -c 90)
+    case "$why" in
+      TENANT_SUSPENDED) bad "login" "credentials are fine — the COMPANY is blocked: $what" ;;
+      AUTH_REQUIRED)    bad "login" "rejected — wrong login/password, or the user is deactivated" ;;
+      RATE_LIMITED)     bad "login" "throttled (5 attempts/minute) — wait a minute and re-run" ;;
+      '')               bad "login" "no token and no error code — is this API build current?" ;;
+      *)                bad "login" "$why: $what" ;;
+    esac
   else
     tenant=$(json_field "$body" 'data.tenant.name')
     nperm=$(json_field "$body" 'data.permissions' | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null || echo '?')

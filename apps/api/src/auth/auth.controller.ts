@@ -22,6 +22,18 @@ export class AuthController {
     return this.auth.refresh(token);
   }
 
+  /** Change your own password (any signed-in user, no permission needed). */
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: { currentPassword?: string; newPassword?: string },
+  ) {
+    return this.auth.changePassword(user.userId, dto?.currentPassword ?? '', dto?.newPassword ?? '');
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: AuthUser) {

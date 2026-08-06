@@ -8,7 +8,7 @@ import {
   Store, Truck, IdCard, Layers, UserPlus, FileText, FileSignature, FilePlus, ClipboardList,
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
-  Sparkles,
+  Sparkles, UserCog,
 } from 'lucide-react';
 import { aiApi } from '../../lib/api';
 import { clearSession, getAccess, getSession } from '../../lib/session';
@@ -39,6 +39,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={IS} /> },
       { href: '/app/assistant', label: 'Assistant', icon: <Sparkles size={IS} />, ai: true },
+      // Ungated on purpose: everyone must be able to change their own password.
+      { href: '/app/account', label: 'My Account', icon: <UserCog size={IS} /> },
     ],
   },
   {

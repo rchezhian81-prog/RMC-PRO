@@ -1,6 +1,7 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { passwordProblemMessage } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Tenant, User } from '../core/database/entities';
 import { loadUserAccess } from '../rbac/access';
@@ -53,6 +54,34 @@ export class AuthService {
     const user = await this.db.ds.getRepository(User).findOne({ where: { id: sub } });
     if (!user || user.status !== 'active') throw new UnauthorizedException(INVALID);
     return this.issueTokens(user);
+  }
+
+  /**
+   * Change your own password. Requires the current one, so a walked-away
+   * session cannot be used to lock the real owner out of their account.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const repo = this.db.ds.getRepository(User);
+    const user = await repo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException(INVALID);
+    if (!bcrypt.compareSync(currentPassword ?? '', user.passwordHash)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Your current password is not correct.',
+      });
+    }
+    const problem = passwordProblemMessage(newPassword ?? '');
+    if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
+    if (bcrypt.compareSync(newPassword, user.passwordHash)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'The new password must be different from the current one.',
+      });
+    }
+    await repo.update(user.id, { passwordHash: bcrypt.hashSync(newPassword, 10) });
+    // Tokens already issued stay valid until they expire; the access token is
+    // short-lived and the refresh token is held only by this same person.
+    return { changed: true };
   }
 
   async me(userId: string) {

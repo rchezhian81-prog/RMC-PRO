@@ -76,7 +76,9 @@ export class UsersController {
     @Param('id') id: string,
     @Body() dto: Record<string, unknown>,
   ) {
-    return this.svc.update(u.tenantId as string, id, dto);
+    // The caller is passed through so the service can refuse an admin acting
+    // on the owner, or on themselves in a way that locks them out.
+    return this.svc.update(u.tenantId as string, id, dto, u.userId);
   }
 }
 

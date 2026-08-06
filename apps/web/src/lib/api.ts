@@ -211,6 +211,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ login, password }),
     }),
+  /** Change your own password — any signed-in user, no permission required. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiFetch<{ changed: boolean }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   tenants: () => apiFetch<TenantRow[]>('/platform/tenants'),
   createTenant: (b: { tenantCode: string; tenantName: string; planId?: string }) =>
     apiFetch<{ id: string }>('/platform/tenants', { method: 'POST', body: JSON.stringify(b) }),

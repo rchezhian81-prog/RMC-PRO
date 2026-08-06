@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DeepPartial } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
+import { ROLE_KEYS, passwordProblemMessage } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
@@ -122,6 +123,8 @@ export class UsersService {
         message: 'name, email, password required',
       });
     }
+    const problem = passwordProblemMessage(password);
+    if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
     const repo = this.db.ds.getRepository(User);
     if (await repo.findOne({ where: { email } })) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Email already exists' });
@@ -146,14 +149,72 @@ export class UsersService {
     return { id: user.id, name: user.name, email: user.email, status: user.status };
   }
 
-  async update(tenantId: string, id: string, dto: Record<string, unknown>) {
+  /** Does this user hold the company-owner role? */
+  private async isOwner(tenantId: string, userId: string): Promise<boolean> {
+    const rows: Array<{ n: string }> = await this.db.runInTenant(tenantId, (m) =>
+      m.query(
+        `SELECT count(*) AS n
+           FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = $1 AND r.role_key = $2`,
+        [userId, ROLE_KEYS.COMPANY_OWNER],
+      ),
+    );
+    return Number(rows[0]?.n ?? 0) > 0;
+  }
+
+  /**
+   * Update a user. `actingUserId` is the person making the change, which is
+   * what the safety rules below are judged against.
+   */
+  async update(tenantId: string, id: string, dto: Record<string, unknown>, actingUserId?: string) {
     const repo = this.db.ds.getRepository(User);
     const user = await repo.findOne({ where: { id, tenantId } });
     if (!user) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'User not found' });
+
+    const isSelf = actingUserId === id;
+    const touchesPrivileged =
+      dto.password !== undefined || dto.status !== undefined || dto.roleId !== undefined;
+
+    // A Company Admin also holds users.manage. Without this, they could reset
+    // the owner's password, deactivate them, or strip their role — taking over
+    // the tenant. Only the owner may act on the owner.
+    if (touchesPrivileged && !isSelf && (await this.isOwner(tenantId, id))) {
+      const actorIsOwner = actingUserId ? await this.isOwner(tenantId, actingUserId) : false;
+      if (!actorIsOwner) {
+        throw new BadRequestException({
+          code: 'PERMISSION_DENIED',
+          message: 'Only the company owner can change the owner’s password, role, or status.',
+        });
+      }
+    }
+
+    // Deactivating yourself locks you out of the screen you are standing on.
+    if (isSelf && dto.status !== undefined && String(dto.status) !== 'active') {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'You cannot deactivate your own account. Ask another administrator.',
+      });
+    }
+    // Likewise, removing your own role would leave you with no access at all.
+    if (isSelf && dto.roleId !== undefined && !String(dto.roleId ?? '').trim()) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'You cannot remove your own role — you would lose access immediately.',
+      });
+    }
+
+    let passwordHash: string | undefined;
+    if (dto.password !== undefined) {
+      const problem = passwordProblemMessage(String(dto.password ?? ''));
+      if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
+      passwordHash = bcrypt.hashSync(String(dto.password), 10);
+    }
+
     await repo.update(id, {
       ...(dto.name !== undefined ? { name: String(dto.name) } : {}),
       ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
       ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
+      ...(passwordHash ? { passwordHash } : {}),
     });
 
     // Role change: a user holds one role here, so replace rather than append.

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, KeyRound, UserCheck, UserX } from 'lucide-react';
+import { PASSWORD_MIN_LENGTH, passwordProblems } from '@rmc/shared';
 import { rolesApi, usersApi, type Row } from '../../../lib/api';
+import { getSession } from '../../../lib/session';
 import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Badge, StatusBadge } from '../../../components/ui/Badge';
@@ -20,6 +22,7 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function reload() {
     const [u, r] = await Promise.all([usersApi.list(), rolesApi.list()]);
@@ -60,7 +63,52 @@ export default function UsersPage() {
     }
   }
 
+  /** Turn a login on or off without deleting the person's history. */
+  async function toggleActive(u: Row) {
+    const active = String(u.status ?? '') === 'active';
+    const label = String(u.name ?? u.email ?? 'this user');
+    if (active && !confirm(`Deactivate ${label}? They will not be able to sign in until reactivated.`)) return;
+    setError(null);
+    setSavingId(String(u.id));
+    try {
+      await usersApi.update(String(u.id), { status: active ? 'inactive' : 'active' });
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change the status.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  /**
+   * Set a new password for someone who has forgotten theirs. Judged by the same
+   * rule the server uses, so the prompt cannot accept what the API will reject.
+   */
+  async function resetPassword(u: Row) {
+    const label = String(u.name ?? u.email ?? 'this user');
+    const pw = prompt(
+      `New password for ${label}\n\nAt least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number.\nTell them the password yourself — it is not shown again.`,
+    );
+    if (pw === null) return;
+    const problems = passwordProblems(pw);
+    if (problems.length) {
+      setError(`That password must ${problems.join(', ')}. Nothing was changed.`);
+      return;
+    }
+    setError(null);
+    setSavingId(String(u.id));
+    try {
+      await usersApi.update(String(u.id), { password: pw });
+      setNotice(`Password updated for ${label}. Give it to them directly — it is not stored anywhere you can read.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not set the password.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   const noRole = rows.filter((r) => !r.roleId && r.userType !== 'super_admin').length;
+  const myId = getSession()?.email;
 
   return (
     <div>
@@ -70,6 +118,25 @@ export default function UsersPage() {
       </p>
 
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
+
+      {notice && (
+        <div
+          style={{
+            marginBottom: 14, padding: '10px 12px', borderRadius: 'var(--mn-radius-md)',
+            background: 'var(--mn-success-tint)', color: 'var(--mn-success)', fontSize: 13,
+            display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between',
+          }}
+        >
+          <span>{notice}</span>
+          <button
+            onClick={() => setNotice(null)}
+            aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 700 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {noRole > 0 && (
         <div style={{ marginBottom: 14 }}>
@@ -130,6 +197,7 @@ export default function UsersPage() {
                 <Th>Email</Th>
                 <Th>Role</Th>
                 <Th>Status</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
@@ -170,6 +238,40 @@ export default function UsersPage() {
                       )}
                     </Td>
                     <Td><StatusBadge status={String(r.status ?? '')} /></Td>
+                    <Td>
+                      {!isSuper && (
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<KeyRound size={14} />}
+                            disabled={savingId === String(r.id)}
+                            onClick={() => resetPassword(r)}
+                            title="Set a new password for this person"
+                          >
+                            Password
+                          </Button>
+                          {String(r.email ?? '') !== myId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={
+                                String(r.status ?? '') === 'active' ? <UserX size={14} /> : <UserCheck size={14} />
+                              }
+                              disabled={savingId === String(r.id)}
+                              onClick={() => toggleActive(r)}
+                              title={
+                                String(r.status ?? '') === 'active'
+                                  ? 'Stop this person signing in'
+                                  : 'Let this person sign in again'
+                              }
+                            >
+                              {String(r.status ?? '') === 'active' ? 'Deactivate' : 'Activate'}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </Td>
                   </tr>
                 );
               })}

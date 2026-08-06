@@ -147,13 +147,20 @@ container or migration.
 
 ```bash
 cd /opt/rmc
-read -rs RMC_PASSWORD; export RMC_PASSWORD    # run this line ALONE
 LOGIN='owner@example.com' bash scripts/ops/verify-app.sh
-unset RMC_PASSWORD
 ```
 
-Without `LOGIN`/`RMC_PASSWORD` it still runs every unauthenticated check and
-marks the rest as skipped, so it is safe to run with no credentials at hand.
+Use a **real** address — `bash scripts/setup/recover-login.sh` lists them. A
+placeholder left in the command line is caught before any request is made,
+because once it reaches the API it is indistinguishable from a wrong password:
+both answer `AUTH_REQUIRED`, on purpose, so the sign-in form cannot be used to
+discover which emails exist.
+
+The password is asked for and not echoed. Set `RMC_PASSWORD` in the environment
+instead for cron or CI.
+
+Without `LOGIN` it still runs every unauthenticated check and marks the rest as
+skipped, so it is safe to run with no credentials at hand.
 
 ## What it covers
 

@@ -11,9 +11,10 @@
 # and no migration or container action is taken.
 #
 # Usage:
-#   read -rs RMC_PASSWORD; export RMC_PASSWORD     # run this line ALONE
 #   LOGIN='owner@example.com' bash scripts/ops/verify-app.sh
-#   unset RMC_PASSWORD
+#
+# Use a real address — `bash scripts/setup/recover-login.sh` lists them. The
+# password is asked for and not echoed; set RMC_PASSWORD instead for cron/CI.
 #
 # Without a login it still runs every unauthenticated check and clearly marks
 # the authenticated ones as skipped.
@@ -133,7 +134,32 @@ expect "bad token rejected"         "${API}/api/v1/dashboard/summary" 401 \
 
 # ------------------------------------------------------------------- login  --
 section "4. Authenticated checks"
-if [ -z "$LOGIN" ] || [ -z "$PASSWORD" ]; then
+
+# Ask for the password rather than making you export it first. A `read -rs` line
+# pasted together with the lines below it silently swallows the next line as the
+# password, and then this reports a login failure that never happened.
+# RMC_PASSWORD from the environment still works for cron and CI.
+if [ -n "$LOGIN" ] && [ -z "$PASSWORD" ] && [ -t 0 ]; then
+  printf 'Password for %s (not shown as you type): ' "$LOGIN" >&2
+  IFS= read -rs PASSWORD; echo >&2
+fi
+
+# A placeholder left in the command line is indistinguishable from a wrong
+# password once it reaches the API — both answer AUTH_REQUIRED, by design. Catch
+# it here, where we can still say which mistake it was.
+LOGIN_PROBLEM=''
+case "${LOGIN:-}" in
+  ''|*@*.*) ;;
+  *) LOGIN_PROBLEM="LOGIN='$LOGIN' is not an email address — use a real one" ;;
+esac
+
+if [ -n "$LOGIN_PROBLEM" ]; then
+  bad "login" "$LOGIN_PROBLEM"
+  printf '  %s\n' "  list the accounts that exist: bash scripts/setup/recover-login.sh" >&2
+  for s in "dashboard summary" "alerts" "message templates" "outstanding report" "permission catalogue"; do
+    skip "$s" "needs login"
+  done
+elif [ -z "$LOGIN" ] || [ -z "$PASSWORD" ]; then
   skip "login" "set LOGIN and RMC_PASSWORD to include these"
   for s in "dashboard summary" "alerts" "message templates" "outstanding report" "permission catalogue"; do
     skip "$s" "needs login"

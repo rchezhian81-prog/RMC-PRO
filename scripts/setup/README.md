@@ -199,3 +199,52 @@ unset RMC_PASSWORD NEW_PASSWORD
 
 Then confirm what the server actually permits — see `scripts/ops/README.md`
 → *verify one user's role*.
+
+---
+
+# Recover a login that cannot sign in
+
+Every other repair needs you signed in already: Setup → Users resets passwords,
+and `create-staff-user.mjs` calls the API as the owner. Neither helps when the
+**owner** is the one locked out. `recover-login.sh` goes to the database
+directly, so it works when nobody can get in.
+
+```bash
+cd /opt/rmc
+bash scripts/setup/recover-login.sh                      # read-only: show every account
+bash scripts/setup/recover-login.sh --activate a@b.com   # undo a deactivation
+
+read -rs NEW_PASSWORD; export NEW_PASSWORD               # run this line ALONE
+bash scripts/setup/recover-login.sh --set-password a@b.com
+unset NEW_PASSWORD
+```
+
+## Reading the status table
+
+Signing in needs **both** the user status `active` **and** the company status
+`active`, `trial` or `grace`.
+
+| What you see | What it means |
+|---|---|
+| `user_status` not `active` | Deactivated — `--activate <email>` |
+| `roles` shows `— none —` | They can sign in but see nothing; give them a role in Setup → Users |
+| `roles` shows `— n/a —` | Normal for a platform admin, who holds no tenant role |
+| `company_status` suspended/cancelled | The whole company is blocked; change it in the admin portal under the tenant's Subscription status |
+| Everything looks right | It is the password — `--set-password <email>` |
+
+All three of the first cases are indistinguishable from the login screen: the
+API answers `AUTH_REQUIRED` for a wrong password, an unknown email **and** a
+deactivated user alike, on purpose, so nobody can use the sign-in form to
+discover which emails exist.
+
+## About the password
+
+Read from the environment only. It is never printed, never logged, never written
+to disk, and never passed as a command argument — it is piped to the hasher on
+stdin, so it does not appear in `ps`. Only a bcrypt hash reaches the database,
+which is what the API stores anyway. Hashing happens inside the API container
+using the same shared policy the app enforces, so this cannot set a password the
+app would later reject.
+
+Existing sessions keep working until their tokens expire; the new password
+applies to the next sign-in.

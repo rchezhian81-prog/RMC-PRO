@@ -109,3 +109,47 @@ API_URL=https://api.mixnovas.com LOGIN='<tenant owner>' \
 Flags: `--confirm` (required to write), `--tenant-code` / `--tenant-id`
 (target selection), `--skip-backup` (not recommended), `--backup-dir DIR`
 (default `./backups`).
+
+---
+
+# Real master data — fill-in-the-blanks config
+
+`plant-config.example.json` + `apply-plant-config.mjs` replace the seeder's
+placeholder values with the plant's own details, without anyone having to paste
+business data into a chat or a ticket. You fill the file in on the server; it is
+git-ignored, so real GSTINs, contacts and credit limits are never committed.
+
+```bash
+cd /opt/rmc
+cp scripts/setup/plant-config.example.json scripts/setup/plant-config.json
+nano scripts/setup/plant-config.json      # fill in what you know
+
+read -rs RMC_PASSWORD; export RMC_PASSWORD          # run this line ALONE
+LOGIN='<tenant owner>' node scripts/setup/apply-plant-config.mjs --dry-run
+LOGIN='<tenant owner>' node scripts/setup/apply-plant-config.mjs
+unset RMC_PASSWORD
+```
+
+## How it behaves
+
+- **Blank means "leave it alone".** A field left as `""` or `null` is never
+  sent, so the script cannot wipe a value. Fill the file in over several
+  sittings and re-run as often as you like.
+- **`--dry-run` first.** It prints exactly which records and fields would
+  change, and sends nothing.
+- **Idempotent.** A field already matching is reported as "nothing to change".
+- **Goes through the API**, so the same validation and permission rules apply as
+  when a user edits the record on screen.
+- **Covers**: company, plant, customer CUST-001, site SITE-001, driver DRV-001,
+  vehicle (including changing the registration number), and material rates and
+  reorder levels.
+
+## Deliberately not covered
+
+- **The M25 mix design.** Approved recipes are version-controlled for QC. Raise
+  and approve a new version in the app: *Production → Mix Designs → M25-STD →
+  New version*. Silently rewriting an approved recipe would break the approval
+  trail.
+- **Creating new records.** This edits the starter set. Add further customers,
+  sites, vehicles or drivers in the app, or with the CSV import on each Masters
+  screen (Import → download the template first).

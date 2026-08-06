@@ -38,3 +38,7 @@ local-data/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Filled-in plant master data — contains the customer's real business details
+# (GSTIN, contacts, credit limits). Only the .example.json template is tracked.
+scripts/setup/plant-config.json

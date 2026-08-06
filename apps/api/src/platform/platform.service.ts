@@ -2,13 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import * as bcrypt from 'bcryptjs';
 import { MODULE_CATALOG, MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { provisionTenantRoles } from '../core/database/provision-tenant-roles';
 import { TenantAccessService } from '../rbac/tenant-access.service';
 import {
   ModuleEntity,
-  Permission,
   PlanModule,
   Role,
-  RolePermission,
   SubscriptionPlan,
   Tenant,
   TenantModule,
@@ -77,6 +76,11 @@ export class PlatformService {
     );
     if (dto.planId) await this.assignPlan(tenant.id, dto.planId);
     else await this.provisionDefaultModules(tenant.id);
+    // Roles at creation, not at the next deploy. Waiting for the seed meant a
+    // plant onboarded between deploys had only Owner and Admin, so its first
+    // staff logins had to be made Company Admins — handing a batching operator
+    // the billing, users and settings screens.
+    await this.db.runInTenant(tenant.id, (m) => provisionTenantRoles(m, tenant.id));
     return this.getTenant(tenant.id);
   }
 
@@ -131,35 +135,20 @@ export class PlatformService {
     const passwordHash = bcrypt.hashSync(dto.password, 10);
 
     return this.db.runInTenant(tenantId, async (m) => {
-      // createTenant does not seed roles, so ensure the tenant's system roles exist.
-      let ownerRole = await m.findOne(Role, {
+      // Covers tenants created before roles were provisioned at creation. It
+      // only fills gaps, so for a tenant created today this finds nothing to do.
+      // Crucially it grants the tenant permission set, not the whole catalogue:
+      // the previous code here handed Owner and Admin every `platform.*` key
+      // too, which is a customer holding the platform's own controls.
+      await provisionTenantRoles(m, tenantId);
+      const ownerRole = await m.findOne(Role, {
         where: { tenantId, roleKey: ROLE_KEYS.COMPANY_OWNER },
       });
       if (!ownerRole) {
-        const allPerms = await m.find(Permission);
-        ownerRole = await m.save(
-          m.create(Role, {
-            tenantId,
-            roleKey: ROLE_KEYS.COMPANY_OWNER,
-            roleName: 'Company Owner',
-            isSystemRole: true,
-          }),
-        );
-        const adminRole = await m.save(
-          m.create(Role, {
-            tenantId,
-            roleKey: ROLE_KEYS.COMPANY_ADMIN,
-            roleName: 'Company Admin',
-            isSystemRole: true,
-          }),
-        );
-        for (const role of [ownerRole, adminRole]) {
-          await m.save(
-            allPerms.map((p) =>
-              m.create(RolePermission, { tenantId, roleId: role.id, permissionId: p.id }),
-            ),
-          );
-        }
+        throw new BadRequestException({
+          code: 'RECORD_NOT_FOUND',
+          message: 'This tenant has no Company Owner role. Re-run the production seed.',
+        });
       }
 
       const user = await m.save(

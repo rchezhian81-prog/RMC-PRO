@@ -102,10 +102,22 @@ export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
 
 const P = PERMISSIONS;
 
-/** Every permission a tenant user can hold (i.e. excluding the platform ones). */
-const TENANT_PERMISSIONS: Permission[] = Object.values(P).filter(
+/**
+ * Every permission a tenant user can hold — the whole catalogue minus the
+ * `platform.*` keys, which govern the SaaS platform itself (creating tenants,
+ * editing plans, granting support access) and belong to Mix Nova, never to a
+ * customer. This is what "full access inside your own company" means, and it is
+ * the most a Company Owner or Company Admin may be granted.
+ */
+export const TENANT_PERMISSIONS: Permission[] = Object.values(P).filter(
   (k) => !k.startsWith('platform.'),
 ) as Permission[];
+
+/** Roles every tenant has from the start, over and above the operational ones. */
+export const SYSTEM_ROLE_KEYS: string[] = [ROLE_KEYS.COMPANY_OWNER, ROLE_KEYS.COMPANY_ADMIN];
+
+/** True for a key that governs the platform rather than one company's data. */
+export const isPlatformPermission = (key: string): boolean => key.startsWith('platform.');
 
 /** Read-only access across the business — the base an auditor gets. */
 const VIEW_ONLY: Permission[] = [
@@ -211,5 +223,3 @@ export const ROLE_LABELS: Record<string, string> = {
   [ROLE_KEYS.FLEET_MANAGER]: 'Fleet Manager',
   [ROLE_KEYS.AUDITOR]: 'Auditor',
 };
-
-export { TENANT_PERMISSIONS };

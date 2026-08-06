@@ -334,9 +334,13 @@ for admin_key in ("users.manage", "roles.manage", "settings.manage"):
     if leaked:
         problems.append(admin_key + " leaked to " + ",".join(leaked))
 
-plat = [k for k in OPERATIONAL if any(p.startswith("platform.") for p in perms[k])]
+# Checked across EVERY role, not just the operational ones. The keys that
+# govern the SaaS platform — creating tenants, editing plans, granting support
+# access — belong to Mix Nova, and the role that used to be handed all of them
+# was the tenant's own Company Admin, which the operational-only check missed.
+plat = [k for k in EXPECTED if any(p.startswith("platform.") for p in perms[k])]
 if plat:
-    problems.append("platform.* leaked to " + ",".join(plat))
+    problems.append("platform.* held by " + ",".join(plat))
 
 if problems:
     print("BAD|" + "; ".join(problems))

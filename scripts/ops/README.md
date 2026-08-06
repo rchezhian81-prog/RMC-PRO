@@ -194,8 +194,14 @@ and asserts the contents, not the names.
 It fails when any of the twelve roles is missing, when an operational role is
 empty, and when a separation of duty has broken — a sales executive able to
 approve quotations or rate contracts, mix-design approval outside QC,
-credit-hold release outside the plant manager, or users / roles / settings /
-`platform.*` reaching an operational role.
+credit-hold release outside the plant manager, or users / roles / settings
+reaching an operational role.
+
+`platform.*` is checked against **every** role, not just the operational ones.
+Those keys govern the SaaS platform — creating tenants, editing plans, granting
+support access — so they belong to Mix Nova and to no customer. The role that
+used to be handed all of them was the tenant's own Company Admin, which a
+check scoped to operational roles walked straight past.
 
 ### Subscription & modules
 

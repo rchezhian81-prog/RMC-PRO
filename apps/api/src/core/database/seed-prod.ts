@@ -1,14 +1,9 @@
 import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
 import { In, type EntityManager } from 'typeorm';
-import {
-  MODULE_CATALOG,
-  PERMISSIONS,
-  ROLE_KEYS,
-  ROLE_LABELS,
-  ROLE_PERMISSION_DEFAULTS,
-} from '@rmc/shared';
+import { MODULE_CATALOG, PERMISSIONS, SYSTEM_ROLE_KEYS } from '@rmc/shared';
 import { AppDataSource } from './data-source';
+import { provisionTenantRoles, revokePlatformPermissions } from './provision-tenant-roles';
 import {
   ModuleEntity,
   Permission,
@@ -40,8 +35,13 @@ import {
  *     enforce a key granted to nobody and silently remove access for every
  *     non-owner user. Only keys created in the same run are granted, so a
  *     deliberately revoked permission is never restored.
- *   - Operational roles (Plant Manager, Batching Operator, …) are created for
- *     tenants that lack them, and only at creation.
+ *   - Tenant roles (Company Owner/Admin plus Plant Manager, Batching Operator,
+ *     …) are created for tenants that lack them, and only at creation. The
+ *     tenant-creation API provisions the same set through the same code, so
+ *     this only catches tenants that predate it.
+ *   - `platform.*` grants are removed from tenant roles. Those keys govern the
+ *     SaaS platform, not one company's data, and older code handed a tenant's
+ *     Owner and Admin the entire catalogue.
  *   - Tenants with no `tenant_modules` rows are provisioned, so subscription
  *     enforcement has something to enforce. A tenant that already has rows is
  *     left exactly as the super admin configured it.
@@ -93,9 +93,6 @@ function assertStrongPassword(pw: string): void {
   }
 }
 
-/** Tenant-level system roles that should carry the full tenant permission set. */
-const SYSTEM_ROLE_KEYS: string[] = [ROLE_KEYS.COMPANY_OWNER, ROLE_KEYS.COMPANY_ADMIN];
-
 /**
  * Grant `perms` to every tenant's system roles, skipping grants that already
  * exist.
@@ -139,52 +136,28 @@ async function grantToSystemRoles(m: EntityManager, perms: Permission[]): Promis
 }
 
 /**
- * Ensure every tenant has the operational roles staff are actually assigned to
- * (Plant Manager, Sales Executive, Batching Operator, …), each with a starting
- * permission set sized to the job.
+ * Ensure every tenant has its full set of roles — Company Owner, Company Admin,
+ * and the ten operational roles staff are actually assigned to.
  *
- * Without these a tenant has only Company Owner and Company Admin, so onboarding
- * a batching operator means either hand-building a role and ticking permissions
- * one by one, or making them a Company Admin — which hands a plant operator the
- * billing, users and settings screens.
+ * Without these a tenant has only Owner and Admin, so onboarding a batching
+ * operator means either hand-building a role and ticking permissions one by one,
+ * or making them a Company Admin — which hands a plant operator the billing,
+ * users and settings screens.
  *
- * A role is seeded only if it does not already exist, and its permissions are
- * written only at that moment. Re-running never touches a role an owner has
- * since edited.
+ * The rules live in `provisionTenantRoles`, which the tenant-creation API calls
+ * too, so a tenant is set up the same way whichever path created it. Re-running
+ * never touches a role an owner has since edited.
  */
-async function seedOperationalRoles(m: EntityManager): Promise<string> {
+async function seedTenantRoles(m: EntityManager): Promise<string> {
   const tenants = await m.find(Tenant);
   if (!tenants.length) return 'no tenants yet';
 
-  const permIdByKey = new Map((await m.find(Permission)).map((p) => [p.permissionKey, p.id]));
   let rolesAdded = 0;
   let grantsAdded = 0;
-
   for (const tenant of tenants) {
-    const existing = new Set(
-      (await m.find(Role, { where: { tenantId: tenant.id } })).map((r) => r.roleKey),
-    );
-    for (const [roleKey, perms] of Object.entries(ROLE_PERMISSION_DEFAULTS)) {
-      if (existing.has(roleKey)) continue;
-      const role = await m.save(
-        m.create(Role, {
-          tenantId: tenant.id,
-          roleKey,
-          roleName: ROLE_LABELS[roleKey] ?? roleKey,
-          // System roles: protected from rename/delete, permissions still editable.
-          isSystemRole: true,
-        }),
-      );
-      rolesAdded += 1;
-      const rows = perms
-        .map((k) => permIdByKey.get(k))
-        .filter((id): id is string => Boolean(id))
-        .map((permissionId) => m.create(RolePermission, { tenantId: tenant.id, roleId: role.id, permissionId }));
-      if (rows.length) {
-        await m.save(rows);
-        grantsAdded += rows.length;
-      }
-    }
+    const r = await provisionTenantRoles(m, tenant.id);
+    rolesAdded += r.rolesAdded;
+    grantsAdded += r.grantsAdded;
   }
   return rolesAdded
     ? `+${rolesAdded} role(s), +${grantsAdded} grant(s) across ${tenants.length} tenant(s)`
@@ -272,8 +245,20 @@ async function main() {
     summary.push(`system-role backfill: +${repaired} grant(s) [BACKFILL_SYSTEM_ROLE_PERMISSIONS=true]`);
   }
 
-  // 2d. Operational roles, so staff can be given a login scoped to their job.
-  summary.push(`operational roles: ${await seedOperationalRoles(m)}`);
+  // 2d. Tenant roles, so staff can be given a login scoped to their job.
+  summary.push(`tenant roles: ${await seedTenantRoles(m)}`);
+
+  // 2e. Repair: take platform.* off any tenant role that was handed the whole
+  //     catalogue before provisioning had this rule. Nothing enforces those keys
+  //     today, so this is not a live hole — it is closing one before something
+  //     starts checking them. Always runs; there is no legitimate reason for a
+  //     customer's role to hold them, so nothing deliberate can be undone.
+  const revoked = await revokePlatformPermissions(m);
+  summary.push(
+    revoked
+      ? `platform.* on tenant roles: revoked ${revoked} grant(s)`
+      : 'platform.* on tenant roles: none found',
+  );
 
   // 3. Default subscription plans (+ their module grants) — create if missing, then
   //    ensure each plan grants all its modules.

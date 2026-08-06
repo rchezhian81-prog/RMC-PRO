@@ -1,11 +1,14 @@
 import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
-import { MODULE_CATALOG, PERMISSIONS } from '@rmc/shared';
+import { In, type EntityManager } from 'typeorm';
+import { MODULE_CATALOG, PERMISSIONS, ROLE_KEYS } from '@rmc/shared';
 import { AppDataSource } from './data-source';
 import {
   ModuleEntity,
   Permission,
   PlanModule,
+  Role,
+  RolePermission,
   SubscriptionPlan,
   User,
 } from './entities';
@@ -21,6 +24,13 @@ import {
  *     catalog, the permission catalog, the default subscription plans (+ their
  *     module grants) — and, optionally, ONE platform Super Admin.
  *   - Running it repeatedly is safe: every step inserts only what is missing.
+ *
+ * One tenant-level exception: when a NEW permission key is added to the
+ * catalog, it is also granted to each tenant's system roles (Company Owner /
+ * Company Admin). Otherwise the API would start enforcing a key that had been
+ * granted to nobody, silently removing access for every non-owner user. Only
+ * keys created in the same run are granted, so a deliberately revoked
+ * permission is never restored.
  *
  * The Super Admin is created only when `SUPERADMIN_EMAIL` is provided and no user
  * with that email exists yet. Its password comes from `SUPERADMIN_PASSWORD`
@@ -64,6 +74,51 @@ function assertStrongPassword(pw: string): void {
   }
 }
 
+/** Tenant-level system roles that should carry the full tenant permission set. */
+const SYSTEM_ROLE_KEYS: string[] = [ROLE_KEYS.COMPANY_OWNER, ROLE_KEYS.COMPANY_ADMIN];
+
+/**
+ * Grant `perms` to every tenant's system roles, skipping grants that already
+ * exist.
+ *
+ * Why this exists: a tenant is created with whatever permissions happened to
+ * exist at that moment, and nothing back-filled it afterwards. Every new
+ * permission key therefore silently shrank what an existing tenant's Company
+ * Admin could do — a key the API had started enforcing was simply never
+ * granted to anyone but the owner (who bypasses checks entirely).
+ *
+ * The routine call passes only keys created in *this* run, so it cannot
+ * resurrect a permission an administrator deliberately revoked. The opt-in
+ * repair path (BACKFILL_SYSTEM_ROLE_PERMISSIONS) passes the whole catalogue and
+ * therefore CAN — which is exactly why it is off by default.
+ *
+ * `platform.*` keys are excluded either way: they are super-admin-only and
+ * meaningless on a tenant role.
+ */
+async function grantToSystemRoles(m: EntityManager, perms: Permission[]): Promise<number> {
+  const grantable = perms.filter((p) => !p.permissionKey.startsWith('platform.'));
+  if (!grantable.length) return 0;
+
+  const roles = await m.find(Role, { where: { roleKey: In(SYSTEM_ROLE_KEYS) } });
+  if (!roles.length) return 0;
+
+  const permIds = grantable.map((p) => p.id);
+  const rows: RolePermission[] = [];
+  for (const role of roles) {
+    const already = new Set(
+      (await m.find(RolePermission, { where: { roleId: role.id, permissionId: In(permIds) } })).map(
+        (rp) => rp.permissionId,
+      ),
+    );
+    for (const id of permIds) {
+      if (already.has(id)) continue;
+      rows.push(m.create(RolePermission, { tenantId: role.tenantId, roleId: role.id, permissionId: id }));
+    }
+  }
+  if (rows.length) await m.save(rows);
+  return rows.length;
+}
+
 async function main() {
   await AppDataSource.initialize();
   const m = AppDataSource.manager;
@@ -84,6 +139,22 @@ async function main() {
     .map((key) => m.create(Permission, { permissionKey: key, moduleKey: key.split('.')[0] ?? 'core' }));
   if (newPerms.length) await m.save(newPerms);
   summary.push(`permissions: +${newPerms.length} new (${existingPermKeys.size} already present)`);
+
+  // 2b. Give those new keys to every tenant's system roles. Without this an
+  //     added key is enforced by the API but granted to nobody, so it silently
+  //     removes access for anyone who isn't the company owner.
+  const grantedNew = await grantToSystemRoles(m, newPerms);
+  summary.push(`system-role grants: +${grantedNew} for newly added permission key(s)`);
+
+  // 2c. Opt-in repair for keys added BEFORE this logic existed (they are no
+  //     longer "new", so 2b will not pick them up). Off by default because it
+  //     re-grants anything an administrator has deliberately unticked on a
+  //     system role. Run once with BACKFILL_SYSTEM_ROLE_PERMISSIONS=true.
+  if (process.env.BACKFILL_SYSTEM_ROLE_PERMISSIONS === 'true') {
+    const allPerms = await m.find(Permission);
+    const repaired = await grantToSystemRoles(m, allPerms);
+    summary.push(`system-role backfill: +${repaired} grant(s) [BACKFILL_SYSTEM_ROLE_PERMISSIONS=true]`);
+  }
 
   // 3. Default subscription plans (+ their module grants) — create if missing, then
   //    ensure each plan grants all its modules.

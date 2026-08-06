@@ -250,3 +250,50 @@ app would later reject.
 
 Existing sessions keep working until their tokens expire; the new password
 applies to the next sign-in.
+
+---
+
+# Offboard a departing company (permanent, backup-first)
+
+When a customer leaves for good, `offboard-tenant.sh` removes them and every row
+they own — but only after the data is safely in hand. It is built so the
+destructive step cannot happen carelessly:
+
+```bash
+cd /opt/rmc
+# 1. In the admin portal: set the company's status to Cancelled.
+#    (blocks every login, and is reversible)
+# 2. Preview — writes a full JSON export to disk, deletes nothing:
+bash scripts/setup/offboard-tenant.sh --tenant-code OLDCO
+# 3. Permanently remove — re-exports, backs up the whole DB, then purges:
+bash scripts/setup/offboard-tenant.sh --tenant-code OLDCO --confirm
+```
+
+## The safeguards
+
+- **Cancelled first.** It refuses unless the tenant's status is `cancelled`, so
+  a company that is still trading can never be purged by a mistyped code.
+  Cancelling is the reversible step; purging is not.
+- **Export before delete.** A complete JSON export of just that tenant's data —
+  every table that has a `tenant_id`, found from the live catalogue so it never
+  drifts — is written to `./offboarding/` first. If that file cannot be written,
+  nothing is deleted. Password hashes are stripped from the export.
+- **Full backup.** Before the purge it takes and verifies a `pg_dump` of the
+  whole database to `./backups/`, exactly like the reset script.
+- **Names its target.** It never guesses — you must pass `--tenant-code` or
+  `--tenant-id`, and it refuses if that does not resolve to exactly one tenant.
+- **`--confirm` to delete.** Without it, you get the preview and the export and
+  nothing more.
+
+The purge runs in one transaction with FK triggers suspended, so it removes the
+tenant cleanly regardless of table order. Verified against a live database: a
+purged tenant leaves zero rows across all 50+ tenant-scoped tables, a second
+tenant on the same database is untouched, and the platform catalogues (plans,
+modules, permissions) are untouched.
+
+## Super admins can also export from the portal
+
+The tenant screen in the admin portal has **Offboarding → Download all data
+(JSON)** — the same export, without SSH, for handing to the customer. Every
+export is recorded in that tenant's audit trail. The portal deliberately has no
+"delete" button: the irreversible purge is this script alone.

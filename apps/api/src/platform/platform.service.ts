@@ -197,6 +197,68 @@ export class PlatformService {
     };
   }
 
+  /**
+   * The whole of one tenant's data, for handing to a departing customer or
+   * keeping as the record before the company is removed. Every table that
+   * carries a `tenant_id` is included — discovered from the catalogue, so it
+   * cannot drift out of date as tables are added — scoped to this tenant only.
+   *
+   * Password hashes are stripped: even a bcrypt hash is a credential, and the
+   * export has no need of it.
+   *
+   * The runtime connects as the RLS-bound app role, so this reads inside the
+   * tenant's own transaction (`runInTenant`) — that both satisfies row-level
+   * security and is a second guarantee, on top of the explicit `tenant_id`
+   * filter, that nothing from another tenant can be pulled in.
+   */
+  async exportTenant(id: string, actorUserId?: string) {
+    const tenant = await this.ds.getRepository(Tenant).findOne({ where: { id } });
+    if (!tenant) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Tenant not found' });
+
+    const { tables, rowCount } = await this.db.runInTenant(id, async (m) => {
+      const cols: { table_name: string }[] = await m.query(
+        `SELECT table_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND column_name = 'tenant_id'
+          ORDER BY table_name`,
+      );
+      const out: Record<string, unknown[]> = {};
+      let count = 0;
+      for (const { table_name } of cols) {
+        // The name comes from the catalogue, but validate before interpolating
+        // it as an identifier so this can never become an injection point.
+        if (!/^[a-z_][a-z0-9_]*$/.test(table_name)) continue;
+        const rows: Record<string, unknown>[] = await m.query(
+          `SELECT to_jsonb(t) - 'password_hash' AS row FROM "${table_name}" t WHERE t.tenant_id = $1`,
+          [id],
+        );
+        out[table_name] = rows.map((r) => r.row);
+        count += rows.length;
+      }
+      return { tables: out, rowCount: count };
+    });
+
+    const doc = {
+      exportedAt: new Date().toISOString(),
+      tenant: { id: tenant.id, code: tenant.tenantCode, name: tenant.tenantName, status: tenant.status },
+      tableCount: Object.keys(tables).length,
+      rowCount,
+      tables,
+    };
+
+    // Recorded after the snapshot is built, so the export does not contain the
+    // record of itself. Accessing all of a company's data is worth a trail entry.
+    await this.audit.record({
+      tenantId: id,
+      actorUserId: actorUserId ?? null,
+      action: AUDIT_ACTIONS.TENANT_DATA_EXPORT,
+      entityType: 'tenant',
+      entityId: id,
+      entityLabel: tenant.tenantName,
+      summary: `Exported all data for ${tenant.tenantName} (${rowCount} rows across ${doc.tableCount} tables)`,
+    });
+    return doc;
+  }
+
   async updateTenant(id: string, dto: UpdateTenantDto, actorUserId?: string) {
     const repo = this.ds.getRepository(Tenant);
     const t = await repo.findOne({ where: { id } });

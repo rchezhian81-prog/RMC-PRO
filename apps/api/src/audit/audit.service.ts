@@ -163,4 +163,5 @@ export const AUDIT_ACTIONS = {
   TENANT_STATUS_CHANGE: 'tenant.status_change',
   TENANT_MODULE_CHANGE: 'tenant.module_change',
   TENANT_PLAN_ASSIGN: 'tenant.plan_assign',
+  TENANT_DATA_EXPORT: 'tenant.data_export',
 } as const;

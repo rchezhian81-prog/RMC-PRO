@@ -294,6 +294,11 @@ export const api = {
       body: JSON.stringify({ planId }),
     }),
   tenantModules: (id: string) => apiFetch<TenantModuleRow[]>(`/platform/tenants/${id}/modules`),
+  /** The whole of a tenant's data as one JSON document (offboarding/portability). */
+  exportTenant: (id: string) =>
+    apiFetch<{ exportedAt: string; tenant: { code: string; name: string }; rowCount: number; tableCount: number }>(
+      `/platform/tenants/${id}/export`,
+    ),
   tenantUsers: (id: string) => apiFetch<TenantUserRow[]>(`/platform/tenants/${id}/users`),
   createTenantUser: (id: string, b: { name: string; email: string; password: string }) =>
     apiFetch<{ id: string; email: string }>(`/platform/tenants/${id}/users`, {

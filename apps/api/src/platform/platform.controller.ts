@@ -50,6 +50,12 @@ export class PlatformController {
     return this.svc.getTenantModules(id);
   }
 
+  /** Download the whole of a tenant's data — for offboarding or portability. */
+  @Get('tenants/:id/export')
+  exportTenant(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.svc.exportTenant(id, u.userId);
+  }
+
   @Get('tenants/:id/users')
   listTenantUsers(@Param('id') id: string) {
     return this.svc.listTenantUsers(id);

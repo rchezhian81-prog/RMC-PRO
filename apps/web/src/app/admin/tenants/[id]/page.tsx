@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import { TENANT_USABLE_STATUSES } from '@rmc/shared';
 import { api, type PlanRow, type PlanUsage, type TenantModuleRow, type TenantUserRow } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -45,6 +45,7 @@ export default function TenantDetailPage() {
   const [creating, setCreating] = useState(false);
   const [userMsg, setUserMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
@@ -113,6 +114,31 @@ export default function TenantDetailPage() {
       setModules(updated);
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  /**
+   * Download the whole tenant as one JSON file. Built in the browser from the
+   * API response so nothing is written server-side; the file is the record a
+   * departing customer takes with them before the company is removed.
+   */
+  async function downloadExport() {
+    setError(null);
+    setExporting(true);
+    try {
+      const doc = await api.exportTenant(id);
+      const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `${doc.tenant.code || 'tenant'}-export-${stamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -279,6 +305,22 @@ export default function TenantDetailPage() {
           </div>
           {userMsg && <p style={{ color: 'var(--mn-success)', fontSize: 13, margin: 0 }}>{userMsg}</p>}
         </div>
+      </Card>
+
+      <Card title="Offboarding">
+        <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 12px' }}>
+          Download a complete copy of this company&apos;s data before it leaves — every record,
+          as one JSON file. Passwords are never included.
+        </p>
+        <Button variant="secondary" icon={<Download size={16} />} loading={exporting} onClick={downloadExport}>
+          Download all data (JSON)
+        </Button>
+        <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '14px 0 0', lineHeight: 1.5 }}>
+          To close the account for good: set the status to <strong>Cancelled</strong> above (this
+          blocks every login and is reversible), download the data here, then run{' '}
+          <code>offboard-tenant.sh</code> on the server, which backs up, re-exports, and then
+          permanently removes the company. That last step cannot be undone.
+        </p>
       </Card>
     </div>
   );

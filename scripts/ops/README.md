@@ -132,3 +132,48 @@ IGNORE_IP="203.0.113.4" sudo -E ./scripts/ops/install-fail2ban.sh
 
 Server-only, idempotent, reversible (`sudo systemctl disable --now fail2ban`).
 Use this *or* key-only hardening — either closes the brute-force gap.
+
+---
+
+# Ops — live verification (read-only smoke test)
+
+`verify-app.sh` checks the running system end to end and prints one pass/fail
+report. Use it after a redeploy, before a pilot milestone, or any time you want
+evidence of the live state to share.
+
+**Read-only:** every request is a GET except the single POST to `/auth/login`
+needed for a token. It creates nothing, changes nothing, and touches no
+container or migration.
+
+```bash
+cd /opt/rmc
+read -rs RMC_PASSWORD; export RMC_PASSWORD    # run this line ALONE
+LOGIN='owner@example.com' bash scripts/ops/verify-app.sh
+unset RMC_PASSWORD
+```
+
+Without `LOGIN`/`RMC_PASSWORD` it still runs every unauthenticated check and
+marks the rest as skipped, so it is safe to run with no credentials at hand.
+
+## What it covers
+
+| Section | Checks |
+|---|---|
+| Edge & TLS | app/api/admin hosts reachable, certificate expiry, http→https redirect |
+| Web app | login page, app shell, admin portal, unknown route returns 404 |
+| API | `/health`, and that protected routes reject missing/invalid tokens |
+| Authenticated | login round-trip, dashboard, funnel, alerts, templates, outstanding, reports catalog, customers, AI state, RBAC permission catalogue |
+| Containers | all services running/healthy, API errors in the last hour, disk usage |
+
+## Exit codes
+
+`0` = all good (warnings allowed) · `1` = at least one check failed.
+Suitable for a cron job or CI step.
+
+## Environment
+
+`DOMAIN` (default `mixnovas.com`), `LOGIN`, `RMC_PASSWORD`, `ENV_FILE`,
+`COMPOSE_FILE`, `CERT_WARN_DAYS` (default 21).
+
+The password is read from the environment only — never printed, never logged,
+never written to disk. The access token is never displayed either.

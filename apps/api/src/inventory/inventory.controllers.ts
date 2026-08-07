@@ -71,6 +71,8 @@ export class WeighbridgeController {
 export class StockAdjustmentController {
   constructor(private readonly service: StockAdjustmentService) {}
 
+  @Get() list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+
   @Post() @RequirePermissions('stock.adjust')
   adjust(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.adjust(tid(u), dto, u.userId); }
 }

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Material, NegativeStockRequest } from '../core/database/entities';
+import { Material, NegativeStockRequest, StockTransaction } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { StockService } from '../production/stock.service';
 
@@ -20,6 +20,17 @@ export class StockAdjustmentService {
     private readonly db: TenantDbService,
     private readonly stock: StockService,
   ) {}
+
+  /** History of applied adjustments — the adjustment rows from the stock ledger. */
+  list(tenantId: string) {
+    return this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(StockTransaction).find({
+        where: { transactionType: 'adjustment' },
+        order: { createdAt: 'DESC' },
+        take: 200,
+      }),
+    );
+  }
 
   adjust(tenantId: string, dto: Record<string, unknown>, userId: string) {
     const materialId = String(dto.materialId ?? '');

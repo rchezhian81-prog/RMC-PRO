@@ -7,7 +7,7 @@ import {
   TENANT_PERMISSIONS,
   isPlatformPermission,
 } from '@rmc/shared';
-import { Permission, Role, RolePermission } from './entities';
+import { Company, Permission, Role, RolePermission } from './entities';
 
 /** Roles that belong to Mix Nova rather than to a customer. */
 const PLATFORM_ROLE_KEYS: string[] = [ROLE_KEYS.SUPER_ADMIN, ROLE_KEYS.SUPPORT_STAFF];
@@ -85,6 +85,26 @@ export async function provisionTenantRoles(
   }
 
   return { rolesAdded, grantsAdded };
+}
+
+/**
+ * Give a tenant a company-profile row if it has none.
+ *
+ * The company row holds the plant's own name, GSTIN, state and address — and its
+ * state drives whether an invoice is inter- or intra-state for GST. A tenant
+ * created without one left the Company screen unable to save (its update tried
+ * to INSERT a row without the required company_name and failed), and invoices
+ * had no plant state to compute GST against. Seeded with the tenant's own name,
+ * ready for the owner to complete. Only ever creates when absent.
+ */
+export async function provisionTenantCompany(
+  m: EntityManager,
+  tenantId: string,
+  companyName: string,
+): Promise<boolean> {
+  if (await m.findOne(Company, { where: { tenantId } })) return false;
+  await m.save(m.create(Company, { tenantId, companyName }));
+  return true;
 }
 
 /**

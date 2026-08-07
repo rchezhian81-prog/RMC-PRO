@@ -30,14 +30,25 @@ export class CompanyService {
   }
 
   update(tenantId: string, dto: Record<string, unknown>) {
+    // Whitelist the columns the profile actually has. Anything else the client
+    // sends is ignored rather than crashing the update — TypeORM throws on an
+    // unknown property, which would otherwise surface as an opaque 500.
+    const patch: Record<string, unknown> = {};
+    for (const k of ['companyName', 'gstin', 'state'] as const) {
+      if (dto[k] !== undefined) patch[k] = dto[k];
+    }
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Company);
       const existing = (await repo.find({ take: 1 }))[0];
-      const rest = { ...dto };
-      delete rest.tenantId;
-      delete rest.id;
-      if (!existing) return repo.save(repo.create({ ...rest, tenantId } as DeepPartial<Company>));
-      await repo.update(existing.id, rest as any);
+      if (!existing) {
+        // Every tenant is provisioned a company row now, so this is a safety
+        // net. company_name is NOT NULL, so refuse cleanly rather than 500.
+        if (!String(patch.companyName ?? '').trim()) {
+          throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Company name is required.' });
+        }
+        return repo.save(repo.create({ ...patch, tenantId } as DeepPartial<Company>));
+      }
+      await repo.update(existing.id, patch as DeepPartial<Company>);
       return repo.findOne({ where: { id: existing.id } });
     });
   }

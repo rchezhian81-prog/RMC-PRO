@@ -3,7 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { In, type EntityManager } from 'typeorm';
 import { MODULE_CATALOG, PERMISSIONS, SYSTEM_ROLE_KEYS } from '@rmc/shared';
 import { AppDataSource } from './data-source';
-import { provisionTenantRoles, revokePlatformPermissions } from './provision-tenant-roles';
+import { provisionTenantRoles, provisionTenantCompany, revokePlatformPermissions } from './provision-tenant-roles';
 import {
   ModuleEntity,
   Permission,
@@ -154,14 +154,19 @@ async function seedTenantRoles(m: EntityManager): Promise<string> {
 
   let rolesAdded = 0;
   let grantsAdded = 0;
+  let companiesAdded = 0;
   for (const tenant of tenants) {
     const r = await provisionTenantRoles(m, tenant.id);
     rolesAdded += r.rolesAdded;
     grantsAdded += r.grantsAdded;
+    // A company-profile row for any tenant that predates it being provisioned
+    // at creation — so the Company screen saves and invoices have a plant state.
+    if (await provisionTenantCompany(m, tenant.id, tenant.tenantName)) companiesAdded += 1;
   }
+  const companyNote = companiesAdded ? `, +${companiesAdded} company profile(s)` : '';
   return rolesAdded
-    ? `+${rolesAdded} role(s), +${grantsAdded} grant(s) across ${tenants.length} tenant(s)`
-    : `none needed (${tenants.length} tenant(s) already have them)`;
+    ? `+${rolesAdded} role(s), +${grantsAdded} grant(s) across ${tenants.length} tenant(s)${companyNote}`
+    : `none needed (${tenants.length} tenant(s) already have them)${companyNote}`;
 }
 
 /**

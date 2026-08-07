@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import * as bcrypt from 'bcryptjs';
 import { MODULE_CATALOG, MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { provisionTenantRoles } from '../core/database/provision-tenant-roles';
+import { provisionTenantRoles, provisionTenantCompany } from '../core/database/provision-tenant-roles';
 import { TenantAccessService } from '../rbac/tenant-access.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
@@ -84,7 +84,12 @@ export class PlatformService {
     // plant onboarded between deploys had only Owner and Admin, so its first
     // staff logins had to be made Company Admins — handing a batching operator
     // the billing, users and settings screens.
-    await this.db.runInTenant(tenant.id, (m) => provisionTenantRoles(m, tenant.id));
+    await this.db.runInTenant(tenant.id, async (m) => {
+      await provisionTenantRoles(m, tenant.id);
+      // A company-profile row so the Company screen can save and invoices have a
+      // plant state for GST — seeded with the tenant name, ready to complete.
+      await provisionTenantCompany(m, tenant.id, tenant.tenantName);
+    });
     return this.getTenant(tenant.id);
   }
 

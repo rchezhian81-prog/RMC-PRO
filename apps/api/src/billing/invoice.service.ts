@@ -8,6 +8,7 @@ import {
   Invoice,
   InvoiceChallan,
   InvoiceItem,
+  OrderItem,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
@@ -53,12 +54,31 @@ export class InvoiceService {
   }
 
   /** Delivered, not-yet-invoiced challans for a customer (candidates to bill). */
-  billableChallans(tenantId: string, customerId?: string) {
-    return this.db.runInTenant(tenantId, (m) => {
+  async billableChallans(tenantId: string, customerId?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
       const where: Record<string, unknown> = { challanStatus: 'delivered', invoiceStatus: 'not_invoiced' };
       if (customerId) where.customerId = customerId;
-      return m.getRepository(DeliveryChallan).find({ where, order: { createdAt: 'DESC' } });
+      const challans = await m.getRepository(DeliveryChallan).find({ where, order: { createdAt: 'DESC' } });
+      // Suggest the rate the customer already agreed to on the order, so the
+      // clerk confirms it rather than re-typing (and mistyping) it.
+      return Promise.all(
+        challans.map(async (c) => ({ ...c, suggestedRate: await this.agreedRate(m, c.orderId, c.gradeId) })),
+      );
     });
+  }
+
+  /**
+   * The all-in agreed price per m³ for a grade on an order — the concrete rate
+   * plus its transport, pump and waiting charges (all quoted per m³). This is
+   * what the customer signed up to pay, so it is what the invoice should bill.
+   * Returns 0 when the order line cannot be found (e.g. an ad-hoc challan).
+   */
+  private async agreedRate(m: EntityManager, orderId: string | null, gradeId: string | null): Promise<number> {
+    if (!orderId) return 0;
+    const items = await m.getRepository(OrderItem).find({ where: { orderId } });
+    const item = items.find((i) => i.gradeId === gradeId) ?? items[0];
+    if (!item) return 0;
+    return round2(num(item.ratePerM3) + num(item.transportCharge) + num(item.pumpCharge) + num(item.waitingCharge));
   }
 
   /** Create a draft invoice from a set of delivered challans (same customer). */
@@ -100,8 +120,13 @@ export class InvoiceService {
         if (challan.customerId && challan.customerId !== customerId) throw badReq('Challan belongs to a different customer');
 
         const quantity = num(challan.quantityM3);
-        const rate = num(line.rate);
-        const gstRate = num(line.gstRate);
+        // Use the rate the clerk entered; otherwise fall back to the price
+        // agreed on the order, so a blank line still bills the right amount
+        // rather than producing a zero-value invoice.
+        const rate = num(line.rate) || (await this.agreedRate(m, challan.orderId, challan.gradeId));
+        // Concrete is 18% GST in India; default it so an unspecified line is
+        // still taxed correctly. An explicit 0 from the caller is respected.
+        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : 18;
         const cessRate = num(line.cessRate);
         const t = computeLineTax(quantity, rate, gstRate, cessRate, isInterstate);
 

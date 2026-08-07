@@ -27,6 +27,19 @@ export class CompanyController {
   update(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
     return this.svc.update(u.tenantId as string, dto);
   }
+
+  /** Upload / replace the invoice logo. Body: { mime, data } (base64). */
+  @Put('logo')
+  @RequirePermissions('settings.manage')
+  setLogo(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
+    return this.svc.setLogo(u.tenantId as string, dto.mime, dto.data);
+  }
+
+  @Delete('logo')
+  @RequirePermissions('settings.manage')
+  removeLogo(@CurrentUser() u: AuthUser) {
+    return this.svc.removeLogo(u.tenantId as string);
+  }
 }
 
 @Controller('settings')

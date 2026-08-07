@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
+import SVGtoPDF from 'svg-to-pdfkit';
 
 export interface QuotationPdfItem {
   gradeLabel: string;
@@ -83,6 +84,9 @@ export interface CompanyBlock {
   bankAccountNo?: string | null;
   bankIfsc?: string | null;
   bankBranch?: string | null;
+  /** Optional invoice logo: validated MIME + base64 bytes. Null → text header. */
+  logoMime?: string | null;
+  logoData?: string | null;
 }
 export interface InvoicePdfData extends CompanyBlock {
   companyName: string;
@@ -108,6 +112,42 @@ export interface InvoicePdfData extends CompanyBlock {
 
 const money = (v: string | number): string =>
   Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * Draw the company logo as a band at the top-left, then advance the cursor below
+ * it so the existing text header flows underneath. Purely additive: on any
+ * problem (missing/invalid bytes, an SVG pdfkit can't draw) it does nothing and
+ * returns false, leaving the caller's text header exactly where it was. A logo
+ * must never be the reason an invoice fails to render.
+ */
+function drawLogoBand(
+  doc: PDFKit.PDFDocument,
+  logo: CompanyBlock,
+  left: number,
+  top: number,
+): boolean {
+  if (!logo.logoData || !logo.logoMime) return false;
+  const maxW = 150;
+  const maxH = 54;
+  try {
+    if (logo.logoMime === 'image/svg+xml') {
+      const svg = Buffer.from(logo.logoData, 'base64').toString('utf8');
+      SVGtoPDF(doc, svg, left, top, { width: maxW, height: maxH, preserveAspectRatio: 'xMinYMin meet' });
+    } else {
+      const buf = Buffer.from(logo.logoData, 'base64');
+      // fit scales within the box; the default top-left anchor is what we want.
+      doc.image(buf, left, top, { fit: [maxW, maxH] });
+    }
+    doc.x = left;
+    doc.y = top + maxH + 8;
+    return true;
+  } catch {
+    // Fall back to the text header — reset the cursor to where it started.
+    doc.x = left;
+    doc.y = top;
+    return false;
+  }
+}
 
 /**
  * Quotation PDF generation (Design Doc 6 §8.5) using pdfkit — pure JS, no native
@@ -357,6 +397,10 @@ export class PdfService {
 
       const left = doc.page.margins.left;
       const right = doc.page.width - doc.page.margins.right;
+
+      // Optional logo band at the very top; the text header below is unchanged
+      // and always drawn, so every required detail still appears with or without.
+      drawLogoBand(doc, data, left, doc.page.margins.top);
 
       doc.fontSize(17).font('Helvetica-Bold').text(data.companyName);
       doc.fontSize(9).font('Helvetica').fillColor('#555');

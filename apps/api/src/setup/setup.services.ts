@@ -6,6 +6,7 @@ import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
+import { validateLogo } from './logo';
 import {
   Company,
   NumberSeries,
@@ -55,6 +56,40 @@ export class CompanyService {
       }
       await repo.update(existing.id, patch as DeepPartial<Company>);
       return repo.findOne({ where: { id: existing.id } });
+    });
+  }
+
+  /**
+   * Store (or replace) the company logo. Validation is authoritative here — the
+   * bytes are sniffed and size-capped — so the browser cannot smuggle in a bad
+   * file. Kept off the text-profile `update()` path so a routine profile save
+   * never carries the logo payload.
+   */
+  setLogo(tenantId: string, rawMime: unknown, rawData: unknown) {
+    const { mime, data } = validateLogo(rawMime, rawData);
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Company);
+      const existing = (await repo.find({ take: 1 }))[0];
+      if (!existing) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Save the company name first, then upload a logo.',
+        });
+      }
+      await repo.update(existing.id, { logoMime: mime, logoData: data } as DeepPartial<Company>);
+      return { hasLogo: true, logoMime: mime };
+    });
+  }
+
+  /** Remove the logo — invoices fall back to the text header. */
+  removeLogo(tenantId: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Company);
+      const existing = (await repo.find({ take: 1 }))[0];
+      if (existing) {
+        await repo.update(existing.id, { logoMime: null, logoData: null } as DeepPartial<Company>);
+      }
+      return { hasLogo: false };
     });
   }
 }

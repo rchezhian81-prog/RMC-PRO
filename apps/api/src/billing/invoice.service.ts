@@ -222,6 +222,8 @@ export class InvoiceService {
         bankAccountNo: company?.bankAccountNo ?? null,
         bankIfsc: company?.bankIfsc ?? null,
         bankBranch: company?.bankBranch ?? null,
+        logoMime: company?.logoMime ?? null,
+        logoData: company?.logoData ?? null,
         invoiceNo: full.invoiceNo, invoiceDate: full.invoiceDate, dueDate: full.dueDate,
         invoiceStatus: full.invoiceStatus,
         customerName: customer?.customerName ?? 'Customer', customerGstin: full.gstin,

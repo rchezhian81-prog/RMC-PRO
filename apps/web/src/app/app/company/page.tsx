@@ -58,23 +58,114 @@ const SECTIONS: Array<{ title: string; help?: string; fields: Array<[string, str
 
 const ALL_KEYS = SECTIONS.flatMap((s) => s.fields.map(([k]) => k));
 
+/** Logo rules, kept in step with the server (apps/api/src/setup/logo.ts). */
+const LOGO_MAX_BYTES = 512 * 1024;
+const LOGO_ACCEPT = 'image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg';
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml'];
+
+/** Read a File as a base64 string with no data-URL prefix. */
+function fileToBase64(file: File): Promise<{ mime: string; base64: string; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      resolve({ mime: file.type || 'image/svg+xml', base64, dataUrl });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function CompanyPage() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Logo state. `preview` is the data URL shown; `hasServerLogo` gates Remove;
+  // `pending` holds a chosen-but-unsaved file so Save/Remove are explicit.
+  const [preview, setPreview] = useState<string | null>(null);
+  const [hasServerLogo, setHasServerLogo] = useState(false);
+  const [pending, setPending] = useState<{ mime: string; base64: string } | null>(null);
+  const [logoMsg, setLogoMsg] = useState<string | null>(null);
+  const [logoErr, setLogoErr] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   useEffect(() => {
     company
       .get()
       .then((c) => {
         if (c) {
+          const rec = c as Record<string, unknown>;
           const next: Record<string, string> = {};
-          for (const k of ALL_KEYS) next[k] = String((c as Record<string, unknown>)[k] ?? '');
+          for (const k of ALL_KEYS) next[k] = String(rec[k] ?? '');
           setForm(next);
+          if (rec.logoData && rec.logoMime) {
+            setPreview(`data:${String(rec.logoMime)};base64,${String(rec.logoData)}`);
+            setHasServerLogo(true);
+          }
         }
       })
       .catch((e) => setError(String(e)));
   }, []);
+
+  async function onPickLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    setLogoMsg(null);
+    setLogoErr(null);
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file after a remove
+    if (!file) return;
+    const isSvgByName = /\.svg$/i.test(file.name);
+    if (!LOGO_TYPES.includes(file.type) && !isSvgByName) {
+      setLogoErr('Logo must be a PNG, JPG or SVG image.');
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setLogoErr(`Logo must be ${Math.round(LOGO_MAX_BYTES / 1024)} KB or smaller.`);
+      return;
+    }
+    try {
+      const { mime, base64, dataUrl } = await fileToBase64(file);
+      setPreview(dataUrl);
+      setPending({ mime: mime && LOGO_TYPES.includes(mime) ? mime : 'image/svg+xml', base64 });
+    } catch {
+      setLogoErr('Could not read that file. Please choose it again.');
+    }
+  }
+
+  async function saveLogo() {
+    if (!pending) return;
+    setLogoBusy(true);
+    setLogoMsg(null);
+    setLogoErr(null);
+    try {
+      await company.uploadLogo(pending.mime, pending.base64);
+      setPending(null);
+      setHasServerLogo(true);
+      setLogoMsg('Logo saved. It will appear on new invoices.');
+    } catch (err) {
+      setLogoErr(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function removeLogo() {
+    setLogoBusy(true);
+    setLogoMsg(null);
+    setLogoErr(null);
+    try {
+      await company.removeLogo();
+      setPreview(null);
+      setPending(null);
+      setHasServerLogo(false);
+      setLogoMsg('Logo removed. Invoices will show the company name as text.');
+    } catch (err) {
+      setLogoErr(err instanceof Error ? err.message : 'Could not remove the logo.');
+    } finally {
+      setLogoBusy(false);
+    }
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -99,6 +190,54 @@ export default function CompanyPage() {
       </p>
 
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
+
+      <div style={{ marginBottom: 18 }}>
+        <Card title="Logo">
+          <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '0 0 12px' }}>
+            Printed at the top of the invoice. PNG, JPG or SVG, up to {Math.round(LOGO_MAX_BYTES / 1024)} KB. If you
+            don’t add one, the invoice shows your company name as text.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                width: 150, height: 60, border: '1px dashed var(--mn-border)', borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                background: 'var(--mn-surface)', flex: '0 0 auto',
+              }}
+            >
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt="Company logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              ) : (
+                <span style={{ color: 'var(--mn-subtle)', fontSize: 12 }}>No logo</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label
+                style={{
+                  display: 'inline-block', cursor: 'pointer', fontSize: 13, padding: '7px 12px',
+                  border: '1px solid var(--mn-border)', borderRadius: 6, background: 'var(--mn-surface)',
+                }}
+              >
+                {hasServerLogo || pending ? 'Choose a different file…' : 'Choose logo file…'}
+                <input type="file" accept={LOGO_ACCEPT} onChange={onPickLogo} style={{ display: 'none' }} />
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Button type="button" onClick={saveLogo} disabled={!pending || logoBusy}>
+                  {logoBusy ? 'Saving…' : 'Save logo'}
+                </Button>
+                {(hasServerLogo || preview) && (
+                  <Button type="button" variant="ghost" onClick={removeLogo} disabled={logoBusy}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+          {logoErr && <p style={{ color: 'var(--mn-danger)', fontSize: 13, margin: '12px 0 0' }}>{logoErr}</p>}
+          {logoMsg && <p style={{ color: 'var(--mn-success)', fontSize: 13, margin: '12px 0 0' }}>{logoMsg}</p>}
+        </Card>
+      </div>
 
       <Form onSubmit={save}>
         <div style={{ display: 'grid', gap: 18 }}>

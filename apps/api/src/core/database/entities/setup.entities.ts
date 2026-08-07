@@ -56,6 +56,19 @@ export class Company extends TenantScopedEntity {
 
   @Column({ name: 'bank_branch', type: 'varchar', nullable: true })
   bankBranch!: string | null;
+
+  /**
+   * Company logo for invoice branding. Stored in-row (not on disk) so it is
+   * tenant-isolated by RLS and survives container redeploys with the rest of the
+   * data. `logoMime` is the validated content type (png/jpeg/svg+xml); `logoData`
+   * is the raw file, base64-encoded. Both null means "no logo — use the text
+   * header". Kept small by a server-side size cap.
+   */
+  @Column({ name: 'logo_mime', type: 'varchar', nullable: true })
+  logoMime!: string | null;
+
+  @Column({ name: 'logo_data', type: 'text', nullable: true })
+  logoData!: string | null;
 }
 
 /** Plant (Design Doc 6 §5.3) — trimmed for the Phase-1 foundation; RLS-enforced. */

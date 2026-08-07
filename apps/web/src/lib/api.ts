@@ -348,6 +348,13 @@ export const company = {
   get: () => apiFetch<Row | null>('/company'),
   update: (b: Record<string, unknown>) =>
     apiFetch<Row>('/company', { method: 'PATCH', body: JSON.stringify(b) }),
+  /** Upload / replace the invoice logo. `data` is base64 (no data-URL prefix). */
+  uploadLogo: (mime: string, data: string) =>
+    apiFetch<{ hasLogo: boolean; logoMime: string }>('/company/logo', {
+      method: 'PUT',
+      body: JSON.stringify({ mime, data }),
+    }),
+  removeLogo: () => apiFetch<{ hasLogo: boolean }>('/company/logo', { method: 'DELETE' }),
 };
 
 export const settings = {

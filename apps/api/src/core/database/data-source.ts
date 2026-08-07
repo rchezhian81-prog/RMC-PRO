@@ -14,6 +14,7 @@ import { Sync1720000009000 } from './migrations/1720000009000-Sync';
 import { Indexes1720000010000 } from './migrations/1720000010000-Indexes';
 import { Audit1720000011000 } from './migrations/1720000011000-Audit';
 import { CompanyProfile1720000012000 } from './migrations/1720000012000-CompanyProfile';
+import { CompanyLogo1720000013000 } from './migrations/1720000013000-CompanyLogo';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -43,6 +44,7 @@ export const AppDataSource = new DataSource({
     Indexes1720000010000,
     Audit1720000011000,
     CompanyProfile1720000012000,
+    CompanyLogo1720000013000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

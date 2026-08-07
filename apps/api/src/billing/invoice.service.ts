@@ -205,10 +205,23 @@ export class InvoiceService {
       const full = await this.loadFull(m, id);
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];
       const customer = full.customerId ? await m.getRepository(Customer).findOne({ where: { id: full.customerId } }) : null;
+      const addr = [
+        company?.addressLine1, company?.addressLine2,
+        [company?.city, company?.state, company?.pincode].filter(Boolean).join(', '),
+      ].filter((s) => s && String(s).trim()).join(', ');
       const data: InvoicePdfData = {
         companyName: company?.companyName ?? 'Company',
+        legalName: company?.legalName ?? null,
         companyGstin: company?.gstin ?? null,
+        companyPan: company?.pan ?? null,
         companyState: company?.state ?? null,
+        companyAddress: addr || null,
+        companyPhone: company?.phone ?? null,
+        companyEmail: company?.email ?? null,
+        bankName: company?.bankName ?? null,
+        bankAccountNo: company?.bankAccountNo ?? null,
+        bankIfsc: company?.bankIfsc ?? null,
+        bankBranch: company?.bankBranch ?? null,
         invoiceNo: full.invoiceNo, invoiceDate: full.invoiceDate, dueDate: full.dueDate,
         invoiceStatus: full.invoiceStatus,
         customerName: customer?.customerName ?? 'Customer', customerGstin: full.gstin,

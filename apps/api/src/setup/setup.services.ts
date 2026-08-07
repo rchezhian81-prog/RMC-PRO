@@ -34,7 +34,12 @@ export class CompanyService {
     // sends is ignored rather than crashing the update — TypeORM throws on an
     // unknown property, which would otherwise surface as an opaque 500.
     const patch: Record<string, unknown> = {};
-    for (const k of ['companyName', 'gstin', 'state'] as const) {
+    const fields = [
+      'companyName', 'legalName', 'gstin', 'pan', 'addressLine1', 'addressLine2',
+      'city', 'state', 'pincode', 'phone', 'email', 'website',
+      'bankName', 'bankAccountNo', 'bankIfsc', 'bankBranch',
+    ] as const;
+    for (const k of fields) {
       if (dto[k] !== undefined) patch[k] = dto[k];
     }
     return this.db.runInTenant(tenantId, async (m) => {

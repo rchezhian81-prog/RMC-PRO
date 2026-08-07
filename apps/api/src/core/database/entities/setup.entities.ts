@@ -1,17 +1,61 @@
 import { Column, Entity, Unique } from 'typeorm';
 import { TenantScopedEntity } from './base.entity';
 
-/** Company inside a tenant (Design Doc 6 §5.1) — trimmed for the Phase-1 foundation. */
+/**
+ * Company inside a tenant (Design Doc 6 §5.1) — the plant's own legal identity,
+ * as it must appear on a GST tax invoice: registered name, address, GSTIN/PAN,
+ * contact and the bank details customers pay into.
+ */
 @Entity('companies')
 export class Company extends TenantScopedEntity {
   @Column({ name: 'company_name', type: 'varchar' })
   companyName!: string;
 
+  /** Registered legal name, when it differs from the trading name. */
+  @Column({ name: 'legal_name', type: 'varchar', nullable: true })
+  legalName!: string | null;
+
   @Column({ name: 'gstin', type: 'varchar', nullable: true })
   gstin!: string | null;
 
+  @Column({ name: 'pan', type: 'varchar', nullable: true })
+  pan!: string | null;
+
+  @Column({ name: 'address_line1', type: 'varchar', nullable: true })
+  addressLine1!: string | null;
+
+  @Column({ name: 'address_line2', type: 'varchar', nullable: true })
+  addressLine2!: string | null;
+
+  @Column({ name: 'city', type: 'varchar', nullable: true })
+  city!: string | null;
+
   @Column({ name: 'state', type: 'varchar', nullable: true })
   state!: string | null;
+
+  @Column({ name: 'pincode', type: 'varchar', nullable: true })
+  pincode!: string | null;
+
+  @Column({ name: 'phone', type: 'varchar', nullable: true })
+  phone!: string | null;
+
+  @Column({ name: 'email', type: 'varchar', nullable: true })
+  email!: string | null;
+
+  @Column({ name: 'website', type: 'varchar', nullable: true })
+  website!: string | null;
+
+  @Column({ name: 'bank_name', type: 'varchar', nullable: true })
+  bankName!: string | null;
+
+  @Column({ name: 'bank_account_no', type: 'varchar', nullable: true })
+  bankAccountNo!: string | null;
+
+  @Column({ name: 'bank_ifsc', type: 'varchar', nullable: true })
+  bankIfsc!: string | null;
+
+  @Column({ name: 'bank_branch', type: 'varchar', nullable: true })
+  bankBranch!: string | null;
 }
 
 /** Plant (Design Doc 6 §5.3) — trimmed for the Phase-1 foundation; RLS-enforced. */

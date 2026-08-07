@@ -71,7 +71,20 @@ export interface InvoicePdfItem {
   igstAmount: string | number;
   lineTotal: string | number;
 }
-export interface InvoicePdfData {
+export interface CompanyBlock {
+  companyName: string;
+  legalName?: string | null;
+  companyGstin?: string | null;
+  companyPan?: string | null;
+  companyAddress?: string | null;
+  companyPhone?: string | null;
+  companyEmail?: string | null;
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankIfsc?: string | null;
+  bankBranch?: string | null;
+}
+export interface InvoicePdfData extends CompanyBlock {
   companyName: string;
   companyGstin?: string | null;
   companyState?: string | null;
@@ -347,8 +360,19 @@ export class PdfService {
 
       doc.fontSize(17).font('Helvetica-Bold').text(data.companyName);
       doc.fontSize(9).font('Helvetica').fillColor('#555');
-      if (data.companyGstin) doc.text(`GSTIN: ${data.companyGstin}`);
-      if (data.companyState) doc.text(`State: ${data.companyState}`);
+      if (data.legalName && data.legalName !== data.companyName) doc.text(data.legalName);
+      if (data.companyAddress) doc.text(data.companyAddress);
+      const idLine = [
+        data.companyGstin ? `GSTIN: ${data.companyGstin}` : null,
+        data.companyPan ? `PAN: ${data.companyPan}` : null,
+      ].filter(Boolean).join('   ');
+      if (idLine) doc.text(idLine);
+      else if (data.companyState) doc.text(`State: ${data.companyState}`);
+      const contactLine = [
+        data.companyPhone ? `Ph: ${data.companyPhone}` : null,
+        data.companyEmail ? data.companyEmail : null,
+      ].filter(Boolean).join('   ');
+      if (contactLine) doc.text(contactLine);
       doc.fillColor('#000');
 
       doc.moveDown(0.3);
@@ -410,6 +434,21 @@ export class PdfService {
       if (Number(data.cessAmount) > 0) totalLine('Cess', money(data.cessAmount));
       if (Number(data.roundOff) !== 0) totalLine('Round off', money(data.roundOff));
       totalLine('Total', `INR ${money(data.totalAmount)}`, true);
+
+      // Bank details block — where the customer pays. Only drawn if provided.
+      const bankBits = [
+        data.bankName ? `Bank: ${data.bankName}` : null,
+        data.bankAccountNo ? `A/c: ${data.bankAccountNo}` : null,
+        data.bankIfsc ? `IFSC: ${data.bankIfsc}` : null,
+        data.bankBranch ? `Branch: ${data.bankBranch}` : null,
+      ].filter(Boolean);
+      if (bankBits.length) {
+        doc.moveDown(1);
+        doc.x = left;
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text('Payment details', left, doc.y);
+        doc.font('Helvetica').fontSize(9).fillColor('#555').text(bankBits.join('   '), { align: 'left' });
+        doc.fillColor('#000');
+      }
 
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text('System-generated tax invoice.', { align: 'center' });

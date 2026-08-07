@@ -174,10 +174,11 @@ skipped, so it is safe to run with no credentials at hand.
 
 ### Stock balances
 
-Matters most **after a reset**: the reset clears stock balances and the seeder
-puts them back. It fails on zero rows ("opening stock has not been seeded"),
-fails on negative stock, warns when any material sits at zero, and otherwise
-reports the count and the lowest material.
+Matters most **after a reset**: the reset clears stock balances, and either the
+seeder or the team's day-one entry puts them back. It **warns** on zero rows
+("enter opening balances") — an empty table right after a reset is a task, not a
+fault — **fails** on negative stock, warns when any material sits at zero, and
+otherwise reports the count and the lowest material.
 
 An absent low-stock *alert* proves nothing here — the alert rule joins
 `stock_balances`, so no rows at all looks identical to full shelves. That is

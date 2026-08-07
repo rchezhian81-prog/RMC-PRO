@@ -225,7 +225,11 @@ try:
 except Exception:
     print("BAD|unreadable response"); raise SystemExit
 if not isinstance(rows, list) or not rows:
-    print("BAD|no stock rows — opening stock has not been seeded"); raise SystemExit
+    # An empty stock table is the deliberate state right after a reset, before
+    # the team enters opening balances on day one — a thing to do, not a fault.
+    # It warns (visible, but not a failure) rather than reporting the whole
+    # system broken. Negative stock, below, stays a hard failure.
+    print("WARN|no stock rows yet — enter opening balances (Production -> Stock)"); raise SystemExit
 neg  = [r for r in rows if float(r.get("currentQuantity") or 0) < 0]
 zero = [r for r in rows if float(r.get("currentQuantity") or 0) == 0]
 low  = min(rows, key=lambda r: float(r.get("currentQuantity") or 0))

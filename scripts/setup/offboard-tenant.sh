@@ -89,8 +89,12 @@ psql_owner() {
   dc exec -T "$PG_SERVICE" sh -c 'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' _ "$@"
 }
 
-if ! dc ps --status running 2>/dev/null | grep -q "$PG_SERVICE"; then
-  echo "✗ The '$PG_SERVICE' container is not running. Start the stack first." >&2
+# Probe the owner connection this script relies on, rather than parsing
+# `docker compose ps` output — whose flags/columns vary between Compose versions
+# and can wrongly report a healthy container as down.
+if ! printf 'SELECT 1;\n' | psql_owner -tAX >/dev/null 2>&1; then
+  echo "✗ Cannot reach the '$PG_SERVICE' database over the container socket." >&2
+  echo "  Is the stack running?  Check:  docker compose --env-file $ENV_FILE -f $COMPOSE_FILE ps" >&2
   exit 1
 fi
 

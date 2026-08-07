@@ -12,6 +12,18 @@ import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const STAGES = ['new', 'qualified', 'quoted', 'won', 'lost'];
 
+// Module-scope text field: declared inside the page it would remount on every
+// keystroke and drop focus after one character.
+function F({ label, v, on, w, req }: { label: string; v: string; on: (v: string) => void; w?: number; req?: boolean }) {
+  return (
+    <div style={{ minWidth: w ?? 150 }}>
+      <Field label={label} required={req}>
+        <Input value={v} onChange={(e) => on(e.target.value)} required={req} />
+      </Field>
+    </div>
+  );
+}
+
 export default function LeadsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
@@ -58,13 +70,6 @@ export default function LeadsPage() {
   }
 
   const followups = (sel?.followups as Row[]) ?? [];
-  const F = ({ label, v, on, w, req }: { label: string; v: string; on: (v: string) => void; w?: number; req?: boolean }) => (
-    <div style={{ minWidth: w ?? 150 }}>
-      <Field label={label} required={req}>
-        <Input value={v} onChange={(e) => on(e.target.value)} required={req} />
-      </Field>
-    </div>
-  );
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>

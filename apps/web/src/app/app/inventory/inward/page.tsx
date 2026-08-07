@@ -12,6 +12,33 @@ import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
+// These field helpers live at module scope on purpose. Declared inside the page
+// they would be a new component type on every keystroke, so React would remount
+// the input and it would lose focus after a single character.
+function Sel({ label, v, on, opts, ov, req }: { label: string; v: string; on: (v: string) => void; opts: Row[]; ov: (o: Row) => string; req?: boolean }) {
+  return (
+    <div style={{ minWidth: 150 }}>
+      <Field label={label} required={req}>
+        <select className="mn-input" value={v} onChange={(e) => on(e.target.value)} required={req}>
+          <option value="">—</option>
+          {opts.map((o) => (
+            <option key={o.id} value={String(o.id)}>{ov(o)}</option>
+          ))}
+        </select>
+      </Field>
+    </div>
+  );
+}
+function Num({ label, v, on, req }: { label: string; v: string; on: (v: string) => void; req?: boolean }) {
+  return (
+    <div style={{ minWidth: 110 }}>
+      <Field label={label} required={req}>
+        <Input type="number" step="any" inputMode="decimal" value={v} onChange={(e) => on(e.target.value)} required={req} />
+      </Field>
+    </div>
+  );
+}
+
 export default function MaterialInwardPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
@@ -60,26 +87,6 @@ export default function MaterialInwardPage() {
       setForm({ plantId: '', supplierId: '', materialId: '', vehicleNo: '', supplierChallanNo: '', quantityReceived: '', quantityAccepted: '', rate: '' });
     }, 'Inward created');
   }
-
-  const Sel = ({ label, v, on, opts, ov, req }: { label: string; v: string; on: (v: string) => void; opts: Row[]; ov: (o: Row) => string; req?: boolean }) => (
-    <div style={{ minWidth: 150 }}>
-      <Field label={label} required={req}>
-        <select className="mn-input" value={v} onChange={(e) => on(e.target.value)} required={req}>
-          <option value="">—</option>
-          {opts.map((o) => (
-            <option key={o.id} value={String(o.id)}>{ov(o)}</option>
-          ))}
-        </select>
-      </Field>
-    </div>
-  );
-  const Num = ({ label, v, on, req }: { label: string; v: string; on: (v: string) => void; req?: boolean }) => (
-    <div style={{ minWidth: 110 }}>
-      <Field label={label} required={req}>
-        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} required={req} />
-      </Field>
-    </div>
-  );
 
   return (
     <div>

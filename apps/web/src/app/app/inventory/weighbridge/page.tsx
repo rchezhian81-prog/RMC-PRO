@@ -12,6 +12,32 @@ import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
+// Module-scope field helpers: declared inside the page they would remount on
+// every keystroke and the input would lose focus after one character.
+function Sel({ label, v, on, opts, ov }: { label: string; v: string; on: (v: string) => void; opts: Row[]; ov: (o: Row) => string }) {
+  return (
+    <div style={{ minWidth: 140 }}>
+      <Field label={label}>
+        <select className="mn-input" value={v} onChange={(e) => on(e.target.value)}>
+          <option value="">—</option>
+          {opts.map((o) => (
+            <option key={o.id} value={String(o.id)}>{ov(o)}</option>
+          ))}
+        </select>
+      </Field>
+    </div>
+  );
+}
+function Num({ label, v, on, req }: { label: string; v: string; on: (v: string) => void; req?: boolean }) {
+  return (
+    <div style={{ minWidth: 100 }}>
+      <Field label={label} required={req}>
+        <Input type="number" step="any" inputMode="decimal" value={v} onChange={(e) => on(e.target.value)} required={req} />
+      </Field>
+    </div>
+  );
+}
+
 export default function WeighbridgePage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
@@ -67,26 +93,6 @@ export default function WeighbridgePage() {
     if (rate === null) return;
     await run(() => weighbridgeApi.toInward(String(r.id), Number(rate || 0)), 'Converted to material inward (draft)');
   }
-
-  const Sel = ({ label, v, on, opts, ov }: { label: string; v: string; on: (v: string) => void; opts: Row[]; ov: (o: Row) => string }) => (
-    <div style={{ minWidth: 140 }}>
-      <Field label={label}>
-        <select className="mn-input" value={v} onChange={(e) => on(e.target.value)}>
-          <option value="">—</option>
-          {opts.map((o) => (
-            <option key={o.id} value={String(o.id)}>{ov(o)}</option>
-          ))}
-        </select>
-      </Field>
-    </div>
-  );
-  const Num = ({ label, v, on, req }: { label: string; v: string; on: (v: string) => void; req?: boolean }) => (
-    <div style={{ minWidth: 100 }}>
-      <Field label={label} required={req}>
-        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} required={req} />
-      </Field>
-    </div>
-  );
 
   return (
     <div>

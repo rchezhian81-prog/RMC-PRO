@@ -14,6 +14,21 @@ import { Loading, ErrorState } from '../../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
+/**
+ * A number field, at module scope so it keeps the same <input> across renders.
+ * Declared inside the page it would be a new component type on every keystroke,
+ * remounting the input and dropping focus after each digit.
+ */
+function Num({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
+  return (
+    <div style={{ minWidth: 96 }}>
+      <Field label={label}>
+        <Input type="number" step="any" inputMode="decimal" value={v} onChange={(e) => on(e.target.value)} />
+      </Field>
+    </div>
+  );
+}
+
 export default function RateContractDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -80,13 +95,6 @@ export default function RateContractDetail() {
   const items = (rc.items as Row[]) ?? [];
   const status = String(rc.approvalStatus);
   const locked = status === 'approved';
-  const Num = ({ label, v, on }: { label: string; v: string; on: (v: string) => void }) => (
-    <div style={{ minWidth: 96 }}>
-      <Field label={label}>
-        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} />
-      </Field>
-    </div>
-  );
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>

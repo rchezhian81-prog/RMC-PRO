@@ -14,6 +14,25 @@ import { Loading, ErrorState } from '../../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
+/**
+ * A number field. Defined at module scope, NOT inside the page component.
+ *
+ * A component declared inside another component is a brand-new type on every
+ * render — and this page re-renders on every keystroke — so React unmounts the
+ * old <input> and mounts a fresh one each time, and the field loses focus after
+ * a single digit. Hoisting it here keeps the same input element across renders,
+ * so you can type a whole number without re-clicking.
+ */
+function Num({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
+  return (
+    <div style={{ minWidth: 96 }}>
+      <Field label={label}>
+        <Input type="number" step="any" inputMode="decimal" value={v} onChange={(e) => on(e.target.value)} />
+      </Field>
+    </div>
+  );
+}
+
 export default function QuotationDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -68,13 +87,6 @@ export default function QuotationDetail() {
   const items = (q.items as Row[]) ?? [];
   const status = String(q.approvalStatus);
   const locked = status === 'approved';
-  const Num = ({ label, v, on }: { label: string; v: string; on: (v: string) => void }) => (
-    <div style={{ minWidth: 96 }}>
-      <Field label={label}>
-        <Input type="number" step="any" value={v} onChange={(e) => on(e.target.value)} />
-      </Field>
-    </div>
-  );
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -96,6 +108,12 @@ export default function QuotationDetail() {
       )}
 
       <Card title="Actions">
+        <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 12px' }}>
+          {status === 'draft' && 'Add your grade items below, then click Submit to send this for approval.'}
+          {status === 'submitted' && 'Waiting for approval — click Approve to accept it (or Reject).'}
+          {status === 'approved' && 'Approved and locked. Click Convert → Order draft to turn it into an order.'}
+          {status === 'rejected' && 'This was rejected. Make changes, then Re-submit.'}
+        </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {status === 'draft' && <Button onClick={() => run(() => quotationsApi.submit(id), 'Submitted for approval')}>Submit</Button>}
           {status === 'rejected' && <Button onClick={() => run(() => quotationsApi.submit(id), 'Re-submitted')}>Re-submit</Button>}
@@ -149,6 +167,12 @@ export default function QuotationDetail() {
           </tbody>
         </Table>
         {!locked ? (
+          <>
+          <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '12px 16px 0', lineHeight: 1.6 }}>
+            All amounts are <strong>per m³</strong>. <strong>Rate</strong> = price of the concrete ·{' '}
+            <strong>Transport</strong> = delivery to the site · <strong>Pump</strong> = concrete pumping charge ·{' '}
+            <strong>Waiting</strong> = charge for a truck kept waiting at the site. Leave a charge at 0 if it does not apply.
+          </p>
           <Form onSubmit={addItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
             <div style={{ minWidth: 130 }}>
               <Field label="Grade">
@@ -169,6 +193,7 @@ export default function QuotationDetail() {
               <Button type="submit" variant="secondary">Add item</Button>
             </div>
           </Form>
+          </>
         ) : (
           <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 16 }}>Approved quotation is locked. Create a revision to edit.</p>
         )}

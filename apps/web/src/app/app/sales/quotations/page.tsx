@@ -11,6 +11,18 @@ import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 
+/** Common payment terms for an Indian RMC plant — a picklist beats free text. */
+const PAYMENT_TERMS = [
+  'Advance (100%)',
+  'Cash on delivery',
+  'Credit — 15 days',
+  'Credit — 30 days',
+  'Credit — 45 days',
+  'UPI',
+  'NEFT / RTGS',
+  'Cheque',
+];
+
 export default function QuotationsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [customers, setCustomers] = useState<Row[]>([]);
@@ -81,9 +93,14 @@ export default function QuotationsPage() {
                 <Input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
               </Field>
             </div>
-            <div style={{ minWidth: 150 }}>
+            <div style={{ minWidth: 170 }}>
               <Field label="Payment terms">
-                <Input value={form.paymentTerms} onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })} />
+                <select className="mn-input" value={form.paymentTerms} onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })}>
+                  <option value="">— select —</option>
+                  {PAYMENT_TERMS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
               </Field>
             </div>
             <div style={{ marginBottom: 14 }}>

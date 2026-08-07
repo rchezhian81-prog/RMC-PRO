@@ -28,10 +28,26 @@ export default function OrdersPage() {
   return (
     <div>
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Orders</h1>
-      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 18px', maxWidth: 720 }}>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 12px', maxWidth: 720 }}>
         Confirm draft orders (credit-checked at booking). Over-limit bookings are blocked to a credit
         hold for approval.
       </p>
+      <div
+        style={{
+          margin: '0 0 18px', padding: '10px 12px', maxWidth: 720,
+          background: 'var(--mn-info-tint, var(--mn-surface-2))', borderRadius: 'var(--mn-radius-md)',
+          border: '1px solid var(--mn-border)', fontSize: 13, color: 'var(--mn-muted)',
+        }}
+      >
+        There is no “new order” button on purpose — an order is created from an{' '}
+        <strong>approved quotation</strong> (or rate contract), so every order carries an agreed price.
+        Start in{' '}
+        <Link href="/app/sales/quotations" style={{ color: 'var(--mn-primary)', fontWeight: 600 }}>
+          Sales → Quotations
+        </Link>
+        : create a quotation, add grade items, Submit, Approve, then “Convert → Order draft”. The draft
+        then appears here to confirm.
+      </div>
       {error && <div style={{ marginBottom: 16 }}><ErrorState message={error} /></div>}
 
       <Card
@@ -79,7 +95,10 @@ export default function OrdersPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No orders" description="Confirmed and draft orders will appear here." />
+          <EmptyState
+            title="No orders yet"
+            description="Orders appear here once you convert an approved quotation. Start in Sales → Quotations."
+          />
         )}
       </Card>
     </div>

@@ -44,6 +44,25 @@ getenv() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- ; }
 command -v docker >/dev/null 2>&1 || die "docker not on PATH"
 DOMAIN="$(getenv DOMAIN)"; DOMAIN="${DOMAIN:-mixnovas.com}"
 
+# ---- Freshness guard: refuse to build a checkout that is behind its remote ----
+# This script does NOT pull. The #1 cause of "I redeployed but the fix isn't
+# live" is running it on a stale checkout, which then rebuilds old code and
+# reports success. Fetch and, if HEAD is strictly behind its upstream, stop and
+# say so. Override with ALLOW_BEHIND=1 for a deliberate rebuild-in-place.
+if [ "${ALLOW_BEHIND:-0}" != "1" ] && git -C "$REPO_ROOT" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
+  git -C "$REPO_ROOT" fetch --quiet 2>/dev/null || log "WARN: git fetch failed; skipping freshness check"
+  BR="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+  LOCAL="$(git -C "$REPO_ROOT" rev-parse @)"
+  REMOTE="$(git -C "$REPO_ROOT" rev-parse '@{u}')"
+  BASE="$(git -C "$REPO_ROOT" merge-base @ '@{u}')"
+  if [ "$LOCAL" != "$REMOTE" ] && [ "$LOCAL" = "$BASE" ]; then
+    die "checkout is BEHIND origin/$BR — you have not pulled the latest code. Run:
+       git -C $REPO_ROOT pull --ff-only
+   then re-run this script. (Set ALLOW_BEHIND=1 to rebuild the current checkout anyway.)"
+  fi
+  log "git: $BR @ ${LOCAL:0:7} is up to date with its remote ✓"
+fi
+
 # What we build/recreate. WEB_ONLY trims to a web+nginx-only change.
 if [ "$WEB_ONLY" = "1" ]; then BUILD_SVCS=(web); RECREATE_SVCS=(web nginx); else BUILD_SVCS=(api web); RECREATE_SVCS=(api web nginx); fi
 

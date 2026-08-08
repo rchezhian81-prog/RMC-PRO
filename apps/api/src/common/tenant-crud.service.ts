@@ -47,6 +47,13 @@ export class TenantCrudService<T extends ObjectLiteral> {
     });
   }
 
+  /**
+   * Per-entity field validation hook, run before create and update. Default is
+   * a no-op; masters override it to reject bad GSTIN / negative amounts / etc.
+   * Throw via {@link fieldErrors} so the failure carries a per-field map.
+   */
+  protected validateWrite(_dto: Record<string, unknown>): void {}
+
   create(tenantId: string, dto: Record<string, unknown>): Promise<T> {
     const missing = (this.opts.required ?? []).filter(
       (k) => dto[k] === undefined || dto[k] === null || dto[k] === '',
@@ -55,8 +62,10 @@ export class TenantCrudService<T extends ObjectLiteral> {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
         message: `Missing required: ${missing.join(', ')}`,
+        fields: Object.fromEntries(missing.map((k) => [k, 'This field is required.'])),
       });
     }
+    this.validateWrite(dto);
     return this.db.runInTenant(tenantId, (m) => {
       const repo = m.getRepository(this.entity);
       const entity = repo.create({ ...dto, tenantId } as unknown as DeepPartial<T>);
@@ -65,6 +74,7 @@ export class TenantCrudService<T extends ObjectLiteral> {
   }
 
   update(tenantId: string, id: string, dto: Record<string, unknown>): Promise<T> {
+    this.validateWrite(dto);
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(this.entity);
       const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });

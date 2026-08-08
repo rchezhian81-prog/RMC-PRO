@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Download, Upload, FileText } from 'lucide-react';
-import { crud, type Row } from '../lib/api';
+import { validateMasterFields } from '@rmc/shared';
+import { crud, ApiError, type Row } from '../lib/api';
 import type { EntityConfig } from '../lib/entity-config';
 import { getAccess } from '../lib/session';
 import { toCsv, downloadCsv, parseCsv } from '../lib/csv';
@@ -28,6 +29,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [access, setAccess] = useState<Access>(NO_ACCESS);
@@ -58,6 +60,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     setForm(next);
     setEditingId(r.id);
     setError(null);
+    setFieldErrors({});
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -65,24 +68,39 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     setEditingId(null);
     setForm({});
     setError(null);
+    setFieldErrors({});
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
+    const body: Record<string, unknown> = {};
+    for (const f of config.fields) {
+      const v = form[f.key];
+      if (v !== undefined && v !== '') body[f.key] = f.type === 'number' ? Number(v) : v;
+    }
+    // Client-side validation using the SAME rules the server enforces, so the
+    // user gets immediate field-level feedback before a round trip.
+    const clientErrors = validateMasterFields(body);
+    if (Object.keys(clientErrors).length) {
+      setFieldErrors(clientErrors);
+      return;
+    }
     setBusy(true);
     try {
-      const body: Record<string, unknown> = {};
-      for (const f of config.fields) {
-        const v = form[f.key];
-        if (v !== undefined && v !== '') body[f.key] = f.type === 'number' ? Number(v) : v;
-      }
       if (editingId) await client.update(editingId, body);
       else await client.create(body);
       cancelEdit();
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed');
+      // Surface the server's per-field errors (source of truth) when present.
+      if (err instanceof ApiError && err.fields && Object.keys(err.fields).length) {
+        setFieldErrors(err.fields);
+        setError('Please correct the highlighted fields.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed');
+      }
     } finally {
       setBusy(false);
     }
@@ -180,8 +198,13 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                       value={form[f.key] ?? ''}
                       onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
                       required={f.required}
+                      aria-invalid={fieldErrors[f.key] ? true : undefined}
+                      style={fieldErrors[f.key] ? { borderColor: 'var(--mn-danger)' } : undefined}
                     />
                   </Field>
+                  {fieldErrors[f.key] && (
+                    <p style={{ color: 'var(--mn-danger)', fontSize: 12, margin: '4px 0 0' }}>{fieldErrors[f.key]}</p>
+                  )}
                 </div>
               ))}
               <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>

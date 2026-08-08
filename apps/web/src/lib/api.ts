@@ -14,6 +14,8 @@ export class ApiError extends Error {
     message: string,
     readonly status?: number,
     readonly code?: string,
+    /** Per-field validation messages from a VALIDATION_ERROR, if any. */
+    readonly fields?: Record<string, string>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -197,7 +199,9 @@ async function performFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
       throw new ApiError('The server had a problem completing that. Please try again.', res.status, err.code);
     }
     const message = err.message ?? err.code ?? res.statusText ?? 'Request failed';
-    throw new ApiError(Array.isArray(message) ? message.join('; ') : String(message), res.status, err.code);
+    const fields =
+      err.fields && typeof err.fields === 'object' ? (err.fields as Record<string, string>) : undefined;
+    throw new ApiError(Array.isArray(message) ? message.join('; ') : String(message), res.status, err.code, fields);
   }
   return json.data as T;
 }

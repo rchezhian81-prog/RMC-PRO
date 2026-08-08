@@ -37,7 +37,7 @@ export class ErrorFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const { code, message } = this.describe(exception, status);
+    const { code, message, fields } = this.describe(exception, status);
 
     // Anything unexpected is logged in full here and summarised to the caller,
     // so a database or driver message never reaches a browser.
@@ -48,13 +48,18 @@ export class ErrorFilter implements ExceptionFilter {
       );
     }
 
-    res.status(status).json({ success: false, error: { code, message } });
+    const error: { code: string; message: string | string[]; fields?: Record<string, string> } = {
+      code,
+      message,
+    };
+    if (fields) error.fields = fields;
+    res.status(status).json({ success: false, error });
   }
 
   private describe(
     exception: unknown,
     status: number,
-  ): { code: string; message: string | string[] } {
+  ): { code: string; message: string | string[]; fields?: Record<string, string> } {
     const fallbackCode = codeForStatus(status);
     if (status >= 500) {
       return { code: fallbackCode, message: 'Something went wrong. Please try again.' };
@@ -66,14 +71,18 @@ export class ErrorFilter implements ExceptionFilter {
     const body = exception.getResponse();
     if (typeof body === 'string') return { code: fallbackCode, message: body };
 
-    const obj = body as { code?: unknown; message?: unknown; error?: unknown };
+    const obj = body as { code?: unknown; message?: unknown; error?: unknown; fields?: unknown };
     const message =
       Array.isArray(obj.message) || typeof obj.message === 'string'
         ? (obj.message as string | string[])
         : typeof obj.error === 'string'
           ? obj.error
           : exception.message;
-    return { code: typeof obj.code === 'string' ? obj.code : fallbackCode, message };
+    // Field-level validation detail is passed through so the form can highlight
+    // the offending inputs, not just show a single banner.
+    const fields =
+      obj.fields && typeof obj.fields === 'object' ? (obj.fields as Record<string, string>) : undefined;
+    return { code: typeof obj.code === 'string' ? obj.code : fallbackCode, message, fields };
   }
 }
 

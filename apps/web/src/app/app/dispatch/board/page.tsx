@@ -25,21 +25,29 @@ export default function DispatchBoardPage() {
   const [batches, setBatches] = useState<Row[]>([]);
   const [vehicles, setVehicles] = useState<Row[]>([]);
   const [drivers, setDrivers] = useState<Row[]>([]);
+  const [challans, setChallans] = useState<Row[]>([]);
+  // Which dispatch already has a challan → drives the button state below, so it
+  // reflects the real relation rather than a status guess.
+  const challanByDispatch = new Map(
+    challans.filter((c) => c.dispatchId).map((c) => [String(c.dispatchId), c]),
+  );
   const [form, setForm] = useState({ batchTicketId: '', vehicleId: '', driverId: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
-    const [d, b, v, dr] = await Promise.all([
+    const [d, b, v, dr, ch] = await Promise.all([
       dispatchApi.list(),
       batchTicketsApi.list('confirmed'),
       crud('vehicles').list(),
       crud('drivers').list(),
+      challansApi.list(),
     ]);
     setRows(d);
     setBatches(b);
     setVehicles(v);
     setDrivers(dr);
+    setChallans(ch);
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e)));
@@ -158,7 +166,17 @@ export default function DispatchBoardPage() {
                             {n.label}
                           </Button>
                         ))}
-                        <Button size="sm" onClick={() => genChallan(r)}>Generate challan</Button>
+                        {challanByDispatch.has(String(r.id)) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => router.push(`/app/dispatch/challans/${challanByDispatch.get(String(r.id))!.id}`)}
+                          >
+                            View challan
+                          </Button>
+                        ) : (
+                          <Button size="sm" onClick={() => genChallan(r)}>Generate challan</Button>
+                        )}
                       </span>
                     </Td>
                   </tr>

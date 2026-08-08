@@ -251,6 +251,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                     <Link
                       key={n.href}
                       href={n.href}
+                      // Sidebar hovers were firing speculative RSC prefetches that
+                      // intermittently 503'd under load. Real navigations never used
+                      // them; disable prefetch on these low-value links.
+                      prefetch={false}
                       aria-current={active ? 'page' : undefined}
                       className={`mn-nav ${active ? 'mn-nav-active' : ''}`}
                     >

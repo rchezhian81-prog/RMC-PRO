@@ -7,11 +7,13 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const FILTERS = ['pending', '', 'approved', 'rejected'];
 
 export default function NegativeStockPage() {
+  const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [filter, setFilter] = useState('pending');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export default function NegativeStockPage() {
   async function decide(id: string, approve: boolean) {
     setError(null);
     setMsg(null);
-    const remarks = window.prompt(approve ? 'Approval remarks (optional)' : 'Rejection remarks', '');
+    const remarks = await prompt({ title: approve ? 'Approve negative stock' : 'Reject negative stock', label: approve ? 'Approval remarks (optional)' : 'Rejection remarks', defaultValue: '' });
     if (remarks === null) return;
     try {
       if (approve) await negativeStockApi.approve(id, remarks);

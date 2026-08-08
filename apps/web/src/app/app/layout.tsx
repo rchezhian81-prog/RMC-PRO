@@ -13,6 +13,7 @@ import {
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
+import { ConfirmProvider } from '../../components/ui/ConfirmDialog';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
 
@@ -218,6 +219,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   })).filter((g) => g.items.length > 0);
 
   return (
+    <ConfirmProvider>
     <div className="mn-shell">
       <a href="#main" className="mn-skip">Skip to content</a>
       <div className={`mn-scrim ${open ? 'mn-open' : ''}`} onClick={() => setOpen(false)} aria-hidden />
@@ -299,5 +301,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }

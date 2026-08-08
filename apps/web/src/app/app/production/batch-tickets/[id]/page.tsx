@@ -10,12 +10,14 @@ import { Badge, StatusBadge } from '../../../../../components/ui/Badge';
 import { Button } from '../../../../../components/ui/Button';
 import { Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
+import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
 export default function BatchTicketDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { confirm: askConfirm } = useConfirm();
   const [t, setT] = useState<Row | null>(null);
   const [actuals, setActuals] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,9 @@ export default function BatchTicketDetail() {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed';
       if (/tolerance/i.test(message) && !override) {
-        if (window.confirm(`${message}\n\nConfirm anyway with variance override?`)) return confirm(true);
+        if (await askConfirm({ title: 'Variance exceeds tolerance', message: `${message}\n\nConfirm anyway with variance override?`, confirmLabel: 'Override & confirm', danger: true })) {
+          return confirm(true);
+        }
         setError(message);
       } else {
         setError(message);

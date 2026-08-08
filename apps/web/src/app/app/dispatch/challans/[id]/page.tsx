@@ -9,6 +9,7 @@ import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
 import { Button } from '../../../../../components/ui/Button';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
+import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -24,6 +25,7 @@ function Info({ label, value }: { label: string; value: ReactNode }) {
 export default function ChallanDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { prompt } = useConfirm();
   const [c, setC] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -87,9 +89,10 @@ export default function ChallanDetail() {
             <Button
               onClick={() =>
                 run(async () => {
-                  const receiver = window.prompt('Receiver name', 'Site Engineer');
+                  const receiver = await prompt({ title: 'Mark delivered', label: 'Receiver name', defaultValue: 'Site Engineer' });
                   if (receiver === null) return;
-                  const ret = window.prompt('Return quantity (m³)', '0');
+                  const ret = await prompt({ title: 'Mark delivered', label: 'Return quantity (m³)', defaultValue: '0', type: 'number' });
+                  if (ret === null) return;
                   await challansApi.deliver(id, { receiverName: receiver, returnQuantityM3: Number(ret || 0) });
                 }, 'Marked delivered')
               }
@@ -105,7 +108,7 @@ export default function ChallanDetail() {
             icon={<Share2 size={16} />}
             onClick={() =>
               run(async () => {
-                const m = window.prompt('Recipient mobile (WhatsApp)', '');
+                const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' });
                 if (m !== null) await challansApi.share(id, m);
               }, 'WhatsApp message logged')
             }
@@ -117,7 +120,7 @@ export default function ChallanDetail() {
               variant="secondary"
               onClick={() =>
                 run(async () => {
-                  const reason = window.prompt('Cancel reason', '');
+                  const reason = await prompt({ title: 'Cancel challan', label: 'Cancel reason', defaultValue: '' });
                   if (reason !== null) await challansApi.cancel(id, reason);
                 }, 'Challan cancelled')
               }

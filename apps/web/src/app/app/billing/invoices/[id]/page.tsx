@@ -9,6 +9,7 @@ import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
 import { Button } from '../../../../../components/ui/Button';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
+import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -24,6 +25,7 @@ function TotalRow({ label, value, strong, tone }: { label: string; value: ReactN
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { prompt } = useConfirm();
   const [inv, setInv] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export default function InvoiceDetail() {
             icon={<Share2 size={16} />}
             onClick={() =>
               run(async () => {
-                const m = window.prompt('Recipient mobile', '');
+                const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile', defaultValue: '' });
                 if (m !== null) await invoicesApi.share(id, m);
               }, 'WhatsApp message logged')
             }
@@ -98,7 +100,7 @@ export default function InvoiceDetail() {
               variant="secondary"
               onClick={() =>
                 run(async () => {
-                  const r = window.prompt('Cancel reason', '');
+                  const r = await prompt({ title: 'Cancel invoice', label: 'Cancel reason', defaultValue: '' });
                   if (r !== null) await invoicesApi.cancel(id, r);
                 }, 'Invoice cancelled')
               }

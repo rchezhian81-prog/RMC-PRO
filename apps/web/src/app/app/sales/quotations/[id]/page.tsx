@@ -11,6 +11,7 @@ import { Button } from '../../../../../components/ui/Button';
 import { Form } from '../../../../../components/ui/Form';
 import { Field, Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
+import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -36,6 +37,7 @@ function Num({ label, v, on }: { label: string; v: string; on: (v: string) => vo
 export default function QuotationDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { prompt } = useConfirm();
   const [q, setQ] = useState<Row | null>(null);
   const [grades, setGrades] = useState<Row[]>([]);
   const [revs, setRevs] = useState<Row[]>([]);
@@ -120,8 +122,8 @@ export default function QuotationDetail() {
           {status === 'submitted' && <Button onClick={() => run(() => quotationsApi.approve(id), 'Approved')}>Approve</Button>}
           {status === 'submitted' && <Button variant="secondary" onClick={() => run(() => quotationsApi.reject(id, 'Not accepted'), 'Rejected')}>Reject</Button>}
           <Button variant="secondary" icon={<Download size={16} />} onClick={() => openQuotationPdf(id).catch((e) => setError(String(e)))}>Download PDF</Button>
-          <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = window.prompt('Recipient mobile (WhatsApp)', ''); if (m !== null) await quotationsApi.share(id, m); }, 'WhatsApp message logged')}>Share on WhatsApp</Button>
-          <Button variant="secondary" onClick={() => run(async () => { const reason = window.prompt('Revision reason', ''); if (reason !== null) await quotationsApi.createRevision(id, reason); }, 'New revision created')}>New revision</Button>
+          <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' }); if (m !== null) await quotationsApi.share(id, m); }, 'WhatsApp message logged')}>Share on WhatsApp</Button>
+          <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'New revision', label: 'Revision reason', defaultValue: '' }); if (reason !== null) await quotationsApi.createRevision(id, reason); }, 'New revision created')}>New revision</Button>
           {status === 'approved' && (
             <Button onClick={() => run(async () => { const od = await orderDraftsApi.fromQuotation(id, {}); setMsg(`Order draft ${String(od.orderNo)} created`); })}>Convert → Order draft</Button>
           )}

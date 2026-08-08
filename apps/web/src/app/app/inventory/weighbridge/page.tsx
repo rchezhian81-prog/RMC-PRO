@@ -9,6 +9,7 @@ import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -39,6 +40,7 @@ function Num({ label, v, on, req }: { label: string; v: string; on: (v: string) 
 }
 
 export default function WeighbridgePage() {
+  const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
@@ -89,7 +91,7 @@ export default function WeighbridgePage() {
   }
 
   async function toInward(r: Row) {
-    const rate = window.prompt('Rate per unit (for the inward)', '0');
+    const rate = await prompt({ title: 'Convert to inward', label: 'Rate per unit (for the inward)', defaultValue: '0', type: 'number' });
     if (rate === null) return;
     await run(() => weighbridgeApi.toInward(String(r.id), Number(rate || 0)), 'Converted to material inward (draft)');
   }

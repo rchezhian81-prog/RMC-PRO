@@ -7,10 +7,12 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function ReceiptsPage() {
+  const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [customers, setCustomers] = useState<Row[]>([]);
   const [customerId, setCustomerId] = useState('');
@@ -181,7 +183,7 @@ export default function ReceiptsPage() {
                       variant="secondary"
                       size="sm"
                       onClick={async () => {
-                        const m = window.prompt('Recipient mobile', '');
+                        const m = await prompt({ title: 'Share receipt', label: 'Recipient mobile', defaultValue: '' });
                         if (m !== null) {
                           await receiptsApi.share(String(r.id), m);
                           setMsg('WhatsApp message logged.');

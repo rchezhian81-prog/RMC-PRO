@@ -10,12 +10,14 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Loading, ErrorState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { prompt } = useConfirm();
   const [o, setO] = useState<Row | null>(null);
   const [credit, setCredit] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export default function OrderDetail() {
               variant="secondary"
               onClick={() =>
                 run(async () => {
-                  const reason = window.prompt('Cancel reason', '');
+                  const reason = await prompt({ title: 'Cancel order', label: 'Cancel reason', defaultValue: '' });
                   if (reason !== null) await ordersApi.cancel(id, reason);
                 }, 'Order cancelled')
               }

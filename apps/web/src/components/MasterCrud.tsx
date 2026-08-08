@@ -13,6 +13,7 @@ import { Button } from './ui/Button';
 import { Form } from './ui/Form';
 import { Field, Input } from './ui/Field';
 import { ErrorState, EmptyState } from './ui/States';
+import { useConfirm } from './ui/ConfirmDialog';
 
 type Access = { isOwner: boolean; permissions: string[]; has: (k: string) => boolean };
 const NO_ACCESS: Access = { isOwner: false, permissions: [], has: () => false };
@@ -24,6 +25,7 @@ const NO_ACCESS: Access = { isOwner: false, permissions: [], has: () => false };
  * granular `masters.<action>` keys.
  */
 export function MasterCrud({ config }: { config: EntityConfig }) {
+  const { confirm } = useConfirm();
   const client = crud(config.path);
   const [rows, setRows] = useState<Row[]>([]);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -110,8 +112,11 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     const labelCol = config.columns[1] ?? config.columns[0] ?? 'id';
     const label = String(r[labelCol] ?? r.id);
     if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Deactivate "${label}"? It is marked inactive, not permanently deleted.`)
+      !(await confirm({
+        title: 'Deactivate',
+        message: `Deactivate "${label}"? It is marked inactive, not permanently deleted.`,
+        confirmLabel: 'Deactivate',
+      }))
     ) {
       return;
     }

@@ -10,11 +10,13 @@ import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN');
 
 export default function BatchQueuePage() {
   const router = useRouter();
+  const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [orders, setOrders] = useState<Row[]>([]);
   const [orderId, setOrderId] = useState('');
@@ -53,7 +55,7 @@ export default function BatchQueuePage() {
 
   async function startBatch(entry: Row) {
     const remaining = Number(entry.plannedQuantityM3) - Number(entry.producedQuantityM3);
-    const qtyStr = window.prompt(`Batch quantity (m³), remaining ${remaining}`, String(remaining));
+    const qtyStr = await prompt({ title: 'Start batch', label: `Batch quantity (m³), remaining ${remaining}`, defaultValue: String(remaining), type: 'number', confirmLabel: 'Start' });
     if (qtyStr === null) return;
     await run(async () => {
       const ticket = await batchTicketsApi.createFromQueue(String(entry.id), { batchQuantityM3: Number(qtyStr) });

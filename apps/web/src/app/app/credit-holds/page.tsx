@@ -8,11 +8,13 @@ import { Table, Th, Td } from '../../../components/ui/Table';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const FILTERS = ['pending', '', 'approved', 'rejected'];
 
 export default function CreditHoldsPage() {
+  const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [filter, setFilter] = useState('pending');
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export default function CreditHoldsPage() {
   async function decide(id: string, approve: boolean) {
     setError(null);
     setMsg(null);
-    const note = window.prompt(approve ? 'Approval note (optional)' : 'Rejection reason', '');
+    const note = await prompt({ title: approve ? 'Approve credit hold' : 'Reject credit hold', label: approve ? 'Approval note (optional)' : 'Rejection reason', defaultValue: '' });
     if (note === null) return;
     try {
       if (approve) await creditHoldsApi.approve(id, note);

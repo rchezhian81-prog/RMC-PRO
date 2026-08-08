@@ -8,8 +8,10 @@ import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
 export default function RolesPage() {
+  const { confirm } = useConfirm();
   const [roles, setRoles] = useState<Row[]>([]);
   const [catalog, setCatalog] = useState<Row[]>([]);
   const [selRole, setSelRole] = useState<Row | null>(null);
@@ -82,8 +84,12 @@ export default function RolesPage() {
   }
   async function deleteRole(r: Row) {
     if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Delete role "${String(r.roleName)}"? This cannot be undone.`)
+      !(await confirm({
+        title: 'Delete role',
+        message: `Delete role "${String(r.roleName)}"? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        danger: true,
+      }))
     ) {
       return;
     }

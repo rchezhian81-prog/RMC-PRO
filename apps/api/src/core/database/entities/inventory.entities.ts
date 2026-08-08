@@ -11,7 +11,10 @@ import { TenantScopedEntity } from './base.entity';
 @Entity('stock_balances')
 @Unique('uq_stock_balances_plant_material', ['tenantId', 'plantId', 'materialId'])
 export class StockBalance extends TenantScopedEntity {
-  @Column({ name: 'plant_id', type: 'uuid', nullable: true }) plantId!: string | null;
+  // plant_id is NOT NULL: a balance is meaningless without a plant, and a null
+  // here defeats the unique constraint (Postgres treats NULLs as distinct),
+  // which is exactly what created the "ghost" duplicate balance rows.
+  @Column({ name: 'plant_id', type: 'uuid' }) plantId!: string;
   @Column({ name: 'material_id', type: 'uuid' }) materialId!: string;
   @Column({ name: 'material_label', type: 'varchar', nullable: true }) materialLabel!: string | null;
   @Column({ name: 'current_quantity', type: 'numeric', precision: 16, scale: 3, default: 0 }) currentQuantity!: string;

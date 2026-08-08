@@ -206,7 +206,6 @@ export default function CompanyPage() {
               }}
             >
               {preview ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview} alt="Company logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
               ) : (
                 <span style={{ color: 'var(--mn-subtle)', fontSize: 12 }}>No logo</span>

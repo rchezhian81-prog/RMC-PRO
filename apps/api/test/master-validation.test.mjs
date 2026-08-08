@@ -8,7 +8,6 @@
  * Env for Part B: API_BASE (default http://localhost:4000/api/v1),
  *                 LOGIN, RMC_PASSWORD (a tenant owner).
  */
-import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { validateMasterFields, isValidGstin, isValidMobile } = require('@rmc/shared');

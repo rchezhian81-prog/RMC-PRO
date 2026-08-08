@@ -38,6 +38,9 @@ WORKDIR /app
 # Standalone output mirrors the monorepo layout under apps/web/.
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+# `output: standalone` does NOT bundle public/ — copy it explicitly, or every
+# /public asset (brand logos, etc.) 404s in production.
+COPY --from=build /app/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

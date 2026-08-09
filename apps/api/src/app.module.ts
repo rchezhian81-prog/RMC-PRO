@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { RequestContextMiddleware } from './common/request-context.middleware';
+import { MetricsModule } from './common/metrics.module';
 import { DatabaseModule } from './core/database/database.module';
 import { RbacModule } from './rbac/rbac.module';
 import { HealthModule } from './health/health.module';
@@ -38,6 +39,7 @@ import { AuditModule } from './audit/audit.module';
       },
     ]),
     DatabaseModule,
+    MetricsModule,
     RbacModule,
     HealthModule,
     AuthModule,

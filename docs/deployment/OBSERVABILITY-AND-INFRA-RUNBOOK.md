@@ -130,5 +130,43 @@ It is on by default in log form and needs no external service:
 | `ALERT_MAX_PER_WINDOW` | `60` | Circuit-breaker cap per window |
 | `ALERT_TIMEOUT_MS` | `3000` | Webhook delivery timeout |
 
+## 7. Metrics (`/metrics`, Prometheus)
+
+The API exposes **`GET /metrics`** in Prometheus text format (unprefixed, like
+`/health`) — the third leg alongside logs (§1) and alerts (§6):
+
+- `http_requests_total{method,route,status}` — request rate + error rate.
+- `http_request_duration_seconds{method,route}` — latency histogram.
+- `process_resident_memory_bytes`, `nodejs_heap_used_bytes`,
+  `process_uptime_seconds`, `rmc_build_info`.
+
+The `route` label is the **normalised** path (ids collapsed to `:id`) and the
+number of distinct routes is capped (overflow folds into `route="other"`), so
+cardinality stays bounded. The scrape endpoint does not count itself.
+
+**Protect it.** `/metrics` leaks operational shape (rates, errors, memory), so on
+an internet-facing API either:
+
+- set **`METRICS_TOKEN`** — the endpoint then requires
+  `Authorization: Bearer <token>` (Prometheus supports this natively), **or**
+- restrict `/metrics` at nginx to the scraper's source (e.g. `allow 10.0.0.0/8;
+  deny all;`) and scrape over the private network.
+
+**Prometheus scrape config**
+
+```yaml
+scrape_configs:
+  - job_name: rmc-api
+    metrics_path: /metrics
+    authorization:
+      credentials: '<METRICS_TOKEN>'   # omit if restricting at nginx instead
+    static_configs:
+      - targets: ['api.internal:4000']
+```
+
+`APP_VERSION` (if set) is surfaced as the `version` label on `rmc_build_info`.
+
+## 8. Remaining infra
+
 None of the remaining infra items block the current release; they are the next
 rung of operability once the app-level hardening (Waves 0–2 + RLS) is deployed.

@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
-import { MoreThan } from 'typeorm';
+import type { EntityManager, ObjectLiteral, Repository } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
   BatchTicket,
@@ -16,6 +15,62 @@ import {
 const notFound = (msg = 'Not found') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: msg });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const iso = (d: Date | null | undefined) => (d ? new Date(d).toISOString() : null);
+
+/**
+ * Rows delivered per entity per pull page. Kept small in tests
+ * (`SYNC_PULL_LIMIT`) so pagination is exercised without seeding thousands of
+ * rows. When a page is full the response sets `hasMore`, and the device keeps
+ * pulling until it is drained.
+ */
+const PULL_LIMIT = Math.max(1, Number(process.env.SYNC_PULL_LIMIT ?? 500));
+
+/** The entities a device pulls, in the response order. */
+const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances'] as const;
+type PullEntity = (typeof PULL_ENTITIES)[number];
+
+/**
+ * A keyset position: the last (updated_at, id) delivered for one entity. Using
+ * the id as a tiebreaker on top of updated_at makes the cursor a TOTAL order, so
+ * rows that share a millisecond can never be skipped or infinitely re-sent — the
+ * failure mode a plain "updated_at > since" cursor has when many rows are
+ * updated in one statement.
+ */
+interface KeysetCursor {
+  ts: string;
+  id: string;
+}
+const ZERO_CURSOR: KeysetCursor = { ts: new Date(0).toISOString(), id: '00000000-0000-0000-0000-000000000000' };
+type PullCursors = Record<PullEntity, KeysetCursor>;
+
+const allEntities = (c: KeysetCursor): PullCursors =>
+  PULL_ENTITIES.reduce((acc, k) => ((acc[k] = c), acc), {} as PullCursors);
+
+/**
+ * Decode the incoming `since` token. Accepts a v2 opaque token (base64 JSON of
+ * per-entity cursors), a legacy ISO timestamp (older clients and the bootstrap
+ * token), or nothing (first sync). A legacy timestamp starts every entity just
+ * before that instant with the zero id, so rows AT that instant are re-included
+ * — safe, because the device upserts by id.
+ */
+function decodeSince(since: string | undefined): PullCursors {
+  if (!since) return allEntities(ZERO_CURSOR);
+  try {
+    const obj = JSON.parse(Buffer.from(since, 'base64').toString('utf8')) as {
+      v?: number;
+      c?: Partial<Record<PullEntity, KeysetCursor>>;
+    };
+    if (obj?.v === 2 && obj.c) {
+      return PULL_ENTITIES.reduce((acc, k) => ((acc[k] = obj.c?.[k] ?? ZERO_CURSOR), acc), {} as PullCursors);
+    }
+  } catch {
+    /* not a v2 token — fall through to the legacy timestamp path */
+  }
+  const ts = new Date(since);
+  return allEntities(Number.isNaN(ts.getTime()) ? ZERO_CURSOR : { ts: ts.toISOString(), id: ZERO_CURSOR.id });
+}
+
+const encodeCursors = (c: PullCursors): string =>
+  Buffer.from(JSON.stringify({ v: 2, c }), 'utf8').toString('base64');
 
 export interface PushRecord {
   entityName: string;
@@ -225,23 +280,63 @@ export class SyncService {
   }
 
   // ---- Pull (cloud → offline) ------------------------------------------
+  /**
+   * Changes since the device's keyset cursor. Each entity is paged independently
+   * with a `(updated_at, id)` keyset and capped at `PULL_LIMIT`; if any entity
+   * fills its page, `hasMore` is set and the device pulls again from the returned
+   * token. Because the cursor is a total order, a backlog of any size — even many
+   * rows sharing one timestamp — drains completely with no row skipped or lost.
+   */
   pull(tenantId: string, deviceId: string, sinceToken?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const since = sinceToken ? new Date(sinceToken) : new Date(0);
-      const token = new Date();
-      const where = { updatedAt: MoreThan(since) } as Record<string, unknown>;
-      const opts = { where, order: { updatedAt: 'ASC' as const }, take: 500 };
-      const [orders, customers, challans, stock] = await Promise.all([
-        m.getRepository(Order).find(opts),
-        m.getRepository(Customer).find(opts),
-        m.getRepository(DeliveryChallan).find(opts),
-        m.getRepository(StockBalance).find(opts),
-      ]);
-      await m.getRepository(Device).update(deviceId, { lastSyncToken: token, lastSeenAt: token });
+      const cursors = decodeSince(sinceToken);
+      const next: PullCursors = { ...cursors };
+      let hasMore = false;
+
+      // Sequential (not Promise.all) so the four reads share the one transaction
+      // connection without overlapping queries.
+      const page = async <T extends ObjectLiteral & { id: string; updatedAt: Date }>(
+        key: PullEntity,
+        repo: Repository<T>,
+      ): Promise<T[]> => {
+        const cur = cursors[key];
+        const rows = await repo
+          .createQueryBuilder('e')
+          .where('(e.updated_at, e.id) > (:ts::timestamptz, :id::uuid)', { ts: cur.ts, id: cur.id })
+          .orderBy('e.updated_at', 'ASC')
+          .addOrderBy('e.id', 'ASC')
+          .limit(PULL_LIMIT + 1) // one extra to detect that more remain
+          .getMany();
+        const capped = rows.length > PULL_LIMIT;
+        const delivered = capped ? rows.slice(0, PULL_LIMIT) : rows;
+        const last = delivered[delivered.length - 1];
+        if (last) next[key] = { ts: new Date(last.updatedAt).toISOString(), id: last.id };
+        if (capped) hasMore = true;
+        return delivered;
+      };
+
+      const orders = await page('orders', m.getRepository(Order));
+      const customers = await page('customers', m.getRepository(Customer));
+      const challans = await page('deliveryChallans', m.getRepository(DeliveryChallan));
+      const stock = await page('stockBalances', m.getRepository(StockBalance));
+
+      const token = encodeCursors(next);
+      // The authoritative cursor is the opaque token returned to (and stored by)
+      // the device. The device row keeps only a timestamp of the last pull, for
+      // operational visibility — `last_sync_token` is timestamptz and is never
+      // read back to drive a pull.
+      const pulledAt = new Date();
+      await m.getRepository(Device).update(deviceId, { lastSyncToken: pulledAt, lastSeenAt: pulledAt });
       return {
-        syncToken: token.toISOString(),
+        syncToken: token,
+        hasMore,
         changes: { orders, customers, deliveryChallans: challans, stockBalances: stock },
-        counts: { orders: orders.length, customers: customers.length, deliveryChallans: challans.length, stockBalances: stock.length },
+        counts: {
+          orders: orders.length,
+          customers: customers.length,
+          deliveryChallans: challans.length,
+          stockBalances: stock.length,
+        },
       };
     });
   }

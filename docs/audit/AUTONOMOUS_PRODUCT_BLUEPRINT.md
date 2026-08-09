@@ -6,6 +6,10 @@
 > and a phased path from today's L0–L2 baseline. Research-backed (SAE-analogous
 > autonomy taxonomy, HITL/HOTL guidance, agentic-ERP governance). No
 > implementation here.
+>
+> **Multi-agent layer:** the concrete five-agent system (Data-Analysis,
+> Automation, Customer-Service, Monitor, Specialist) that operationalises this
+> ladder is designed in `MULTI_AGENT_SYSTEM_ARCHITECTURE.md`.
 
 ## 1. Autonomy ladder (the definitions we will use)
 

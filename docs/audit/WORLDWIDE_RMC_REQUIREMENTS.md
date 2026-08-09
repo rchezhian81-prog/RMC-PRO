@@ -43,7 +43,9 @@ validation rule** — many standards have 2023–2026 revisions (ASTM C94-24a, E
 `STD` standards/QC · `BCI` batch-controller integration · `TEL` telematics &
 dispatch · `COM` commerce/portal/payments · `FIN` enterprise finance & ops ·
 `TAX` tax & e-invoicing · `SUS` sustainability & circularity · `PLT` platform &
-cross-cutting non-functional.
+cross-cutting non-functional. The **`AGT`** domain (multi-agent system:
+Data-Analysis, Automation, Customer-Service, Monitor, Specialist) is specified in
+`MULTI_AGENT_SYSTEM_ARCHITECTURE.md` (requirements `WR-AGT-*`).
 
 **Global-market priority.** `P0` = legal/conformance blocker in ≥1 major market
 (cannot sell/operate there without it) · `P1` = strongly expected, needed to be

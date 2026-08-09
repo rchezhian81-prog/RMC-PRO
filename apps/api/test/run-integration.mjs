@@ -45,6 +45,7 @@ const TESTS = [
   'test/master-validation.test.mjs',
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
+  'test/cookie-auth.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',

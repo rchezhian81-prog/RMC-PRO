@@ -1,0 +1,7 @@
+{
+  "reporter": ["text-summary", "text"],
+  "include": ["apps/api/dist/**", "packages/shared/dist/**"],
+  "exclude": ["**/*.map", "**/node_modules/**"],
+  "all": false,
+  "check-coverage": false
+}

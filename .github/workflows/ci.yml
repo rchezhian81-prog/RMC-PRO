@@ -33,12 +33,14 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Fast, DB-free unit tests over the pure logic: GST money-math, the shared
-      # validators, password policy, tenant-status, and the RBAC role defaults
-      # (separation-of-duties). Runs on the already-built dist; decoupled from
-      # the web build so neither masks the other.
-      - name: Unit tests
-        run: pnpm --filter @rmc/shared test && pnpm --filter @rmc/api test
+      # Fast, DB-free unit tests over the pure logic (GST money-math, validators,
+      # password policy, tenant-status, RBAC role defaults, logo-upload security,
+      # sanitize, module catalogue) with a c8 coverage summary printed to the
+      # log. Runs on the already-built dist; no coverage floor is enforced yet
+      # (visibility first) — the whole-app behaviour is covered by the
+      # integration + e2e jobs.
+      - name: Unit tests + coverage
+        run: pnpm coverage
 
   integration:
     name: integration tests

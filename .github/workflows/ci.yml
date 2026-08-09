@@ -33,6 +33,13 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Fast, DB-free unit tests over the pure logic: GST money-math, the shared
+      # validators, password policy, tenant-status, and the RBAC role defaults
+      # (separation-of-duties). Runs on the already-built dist; decoupled from
+      # the web build so neither masks the other.
+      - name: Unit tests
+        run: pnpm --filter @rmc/shared test && pnpm --filter @rmc/api test
+
   integration:
     name: integration tests
     runs-on: ubuntu-latest

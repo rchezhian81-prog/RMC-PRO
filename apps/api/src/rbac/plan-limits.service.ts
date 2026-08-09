@@ -2,6 +2,14 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Plant, SubscriptionPlan, Tenant, User } from '../core/database/entities';
 
+/**
+ * When set, a tenant with no plan is capped at zero (limits fail closed) rather
+ * than treated as unlimited. Off by default; recommended ON in production once
+ * every tenant has a plan assigned. Set `PROVISIONING_STRICT=1`.
+ */
+const PROVISIONING_STRICT =
+  process.env.PROVISIONING_STRICT === '1' || process.env.PROVISIONING_STRICT === 'true';
+
 /** What a plan permits, and what the tenant is currently using. */
 export interface LimitUsage {
   used: number;
@@ -39,11 +47,16 @@ export class PlanLimitsService {
       if (!this.warned.has(tenantId)) {
         this.warned.add(tenantId);
         this.log.warn(
-          `Tenant ${tenantId} has no subscription plan — user and plant limits are not enforced. ` +
-            'Assign a plan from the admin portal to apply them.',
+          `Tenant ${tenantId} has no subscription plan — user and plant limits are ` +
+            (PROVISIONING_STRICT ? 'capped at zero (PROVISIONING_STRICT).' : 'not enforced.') +
+            ' Assign a plan from the admin portal to apply them.',
         );
       }
-      return { planName: null, maxUsers: null, maxPlants: null };
+      // Fail closed (cap at zero) only under strict provisioning; otherwise leave
+      // limits unenforced so a provisioning gap does not block adding staff.
+      return PROVISIONING_STRICT
+        ? { planName: null, maxUsers: 0, maxPlants: 0 }
+        : { planName: null, maxUsers: null, maxPlants: null };
     }
     const plan = await this.db.ds.getRepository(SubscriptionPlan).findOne({ where: { id: planId } });
     if (!plan) return { planName: null, maxUsers: null, maxPlants: null };

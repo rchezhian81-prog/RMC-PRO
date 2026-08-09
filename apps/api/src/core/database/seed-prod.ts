@@ -81,6 +81,7 @@ const DEFAULT_PLANS = [
 // Passwords that must never protect a production Super Admin.
 const WEAK_PASSWORDS = new Set([
   'Passw0rd!', 'password', 'Password1', 'admin', 'admin123', 'changeme', 'change-me', 'rmc', 'rmc_app',
+  'Concrete#2026', // the demo-seed password — must never protect a real Super Admin
 ]);
 
 function assertStrongPassword(pw: string): void {

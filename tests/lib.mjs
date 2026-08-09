@@ -5,7 +5,10 @@
  * login rate limit.
  */
 export const BASE = process.env.RMC_BASE ?? 'http://localhost:4000';
-export const PASSWORD = 'Passw0rd!';
+// Matches the demo seed password (apps/api/src/core/database/seed.ts) and
+// satisfies the shared password policy, so makeScopedUser can create users
+// through POST /users without a validation error.
+export const PASSWORD = 'Concrete#2026';
 
 const tokenCache = new Map();
 

@@ -54,11 +54,44 @@ independently. Retention counts default to 7 / 4 / 3 (override via env).
 Run a **restore test monthly** (and after any backup config change). A green restore
 test is the only proof the backup works.
 
-## Off-box copy — required
-On-box copies die with the box. Uncomment and configure one transport in
-`pg-backup.sh` (rclone / `mc` to a *separate* S3-or-MinIO / `scp` to another host) so a
-copy lives somewhere that survives loss of VM3. Do **not** rely on the same disk/VM as
-the database.
+## Off-box copy — required (Backblaze B2)
+On-box copies die with the box. Every dump is copied off VM3 to **Backblaze B2**
+(the configured target) via `rclone`. A **failed** off-box copy is *alerted*, not
+silently logged (see `RMC_ALERT_WEBHOOK`) — a backup that never leaves the box is
+the failure that loses everything when the box does.
+
+**One-time setup on the VPS:**
+
+```bash
+# 1. Install rclone (Debian/Ubuntu)
+sudo apt-get update && sudo apt-get install -y rclone   # or: curl https://rclone.org/install.sh | sudo bash
+
+# 2. Create a B2 application key in the Backblaze console (Account → App Keys),
+#    scoped to a single private bucket (e.g. rmc-offbox-backups). Note the
+#    keyID and applicationKey — keep them OFF chat and out of git.
+
+# 3. Configure an rclone remote named "b2" (interactive, secrets go to
+#    ~/.config/rclone/rclone.conf on the box only):
+rclone config
+#    n) New remote  → name: b2  → storage: "Backblaze B2"
+#    account: <keyID>   key: <applicationKey>   (leave the rest default)
+
+# 4. Verify rclone can see the bucket:
+rclone lsd b2:
+
+# 5. Point the backup at it in .env.production (already in the template):
+#    RMC_OFFBOX_RCLONE=b2:rmc-offbox-backups
+#    RMC_ALERT_WEBHOOK=https://hooks.example.com/...   # optional but recommended
+```
+
+After that, `pg-backup.sh` uploads each `.dump` + `.sha256` to B2 and **reads it
+back** to confirm it landed (it doesn't just trust a zero exit code). Do **not**
+rely on the same disk/VM as the database. An `scp` to a separate host is an
+alternative — set `RMC_OFFBOX_SCP` and leave `RMC_OFFBOX_RCLONE` unset.
+
+> **Timing the drill against RTO:** run `verify-restore.sh` and note how long the
+> restore takes; that time is your restore-side RTO. Confirm the newest B2 dump
+> restores cleanly, not just the on-box copy.
 
 ## Retention & the deploy flow
 - `pg-backup.sh --label pre-migrate` **before every migration** — the rollback anchor

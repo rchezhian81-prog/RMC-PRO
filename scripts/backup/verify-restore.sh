@@ -25,7 +25,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"
 PG_SERVICE="${PG_SERVICE:-postgres}"
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups/postgres}"
 SCRATCH="${SCRATCH:-rmc_restore_verify}"
-MIN_MIGRATIONS="${MIN_MIGRATIONS:-10}"   # we ship 14; a floor that proves the schema applied
+MIN_MIGRATIONS="${MIN_MIGRATIONS:-10}"   # we ship 15; a floor that proves the schema applied
 CRON_FILE="/etc/cron.d/rmc-restore-verify"
 LOG_FILE="/var/log/rmc-restore-verify.log"
 

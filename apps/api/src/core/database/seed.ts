@@ -30,7 +30,10 @@ import {
   Vehicle,
 } from './entities';
 
-const DEMO_PASSWORD = 'Passw0rd!';
+// Must satisfy the shared password policy (>=10 chars, letter+digit, no
+// common-word prefix) because the e2e suite creates users through the API with
+// it — a demo value that the API would reject makes the suite un-runnable.
+const DEMO_PASSWORD = 'Concrete#2026';
 
 async function main() {
   await AppDataSource.initialize();
@@ -168,11 +171,12 @@ async function main() {
   );
   await m.save(proModules.map((k) => m.create(PlanModule, { planId: pro.id, moduleKey: k })));
 
-  // Assign Starter to Alpha (includes 'orders'); Beta gets no plan (modules off)
-  // so MODULE_NOT_ENABLED enforcement is demonstrable out of the box.
-  await m.update(Tenant, alpha.tenant.id, { currentPlanId: starter.id });
+  // Assign Professional to Alpha (all Phase-1 modules) so the full order-to-cash
+  // + production + offline-sync UAT can run end to end; Beta gets no plan
+  // (modules off) so MODULE_NOT_ENABLED enforcement is demonstrable out of the box.
+  await m.update(Tenant, alpha.tenant.id, { currentPlanId: pro.id });
   await m.save(
-    starterModules.map((k) =>
+    proModules.map((k) =>
       m.create(TenantModule, { tenantId: alpha.tenant.id, moduleKey: k, isEnabled: true }),
     ),
   );

@@ -35,6 +35,16 @@ const TTL_MS = 30_000;
 /** Tenants are few; this bound only exists so a bug can never grow the map forever. */
 const MAX_ENTRIES = 500;
 
+/**
+ * When set, an unprovisioned tenant (no `tenant_modules` rows) is treated as
+ * having NOTHING enabled instead of everything — i.e. module checks fail closed.
+ * Off by default so a provisioning gap never silently takes a live plant off the
+ * air; recommended ON in production once every tenant is confirmed provisioned
+ * (the production seed back-fills modules). Set `PROVISIONING_STRICT=1`.
+ */
+const PROVISIONING_STRICT =
+  process.env.PROVISIONING_STRICT === '1' || process.env.PROVISIONING_STRICT === 'true';
+
 @Injectable()
 export class TenantAccessService {
   private readonly log = new Logger(TenantAccessService.name);
@@ -117,11 +127,14 @@ export class TenantAccessService {
       if (!this.warned.has(tenantId)) {
         this.warned.add(tenantId);
         this.log.warn(
-          `Tenant ${tenantId} has no tenant_modules rows — module checks are passing unenforced. ` +
-            'Assign a plan, or run the production seed to provision the default modules.',
+          `Tenant ${tenantId} has no tenant_modules rows — module checks are ` +
+            (PROVISIONING_STRICT ? 'DENIED (PROVISIONING_STRICT).' : 'passing unenforced.') +
+            ' Assign a plan, or run the production seed to provision the default modules.',
         );
       }
-      return true;
+      // Fail closed only when explicitly asked to; otherwise keep a live plant
+      // working through a provisioning gap (a business decision, not a bug).
+      return !PROVISIONING_STRICT;
     }
     return modules.has(moduleKey);
   }

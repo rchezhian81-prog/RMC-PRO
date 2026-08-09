@@ -6,9 +6,11 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { Tenant, User } from '../core/database/entities';
 import { loadUserAccess } from '../rbac/access';
 import { TenantAccessService } from '../rbac/tenant-access.service';
+import { JWT_ACCESS_SECRET, JWT_REFRESH_SECRET } from './jwt-secrets';
 
-const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET ?? 'change-me-access';
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'change-me-refresh';
+// Resolved once at startup; production refuses to boot on a default/weak secret.
+const ACCESS_SECRET = JWT_ACCESS_SECRET;
+const REFRESH_SECRET = JWT_REFRESH_SECRET;
 const ACCESS_TTL = Number(process.env.JWT_ACCESS_TTL ?? 900);
 const REFRESH_TTL = Number(process.env.JWT_REFRESH_TTL ?? 1_209_600);
 

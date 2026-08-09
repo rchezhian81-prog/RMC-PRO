@@ -22,9 +22,22 @@ export class MixDesignsController {
 
   @Get() list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
-  @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
-  @Post(':id/materials') addMaterial(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.addMaterial(tid(u), id, dto); }
-  @Delete(':id/materials/:rowId') deleteMaterial(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('rowId') rowId: string) { return this.service.deleteMaterial(tid(u), id, rowId); }
+
+  // Authoring a mix design is a QC responsibility, so it is gated by the same
+  // key that approves one (mix_design.approve) rather than left open to any
+  // authenticated user with the production module. A separate mix_design.manage
+  // key (author != approver) is a Phase-2 separation-of-duties refinement.
+  @Post()
+  @RequirePermissions('mix_design.approve')
+  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
+
+  @Post(':id/materials')
+  @RequirePermissions('mix_design.approve')
+  addMaterial(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.addMaterial(tid(u), id, dto); }
+
+  @Delete(':id/materials/:rowId')
+  @RequirePermissions('mix_design.approve')
+  deleteMaterial(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('rowId') rowId: string) { return this.service.deleteMaterial(tid(u), id, rowId); }
 
   @Post(':id/approve')
   @RequirePermissions('mix_design.approve')
@@ -43,11 +56,30 @@ export class ProductionPlansController {
 
   @Get() list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
-  @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto, u.userId); }
-  @Post(':id/items') addItem(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.addItem(tid(u), id, dto); }
-  @Delete(':id/items/:itemId') deleteItem(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('itemId') itemId: string) { return this.service.deleteItem(tid(u), id, itemId); }
-  @Post(':id/status') setStatus(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.setStatus(tid(u), id, String(dto.status)); }
-  @Post(':id/enqueue') enqueue(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.enqueue(tid(u), id); }
+
+  // Production-plan writes were previously ungated, so any user with the
+  // production module (including a view-only auditor) could create, edit and
+  // enqueue plans. Gate them behind batch_tickets.create — the same key the
+  // plant manager and batching operator already hold for production work.
+  @Post()
+  @RequirePermissions('batch_tickets.create')
+  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto, u.userId); }
+
+  @Post(':id/items')
+  @RequirePermissions('batch_tickets.create')
+  addItem(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.addItem(tid(u), id, dto); }
+
+  @Delete(':id/items/:itemId')
+  @RequirePermissions('batch_tickets.create')
+  deleteItem(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('itemId') itemId: string) { return this.service.deleteItem(tid(u), id, itemId); }
+
+  @Post(':id/status')
+  @RequirePermissions('batch_tickets.create')
+  setStatus(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.setStatus(tid(u), id, String(dto.status)); }
+
+  @Post(':id/enqueue')
+  @RequirePermissions('batch_tickets.create')
+  enqueue(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.enqueue(tid(u), id); }
 }
 
 @Controller('batch-queue')

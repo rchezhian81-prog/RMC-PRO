@@ -85,3 +85,54 @@ jobs:
       # order-to-cash).
       - name: Integration tests
         run: pnpm --filter @rmc/api test:integration
+
+  e2e:
+    name: e2e suite (isolation · rbac · uat · security)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rmc_owner
+          POSTGRES_PASSWORD: ownerpw
+          POSTGRES_DB: rmc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rmc_owner -d rmc"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: rmc
+      POSTGRES_USER: rmc_owner
+      POSTGRES_PASSWORD: ownerpw
+      APP_DB_USER: rmc_app
+      APP_DB_PASSWORD: apppw
+      JWT_ACCESS_SECRET: ci-access-secret-0123456789abcdefghij
+      JWT_REFRESH_SECRET: ci-refresh-secret-0123456789abcdefghij
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared + api
+        run: pnpm --filter @rmc/shared build && pnpm --filter @rmc/api build
+
+      # Migrates a fresh DB, seeds the DEMO tenants (Alpha/Beta), boots the API,
+      # then runs the repo-root tests/ suite: tenant isolation, RBAC, UAT
+      # end-to-end, and security — previously manual-only, now a merge gate.
+      - name: E2E suite
+        run: pnpm --filter @rmc/api test:e2e:ci

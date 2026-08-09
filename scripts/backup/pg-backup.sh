@@ -96,22 +96,43 @@ log "done: $(basename "$OUT") ($SIZE) + .sha256"
 # Set ONE of these to auto-copy every dump off VM3. Read from the environment
 # first, else from .env.production, so it also works from cron. Leave both unset
 # to skip (Acronis still images the whole VM separately).
-#   RMC_OFFBOX_RCLONE=remote:rmc-backups         # an rclone remote (S3/Drive/B2/…)
+#   RMC_OFFBOX_RCLONE=b2:rmc-backups             # an rclone remote (Backblaze B2/S3/…)
 #   RMC_OFFBOX_SCP=backup@host:/srv/rmc-backups  # another host over SSH
+# Backblaze B2 setup (recommended): see scripts/backup/README.md — configure an
+# rclone remote named e.g. `b2` and set RMC_OFFBOX_RCLONE=b2:<your-bucket>.
+#
+# Off-box is a recovery-critical control, so a FAILED copy is ALERTED (not just a
+# silent WARN) via RMC_ALERT_WEBHOOK when that is set — a backup that never left
+# the box is the failure mode that loses everything when the box does.
 RMC_OFFBOX_RCLONE="${RMC_OFFBOX_RCLONE:-$(getenv RMC_OFFBOX_RCLONE)}"
 RMC_OFFBOX_SCP="${RMC_OFFBOX_SCP:-$(getenv RMC_OFFBOX_SCP)}"
+RMC_ALERT_WEBHOOK="${RMC_ALERT_WEBHOOK:-$(getenv RMC_ALERT_WEBHOOK)}"
+
+offbox_alert() {  # $1 = message; POST to the webhook if one is configured
+  log "WARN: $1"
+  [ -n "${RMC_ALERT_WEBHOOK:-}" ] && curl -fsS -m 8 -X POST -H 'Content-Type: application/json' \
+    -d "{\"text\":\"RMC off-box backup FAILED: $1\"}" "$RMC_ALERT_WEBHOOK" >/dev/null 2>&1 || true
+}
+
 if [ -n "$RMC_OFFBOX_RCLONE" ]; then
-  if command -v rclone >/dev/null 2>&1 \
-     && rclone copy "$OUT" "$RMC_OFFBOX_RCLONE" && rclone copy "$OUT.sha256" "$RMC_OFFBOX_RCLONE"; then
-    log "off-box copy ok -> rclone:$RMC_OFFBOX_RCLONE"
+  if ! command -v rclone >/dev/null 2>&1; then
+    offbox_alert "rclone not installed but RMC_OFFBOX_RCLONE is set (local dump kept)"
+  elif rclone copy "$OUT" "$RMC_OFFBOX_RCLONE" && rclone copy "$OUT.sha256" "$RMC_OFFBOX_RCLONE"; then
+    # Read back: confirm the dump actually landed at the destination, don't just
+    # trust a zero exit. A silent partial upload is exactly what bites in a DR.
+    if rclone lsf "$RMC_OFFBOX_RCLONE" 2>/dev/null | grep -qF "$(basename "$OUT")"; then
+      log "off-box copy verified -> rclone:$RMC_OFFBOX_RCLONE"
+    else
+      offbox_alert "off-box rclone copy not found on read-back at $RMC_OFFBOX_RCLONE (local dump kept)"
+    fi
   else
-    log "WARN: off-box rclone copy FAILED or rclone missing (local dump kept)"
+    offbox_alert "off-box rclone copy failed to $RMC_OFFBOX_RCLONE (local dump kept)"
   fi
 elif [ -n "$RMC_OFFBOX_SCP" ]; then
   if scp -q "$OUT" "$OUT.sha256" "$RMC_OFFBOX_SCP"/; then
     log "off-box copy ok -> scp:$RMC_OFFBOX_SCP"
   else
-    log "WARN: off-box scp copy FAILED (local dump kept)"
+    offbox_alert "off-box scp copy failed to $RMC_OFFBOX_SCP (local dump kept)"
   fi
 else
   log "note: no off-box target set (RMC_OFFBOX_RCLONE / RMC_OFFBOX_SCP) — on-box copy only"

@@ -78,7 +78,10 @@ for undoing a bad migration specifically.
 | pg-backup (this) | granular logical dumps, per-table restore | GFS: 7 daily / 4 weekly / 3 monthly |
 | MilesWeb Acronis | whole-VM image | 7 days (restore via MilesWeb ticket) |
 
-**Off-box copy (do this):** on-box backups don't survive losing the box. Set
-`RMC_OFFBOX_SCP` or `RMC_OFFBOX_RCLONE` in `.env.production` so every dump is
-copied off the VM (see `scripts/backup/pg-backup.sh`). Until then the Acronis
-whole-VM image is the only off-box layer.
+**Off-box copy:** on-box backups don't survive losing the box. The configured
+off-box target is **Backblaze B2** via rclone — set `RMC_OFFBOX_RCLONE=b2:<bucket>`
+(and ideally `RMC_ALERT_WEBHOOK`) in `.env.production` so every dump is copied off
+the VM and a failed copy is alerted (setup in `scripts/backup/README.md`). The
+Acronis whole-VM image remains a second, independent off-box layer. In a real
+recovery you can pull the newest dump back with
+`rclone copy b2:<bucket>/<dump> backups/postgres/` before restoring.

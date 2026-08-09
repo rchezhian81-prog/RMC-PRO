@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"(unit tests: none; see test:integration)\" && exit 0",
     "test:integration": "node test/run-integration.mjs",
+    "test:e2e:ci": "node test/run-e2e.mjs",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/core/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/core/database/data-source.ts",
     "seed": "ts-node src/core/database/seed.ts",

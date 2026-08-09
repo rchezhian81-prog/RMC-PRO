@@ -25,7 +25,10 @@ export class StockBalance extends TenantScopedEntity {
 /** Stock ledger (Doc 6 §12.2). transaction_type: opening | batch_consumption | adjustment. */
 @Entity('stock_transactions')
 export class StockTransaction extends TenantScopedEntity {
-  @Column({ name: 'plant_id', type: 'uuid', nullable: true }) plantId!: string | null;
+  // NOT NULL (migration 17): every movement resolves a plant before it is
+  // written (StockService.resolvePlant), so a plant-less ledger row — the other
+  // half of the null-plant "ghost row" bug — can no longer be persisted.
+  @Column({ name: 'plant_id', type: 'uuid' }) plantId!: string;
   @Column({ name: 'material_id', type: 'uuid' }) materialId!: string;
   @Column({ name: 'material_label', type: 'varchar', nullable: true }) materialLabel!: string | null;
   @Column({ name: 'transaction_type', type: 'varchar' }) transactionType!: string;

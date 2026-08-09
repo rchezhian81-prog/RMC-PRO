@@ -18,6 +18,7 @@ import { CompanyLogo1720000013000 } from './migrations/1720000013000-CompanyLogo
 import { StockBalancePlantNotNull1720000014000 } from './migrations/1720000014000-StockBalancePlantNotNull';
 import { UserTokenVersion1720000015000 } from './migrations/1720000015000-UserTokenVersion';
 import { DataIntegrityChecks1720000016000 } from './migrations/1720000016000-DataIntegrityChecks';
+import { StockTransactionPlantNotNull1720000017000 } from './migrations/1720000017000-StockTransactionPlantNotNull';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -51,6 +52,7 @@ export const AppDataSource = new DataSource({
     StockBalancePlantNotNull1720000014000,
     UserTokenVersion1720000015000,
     DataIntegrityChecks1720000016000,
+    StockTransactionPlantNotNull1720000017000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

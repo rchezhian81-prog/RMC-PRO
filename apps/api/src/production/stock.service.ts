@@ -6,7 +6,7 @@ import { Material, Plant, StockBalance, StockTransaction } from '../core/databas
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 
 interface TxnInput {
-  plantId: string | null;
+  plantId: string; // always resolved (non-null) before a ledger row is written
   materialId: string;
   materialLabel: string | null;
   transactionType: string;

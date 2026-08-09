@@ -129,7 +129,9 @@ export class NumberSeriesService extends TenantCrudService<NumberSeries> {
   }
 }
 
-/** Tenant-side user management (Design Doc 6 §6.1). users has no RLS — scope by tenant_id. */
+/** Tenant-side user management (Design Doc 6 §6.1). `users` is RLS-scoped, so
+ *  reads and writes run inside the tenant's context; the one cross-tenant check
+ *  (email is globally unique) runs in the platform context. */
 @Injectable()
 export class UsersService {
   constructor(
@@ -139,9 +141,9 @@ export class UsersService {
   ) {}
 
   async list(tenantId: string) {
-    const users = await this.db.ds
-      .getRepository(User)
-      .find({ where: { tenantId }, order: { name: 'ASC' } });
+    const users = await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).find({ where: { tenantId }, order: { name: 'ASC' } }),
+    );
 
     // Carry each user's role, so the list shows who can do what. A user with no
     // role has no permissions at all, which the UI needs to be able to flag.
@@ -182,22 +184,30 @@ export class UsersService {
     }
     const problem = passwordProblemMessage(password);
     if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
-    const repo = this.db.ds.getRepository(User);
-    if (await repo.findOne({ where: { email } })) {
+    // Email is globally unique (login is by email alone), so the duplicate check
+    // is a cross-tenant question — run it in the platform context, or RLS would
+    // hide a clash in another tenant and the DB unique index would surface it as
+    // an opaque 500 instead of this clean message.
+    const emailTaken = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { email } }),
+    );
+    if (emailTaken) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Email already exists' });
     }
     // Checked after the duplicate test, so retrying an email that already exists
     // does not report a seat problem the administrator cannot act on.
     await this.planLimits.assertCanAddUser(tenantId);
-    const user = await repo.save(
-      repo.create({
-        tenantId,
-        name,
-        email,
-        mobile: dto.mobile ? String(dto.mobile) : null,
-        passwordHash: bcrypt.hashSync(password, 10),
-        userType: 'tenant_user',
-      }),
+    const user = await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).save(
+        m.getRepository(User).create({
+          tenantId,
+          name,
+          email,
+          mobile: dto.mobile ? String(dto.mobile) : null,
+          passwordHash: bcrypt.hashSync(password, 10),
+          userType: 'tenant_user',
+        }),
+      ),
     );
     if (dto.roleId) {
       await this.db.runInTenant(tenantId, (m) =>
@@ -236,8 +246,9 @@ export class UsersService {
    * what the safety rules below are judged against.
    */
   async update(tenantId: string, id: string, dto: Record<string, unknown>, actingUserId?: string) {
-    const repo = this.db.ds.getRepository(User);
-    const user = await repo.findOne({ where: { id, tenantId } });
+    const user = await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).findOne({ where: { id, tenantId } }),
+    );
     if (!user) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'User not found' });
 
     const isSelf = actingUserId === id;
@@ -286,12 +297,14 @@ export class UsersService {
       passwordHash = bcrypt.hashSync(String(dto.password), 10);
     }
 
-    await repo.update(id, {
-      ...(dto.name !== undefined ? { name: String(dto.name) } : {}),
-      ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
-      ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
-      ...(passwordHash ? { passwordHash } : {}),
-    });
+    await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).update(id, {
+        ...(dto.name !== undefined ? { name: String(dto.name) } : {}),
+        ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
+        ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
+        ...(passwordHash ? { passwordHash } : {}),
+      }),
+    );
 
     // Role change: a user holds one role here, so replace rather than append.
     // An empty roleId clears the role, which leaves the user with no access —

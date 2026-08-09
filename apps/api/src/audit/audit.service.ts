@@ -132,7 +132,12 @@ export class AuditService {
   }
 
   private async lookupActor(userId: string): Promise<{ email: string; name: string } | null> {
-    const u = await this.db.ds.getRepository(User).findOne({ where: { id: userId } });
+    // Resolving who the actor is — often a super-admin (tenant_id NULL) acting
+    // on a tenant's data — is an identity lookup, so it runs in the platform
+    // context; a plain read of the RLS-scoped users table would find nothing.
+    const u = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { id: userId } }),
+    );
     return u ? { email: u.email, name: u.name } : null;
   }
 }

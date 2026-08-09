@@ -66,11 +66,14 @@ export class PlanLimitsService {
   /**
    * Seats in use. Counts **active** users only, so deactivating someone frees
    * their seat — otherwise a plant that loses a driver would have to buy a
-   * bigger plan to replace them. Read on the plain connection because `users`
-   * is not RLS-scoped; the tenant id comes from the verified JWT.
+   * bigger plan to replace them. `users` is now RLS-scoped, so the count runs in
+   * the tenant's context (the id comes from the verified JWT) — same result,
+   * now database-enforced, and it mirrors `countPlants` below.
    */
   private countUsers(tenantId: string): Promise<number> {
-    return this.db.ds.getRepository(User).count({ where: { tenantId, status: 'active' } });
+    return this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).count({ where: { tenantId, status: 'active' } }),
+    );
   }
 
   /** Plants in use. Also active-only: a decommissioned plant does not occupy a slot. */

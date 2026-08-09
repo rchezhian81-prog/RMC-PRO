@@ -64,12 +64,15 @@ export class TenantAccessService {
     const hit = this.cache.get(tenantId);
     if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
 
-    // Both tables are platform-managed (no RLS), so they are read on the plain
-    // connection and scoped by the id from the verified JWT.
-    const [tenant, rows] = await Promise.all([
-      this.db.ds.getRepository(Tenant).findOne({ where: { id: tenantId } }),
-      this.db.ds.getRepository(TenantModule).find({ where: { tenantId } }),
-    ]);
+    // `tenant_modules` is now RLS-scoped, so read it inside the tenant's context
+    // (the id comes from the verified JWT). `tenants` has no RLS and is
+    // unaffected — reading it in the same short transaction just keeps the two
+    // reads together. This runs at guard time but is cached (30 s), so the cost
+    // is negligible.
+    const { tenant, rows } = await this.db.runInTenant(tenantId, async (m) => ({
+      tenant: await m.getRepository(Tenant).findOne({ where: { id: tenantId } }),
+      rows: await m.getRepository(TenantModule).find({ where: { tenantId } }),
+    }));
 
     const value: Entitlements = {
       status: tenant?.status ?? '',

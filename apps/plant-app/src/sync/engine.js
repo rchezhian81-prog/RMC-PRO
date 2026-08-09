@@ -123,16 +123,36 @@ export class SyncEngine {
     return { applied: res.applied, conflicts: res.conflicts };
   }
 
-  /** Pull cloud changes since the last token and merge into local ref data. */
+  /**
+   * Pull cloud changes since the last token and merge into local ref data.
+   *
+   * Drains: the server pages each entity and sets `hasMore` when a page fills,
+   * so we keep pulling from the returned token until it clears. Without this, a
+   * backlog larger than one page (a plant offline long enough to accumulate many
+   * changes) would leave the tail of the changes on the cloud, unseen. The guard
+   * caps the loop so a misbehaving server can never spin it forever.
+   */
   async pull() {
-    const since = this.getMeta('sync_token') ?? '';
-    const data = await this.api('GET', `/sync/pull?deviceId=${this.deviceId}&since=${encodeURIComponent(since)}`);
     const ins = this.db.prepare('INSERT INTO ref_data(entity,cloud_id,payload_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(entity,cloud_id) DO UPDATE SET payload_json=excluded.payload_json, updated_at=excluded.updated_at');
-    for (const [entity, rows] of Object.entries(data.changes)) {
-      for (const row of rows) ins.run(entity, row.id, JSON.stringify(row), row.updatedAt ?? null);
+    const total = {};
+    let pages = 0;
+    let more = true;
+    while (more && pages < 10000) {
+      pages += 1;
+      const since = this.getMeta('sync_token') ?? '';
+      const data = await this.api('GET', `/sync/pull?deviceId=${this.deviceId}&since=${encodeURIComponent(since)}`);
+      for (const [entity, rows] of Object.entries(data.changes)) {
+        for (const row of rows) ins.run(entity, row.id, JSON.stringify(row), row.updatedAt ?? null);
+      }
+      for (const [k, v] of Object.entries(data.counts ?? {})) total[k] = (total[k] ?? 0) + v;
+      // Advance to the server's cursor before the next page. A server that
+      // returns hasMore without advancing the token would otherwise loop; the
+      // page guard above still bounds it.
+      const prev = since;
+      this.setMeta('sync_token', data.syncToken);
+      more = Boolean(data.hasMore) && data.syncToken !== prev;
     }
-    this.setMeta('sync_token', data.syncToken);
-    return data.counts;
+    return { ...total, pages };
   }
 
   localDocs(entity) { return this.db.prepare('SELECT * FROM local_docs WHERE entity_name=? ORDER BY rowid').all(entity); }

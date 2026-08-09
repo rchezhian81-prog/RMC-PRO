@@ -50,7 +50,9 @@ export class PlatformService {
     const [tenants, plans, tms] = await Promise.all([
       this.ds.getRepository(Tenant).find({ order: { tenantCode: 'ASC' } }),
       this.ds.getRepository(SubscriptionPlan).find(),
-      this.ds.getRepository(TenantModule).find({ where: { isEnabled: true } }),
+      // Genuinely cross-tenant: every tenant's enabled-module count for the
+      // admin overview. RLS on tenant_modules requires the platform context.
+      this.db.runAsPlatform((m) => m.getRepository(TenantModule).find({ where: { isEnabled: true } })),
     ]);
     const planCode = new Map(plans.map((p) => [p.id, p.planCode]));
     const counts = new Map<string, number>();
@@ -100,21 +102,23 @@ export class PlatformService {
    * deliberate choices.
    */
   private async provisionDefaultModules(tenantId: string): Promise<void> {
-    const repo = this.ds.getRepository(TenantModule);
-    if (await repo.findOne({ where: { tenantId } })) return;
-    await repo.save(
-      DEFAULT_TENANT_MODULES.map((moduleKey) => repo.create({ tenantId, moduleKey, isEnabled: true })),
-    );
+    await this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(TenantModule);
+      if (await repo.findOne({ where: { tenantId } })) return;
+      await repo.save(
+        DEFAULT_TENANT_MODULES.map((moduleKey) => repo.create({ tenantId, moduleKey, isEnabled: true })),
+      );
+    });
     this.access.invalidate(tenantId);
   }
 
   // ---- Tenant users (bootstrap the first login for a plant) ----
   async listTenantUsers(tenantId: string) {
     await this.getTenant(tenantId); // 404 if the tenant does not exist
-    const users = await this.ds.getRepository(User).find({
-      where: { tenantId },
-      order: { email: 'ASC' },
-    });
+    // Target-tenant-scoped: read this tenant's users inside its own context.
+    const users = await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).find({ where: { tenantId }, order: { email: 'ASC' } }),
+    );
     return users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -135,7 +139,12 @@ export class PlatformService {
   async createTenantUser(tenantId: string, dto: CreateTenantUserDto) {
     await this.getTenant(tenantId);
     const email = dto.email.trim().toLowerCase();
-    if (await this.ds.getRepository(User).findOne({ where: { email } })) {
+    // Email is globally unique (login is by email), so this clash check is
+    // cross-tenant — run it in the platform context.
+    const emailTaken = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { email } }),
+    );
+    if (emailTaken) {
       throw new BadRequestException({
         code: 'DUPLICATE_RECORD',
         message: 'A user with this email already exists',
@@ -301,19 +310,22 @@ export class PlatformService {
     if (!plan) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Plan not found' });
 
     await tenantRepo.update(tenantId, { currentPlanId: planId });
-    // Reset the tenant's modules to the plan's enabled modules.
-    const tmRepo = this.ds.getRepository(TenantModule);
-    await tmRepo.delete({ tenantId });
+    // Reset the tenant's modules to the plan's enabled modules. plan_modules has
+    // no RLS; tenant_modules does, so its delete+insert run in the tenant's
+    // context (the delete's USING clause and the insert's WITH CHECK both bind
+    // to this tenant, a second guarantee the reset cannot touch another tenant).
     const planMods = await this.ds
       .getRepository(PlanModule)
       .find({ where: { planId, isEnabled: true } });
-    if (planMods.length) {
-      await tmRepo.save(
-        planMods.map((pm) =>
-          tmRepo.create({ tenantId, moduleKey: pm.moduleKey, isEnabled: true }),
-        ),
-      );
-    }
+    await this.db.runInTenant(tenantId, async (m) => {
+      const tmRepo = m.getRepository(TenantModule);
+      await tmRepo.delete({ tenantId });
+      if (planMods.length) {
+        await tmRepo.save(
+          planMods.map((pm) => tmRepo.create({ tenantId, moduleKey: pm.moduleKey, isEnabled: true })),
+        );
+      }
+    });
     this.access.invalidate(tenantId);
     if (actorUserId) {
       await this.audit.record({
@@ -333,7 +345,7 @@ export class PlatformService {
   async getTenantModules(tenantId: string) {
     const [catalog, tms] = await Promise.all([
       this.ds.getRepository(ModuleEntity).find({ order: { phase: 'ASC', name: 'ASC' } }),
-      this.ds.getRepository(TenantModule).find({ where: { tenantId } }),
+      this.db.runInTenant(tenantId, (m) => m.getRepository(TenantModule).find({ where: { tenantId } })),
     ]);
     const enabled = new Map(tms.map((tm) => [tm.moduleKey, tm.isEnabled]));
     return catalog.map((mod) => ({
@@ -348,10 +360,12 @@ export class PlatformService {
     if (!MODULE_KEYS.includes(moduleKey)) {
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown module' });
     }
-    const repo = this.ds.getRepository(TenantModule);
-    const existing = await repo.findOne({ where: { tenantId, moduleKey } });
-    if (existing) await repo.update(existing.id, { isEnabled });
-    else await repo.save(repo.create({ tenantId, moduleKey, isEnabled }));
+    await this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(TenantModule);
+      const existing = await repo.findOne({ where: { tenantId, moduleKey } });
+      if (existing) await repo.update(existing.id, { isEnabled });
+      else await repo.save(repo.create({ tenantId, moduleKey, isEnabled }));
+    });
     this.access.invalidate(tenantId);
     if (actorUserId) {
       await this.audit.record({

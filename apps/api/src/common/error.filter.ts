@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { ERROR_CODES } from '@rmc/shared';
 
 /**
@@ -31,7 +31,10 @@ export class ErrorFilter implements ExceptionFilter {
   private readonly log = new Logger('Api');
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const res = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const res = http.getResponse<Response>();
+    const req = http.getRequest<Request & { requestId?: string }>();
+    const requestId = req?.requestId;
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
@@ -39,20 +42,31 @@ export class ErrorFilter implements ExceptionFilter {
 
     const { code, message, fields } = this.describe(exception, status);
 
+    // Hand the code to the request logger (RequestContextMiddleware reads it off
+    // res.locals when the response finishes), so the one log line for this
+    // request carries the same code the caller sees.
+    if (res.locals) res.locals.errorCode = code;
+
     // Anything unexpected is logged in full here and summarised to the caller,
-    // so a database or driver message never reaches a browser.
+    // so a database or driver message never reaches a browser. The request id
+    // ties this stack back to the request log line and the caller's response.
     if (status >= 500) {
       this.log.error(
-        exception instanceof Error ? `${exception.message}` : String(exception),
+        `[${requestId ?? 'no-request-id'}] ${exception instanceof Error ? exception.message : String(exception)}`,
         exception instanceof Error ? exception.stack : undefined,
       );
     }
 
-    const error: { code: string; message: string | string[]; fields?: Record<string, string> } = {
-      code,
-      message,
-    };
+    const error: {
+      code: string;
+      message: string | string[];
+      fields?: Record<string, string>;
+      requestId?: string;
+    } = { code, message };
     if (fields) error.fields = fields;
+    // Surfaced so a person reporting an error can quote it and support can find
+    // the exact request in the logs.
+    if (requestId) error.requestId = requestId;
     res.status(status).json({ success: false, error });
   }
 

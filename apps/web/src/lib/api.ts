@@ -1,4 +1,4 @@
-import { clearSession, getSession, updateTokens } from './session';
+import { clearSession, getSession, updateAccessToken } from './session';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -35,28 +35,28 @@ function networkError(): ApiError {
  * Single-flight refresh: many requests can fail with 401 at the same moment
  * (the access token is short-lived). They all await one shared refresh call so
  * we mint exactly one new token, then each retries. Returns the new access
- * token, or null if the refresh token is missing/expired.
+ * token, or null if the refresh cookie is missing/expired.
+ *
+ * The refresh token is never in JavaScript's hands: it rides in the httpOnly
+ * `rmc_rt` cookie, which the browser attaches automatically because this call
+ * sends `credentials: 'include'`. We send no body token — the cookie IS the
+ * credential. The server rotates the cookie and returns only a new access token.
  */
 let refreshInFlight: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = getSession()?.refreshToken;
-  if (!refreshToken) return null;
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
         const res = await fetch(`${BASE}/api/v1/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          credentials: 'include',
         });
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.success) return null;
-        const { access_token, refresh_token } = json.data as {
-          access_token: string;
-          refresh_token?: string;
-        };
-        updateTokens(access_token, refresh_token);
+        const { access_token } = json.data as { access_token: string };
+        updateAccessToken(access_token);
         return access_token;
       } catch {
         return null;
@@ -149,10 +149,10 @@ async function performFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
     throw networkError();
   }
 
-  // Access token expired mid-session: refresh once and retry the request. If we
-  // have no refresh token (e.g. the login call itself), skip straight to the
-  // normal error path so bad credentials surface as-is.
-  if (res.status === 401 && getSession()?.refreshToken) {
+  // Access token expired mid-session: refresh once (via the httpOnly cookie) and
+  // retry. With no session at all (e.g. the login call itself) skip straight to
+  // the normal error path so bad credentials surface as-is.
+  if (res.status === 401 && getSession()) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       try {
@@ -272,7 +272,17 @@ export const api = {
     apiFetch<LoginResult>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ login, password }),
+      // Let the browser store the httpOnly refresh cookie the server sets.
+      credentials: 'include',
     }),
+  /**
+   * End the session: tell the server to clear the httpOnly refresh cookie, so it
+   * cannot be used again. `credentials: 'include'` sends the cookie so the
+   * server can match and clear it. Best-effort — the caller clears the local
+   * session regardless (see the layout Logout buttons).
+   */
+  logout: () =>
+    apiFetch<{ loggedOut: boolean }>('/auth/logout', { method: 'POST', credentials: 'include' }),
   /** Change your own password — any signed-in user, no permission required. */
   changePassword: (currentPassword: string, newPassword: string) =>
     apiFetch<{ changed: boolean }>('/auth/change-password', {

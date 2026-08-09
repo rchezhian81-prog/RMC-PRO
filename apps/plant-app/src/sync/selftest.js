@@ -18,7 +18,7 @@ async function api(method, path, body, tok = token) {
 const ok = (label, cond, extra = '') => console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${extra ? '  ' + extra : ''}`);
 
 (async () => {
-  if (!token) token = (await api('POST', '/auth/login', { login: 'admin@alpha.test', password: 'Passw0rd!' })).access_token;
+  if (!token) token = (await api('POST', '/auth/login', { login: 'admin@alpha.test', password: 'Concrete#2026' })).access_token;
 
   const engine = new SyncEngine({ dbPath: ':memory:', baseUrl: BASE, token });
 

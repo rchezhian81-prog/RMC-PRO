@@ -25,8 +25,12 @@ export class AuthService {
   ) {}
 
   async login(login: string, password: string) {
-    const repo = this.db.ds.getRepository(User);
-    const user = await repo.findOne({ where: { email: login } });
+    // Identity lookup by email, before the tenant is known — and platform
+    // super-admins carry tenant_id NULL. Runs in the platform context so the
+    // RLS policy on `users` admits the row; a plain read would return nothing.
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { email: login } }),
+    );
     if (!user || user.status !== 'active' || !bcrypt.compareSync(password, user.passwordHash)) {
       throw new UnauthorizedException(INVALID);
     }
@@ -36,7 +40,9 @@ export class AuthService {
     // password so the message cannot be used to probe which companies exist.
     if (user.tenantId) await this.access.assertUsable(user.tenantId);
 
-    await repo.update(user.id, { lastLoginAt: new Date() });
+    await this.db.runAsPlatform((m) =>
+      m.getRepository(User).update(user.id, { lastLoginAt: new Date() }),
+    );
     const tokens = await this.issueTokens(user);
     const [tenant, access, modules] = await Promise.all([
       this.loadTenant(user.tenantId),
@@ -65,7 +71,10 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException({ code: 'INVALID_TOKEN', message: 'Invalid refresh token' });
     }
-    const user = await this.db.ds.getRepository(User).findOne({ where: { id: sub } });
+    // Identity lookup by id — platform context so RLS admits the row.
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { id: sub } }),
+    );
     if (!user || user.status !== 'active') throw new UnauthorizedException(INVALID);
     // A bumped token_version revokes every refresh token minted before it, so a
     // password change (or a future "sign out everywhere") stops a leaked token
@@ -88,8 +97,10 @@ export class AuthService {
    * session cannot be used to lock the real owner out of their account.
    */
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    const repo = this.db.ds.getRepository(User);
-    const user = await repo.findOne({ where: { id: userId } });
+    // Identity lookup + credential update — platform context on both.
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { id: userId } }),
+    );
     if (!user) throw new UnauthorizedException(INVALID);
     if (!bcrypt.compareSync(currentPassword ?? '', user.passwordHash)) {
       throw new BadRequestException({
@@ -109,15 +120,20 @@ export class AuthService {
     // a password change signs out other (and any leaked) sessions. The caller
     // keeps its short-lived access token until it expires (<=15 min), then signs
     // in again: the standard "re-authenticate after a password change" behaviour.
-    await repo.update(user.id, {
-      passwordHash: bcrypt.hashSync(newPassword, 10),
-      tokenVersion: (user.tokenVersion ?? 0) + 1,
-    });
+    await this.db.runAsPlatform((m) =>
+      m.getRepository(User).update(user.id, {
+        passwordHash: bcrypt.hashSync(newPassword, 10),
+        tokenVersion: (user.tokenVersion ?? 0) + 1,
+      }),
+    );
     return { changed: true };
   }
 
   async me(userId: string) {
-    const user = await this.db.ds.getRepository(User).findOne({ where: { id: userId } });
+    // Identity lookup by id — platform context so RLS admits the row.
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { id: userId } }),
+    );
     if (!user) throw new UnauthorizedException();
     const [tenant, access, modules] = await Promise.all([
       this.loadTenant(user.tenantId),

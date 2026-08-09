@@ -4,7 +4,6 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
-import { RequestLoggerInterceptor } from './common/request-logger.interceptor';
 import { ErrorFilter } from './common/error.filter';
 
 /**
@@ -30,12 +29,14 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '25mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '25mb' });
 
-  // Versioned API base path (Design Doc 7 §2.2); health stays unprefixed.
-  app.setGlobalPrefix('api/v1', { exclude: ['health'] });
+  // Versioned API base path (Design Doc 7 §2.2); health + readiness stay
+  // unprefixed so probes hit /health and /health/ready consistently.
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  // Request logger first (outermost) so it times the whole pipeline; then the
-  // envelope wrapper.
-  app.useGlobalInterceptors(new RequestLoggerInterceptor(), new ResponseInterceptor());
+  // Structured per-request logging + correlation id are handled by
+  // RequestContextMiddleware (runs before guards, so it also logs rejections).
+  // Here we only wrap successful responses in the standard envelope.
+  app.useGlobalInterceptors(new ResponseInterceptor());
   // Failures get the same envelope as successes, so the web client can read the
   // error code rather than guessing from the status alone.
   app.useGlobalFilters(new ErrorFilter());

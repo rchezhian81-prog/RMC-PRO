@@ -31,6 +31,9 @@ const E = {
   // the production 429 behaviour.
   THROTTLE_LIMIT: '100000',
   AUTH_THROTTLE_LIMIT: '100000',
+  // Small pull pages so sync-pagination exercises the keyset drain with a
+  // handful of rows instead of thousands. Production default is 500.
+  SYNC_PULL_LIMIT: '3',
   SUPERADMIN_EMAIL: 'super@ci.test',
   SUPERADMIN_PASSWORD: 'SuperCI#12345',
   SUPERADMIN_NAME: 'CI Super',
@@ -46,6 +49,9 @@ const TESTS = [
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
   'test/cookie-auth.test.mjs',
+  'test/observability.test.mjs',
+  'test/sync-pagination.test.mjs',
+  'test/rls-users.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',
@@ -121,7 +127,9 @@ async function main() {
   const results = [];
   for (const t of TESTS) {
     console.log(`\n════════ ${t} ════════`);
-    const r = spawnSync('node', [t], { stdio: 'inherit', env: { ...childEnv, ...fixtures } });
+    // --experimental-sqlite so a test may drive the plant-app SyncEngine (which
+    // uses node:sqlite); harmless for the tests that don't.
+    const r = spawnSync('node', ['--experimental-sqlite', t], { stdio: 'inherit', env: { ...childEnv, ...fixtures } });
     results.push({ t, ok: (r.status ?? 1) === 0 });
   }
 

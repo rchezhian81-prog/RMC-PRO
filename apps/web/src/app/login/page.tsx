@@ -30,9 +30,11 @@ export default function LoginPage() {
     setError(null);
     try {
       const r = await api.login(login, password);
+      // Only the short-lived access token is kept in the browser. The refresh
+      // token arrived as an httpOnly cookie (set by the login call above) and is
+      // never touched by JavaScript.
       saveSession({
         token: r.access_token,
-        refreshToken: r.refresh_token,
         userType: r.user.userType,
         email: r.user.email,
         permissions: r.permissions,

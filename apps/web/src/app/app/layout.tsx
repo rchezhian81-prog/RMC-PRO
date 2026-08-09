@@ -288,7 +288,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             variant="ghost"
             size="sm"
             icon={<LogOut size={16} />}
-            onClick={() => {
+            onClick={async () => {
+              // Ask the server to clear the httpOnly refresh cookie; then drop
+              // the local session no matter what (a network hiccup must not trap
+              // the user in a session they asked to end).
+              try {
+                await api.logout();
+              } catch {
+                /* best effort */
+              }
               clearSession();
               router.replace('/login');
             }}

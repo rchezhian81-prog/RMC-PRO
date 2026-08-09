@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ERROR_CODES } from '@rmc/shared';
+import type { AuthUser } from '../auth/auth-user';
+import type { ErrorAlertService } from './error-alert.service';
 
 /**
  * Puts every failure into the documented envelope (Design Doc 7 §2.4):
@@ -30,10 +32,13 @@ import { ERROR_CODES } from '@rmc/shared';
 export class ErrorFilter implements ExceptionFilter {
   private readonly log = new Logger('Api');
 
+  /** Optional ops alerter (wired in main.ts). Absent in unit tests. */
+  constructor(private readonly alerter?: ErrorAlertService) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const res = http.getResponse<Response>();
-    const req = http.getRequest<Request & { requestId?: string }>();
+    const req = http.getRequest<Request & { requestId?: string; user?: AuthUser }>();
     const requestId = req?.requestId;
     const status =
       exception instanceof HttpException
@@ -55,6 +60,18 @@ export class ErrorFilter implements ExceptionFilter {
         `[${requestId ?? 'no-request-id'}] ${exception instanceof Error ? exception.message : String(exception)}`,
         exception instanceof Error ? exception.stack : undefined,
       );
+      // Fire an ops alert (deduped + throttled inside the alerter). Best-effort:
+      // the alerter never throws, and the void keeps the response synchronous.
+      void this.alerter?.capture({
+        status,
+        message: exception instanceof Error ? exception.message : String(exception),
+        name: exception instanceof Error ? exception.constructor?.name : undefined,
+        requestId,
+        method: req?.method,
+        path: req?.originalUrl ?? req?.url,
+        tenantId: req?.user?.tenantId ?? null,
+        userId: req?.user?.userId ?? null,
+      });
     }
 
     const error: {

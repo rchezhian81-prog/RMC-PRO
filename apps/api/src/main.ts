@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { ErrorFilter } from './common/error.filter';
+import { ErrorAlertService } from './common/error-alert.service';
 
 /**
  * Build the CORS origin allowlist. Browser origins are read from `CORS_ORIGINS`
@@ -38,8 +39,10 @@ async function bootstrap() {
   // Here we only wrap successful responses in the standard envelope.
   app.useGlobalInterceptors(new ResponseInterceptor());
   // Failures get the same envelope as successes, so the web client can read the
-  // error code rather than guessing from the status alone.
-  app.useGlobalFilters(new ErrorFilter());
+  // error code rather than guessing from the status alone. The filter also
+  // raises an ops alert on 5xx (deduped/throttled; POSTs to ALERT_WEBHOOK_URL
+  // when set, and always logs a structured alert line).
+  app.useGlobalFilters(new ErrorFilter(new ErrorAlertService()));
   app.enableCors({
     origin: corsOrigins(),
     credentials: true,

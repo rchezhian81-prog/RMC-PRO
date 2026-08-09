@@ -92,8 +92,43 @@ These are the pieces the audit flagged that a sandbox/CI cannot provision:
 | **Staging environment** | The RLS-on-users change and any auth-touching work must be smoke-tested against a prod-like DB before production. | Stand up one small staging stack (same compose, separate DB) and point a staging domain at it. |
 | **Secrets management** | JWT/DB/B2 secrets currently live in env files. | Adopt `sops` + `age` (or the host's secret store); keep the encrypted file in the repo, decrypt at deploy. Covered in `WAVE1-HARDENING-RUNBOOK.md`. |
 | **Log/metrics backend** | §2 above — logs are ready to ship but no aggregator is running yet. | Pick Option A or B and wire it. |
-| **Error alerting** | 5xx lines are logged but nobody is paged. | Add a log-based alert (e.g. "rate of `level=error` > N/min") in whichever backend you chose. |
+| **Error alerting** | Built in — see §6. Set `ALERT_WEBHOOK_URL` to page on 5xx, or add a log-based rule on `level=alert`. | Paste an incoming-webhook URL into `ALERT_WEBHOOK_URL`. |
 | **Uptime check** | Nothing watches the box from outside. | Point an external monitor at `/health/ready`. |
 
-None of these block the current release; they are the next rung of
-operability once the app-level hardening (Waves 0–2 + RLS) is deployed.
+## 6. Error alerting (built-in)
+
+The API raises an **ops alert on every 5xx** (`ErrorFilter` → `ErrorAlertService`).
+It is on by default in log form and needs no external service:
+
+- **Always** emits a structured `{"level":"alert","msg":"error_alert",…}` line
+  carrying the status, method, id-normalised path, `requestId`, tenant/user, and
+  a **redacted** error message. A log-based rule on `level=alert` (or
+  `msg=error_alert`) pages with zero further wiring.
+- **When `ALERT_WEBHOOK_URL` is set**, it also POSTs a generic JSON body to that
+  URL — a Slack/Discord/incoming-webhook renders it (`text`/`content`), and a
+  custom relay can read the structured fields. For PagerDuty, point the webhook
+  at a Events-API relay or an email-integration address.
+
+**Noise control** (a broken deploy pages once, not thousands of times):
+
+- only status ≥ `ALERT_MIN_STATUS` (default **500**);
+- the same error signature (`status:name:method:path`, ids collapsed) is sent at
+  most once per `ALERT_DEDUP_WINDOW_MS` (default **5 min**), and the next alert
+  reports how many it suppressed;
+- a circuit breaker caps total alerts to `ALERT_MAX_PER_WINDOW` (default **60**)
+  per window;
+- delivery is bounded by `ALERT_TIMEOUT_MS` (default **3 s**) and is fully
+  best-effort — a failed or slow webhook never affects the request.
+
+**Config summary**
+
+| Env | Default | Meaning |
+|---|---|---|
+| `ALERT_WEBHOOK_URL` | *(unset)* | POST target for push alerts; log-only when unset |
+| `ALERT_MIN_STATUS` | `500` | Minimum HTTP status that alerts |
+| `ALERT_DEDUP_WINDOW_MS` | `300000` | Per-signature cooldown |
+| `ALERT_MAX_PER_WINDOW` | `60` | Circuit-breaker cap per window |
+| `ALERT_TIMEOUT_MS` | `3000` | Webhook delivery timeout |
+
+None of the remaining infra items block the current release; they are the next
+rung of operability once the app-level hardening (Waves 0–2 + RLS) is deployed.

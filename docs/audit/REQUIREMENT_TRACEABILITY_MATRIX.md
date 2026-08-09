@@ -9,6 +9,11 @@
 > PROD-VERIFIED · IMPL-UNVERIFIED · PARTIAL · DOC-ONLY · PLANNED · MISSING · UNCLEAR.
 > **Test evidence:** CI = `apps/api/test/*` (runs in CI); E2E = `tests/*` (manual,
 > not wired into CI); OWNER = owner-confirmed live; — = none.
+>
+> **Worldwide scope (wider lens):** this matrix grades against the **Indian
+> Phase-1 SRS**. For the **globally-sellable** superset — a de-duplicated,
+> worldwide-sourced requirements corpus and its have/partial/missing gap-delta —
+> see `WORLDWIDE_RMC_REQUIREMENTS.md` and `WORLDWIDE_GAP_DELTA.md`.
 
 ## 1. How to read this
 

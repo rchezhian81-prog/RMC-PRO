@@ -1,7 +1,11 @@
 export interface Session {
+  /**
+   * Short-lived access token (Bearer). The long-lived refresh token is NOT kept
+   * here any more — it lives only in the httpOnly `rmc_rt` cookie the API sets,
+   * out of reach of JavaScript (and any XSS). This token is renewed silently via
+   * that cookie; on its own it is worth at most one access-token lifetime.
+   */
   token: string;
-  /** Long-lived refresh token used to silently mint a new access token. */
-  refreshToken?: string;
   userType: string;
   email: string;
   /** Effective permission keys for this user (for UI gating). */
@@ -75,11 +79,15 @@ export function updateAccess(a: { permissions?: string[]; roles?: string[]; modu
   });
 }
 
-/** Replace the access (and refresh) token on the existing session after a refresh. */
-export function updateTokens(token: string, refreshToken?: string): void {
+/**
+ * Replace the short-lived access token after a silent refresh. There is no
+ * refresh token to store: it stays in the httpOnly `rmc_rt` cookie the API
+ * rotates on every refresh, which the browser sends automatically.
+ */
+export function updateAccessToken(token: string): void {
   const cur = getSession();
   if (!cur) return;
-  saveSession({ ...cur, token, ...(refreshToken ? { refreshToken } : {}) });
+  saveSession({ ...cur, token });
 }
 
 export function clearSession(): void {

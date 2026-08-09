@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Building2, Package, LogOut } from 'lucide-react';
+import { api } from '../../lib/api';
 import { clearSession, getSession } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
@@ -66,7 +67,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             variant="ghost"
             size="sm"
             icon={<LogOut size={16} />}
-            onClick={() => {
+            onClick={async () => {
+              // Clear the httpOnly refresh cookie server-side, then drop the
+              // local session regardless of the network result.
+              try {
+                await api.logout();
+              } catch {
+                /* best effort */
+              }
               clearSession();
               router.replace('/login');
             }}

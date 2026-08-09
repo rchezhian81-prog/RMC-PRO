@@ -46,6 +46,7 @@ const TESTS = [
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
   'test/cookie-auth.test.mjs',
+  'test/observability.test.mjs',
   'test/rls-users.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.

@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { RequestContextMiddleware } from './common/request-context.middleware';
 import { DatabaseModule } from './core/database/database.module';
 import { RbacModule } from './rbac/rbac.module';
 import { HealthModule } from './health/health.module';
@@ -57,4 +58,10 @@ import { AuditModule } from './audit/audit.module';
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // Correlation id + structured request log for every route (the id header is
+    // set even for /health; the log line skips it — see the middleware).
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}

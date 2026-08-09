@@ -28,7 +28,14 @@ import { AuditModule } from './audit/audit.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['../../.env', '.env'] }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // Global rate limit (prod default 100 req/60s). Env-overridable so integration
+    // and load tests, which drive far above a human request rate, can relax it.
+    ThrottlerModule.forRoot([
+      {
+        ttl: Number(process.env.THROTTLE_TTL ?? 60_000),
+        limit: Number(process.env.THROTTLE_LIMIT ?? 100),
+      },
+    ]),
     DatabaseModule,
     RbacModule,
     HealthModule,

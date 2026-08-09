@@ -5,13 +5,26 @@ import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser, type AuthUser } from './auth-user';
 
+/**
+ * Tight per-route limit on the credential endpoints (login, change-password) to
+ * blunt brute force — 5 attempts per minute in production. Overridable via env
+ * so integration/load tests can relax it (they hammer login far past a human
+ * rate); the defaults are the production values.
+ */
+const AUTH_THROTTLE = {
+  default: {
+    limit: Number(process.env.AUTH_THROTTLE_LIMIT ?? 5),
+    ttl: Number(process.env.AUTH_THROTTLE_TTL ?? 60_000),
+  },
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('login')
   @HttpCode(200)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle(AUTH_THROTTLE)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.login, dto.password);
   }
@@ -26,7 +39,7 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Throttle(AUTH_THROTTLE)
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: { currentPassword?: string; newPassword?: string },

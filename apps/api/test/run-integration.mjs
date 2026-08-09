@@ -25,6 +25,12 @@ const E = {
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ?? 'ci-refresh-secret-0123456789abcdefghij',
   API_PORT: process.env.API_PORT ?? '4000',
   NODE_ENV: 'production',
+  // Relax the rate limiters for this suite only — it logs in many times across
+  // fixtures + tests (incl. refresh rotation), far above the human 5/60s limit.
+  // The e2e suite deliberately does NOT set these, so security.mjs still proves
+  // the production 429 behaviour.
+  THROTTLE_LIMIT: '100000',
+  AUTH_THROTTLE_LIMIT: '100000',
   SUPERADMIN_EMAIL: 'super@ci.test',
   SUPERADMIN_PASSWORD: 'SuperCI#12345',
   SUPERADMIN_NAME: 'CI Super',
@@ -39,6 +45,9 @@ const TESTS = [
   'test/master-validation.test.mjs',
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
+  // Last: it changes the fixture owner's password (token_version bump), so
+  // nothing after it may depend on the old password.
+  'test/refresh-rotation.test.mjs',
 ];
 
 function step(name, cmd, args, extraEnv = {}) {

@@ -29,6 +29,15 @@ export class User extends BaseUuidEntity {
   @Column({ name: 'is_2fa_enabled', type: 'boolean', default: false })
   is2faEnabled!: boolean;
 
+  /**
+   * Monotonic session-version counter embedded in issued JWTs. Bumping it (e.g.
+   * on a password change) invalidates every previously-issued refresh token for
+   * this user, so a leaked/stolen refresh token can be revoked instead of
+   * staying valid for its full lifetime.
+   */
+  @Column({ name: 'token_version', type: 'integer', default: 0 })
+  tokenVersion!: number;
+
   @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
 }

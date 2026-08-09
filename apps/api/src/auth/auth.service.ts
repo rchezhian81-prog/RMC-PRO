@@ -55,16 +55,28 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     let sub: string;
+    let presentedTokenVersion = 0;
     try {
-      const payload = await this.jwt.verifyAsync<{ sub: string }>(refreshToken, {
+      const payload = await this.jwt.verifyAsync<{ sub: string; tv?: number }>(refreshToken, {
         secret: REFRESH_SECRET,
       });
       sub = payload.sub;
+      presentedTokenVersion = payload.tv ?? 0;
     } catch {
       throw new UnauthorizedException({ code: 'INVALID_TOKEN', message: 'Invalid refresh token' });
     }
     const user = await this.db.ds.getRepository(User).findOne({ where: { id: sub } });
     if (!user || user.status !== 'active') throw new UnauthorizedException(INVALID);
+    // A bumped token_version revokes every refresh token minted before it, so a
+    // password change (or a future "sign out everywhere") stops a leaked token
+    // being renewed. Tokens predating this feature carry no `tv` (read as 0) and
+    // match the default, so they keep working until they naturally expire.
+    if ((user.tokenVersion ?? 0) !== presentedTokenVersion) {
+      throw new UnauthorizedException({
+        code: 'SESSION_REVOKED',
+        message: 'This session was signed out. Please sign in again.',
+      });
+    }
     // A suspension must also close the door on refresh, or a session started
     // before it would renew itself indefinitely.
     if (user.tenantId) await this.access.assertUsable(user.tenantId);
@@ -93,9 +105,14 @@ export class AuthService {
         message: 'The new password must be different from the current one.',
       });
     }
-    await repo.update(user.id, { passwordHash: bcrypt.hashSync(newPassword, 10) });
-    // Tokens already issued stay valid until they expire; the access token is
-    // short-lived and the refresh token is held only by this same person.
+    // Bump token_version so every refresh token issued before now is revoked —
+    // a password change signs out other (and any leaked) sessions. The caller
+    // keeps its short-lived access token until it expires (<=15 min), then signs
+    // in again: the standard "re-authenticate after a password change" behaviour.
+    await repo.update(user.id, {
+      passwordHash: bcrypt.hashSync(newPassword, 10),
+      tokenVersion: (user.tokenVersion ?? 0) + 1,
+    });
     return { changed: true };
   }
 
@@ -117,13 +134,15 @@ export class AuthService {
   }
 
   private async issueTokens(user: User) {
-    const payload = { sub: user.id, tid: user.tenantId, typ: user.userType };
+    // The session-version claim (`tv`) lets a bumped token_version revoke tokens.
+    const tv = user.tokenVersion ?? 0;
+    const payload = { sub: user.id, tid: user.tenantId, typ: user.userType, tv };
     const access_token = await this.jwt.signAsync(payload, {
       secret: ACCESS_SECRET,
       expiresIn: ACCESS_TTL,
     });
     const refresh_token = await this.jwt.signAsync(
-      { sub: user.id },
+      { sub: user.id, tv },
       { secret: REFRESH_SECRET, expiresIn: REFRESH_TTL },
     );
     return { access_token, refresh_token };

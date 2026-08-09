@@ -1,0 +1,168 @@
+# Mix Nova RMC — Nginx reverse-proxy template (Phase-1 pilot).
+#
+# This is an nginx ENVSUBST TEMPLATE. The official nginx image expands it at
+# container start: `${DOMAIN}` is replaced with the DOMAIN env var and the
+# result is written to /etc/nginx/conf.d/rmc.conf. Nothing is hand-edited on the
+# host, so the checked-out tree never drifts (no more `sed` on a tracked file).
+#
+# Wiring (see docker-compose.prod.yml → nginx service):
+#   volume: ./nginx/templates -> /etc/nginx/templates:ro
+#   env:    DOMAIN=${DOMAIN}                (from .env.production, e.g. mixnovas.com)
+#           NGINX_ENVSUBST_FILTER=^DOMAIN$  (ONLY ${DOMAIN} is substituted; nginx's
+#                                            own $host/$scheme/etc. are left intact)
+#
+# Braces matter: our variable is ${DOMAIN} (braced); nginx runtime variables stay
+# bare ($host, $request_uri, …) so the filter never touches them, and adjacent
+# tokens like app.${DOMAIN}$request_uri parse correctly.
+#
+# Host scheme (5 hosts, one SAN cert covering all of them):
+#   ${DOMAIN}         (apex)  -> 301 redirect to https://app.${DOMAIN}
+#   www.${DOMAIN}             -> 301 redirect to https://app.${DOMAIN}
+#   app.${DOMAIN}             -> web:3000   (Next.js portal: tenant + super-admin)
+#   api.${DOMAIN}             -> api:4000   (NestJS API: /api/v1, /health)
+#   admin.${DOMAIN}           -> web:3000   (super-admin alias; same Next app, /admin)
+#
+# CORS + client build must match this scheme:
+#   CORS_ORIGINS      = https://app.${DOMAIN},https://admin.${DOMAIN}
+#   NEXT_PUBLIC_API_URL = https://api.${DOMAIN}
+
+# WebSocket upgrade helper (future-proofing; harmless for plain HTTP).
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# ---- HTTP :80 — ACME challenge + redirect everything else to HTTPS ----
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} www.${DOMAIN} app.${DOMAIN} api.${DOMAIN} admin.${DOMAIN};
+
+    # Let's Encrypt webroot challenge (certbot writes here on the host).
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---- apex + www : canonical redirect to the app portal ----
+# Cert paths assume a single SAN cert covering all five hosts, issued with the
+# apex first, so the lineage dir is /etc/letsencrypt/live/${DOMAIN}/.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${DOMAIN} www.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    return 301 https://app.${DOMAIN}$request_uri;
+}
+
+# ---- app.${DOMAIN} : web portal (tenant + super-admin) ----
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name app.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Security headers. Enable HSTS only AFTER HTTPS is verified working on
+    # every host under ${DOMAIN} (includeSubDomains covers app/api/admin/www).
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://web:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 60s;
+    }
+}
+
+# ---- admin.${DOMAIN} : super-admin alias -> same Next app (/admin route) ----
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name admin.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://web:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 60s;
+    }
+}
+
+# ---- api.${DOMAIN} : API ----
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name api.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Invoice/challan PDFs and CSV exports — allow a generous body/response.
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://api:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 120s;
+    }
+}

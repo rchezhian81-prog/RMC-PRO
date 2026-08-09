@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# tests
+coverage/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# database backups (never commit dump contents)
+backups/
+
+# logs
+*.log
+npm-debug.log*
+
+# local data / sqlite (plant app)
+*.sqlite
+*.sqlite3
+local-data/
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Filled-in plant master data — contains the customer's real business details
+# (GSTIN, contacts, credit limits). Only the .example.json template is tracked.
+scripts/setup/plant-config.json

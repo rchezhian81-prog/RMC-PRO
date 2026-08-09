@@ -1,0 +1,17 @@
+{
+  "name": "@rmc/plant-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RMC standalone offline plant app (Electron + local SQLite sync engine)",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "sync:selftest": "node --experimental-sqlite src/sync/selftest.js",
+    "typecheck": "echo \"(plant-app: plain JS, no typecheck)\" && exit 0",
+    "test": "echo \"(plant-app: see sync engine harness)\" && exit 0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}

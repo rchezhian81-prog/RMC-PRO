@@ -1,0 +1,206 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { crud, invoicesApi, receiptsApi, type Row } from '../../../../lib/api';
+import { Card } from '../../../../components/ui/Card';
+import { Table, Th, Td } from '../../../../components/ui/Table';
+import { Button } from '../../../../components/ui/Button';
+import { Field, Input } from '../../../../components/ui/Field';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
+
+const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+export default function ReceiptsPage() {
+  const { prompt } = useConfirm();
+  const [rows, setRows] = useState<Row[]>([]);
+  const [customers, setCustomers] = useState<Row[]>([]);
+  const [customerId, setCustomerId] = useState('');
+  const [openInvoices, setOpenInvoices] = useState<Row[]>([]);
+  const [alloc, setAlloc] = useState<Record<string, string>>({});
+  const [form, setForm] = useState({ amount: '', paymentMode: 'neft', receiptDate: '', bankReference: '' });
+  const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function reload() {
+    const [r, c] = await Promise.all([receiptsApi.list(), crud('customers').list()]);
+    setRows(r);
+    setCustomers(c);
+  }
+  useEffect(() => {
+    reload().catch((e) => setError(String(e)));
+  }, []);
+
+  async function pickCustomer(cid: string) {
+    setCustomerId(cid);
+    setAlloc({});
+    setError(null);
+    setMsg(null);
+    if (!cid) {
+      setOpenInvoices([]);
+      return;
+    }
+    const all = await invoicesApi.list('issued');
+    setOpenInvoices(all.filter((i) => i.customerId === cid && Number(i.outstandingAmount) > 0));
+  }
+
+  async function create() {
+    setError(null);
+    setMsg(null);
+    const allocations = openInvoices
+      .map((i) => ({ invoiceId: String(i.id), amount: Number(alloc[String(i.id)] || 0) }))
+      .filter((a) => a.amount > 0);
+    try {
+      const r = await receiptsApi.create({
+        customerId,
+        amount: Number(form.amount || 0),
+        paymentMode: form.paymentMode,
+        receiptDate: form.receiptDate || undefined,
+        bankReference: form.bankReference || undefined,
+        allocations,
+      });
+      setMsg(`Receipt ${String(r.receiptNo)} recorded (allocated ₹${money(r.allocatedAmount)}, unallocated ₹${money(r.unallocatedAmount)}).`);
+      setForm({ amount: '', paymentMode: 'neft', receiptDate: '', bankReference: '' });
+      setCustomerId('');
+      setOpenInvoices([]);
+      setAlloc({});
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
+  }
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Receipts</h1>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px' }}>Record a customer payment and allocate it against outstanding invoices.</p>
+      {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
+      {msg && (
+        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
+          {msg}
+        </p>
+      )}
+
+      <div style={{ marginBottom: 18 }}>
+        <Card title="New receipt">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: customerId ? 14 : 0 }}>
+            <div style={{ minWidth: 200 }}>
+              <Field label="Customer">
+                <select className="mn-input" value={customerId} onChange={(e) => pickCustomer(e.target.value)}>
+                  <option value="">— select —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{String(c.customerName)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 130 }}>
+              <Field label="Amount">
+                <Input type="number" step="any" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 110 }}>
+              <Field label="Mode">
+                <select className="mn-input" value={form.paymentMode} onChange={(e) => setForm({ ...form, paymentMode: e.target.value })}>
+                  {['neft', 'rtgs', 'upi', 'cheque', 'cash'].map((mode) => (
+                    <option key={mode} value={mode}>{mode}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Date">
+                <Input type="date" value={form.receiptDate} onChange={(e) => setForm({ ...form, receiptDate: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 130 }}>
+              <Field label="Bank ref">
+                <Input value={form.bankReference} onChange={(e) => setForm({ ...form, bankReference: e.target.value })} />
+              </Field>
+            </div>
+          </div>
+
+          {customerId &&
+            (openInvoices.length ? (
+              <>
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>Invoice</Th>
+                      <Th numeric>Total</Th>
+                      <Th numeric>Outstanding</Th>
+                      <Th numeric>Allocate</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openInvoices.map((i) => (
+                      <tr key={i.id}>
+                        <Td>{String(i.invoiceNo)}</Td>
+                        <Td numeric>{money(i.totalAmount)}</Td>
+                        <Td numeric>{money(i.outstandingAmount)}</Td>
+                        <Td numeric>
+                          <Input type="number" step="any" style={{ width: 120, textAlign: 'right' }} value={alloc[String(i.id)] ?? ''} onChange={(e) => setAlloc({ ...alloc, [String(i.id)]: e.target.value })} />
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+                <div style={{ marginTop: 14 }}>
+                  <Button onClick={create}>Record receipt</Button>
+                </div>
+              </>
+            ) : (
+              <p style={{ color: 'var(--mn-muted)', fontSize: 13 }}>No outstanding invoices for this customer.</p>
+            ))}
+        </Card>
+      </div>
+
+      <Card title="Receipts" padded={false}>
+        {rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Receipt No</Th>
+                <Th>Date</Th>
+                <Th>Mode</Th>
+                <Th numeric>Amount</Th>
+                <Th numeric>Allocated</Th>
+                <Th numeric>Unallocated</Th>
+                <Th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.receiptNo ?? '')}</Td>
+                  <Td>{String(r.receiptDate ?? '—')}</Td>
+                  <Td>{String(r.paymentMode ?? '')}</Td>
+                  <Td numeric>₹{money(r.amount)}</Td>
+                  <Td numeric>₹{money(r.allocatedAmount)}</Td>
+                  <Td numeric>₹{money(r.unallocatedAmount)}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        const m = await prompt({ title: 'Share receipt', label: 'Recipient mobile', defaultValue: '' });
+                        if (m !== null) {
+                          await receiptsApi.share(String(r.id), m);
+                          setMsg('WhatsApp message logged.');
+                        }
+                      }}
+                    >
+                      Share
+                    </Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No receipts yet" description="Record a customer payment above." />
+        )}
+      </Card>
+    </div>
+  );
+}

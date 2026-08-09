@@ -1,109 +1,66 @@
-# 🏗️ RMC Pro — Plant Management PWA
+# 🏗️ RMC Pro — Plant SaaS
 
-A Progressive Web App (PWA) for Ready Mix Concrete plant daily operations management.
+A multi-tenant SaaS platform (with an offline-capable standalone plant app) for Ready Mix Concrete plant operations.
 
-## 📱 Features
+> **Status:** Development Stage — Phase 1. Requirement and Design stages are complete and signed off (see `docs/`). This repository is the monorepo skeleton; modules are built per the Phase-1 sprint plan.
 
-| Module | Description |
-|--------|-------------|
-| 🏠 Dashboard | Live KPIs, production charts, fleet status, activity feed |
-| 🏗️ Production | Batch log, mix grades, plant parameters |
-| 🚛 Vehicles | Fleet GPS tracker, TM status, breakdown log |
-| ⚡ Electricity | EB meter readings, DG log, equipment load |
-| 📦 Materials | Stock inventory, low-stock alerts |
-| 🧪 Quality | Cube tests, slump records, NCR management |
-| 📋 Delivery | DO tracking, digital challan, signature |
-| 📊 Reports | PDF/Excel/WhatsApp report generation |
+## Documentation
 
-## 🚀 Deploy in 3 Minutes (GitHub Pages)
+| Area | Location |
+|------|----------|
+| Requirement baseline | `docs/requirements/SRS-v1.4.md` |
+| Design documents (12 + RBAC addendum + sign-off) | `docs/design/` |
+| Development plan (Phase 1) | `docs/development/DEV-PLAN-01-phase1-development-stage-plan.md` |
+| Original PWA prototype (archived reference) | `prototype/` |
 
-### Option A — GitHub Pages (Free)
+## Tech Stack
 
-1. **Fork or upload** this repository to your GitHub account
-2. Go to **Settings → Pages**
-3. Under **Source**, select `main` branch → `/ (root)`
-4. Click **Save**
-5. Your app is live at: `https://YOUR-USERNAME.github.io/rmc-pro/`
+Next.js (web) · NestJS (API) · PostgreSQL · Redis · SQLite (plant app, offline) · S3-compatible object storage · Electron (standalone plant app) · Docker / Nginx. Monorepo via **pnpm workspaces + Turborepo**.
 
-### Option B — Netlify (Recommended, Free)
+## Repository Layout
 
-1. Go to [netlify.com](https://netlify.com) → Sign up
-2. Click **"Add new site" → "Import from Git"**
-3. Connect your GitHub account → Select this repo
-4. Build command: *(leave empty)*
-5. Publish directory: `.` (root)
-6. Click **Deploy Site**
-7. Live at: `https://rmc-pro.netlify.app`
-
-### Option C — Vercel (Free)
-
-1. Go to [vercel.com](https://vercel.com) → Sign up with GitHub
-2. Click **"New Project"** → Import this repo
-3. Framework preset: **Other**
-4. Click **Deploy**
-
-## 📂 Project Structure
-
-```
-rmc-pro/
-├── index.html          ← Main PWA app (all modules)
-├── manifest.json       ← PWA manifest (app name, icons, theme)
-├── service-worker.js   ← Offline support & caching
-├── icons/              ← App icons for all device sizes
-│   ├── icon-72.png
-│   ├── icon-96.png
-│   ├── icon-128.png
-│   ├── icon-144.png
-│   ├── icon-152.png
-│   ├── icon-192.png
-│   ├── icon-384.png
-│   └── icon-512.png
-└── README.md           ← This file
+```text
+apps/
+  api/         NestJS backend (REST + WebSocket)
+  web/         Next.js web portal (tenant + super admin)
+  plant-app/   Electron standalone plant app (added in Sprint 10)
+packages/
+  shared/      shared TS types, enums, error codes, permission keys
+docker/        local infra (Postgres + Redis + MinIO)
+docs/          requirements · design · development
+prototype/     archived original PWA prototype
 ```
 
-## 📲 Install as App on Phone
+## Getting Started (local)
 
-### Android
-1. Open Chrome → visit your deployed URL
-2. Tap the **⋮ menu → "Add to Home Screen"**
-3. Or tap the **Install banner** that appears automatically
+Prerequisites: Node ≥ 20, pnpm 10, Docker.
 
-### iPhone (iOS 16.4+)
-1. Open Safari → visit your deployed URL
-2. Tap the **Share button (□↑)**
-3. Tap **"Add to Home Screen"**
+```bash
+# 1. install
+pnpm install
 
-## 🔧 Customization
+# 2. copy env
+cp .env.example .env
 
-Edit `index.html` to update:
-- **Plant name & location** → Search for `"Plant Name"`
-- **Target volume** → Search for `480` (m³/day target)
-- **Number of TMs** → Search for vehicle cards section
-- **Mix grades** → Update grade options in batch form
-- **Alert thresholds** → Settings page form values
+# 3. start local infra (Postgres, Redis, MinIO)
+docker compose -f docker/docker-compose.yml up -d
 
-## 📡 Next Steps (Production Ready)
+# 4. run apps (api on :4000, web on :3000)
+pnpm dev
+```
 
-To connect real data:
+Health checks: API `http://localhost:4000/health` · Web `http://localhost:3000/api/health`.
 
-1. **Firebase Realtime DB** — Replace dummy data with live batch entries
-2. **Firebase Auth** — Add login with phone OTP for drivers
-3. **Push Notifications** — Firebase Cloud Messaging for alerts
-4. **GPS Integration** — Google Maps API for live TM tracking
-5. **WhatsApp API** — Auto-send delivery challan to customers
+## Scripts
 
-## 🏭 Built For
+```bash
+pnpm dev         # run all apps in watch mode (turbo)
+pnpm build       # build all packages/apps
+pnpm typecheck   # type-check everything
+pnpm lint        # eslint
+pnpm format      # prettier write
+```
 
-- RMC Plant Managers & Owners
-- Shift Engineers
-- QC Technicians  
-- Transit Mixer Drivers
-- Accounts & Dispatch Teams
+## License
 
-## 📄 License
-
-MIT License — Free to use and modify for your plant.
-
----
-
-**Built with ❤️ for the Indian RMC industry**
+MIT — free to use and modify.

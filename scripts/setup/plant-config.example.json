@@ -1,0 +1,89 @@
+{
+  "_README": [
+    "Mix Nova — plant master data. Copy this file to plant-config.json, fill in",
+    "the values, then run:   node scripts/setup/apply-plant-config.mjs",
+    "",
+    "RULES",
+    "  - Leave a value as \"\" or null to KEEP what is already in the app.",
+    "    Nothing is ever blanked out by an empty field.",
+    "  - The *Code fields identify the existing record. Do not change them",
+    "    unless you mean to point at a different record.",
+    "  - Safe to run more than once: it only sends fields you filled in.",
+    "  - plant-config.json is git-ignored, so your real data is never committed.",
+    "",
+    "NOT HANDLED HERE (deliberately)",
+    "  - The M25 mix design. Approved recipes are version-controlled for QC,",
+    "    so a new version must be raised and approved in the app:",
+    "    Production -> Mix Designs -> M25-STD -> New version.",
+    "  - New records. This edits the starter records the seeder created. Add",
+    "    further customers/sites/vehicles in the app, or by CSV import on each",
+    "    Masters screen."
+  ],
+
+  "company": {
+    "companyName": "",
+    "gstin": "",
+    "state": ""
+  },
+
+  "plant": {
+    "plantCode": "SRE-P1",
+    "plantName": "",
+    "city": ""
+  },
+
+  "customer": {
+    "customerCode": "CUST-001",
+    "customerName": "",
+    "customerType": "",
+    "gstin": "",
+    "billingAddress": "",
+    "city": "",
+    "state": "",
+    "contactPerson": "",
+    "mobile": "",
+    "email": "",
+    "creditLimit": null,
+    "creditDays": null
+  },
+
+  "site": {
+    "siteCode": "SITE-001",
+    "siteName": "",
+    "address": "",
+    "city": "",
+    "state": "",
+    "contactPerson": "",
+    "mobile": "",
+    "pumpRequired": null
+  },
+
+  "driver": {
+    "driverCode": "DRV-001",
+    "driverName": "",
+    "mobile": "",
+    "licenseNo": ""
+  },
+
+  "vehicle": {
+    "vehicleNo": "TN00AA0000",
+    "newVehicleNo": "",
+    "vehicleType": "",
+    "capacityM3": null,
+    "ownershipType": ""
+  },
+
+  "materials": [
+    { "materialCode": "CEM-OPC53", "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "CEM-OPC43", "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "CEM-PPC",   "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "AGG-20",    "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "AGG-10",    "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "SAND-R",    "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "SAND-M",    "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "FLYASH",    "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "WATER",     "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "ADMX-SP",   "standardRate": null, "reorderLevel": null, "materialName": "" },
+    { "materialCode": "ADMX-RET",  "standardRate": null, "reorderLevel": null, "materialName": "" }
+  ]
+}

@@ -1,0 +1,411 @@
+/* ============================================================================
+   Mix Nova RMC Software — design foundation (Phase A)
+   Brand: Mix Nova · "Smart Mix. Stronger Future."
+   Light is the default (long-hour plant/ops readability); dark is opt-in via
+   [data-theme="dark"]. New screens use the --mn-* tokens; existing Phase-1
+   screens keep the legacy tokens (below) so they render unchanged during the
+   incremental re-skin.
+   ============================================================================ */
+
+:root {
+  /* ---- Mix Nova brand ramp ---- */
+  --mn-purple-50: #f4eeff;
+  --mn-purple-100: #e9ddff;
+  --mn-purple-200: #d6c2ff;
+  --mn-purple-300: #b78cff; /* Soft Lavender */
+  --mn-purple-400: #9e6bff;
+  --mn-purple-500: #8a4fff; /* Electric Violet */
+  --mn-purple-600: #6c2bd9; /* Primary Purple */
+  --mn-purple-700: #5a1fb8;
+  --mn-purple-800: #481a90;
+  --mn-purple-900: #2e1160;
+  --mn-navy: #1e1e2e; /* Deep Dark/Navy */
+  --mn-grey: #8e8e9a; /* Neutral Grey */
+  --mn-gradient: linear-gradient(135deg, #6c2bd9 0%, #8a4fff 100%);
+
+  /* ---- Semantic tokens — LIGHT (default) ---- */
+  --mn-bg: #f7f7fb;
+  --mn-surface: #ffffff;
+  --mn-surface-2: #fbfbfe;
+  --mn-border: #e6e6ef;
+  --mn-border-strong: #d3d3df;
+  --mn-text: #1e1e2e;
+  --mn-muted: #5b5b6b; /* AA on white */
+  --mn-subtle: #8e8e9a; /* non-text / large only */
+  --mn-primary: #6c2bd9;
+  --mn-primary-hover: #5a1fb8;
+  --mn-on-primary: #ffffff;
+  --mn-focus: #b78cff;
+
+  --mn-success: #15803d;
+  --mn-success-tint: #dcfce7;
+  --mn-warning: #b45309;
+  --mn-warning-tint: #fef3c7;
+  --mn-danger: #b91c1c;
+  --mn-danger-tint: #fee2e2;
+  --mn-info: #6c2bd9;
+  --mn-info-tint: #f4eeff;
+
+  /* ---- Spacing / radius / elevation ---- */
+  --mn-radius-sm: 6px;
+  --mn-radius-md: 8px;
+  --mn-radius-lg: 12px;
+  --mn-radius-pill: 999px;
+  --mn-shadow-card: 0 1px 2px rgba(16, 17, 33, 0.04), 0 4px 16px rgba(16, 17, 33, 0.06);
+  --mn-shadow-pop: 0 8px 30px rgba(16, 17, 33, 0.14);
+
+  /* ---- Typography (font vars wired by next/font in layout.tsx) ----
+     Latin runs on Inter; Devanagari/Hindi + Tamil fall through to the loaded
+     Noto faces (self-hosted at build time), so Indian-language names render
+     with real glyphs on every OS. */
+  --mn-font-display: var(--font-space-grotesk), 'Space Grotesk', system-ui, sans-serif;
+  --mn-font-body: var(--font-inter), 'Inter', var(--font-noto), var(--font-noto-tamil),
+    'Noto Sans', 'Noto Sans Tamil', 'Noto Sans Devanagari', system-ui, -apple-system, 'Segoe UI',
+    Roboto, Arial, sans-serif;
+
+  /* ---- Legacy Phase-1 tokens — now ALIAS the Mix Nova tokens ----
+     Existing screens read these vars, so aliasing moves the whole app onto the
+     Mix Nova light theme (and the dark toggle) without editing each screen.
+     Per-screen visual polish still follows in Phases C–E. */
+  --bg: var(--mn-bg);
+  --panel: var(--mn-surface);
+  --text: var(--mn-text);
+  --muted: var(--mn-muted);
+  --brand: var(--mn-primary);
+  --brand-contrast: var(--mn-on-primary);
+}
+
+/* ---- Dark theme (opt-in): overrides the Mix Nova semantic tokens ---- */
+:root[data-theme='dark'] {
+  --mn-bg: #14141f;
+  --mn-surface: #1e1e2e;
+  --mn-surface-2: #262636;
+  --mn-border: #33334a;
+  --mn-border-strong: #40405a;
+  --mn-text: #ececf3;
+  --mn-muted: #a9a9b8;
+  --mn-subtle: #8e8e9a;
+  --mn-primary: #8a4fff;
+  --mn-primary-hover: #9e6bff;
+  --mn-on-primary: #14141f;
+  --mn-focus: #b78cff;
+
+  --mn-success: #4ade80;
+  --mn-success-tint: #10371f;
+  --mn-warning: #fbbf24;
+  --mn-warning-tint: #3a2a08;
+  --mn-danger: #f87171;
+  --mn-danger-tint: #3a1414;
+  --mn-info: #b78cff;
+  --mn-info-tint: #241833;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mn-font-body);
+  font-feature-settings: 'tnum' 1; /* tabular figures — aligned qty/₹ columns */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--mn-font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 2px;
+}
+/* Main content is focus-target for the skip link; never draw a ring on it. */
+main:focus,
+main:focus-visible {
+  outline: none;
+}
+
+/* ---- Accessibility helpers ---- */
+.mn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* Skip-to-content: hidden until keyboard-focused, then pinned top-left. */
+.mn-skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-primary);
+  color: var(--mn-on-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--mn-shadow-pop);
+  transform: translateY(-150%);
+  transition: transform 0.15s ease;
+}
+.mn-skip:focus {
+  transform: translateY(0);
+}
+
+/* ---- Mix Nova utilities (used by re-skinned surfaces, e.g. login) ---- */
+.mn-app {
+  background: var(--mn-bg);
+  color: var(--mn-text);
+}
+.mn-gradient {
+  background: var(--mn-gradient);
+}
+.mn-gradient-text {
+  background: var(--mn-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* ============================================================================
+   Mix Nova UI kit — component layer (Phase B)
+   ============================================================================ */
+@keyframes mn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.mn-spin {
+  animation: mn-spin 0.8s linear infinite;
+}
+@keyframes mn-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.mn-skel {
+  background: var(--mn-border);
+  border-radius: var(--mn-radius-sm);
+  animation: mn-pulse 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-spin,
+  .mn-skel {
+    animation: none;
+  }
+}
+
+.mn-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--mn-font-body);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  padding: 10px 16px;
+  min-height: 40px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.mn-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.mn-btn-sm {
+  padding: 6px 11px;
+  min-height: 32px;
+  font-size: 13px;
+}
+.mn-btn-primary {
+  background: var(--mn-primary);
+  color: var(--mn-on-primary);
+}
+.mn-btn-primary:hover:not(:disabled) {
+  background: var(--mn-primary-hover);
+}
+.mn-btn-secondary {
+  background: var(--mn-surface);
+  color: var(--mn-text);
+  border-color: var(--mn-border-strong);
+}
+.mn-btn-secondary:hover:not(:disabled) {
+  background: var(--mn-surface-2);
+  border-color: var(--mn-primary);
+}
+.mn-btn-ghost {
+  background: transparent;
+  color: var(--mn-text);
+}
+.mn-btn-ghost:hover:not(:disabled) {
+  background: var(--mn-purple-50);
+  color: var(--mn-primary);
+}
+.mn-btn-danger {
+  background: var(--mn-danger);
+  color: #fff;
+}
+
+.mn-card {
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  box-shadow: var(--mn-shadow-card);
+}
+
+.mn-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border-strong);
+  background: var(--mn-surface);
+  color: var(--mn-text);
+  font-size: 14px;
+  font-family: var(--mn-font-body);
+}
+.mn-input:focus {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 1px;
+  border-color: var(--mn-primary);
+}
+
+.mn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--mn-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.mn-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 14px;
+  color: var(--mn-muted);
+  transition: background 0.12s, color 0.12s;
+}
+.mn-nav:hover {
+  background: var(--mn-purple-50);
+  color: var(--mn-text);
+}
+.mn-nav-active,
+.mn-nav-active:hover {
+  background: var(--mn-primary);
+  color: #fff;
+}
+.mn-nav svg {
+  flex: 0 0 auto;
+}
+
+/* ---- Responsive app shell ---- */
+.mn-shell {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+  background: var(--mn-bg);
+  color: var(--mn-text);
+}
+.mn-sidebar {
+  background: var(--mn-surface);
+  border-right: 1px solid var(--mn-border);
+  display: flex;
+  flex-direction: column;
+}
+.mn-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  background: var(--mn-surface);
+  border-bottom: 1px solid var(--mn-border);
+}
+.mn-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+  color: var(--mn-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.mn-iconbtn:hover {
+  background: var(--mn-purple-50);
+  color: var(--mn-primary);
+  border-color: var(--mn-primary);
+}
+.mn-hamburger {
+  display: none;
+}
+.mn-scrim {
+  display: none;
+}
+@media (max-width: 1024px) {
+  .mn-shell {
+    grid-template-columns: 1fr;
+  }
+  .mn-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 268px;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--mn-shadow-pop);
+  }
+  .mn-sidebar.mn-open {
+    transform: translateX(0);
+  }
+  .mn-hamburger {
+    display: inline-flex;
+  }
+  .mn-scrim.mn-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 17, 33, 0.4);
+    z-index: 35;
+  }
+}

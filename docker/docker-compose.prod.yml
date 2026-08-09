@@ -1,0 +1,182 @@
+# RMC Plant SaaS — PRODUCTION compose TEMPLATE (Phase-1 controlled pilot).
+#
+# TEMPLATE ONLY — nothing here is deployed by this repo. Before use:
+#   1. Copy ../.env.production.example -> ../.env.production and fill in REAL
+#      secrets and the REAL domain (replace every <DOMAIN> and every __REPLACE__).
+#   2. Issue TLS certs on the host (see the runbook) — not done here.
+#   3. Run from the repo root:
+#        docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d
+#
+# Topology: only nginx is published. app.<DOMAIN> + admin.<DOMAIN> -> web:3000,
+# api.<DOMAIN> -> api:4000, apex + www.<DOMAIN> -> 301 app.<DOMAIN>. Postgres/
+# Redis/MinIO are NOT published to the host — internal network only.
+
+name: rmc-pilot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - rmc_pgdata:/var/lib/postgresql/data
+    networks: [rmc_internal]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No `ports:` — intentionally not reachable from outside the compose network.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - rmc_redisdata:/data
+    networks: [rmc_internal]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - rmc_miniodata:/data
+    networks: [rmc_internal]
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Console (9001) intentionally not published — reach it via an SSH tunnel.
+
+  # One-shot: apply migrations (owner role) then the idempotent prod bootstrap.
+  # Runs from compiled JS in the API image (no ts-node). Exits when done.
+  migrate:
+    image: ${IMAGE_REPO_API:-rmc-api}:${IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: >
+      sh -c "node_modules/.bin/typeorm migration:run -d dist/core/database/data-source.js &&
+             node dist/core/database/seed-prod.js"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
+      SUPERADMIN_NAME: ${SUPERADMIN_NAME:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [rmc_internal]
+    restart: 'no'
+
+  api:
+    image: ${IMAGE_REPO_API:-rmc-api}:${IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: '4000'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Runtime connects as the NON-superuser app role (RLS-enforced).
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      # Owner creds present only so migrations already ran via `migrate`.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-1209600}
+      # Browser-origin allowlist (app + admin portal hosts; comma-separated).
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      # AI features (optional). Empty key => AI stays off; app runs normally.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+    expose: ['4000']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [rmc_internal]
+
+  web:
+    image: ${IMAGE_REPO_WEB:-rmc-web}:${IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the client bundle at build time — must be the API origin.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+    expose: ['3000']
+    depends_on:
+      - api
+    networks: [rmc_internal]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    # The nginx image expands rmc.conf.template at start: ${DOMAIN} -> $DOMAIN,
+    # writing /etc/nginx/conf.d/rmc.conf. No host-side sed; the tree never drifts.
+    # NGINX_ENVSUBST_FILTER limits substitution to DOMAIN only (nginx's own $host,
+    # $scheme, etc. are left intact). '$$' is compose escaping -> the container
+    # receives the literal filter '^DOMAIN$'.
+    environment:
+      DOMAIN: ${DOMAIN}
+      NGINX_ENVSUBST_FILTER: '^DOMAIN$$'
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      # TLS material + ACME webroot are provisioned on the host (see runbook).
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - rmc_acme:/var/www/certbot
+    depends_on:
+      - api
+      - web
+    networks: [rmc_internal]
+
+volumes:
+  rmc_pgdata:
+  rmc_redisdata:
+  rmc_miniodata:
+  rmc_acme:
+
+networks:
+  rmc_internal:
+    driver: bridge

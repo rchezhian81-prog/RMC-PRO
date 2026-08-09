@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mix Nova — Plant App (Offline)</title>
+  <style>
+    /* ===== Mix Nova offline app — self-contained (no external calls) ===== */
+    :root {
+      --mn-purple-600: #6c2bd9; --mn-purple-500: #8a4fff; --mn-purple-50: #f4eeff;
+      --mn-gradient: linear-gradient(135deg, #6c2bd9 0%, #8a4fff 100%);
+      --bg: #f7f7fb; --surface: #ffffff; --surface-2: #fbfbfe;
+      --border: #e6e6ef; --border-strong: #d3d3df;
+      --text: #1e1e2e; --muted: #5b5b6b; --subtle: #8e8e9a;
+      --ok: #15803d; --ok-tint: #dcfce7; --warn: #b45309; --danger: #b91c1c;
+      /* Noto in the stack so Tamil/Hindi challan names render if the OS has them */
+      --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans',
+        'Noto Sans Tamil', 'Noto Sans Devanagari', Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: var(--font); background: var(--bg); color: var(--text);
+      margin: 0; padding: 0; -webkit-font-smoothing: antialiased;
+      font-feature-settings: 'tnum' 1;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 40px; }
+
+    /* Brand header */
+    header {
+      background: var(--mn-gradient); color: #fff; padding: 20px 24px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .mark {
+      width: 40px; height: 40px; border-radius: 11px; background: #fff;
+      display: grid; place-items: center; flex: 0 0 auto;
+      font-weight: 800; font-size: 22px; color: #6c2bd9;
+      box-shadow: 0 2px 10px rgba(0,0,0,.22);
+    }
+    .brand { line-height: 1.1; }
+    .brand b { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+    .brand span { display: block; font-size: 12px; opacity: .82; margin-top: 2px; }
+    .conn {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+      padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+      background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.28); }
+    .conn.off .dot { background: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,.28); }
+
+    /* Cards */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 18px;
+      box-shadow: 0 1px 2px rgba(16,17,33,.04), 0 4px 16px rgba(16,17,33,.05);
+    }
+    .card h2 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--subtle); margin: 0 0 12px; font-weight: 700;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin: 0 0 4px; }
+    input {
+      padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border-strong);
+      background: var(--surface); color: var(--text); font-size: 14px; font-family: var(--font); width: 100%;
+    }
+    input:focus { outline: 2px solid #b78cff; outline-offset: 1px; border-color: var(--mn-purple-600); }
+    .field { flex: 1 1 160px; min-width: 0; }
+
+    button {
+      padding: 9px 14px; border-radius: 8px; border: 1px solid transparent;
+      font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: var(--font);
+      display: inline-flex; align-items: center; gap: 7px; transition: background .15s, border-color .15s;
+    }
+    .btn-primary { background: var(--mn-purple-600); color: #fff; }
+    .btn-primary:hover { background: #5a1fb8; }
+    .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+    .btn-secondary:hover { background: var(--surface-2); border-color: var(--mn-purple-600); }
+    button:focus-visible { outline: 2px solid #b78cff; outline-offset: 2px; }
+
+    /* Sync status strip */
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+    .stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; text-align: center; }
+    .stat b { display: block; font-size: 20px; line-height: 1.1; color: var(--text); }
+    .stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+
+    /* Log */
+    .log-card { margin-top: 16px; }
+    .log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    pre {
+      background: #14141f; color: #d6c2ff; padding: 12px 14px; border-radius: 10px;
+      overflow: auto; max-height: 300px; font-size: 12px; line-height: 1.55;
+      font-family: 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace; margin: 0;
+    }
+    .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="mark">M</div>
+    <div class="brand">
+      <b>Mix Nova</b>
+      <span>Plant App · Offline-first</span>
+    </div>
+    <div id="conn" class="conn off"><span class="dot"></span><span id="connText">Offline mode</span></div>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+      <section class="card">
+        <h2>Connect</h2>
+        <div class="row" style="margin-bottom:10px">
+          <div class="field">
+            <label for="baseUrl">Server URL</label>
+            <input id="baseUrl" value="http://localhost:4000" />
+          </div>
+        </div>
+        <div class="row" style="margin-bottom:12px">
+          <div class="field" style="flex:1 1 100%">
+            <label for="token">Access token</label>
+            <input id="token" placeholder="paste access token" />
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn-secondary" onclick="doAuth()">Set auth</button>
+          <button class="btn-primary" onclick="doRegister()">Register &amp; bootstrap</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Offline entry · works without network</h2>
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn-secondary" onclick="reserve()">Reserve 50 challan numbers</button>
+        </div>
+        <div class="row">
+          <button class="btn-primary" onclick="newChallan()">New offline challan</button>
+          <button class="btn-primary" onclick="newBatch()">New offline batch</button>
+        </div>
+        <p class="hint">Entries are stored locally and queued until the next successful push.</p>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <h2>Sync</h2>
+      <div class="stats">
+        <div class="stat"><b id="stPending">–</b><span>Pending push</span></div>
+        <div class="stat"><b id="stChallans">–</b><span>Local challans</span></div>
+        <div class="stat"><b id="stBatches">–</b><span>Local batches</span></div>
+      </div>
+      <div class="row">
+        <button class="btn-primary" onclick="doPush()">Push</button>
+        <button class="btn-secondary" onclick="doPull()">Pull</button>
+        <button class="btn-secondary" onclick="refresh()">Refresh status</button>
+      </div>
+    </section>
+
+    <section class="card log-card">
+      <div class="log-head">
+        <h2 style="margin:0">Activity log</h2>
+        <button class="btn-secondary" onclick="clearLog()">Clear</button>
+      </div>
+      <pre id="log" aria-live="polite">Ready. Set auth, then bootstrap this device to begin.</pre>
+    </section>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const stamp = () => new Date().toLocaleTimeString();
+    const log = (x) => {
+      const body = typeof x === 'string' ? x : JSON.stringify(x, null, 2);
+      logEl.textContent = '[' + stamp() + '] ' + body + '\n' + logEl.textContent;
+      // A status payload updates the counters too (pure UI reflection).
+      if (x && typeof x === 'object') applyStatus(x);
+    };
+    const clearLog = () => { logEl.textContent = 'Cleared.'; };
+
+    function applyStatus(s) {
+      const pending = s.pendingPush ?? s.pending ?? s.outbox ?? s.queued;
+      const challans = s.challans ?? s.localChallans ?? s.deliveryChallans;
+      const batches = s.batches ?? s.localBatches;
+      if (pending !== undefined) document.getElementById('stPending').textContent = pending;
+      if (challans !== undefined) document.getElementById('stChallans').textContent = challans;
+      if (batches !== undefined) document.getElementById('stBatches').textContent = batches;
+    }
+
+    function paintConn() {
+      const on = navigator.onLine;
+      const el = document.getElementById('conn');
+      el.classList.toggle('off', !on);
+      document.getElementById('connText').textContent = on ? 'Online' : 'Offline mode';
+    }
+    window.addEventListener('online', paintConn);
+    window.addEventListener('offline', paintConn);
+    paintConn();
+
+    // ---- Bridge calls unchanged (business logic untouched) ----
+    async function doAuth() { log(await window.rmc.auth(document.getElementById('baseUrl').value, document.getElementById('token').value)); }
+    async function doRegister() { log(await window.rmc.register({ deviceIdentifier: 'PLANT-DEV-1', deviceName: 'Plant PC 1' })); }
+    async function reserve() { log(await window.rmc.reserve('delivery_challan', 50)); }
+    async function newChallan() { log(await window.rmc.createChallan({ gradeLabel: 'M25', quantityM3: 6, slump: '120mm', receiverName: 'Site Eng' })); }
+    async function newBatch() { log(await window.rmc.createBatch({ gradeLabel: 'M25', batchQuantityM3: 6 })); }
+    async function doPush() { log(await window.rmc.push()); }
+    async function doPull() { log(await window.rmc.pull()); }
+    async function refresh() { log(await window.rmc.status()); }
+  </script>
+</body>
+</html>

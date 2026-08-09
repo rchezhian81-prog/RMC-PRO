@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
+import { RequestLoggerInterceptor } from './common/request-logger.interceptor';
 import { ErrorFilter } from './common/error.filter';
 
 /**
@@ -32,7 +33,9 @@ async function bootstrap() {
   // Versioned API base path (Design Doc 7 §2.2); health stays unprefixed.
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  // Request logger first (outermost) so it times the whole pipeline; then the
+  // envelope wrapper.
+  app.useGlobalInterceptors(new RequestLoggerInterceptor(), new ResponseInterceptor());
   // Failures get the same envelope as successes, so the web client can read the
   // error code rather than guessing from the status alone.
   app.useGlobalFilters(new ErrorFilter());

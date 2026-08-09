@@ -30,9 +30,9 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '25mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '25mb' });
 
-  // Versioned API base path (Design Doc 7 §2.2); health + readiness stay
-  // unprefixed so probes hit /health and /health/ready consistently.
-  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready'] });
+  // Versioned API base path (Design Doc 7 §2.2); health, readiness and the
+  // Prometheus scrape endpoint stay unprefixed (/health, /health/ready, /metrics).
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready', 'metrics'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // Structured per-request logging + correlation id are handled by
   // RequestContextMiddleware (runs before guards, so it also logs rejections).

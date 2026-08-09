@@ -34,6 +34,8 @@ const E = {
   // Small pull pages so sync-pagination exercises the keyset drain with a
   // handful of rows instead of thousands. Production default is 500.
   SYNC_PULL_LIMIT: '3',
+  // Token-gate the /metrics scrape so the metrics test can prove both paths.
+  METRICS_TOKEN: 'ci-metrics-token',
   SUPERADMIN_EMAIL: 'super@ci.test',
   SUPERADMIN_PASSWORD: 'SuperCI#12345',
   SUPERADMIN_NAME: 'CI Super',
@@ -50,6 +52,7 @@ const TESTS = [
   'test/order-to-cash.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
+  'test/metrics.test.mjs',
   'test/sync-pagination.test.mjs',
   'test/rls-users.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so

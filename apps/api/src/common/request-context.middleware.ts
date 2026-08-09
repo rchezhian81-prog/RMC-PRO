@@ -2,6 +2,7 @@ import { Injectable, NestMiddleware } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import type { AuthUser } from '../auth/auth-user';
+import { MetricsService } from './metrics.service';
 
 /** Off switch for noisy environments; on by default. */
 const ENABLED = process.env.REQUEST_LOG !== 'off';
@@ -39,6 +40,8 @@ type ContextRequest = Request & { user?: AuthUser; requestId?: string };
  */
 @Injectable()
 export class RequestContextMiddleware implements NestMiddleware {
+  constructor(private readonly metrics: MetricsService) {}
+
   use(req: ContextRequest, res: Response, next: NextFunction): void {
     const inbound = req.headers[HEADER];
     const candidate = Array.isArray(inbound) ? inbound[0] : inbound;
@@ -52,37 +55,43 @@ export class RequestContextMiddleware implements NestMiddleware {
       /* headers already sent — nothing we can do, and not worth failing over */
     }
 
-    if (ENABLED) {
-      const start = Date.now();
-      res.on('finish', () => {
-        try {
-          const path = (req.originalUrl ?? req.url ?? '').split('?')[0] ?? '';
-          // Health probes and CORS preflight are pure noise; keep the id header
-          // but skip the log line.
-          if (path === '/health' || path.startsWith('/health/') || req.method === 'OPTIONS') return;
-          const status = res.statusCode ?? 200;
-          const u = req.user;
-          const errorCode = (res.locals?.errorCode as string | undefined) ?? undefined;
-          const line = {
-            t: new Date().toISOString(),
-            level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
-            msg: 'request',
-            method: req.method,
-            path,
-            status,
-            durationMs: Date.now() - start,
-            tenantId: u?.tenantId ?? null,
-            userId: u?.userId ?? null,
-            userType: u?.userType ?? null,
-            requestId,
-            ...(errorCode ? { errorCode } : {}),
-          };
-          console.log(JSON.stringify(line));
-        } catch {
-          /* logging must never break a request */
-        }
-      });
-    }
+    const start = Date.now();
+    res.on('finish', () => {
+      try {
+        const path = (req.originalUrl ?? req.url ?? '').split('?')[0] ?? '';
+        // Health probes, the metrics scrape, and CORS preflight are pure noise —
+        // skip them for BOTH the metrics and the log line (a scrape must never
+        // inflate the metrics it is reading).
+        if (path === '/health' || path.startsWith('/health/') || path === '/metrics' || req.method === 'OPTIONS') return;
+        const status = res.statusCode ?? 200;
+        const durationMs = Date.now() - start;
+
+        // Metrics are recorded regardless of REQUEST_LOG (logging is the noisy
+        // part; metrics are cheap and always wanted).
+        this.metrics.observeHttp(req.method, path, status, durationMs / 1000);
+
+        if (!ENABLED) return;
+        const u = req.user;
+        const errorCode = (res.locals?.errorCode as string | undefined) ?? undefined;
+        const line = {
+          t: new Date().toISOString(),
+          level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
+          msg: 'request',
+          method: req.method,
+          path,
+          status,
+          durationMs,
+          tenantId: u?.tenantId ?? null,
+          userId: u?.userId ?? null,
+          userType: u?.userType ?? null,
+          requestId,
+          ...(errorCode ? { errorCode } : {}),
+        };
+        console.log(JSON.stringify(line));
+      } catch {
+        /* metrics/logging must never break a request */
+      }
+    });
 
     next();
   }

@@ -100,6 +100,7 @@ export class AgentKernelService {
     const ctx: AgentRunContext = {
       tenantId,
       actorUserId,
+      runId: run.id,
       input,
       callTool: async <T>(toolName: string, args?: unknown): Promise<T> => {
         let stepSeq: number;
@@ -148,7 +149,7 @@ export class AgentKernelService {
 
         // execute — inside the tenant transaction (RLS-bound).
         const result = await this.db.runInTenant(tenantId, (m) =>
-          tool.execute({ tenantId, actorUserId, manager: m, args: args ?? {} }),
+          tool.execute({ tenantId, actorUserId, runId: run.id, manager: m, args: args ?? {} }),
         );
         await this.recordStep(tenantId, run.id, stepSeq, {
           stepType: 'tool_call', toolName, toolKind: tool.kind, reversibility: tool.reversibility,

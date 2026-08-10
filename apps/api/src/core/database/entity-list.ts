@@ -60,6 +60,7 @@ import {
   AgentControl,
   AgentRun,
   AgentRunStep,
+  AgentApprovalRequest,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -125,4 +126,5 @@ export const ENTITIES = [
   AgentControl,
   AgentRun,
   AgentRunStep,
+  AgentApprovalRequest,
 ];

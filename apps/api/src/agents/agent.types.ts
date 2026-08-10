@@ -36,6 +36,8 @@ export interface PolicyDecision {
 export interface ToolContext<TArgs = unknown> {
   tenantId: string;
   actorUserId: string | null;
+  /** The run this tool call belongs to (for linking prepared actions, etc.). */
+  runId: string;
   /** Tenant-scoped EntityManager (RLS applies) — the tool must use only this. */
   manager: EntityManager;
   args: TArgs;
@@ -57,6 +59,8 @@ export interface AgentToolDef<TArgs = unknown, TResult = unknown> {
 export interface AgentRunContext {
   tenantId: string;
   actorUserId: string | null;
+  /** This run's id (agents may reference it, e.g. to link a prepared action). */
+  runId: string;
   input: Record<string, unknown>;
   /**
    * Call a tool by name. Enforces, in order: budget (step cap) → scope

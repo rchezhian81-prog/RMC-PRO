@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
@@ -13,6 +13,8 @@ import { AGENT_DATA_ANALYSIS } from './data-analysis.agent';
 import { AGENT_MONITOR } from './monitor.agent';
 import { AGENT_SPECIALIST } from './specialist.agent';
 import { AGENT_CUSTOMER_SERVICE } from './customer-service.agent';
+import { AGENT_AUTOMATION } from './automation.agent';
+import { ApprovalService } from './approval.service';
 
 class SetControlsDto {
   /** The kill switch: true pauses all agent runs for this tenant. */
@@ -51,6 +53,20 @@ class RunCustomerServiceDto {
   @IsOptional() @IsIn(['account_summary', 'order_status']) intent?: string;
 }
 
+class RunAutomationDto {
+  @IsOptional() @IsString() @MaxLength(64) actionKind?: string;
+  @IsOptional() @IsString() @MaxLength(200) title?: string;
+  @IsOptional() @IsObject() payload?: Record<string, unknown>;
+  @IsOptional() @IsIn(['reversible', 'irreversible', 'financial', 'legal', 'safety']) reversibility?: string;
+  /** Test/hard-rule path: attempt a financial commit (must be blocked). */
+  @IsOptional() @IsBoolean() tryCommit?: boolean;
+}
+
+class DecideApprovalDto {
+  @IsIn(['approved', 'rejected']) decision!: 'approved' | 'rejected';
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
 /**
  * Tenant-scoped control surface for the multi-agent substrate (M0). Gated by the
  * new `agents.manage` permission, which only Company Owner / Company Admin hold —
@@ -66,6 +82,7 @@ export class AgentsController {
     private readonly governor: AgentGovernorService,
     private readonly kernel: AgentKernelService,
     private readonly registry: ToolRegistryService,
+    private readonly approvals: ApprovalService,
   ) {}
 
   /** The registered agents and their tool allow-lists (the security contract). */
@@ -154,5 +171,36 @@ export class AgentsController {
       taskKind: 'customer-service',
       input: { ...dto },
     });
+  }
+
+  /**
+   * Run the Automation agent: it PREPARES an action for approval (a reversible
+   * L3 write) — it never commits a financial/legal/irreversible action.
+   */
+  @Post('automation/run')
+  runAutomation(@CurrentUser() u: AuthUser, @Body() dto: RunAutomationDto) {
+    return this.kernel.runTask({
+      tenantId: u.tenantId as string,
+      agentName: AGENT_AUTOMATION,
+      actorUserId: u.userId,
+      taskKind: 'automation',
+      input: { ...dto },
+    });
+  }
+
+  // ---- Approval queue (the human-in-the-loop L2 gate; `agents.approve`) ----
+
+  /** Pending (or ?status=all/approved/rejected) prepared actions for this tenant. */
+  @Get('approvals')
+  @RequirePermissions('agents.approve')
+  listApprovals(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
+    return this.approvals.list(u.tenantId as string, status ?? 'pending');
+  }
+
+  /** Approve or reject a prepared action. Decided once — a second decision 409s. */
+  @Post('approvals/:id/decide')
+  @RequirePermissions('agents.approve')
+  decideApproval(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: DecideApprovalDto) {
+    return this.approvals.decide(u.tenantId as string, id, dto.decision, u.userId, dto.reason);
   }
 }

@@ -81,6 +81,10 @@ export const PERMISSIONS = {
   // automation kill switch, the per-run budgets, and the run trail. A tenant
   // admin control, held by Company Owner/Admin only (see SYSTEM_ROLE_KEYS).
   AGENTS_MANAGE: 'agents.manage',
+  // Approve or reject an action an agent PREPARED (the human-in-the-loop L2
+  // gate). Higher-trust than agents.manage — the person who signs off on a
+  // prepared action, distinct from the person who tunes the substrate.
+  AGENTS_APPROVE: 'agents.approve',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -59,6 +59,7 @@ const TESTS = [
   'test/agents-insight.test.mjs',
   'test/agents-specialist.test.mjs',
   'test/agents-customer-service.test.mjs',
+  'test/agents-automation.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',

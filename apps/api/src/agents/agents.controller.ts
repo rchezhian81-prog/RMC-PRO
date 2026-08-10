@@ -9,6 +9,8 @@ import { AgentGovernorService } from './agent-governor.service';
 import { AgentKernelService } from './agent-kernel.service';
 import { ToolRegistryService } from './tool-registry.service';
 import { AGENT_DIAGNOSTICS } from './diagnostics.agent';
+import { AGENT_DATA_ANALYSIS } from './data-analysis.agent';
+import { AGENT_MONITOR } from './monitor.agent';
 
 class SetControlsDto {
   /** The kill switch: true pauses all agent runs for this tenant. */
@@ -22,6 +24,15 @@ class RunDiagnosticsDto {
   @IsOptional() @IsBoolean() mark?: boolean;
   @IsOptional() @IsBoolean() tryPayment?: boolean;
   @IsOptional() @IsBoolean() tryUnknownTool?: boolean;
+}
+
+class RunAnalysisDto {
+  @IsOptional() @IsInt() @Min(1) @Max(365) windowDays?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(50) topN?: number;
+}
+
+class RunMonitorDto {
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) stockThreshold?: number;
 }
 
 /**
@@ -73,6 +84,30 @@ export class AgentsController {
       agentName: AGENT_DIAGNOSTICS,
       actorUserId: u.userId,
       taskKind: 'diagnostics',
+      input: { ...dto },
+    });
+  }
+
+  /** Run the read-only Data-Analysis agent: KPI snapshot + top customers. */
+  @Post('data-analysis/run')
+  runAnalysis(@CurrentUser() u: AuthUser, @Body() dto: RunAnalysisDto) {
+    return this.kernel.runTask({
+      tenantId: u.tenantId as string,
+      agentName: AGENT_DATA_ANALYSIS,
+      actorUserId: u.userId,
+      taskKind: 'data-analysis',
+      input: { ...dto },
+    });
+  }
+
+  /** Run the read-only Monitor agent: operational threshold checks → alerts. */
+  @Post('monitor/run')
+  runMonitor(@CurrentUser() u: AuthUser, @Body() dto: RunMonitorDto) {
+    return this.kernel.runTask({
+      tenantId: u.tenantId as string,
+      agentName: AGENT_MONITOR,
+      actorUserId: u.userId,
+      taskKind: 'monitor',
       input: { ...dto },
     });
   }

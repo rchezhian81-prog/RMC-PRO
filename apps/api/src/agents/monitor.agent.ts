@@ -24,6 +24,13 @@ export class MonitorAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'reports.view',
       description: 'Operational threshold checks → alerts: overdue AR, credit-limit breach, low stock.',
+      parameters: {
+        type: 'object',
+        properties: {
+          stockThreshold: { type: 'number', minimum: 0, description: 'Stock-balance level at/below which to alert (default 0).' },
+        },
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const threshold = num((ctx.args as { stockThreshold?: unknown })?.stockThreshold);
         const alerts: Array<Record<string, unknown>> = [];

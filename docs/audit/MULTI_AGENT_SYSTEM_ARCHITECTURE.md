@@ -231,13 +231,15 @@ auto-filing GST returns, auto-committing customer contracts, auto-issuing
 invoices/IRN without sign-off, auto-accepting/rejecting a concrete load. No agent
 is ever L5.
 
-### 6.1 Build status — M0–M5 shipped (merged to `main`)
+### 6.1 Build status — M0–M5 + LLM-1 shipped (merged to `main`)
 
 The rollout above is now **built and merged**, each milestone verified against a
-real Postgres 16 (unit + integration) and CI-green. All of it is deterministic
-and LLM-free — the guardrails are enforced in our code, not a model. What lands
-here is the *safe skeleton*; the LLM and the live external calls are the held
-owner/deployment portion (below).
+real Postgres 16 (unit + integration) and CI-green. M0–M5 are deterministic and
+LLM-free — the guardrails are enforced in our code, not a model. **LLM-1** now
+adds the reasoning layer *on top of* that same funnel: the model only *proposes*
+tool calls; scope/policy/budget/tenant/audit still dispose. What lands here is the
+*safe skeleton + reasoning harness*; only the live API key and the live external
+calls remain the held owner/deployment portion (below).
 
 | Milestone | Shipped | Where |
 |---|---|---|
@@ -247,9 +249,12 @@ owner/deployment portion (below).
 | **M3** | **Customer-Service** — customer-scoped (two-layer: RLS + `customerId` filter), fixed-intent allow-list (untrusted-input seam). | `customer-service.agent.ts` |
 | **M4** | **Automation** write-path + the **L2 approval substrate**: reversible write executes bounded (L3); financial/legal/irreversible is *prepared* as a `pending` approval a human decides once. | `automation.agent.ts`, `approval.service.ts`, migration 21, perm `agents.approve` |
 | **M5** | Assisted compliance: Automation **prepares** India IRN / e-way payloads for approval (deterministic build, no transmission). | `compliance.util.ts`, `automation.agent.ts` |
+| **LLM-1** | Reasoning layer: pluggable `LlmProvider` (Anthropic adapter, default `claude-opus-5`, adaptive thinking) behind graceful degradation; a bounded tool-use loop where the model *proposes* and the M0 funnel *disposes*; `ctx.reason()` + an `ask` run mode; `GET /agents/llm` + `POST /agents/:name/ask` (gated `agents.manage`); prompt-injection defense (data-not-instructions). The live key is held. | `agents/llm/*`, `agent-kernel.service.ts`, `agents.controller.ts` |
 
-**Held for the owner/deployment portion** (deliberately *not* built in-sandbox):
-the LLM wiring + free-text handling; live IRP/e-way **transmission** (GW-2/3/4);
+**Held for the owner/deployment portion** (deliberately *not* run in-sandbox): the
+live **`ANTHROPIC_API_KEY`** (the LLM harness is built and unit/integration-tested
+with a fake provider + the keyless degradation path; the real model call is
+exercised by the owner post-deploy); live IRP/e-way **transmission** (GW-2/3/4);
 outbound messaging + the **consent engine** (GW-12) that gates it; the shared
 external provider-registry/queue backbone (GW-1); and the scale infra
 (HA/PITR/secrets-vault, GW-16). Every M4/M5 write today is *prepare-and-block* —

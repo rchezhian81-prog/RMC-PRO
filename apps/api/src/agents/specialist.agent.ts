@@ -29,6 +29,13 @@ export class SpecialistAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'reports.view',
       description: 'Advisory: India GST e-invoice / e-way / HSN readiness gaps on recent invoices, with cited recommendations.',
+      parameters: {
+        type: 'object',
+        properties: {
+          windowDays: { type: 'integer', minimum: 1, maximum: 365, description: 'Look-back window in days (default 30).' },
+        },
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const days = clampInt((ctx.args as { windowDays?: unknown })?.windowDays, 30, 1, 365);
         const findings: Array<Record<string, unknown>> = [];
@@ -87,6 +94,7 @@ export class SpecialistAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'reports.view',
       description: 'Advisory: accounts-receivable risk (overdue exposure + over-limit customers) with cited recommendations.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
       execute: async (ctx) => {
         const findings: Array<Record<string, unknown>> = [];
 

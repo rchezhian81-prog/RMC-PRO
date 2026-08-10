@@ -14,7 +14,20 @@ import { AutomationAgent } from './automation.agent';
 import { ApprovalService } from './approval.service';
 import { LlmService } from './llm/llm.service';
 import { AnthropicLlmProvider } from './llm/anthropic.provider';
-import { LLM_PROVIDER } from './llm/llm.types';
+import { LocalLlmProvider } from './llm/local.provider';
+import { LLM_PROVIDER, type LlmProvider } from './llm/llm.types';
+
+/**
+ * Select the reasoning backend. Default is the INBUILT, self-hosted local model
+ * (no subscription); the paid Anthropic API is strictly opt-in via
+ * `AGENT_LLM_PROVIDER=anthropic`. Either way the provider is fail-safe off when
+ * unconfigured, so the agents fall back to their deterministic paths.
+ */
+function selectLlmProvider(): LlmProvider {
+  return (process.env.AGENT_LLM_PROVIDER ?? 'local').toLowerCase() === 'anthropic'
+    ? new AnthropicLlmProvider()
+    : new LocalLlmProvider();
+}
 
 /**
  * The multi-agent substrate (M0). Wires the orchestrator kernel, the guardrail
@@ -47,9 +60,10 @@ import { LLM_PROVIDER } from './llm/llm.types';
     PolicyEngineService,
     AgentGovernorService,
     ApprovalService,
-    // LLM reasoning layer (LLM-1): the provider is bound behind a token so the
-    // real Anthropic adapter can be swapped/absent without touching the kernel.
-    { provide: LLM_PROVIDER, useClass: AnthropicLlmProvider },
+    // LLM reasoning layer: the provider is bound behind a token so the inbuilt
+    // local model (default) or the opt-in Anthropic API can be swapped/absent
+    // without touching the kernel.
+    { provide: LLM_PROVIDER, useFactory: selectLlmProvider },
     LlmService,
     AgentKernelService,
     DiagnosticsAgent,

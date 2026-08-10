@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ComplianceModule } from '../compliance/compliance.module';
 import { AgentsController } from './agents.controller';
 import { ToolRegistryService } from './tool-registry.service';
 import { PolicyEngineService } from './policy-engine.service';
@@ -39,6 +40,7 @@ import { LLM_PROVIDER } from './llm/llm.types';
  * key is held for deployment.
  */
 @Module({
+  imports: [ComplianceModule],
   controllers: [AgentsController],
   providers: [
     ToolRegistryService,

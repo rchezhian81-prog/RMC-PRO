@@ -32,6 +32,16 @@ So the remaining work is narrow: **an execution service that, on approval, calls
 the provider and writes the response into the columns above** — plus the
 credentials to do it.
 
+> **Update — the execution scaffold is now built** (`apps/api/src/compliance/`,
+> migration 22). The provider interface, the disabled default, a deterministic
+> **fake** provider, the pure full-schema INV-01/EWB builders + pre-flight
+> validators, and `GstExecutionService` (approve → validate → transmit → persist →
+> audit, idempotent + duplicate-reconciling) all exist and are unit/integration-
+> tested against the fake. `GET /agents/gst` reports status; `POST /agents/approvals/:id/execute`
+> runs it. **Only two things remain for go-live:** implement `nic.provider.ts`
+> against your GSP (§3–4 + runbooks 01/02), and supply credentials (§7). Set
+> `GST_PROVIDER=nic` to switch on; it defaults to `disabled` (prepare-only).
+
 ## 2. Decision: go through a GSP/ASP, behind one interface (GW-1)
 
 India exposes two government systems — the **IRP** (Invoice Registration Portal,

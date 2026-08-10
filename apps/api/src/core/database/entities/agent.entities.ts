@@ -199,6 +199,13 @@ export class AgentApprovalRequest {
   @Column({ name: 'reversibility', type: 'varchar', nullable: true })
   reversibility!: string | null;
 
+  /** Optional domain-object reference (e.g. `invoice`) the action targets. */
+  @Column({ name: 'entity_type', type: 'varchar', nullable: true })
+  entityType!: string | null;
+
+  @Column({ name: 'entity_id', type: 'uuid', nullable: true })
+  entityId!: string | null;
+
   /** pending | approved | rejected | cancelled. */
   @Column({ name: 'status', type: 'varchar', default: 'pending' })
   status!: string;

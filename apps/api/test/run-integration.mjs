@@ -36,6 +36,10 @@ const E = {
   SYNC_PULL_LIMIT: '3',
   // Token-gate the /metrics scrape so the metrics test can prove both paths.
   METRICS_TOKEN: 'ci-metrics-token',
+  // Drive the GST execution scaffold with the deterministic offline provider
+  // (no credentials, no portal). Prepare-only paths are unaffected — execution
+  // only runs when /agents/approvals/:id/execute is called explicitly.
+  GST_PROVIDER: 'fake',
   SUPERADMIN_EMAIL: 'super@ci.test',
   SUPERADMIN_PASSWORD: 'SuperCI#12345',
   SUPERADMIN_NAME: 'CI Super',
@@ -62,6 +66,7 @@ const TESTS = [
   'test/agents-automation.test.mjs',
   'test/agents-compliance.test.mjs',
   'test/agents-llm.test.mjs',
+  'test/agents-gst-execution.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',

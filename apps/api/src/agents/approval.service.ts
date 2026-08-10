@@ -32,6 +32,9 @@ export interface PrepareApprovalInput {
   payload?: Record<string, unknown> | null;
   reversibility?: string | null;
   requestedBy: string | null;
+  /** Optional domain-object the action targets (e.g. entityType 'invoice'). */
+  entityType?: string | null;
+  entityId?: string | null;
 }
 
 /**
@@ -59,6 +62,8 @@ export class ApprovalService {
         title: input.title,
         payload: (input.payload ? scrubPayload(input.payload) : null) as Record<string, unknown> | null,
         reversibility: input.reversibility ?? null,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
         status: 'pending',
         requestedBy: input.requestedBy,
       }),

@@ -123,6 +123,7 @@ export class AutomationAgent implements OnModuleInit {
           actionKind: 'einvoice_irn', title: `Generate IRN for ${inv.invoiceNo}`,
           payload: buildEinvoicePayload(inv as never), reversibility: 'legal',
           requestedBy: ctx.actorUserId,
+          entityType: 'invoice', entityId: inv.id as string,
         });
         return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
       },
@@ -147,6 +148,7 @@ export class AutomationAgent implements OnModuleInit {
           actionKind: 'eway_bill', title: `Generate e-way bill for ${inv.invoiceNo}`,
           payload: buildEwayPayload(inv as never), reversibility: 'legal',
           requestedBy: ctx.actorUserId,
+          entityType: 'invoice', entityId: inv.id as string,
         });
         return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
       },

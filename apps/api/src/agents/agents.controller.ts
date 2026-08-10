@@ -16,6 +16,7 @@ import { AGENT_CUSTOMER_SERVICE } from './customer-service.agent';
 import { AGENT_AUTOMATION } from './automation.agent';
 import { ApprovalService } from './approval.service';
 import { LlmService } from './llm/llm.service';
+import { GstExecutionService } from '../compliance/gst-execution.service';
 
 /**
  * Agents that expose the conversational LLM `/ask` mode. These are the ones whose
@@ -110,6 +111,7 @@ export class AgentsController {
     private readonly registry: ToolRegistryService,
     private readonly approvals: ApprovalService,
     private readonly llm: LlmService,
+    private readonly gst: GstExecutionService,
   ) {}
 
   /** The registered agents and their tool allow-lists (the security contract). */
@@ -268,5 +270,26 @@ export class AgentsController {
   @RequirePermissions('agents.approve')
   decideApproval(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: DecideApprovalDto) {
     return this.approvals.decide(u.tenantId as string, id, dto.decision, u.userId, dto.reason);
+  }
+
+  // ---- GST live execution (the approved-action transmission step; GW-2/3/4) ----
+
+  /** Whether a GST provider is configured for this deployment, and which one. */
+  @Get('gst')
+  gstStatus() {
+    return { configured: this.gst.isConfigured(), provider: this.gst.providerName() };
+  }
+
+  /**
+   * Execute an APPROVED GST action (IRN or e-way) against the configured provider
+   * and persist the government response onto the invoice. Gated by `agents.approve`
+   * — the same human authority that approved it. Idempotent; with no provider
+   * configured it skips (prepare-only preserved). This is the operator/worker
+   * entrypoint until the durable queue backbone (GW-1) lands.
+   */
+  @Post('approvals/:id/execute')
+  @RequirePermissions('agents.approve')
+  executeApproval(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.gst.execute(u.tenantId as string, id, u.userId);
   }
 }

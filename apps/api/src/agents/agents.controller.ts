@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
@@ -12,6 +12,7 @@ import { AGENT_DIAGNOSTICS } from './diagnostics.agent';
 import { AGENT_DATA_ANALYSIS } from './data-analysis.agent';
 import { AGENT_MONITOR } from './monitor.agent';
 import { AGENT_SPECIALIST } from './specialist.agent';
+import { AGENT_CUSTOMER_SERVICE } from './customer-service.agent';
 
 class SetControlsDto {
   /** The kill switch: true pauses all agent runs for this tenant. */
@@ -42,6 +43,12 @@ class RunMonitorDto {
 class RunSpecialistDto {
   @IsOptional() @IsIn(['all', 'compliance', 'ar_risk']) topic?: string;
   @IsOptional() @IsInt() @Min(1) @Max(365) windowDays?: number;
+}
+
+class RunCustomerServiceDto {
+  /** Customer scope is mandatory — a CS run always acts for one named customer. */
+  @IsUUID() customerId!: string;
+  @IsOptional() @IsIn(['account_summary', 'order_status']) intent?: string;
 }
 
 /**
@@ -129,6 +136,22 @@ export class AgentsController {
       agentName: AGENT_SPECIALIST,
       actorUserId: u.userId,
       taskKind: 'specialist',
+      input: { ...dto },
+    });
+  }
+
+  /**
+   * Run the customer-scoped, read-only Customer-Service agent for ONE customer.
+   * `customerId` is mandatory; every tool filters by it (customer-scoping on top
+   * of tenant RLS). Outbound messaging and order placement are out of scope here.
+   */
+  @Post('customer-service/run')
+  runCustomerService(@CurrentUser() u: AuthUser, @Body() dto: RunCustomerServiceDto) {
+    return this.kernel.runTask({
+      tenantId: u.tenantId as string,
+      agentName: AGENT_CUSTOMER_SERVICE,
+      actorUserId: u.userId,
+      taskKind: 'customer-service',
       input: { ...dto },
     });
   }

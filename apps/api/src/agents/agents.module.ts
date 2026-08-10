@@ -8,6 +8,7 @@ import { DiagnosticsAgent } from './diagnostics.agent';
 import { DataAnalysisAgent } from './data-analysis.agent';
 import { MonitorAgent } from './monitor.agent';
 import { SpecialistAgent } from './specialist.agent';
+import { CustomerServiceAgent } from './customer-service.agent';
 
 /**
  * The multi-agent substrate (M0). Wires the orchestrator kernel, the guardrail
@@ -19,9 +20,10 @@ import { SpecialistAgent } from './specialist.agent';
  *
  * M1 adds the first two REAL agents — Data-Analysis and Monitor — both
  * read-only. M2 adds the Specialist advisory agent and inter-agent escalation
- * (Monitor → Specialist). Every agent here is still read-only: every tool is a
- * `read`, so the policy engine executes them freely and none can write. Still no
- * LLM; the agents run deterministic, tenant-scoped queries through the M0 funnel.
+ * (Monitor → Specialist). M3 adds the customer-scoped Customer-Service agent.
+ * Every agent here is still read-only: every tool is a `read`, so the policy
+ * engine executes them freely and none can write. Still no LLM; the agents run
+ * deterministic, tenant-scoped queries through the M0 funnel.
  */
 @Module({
   controllers: [AgentsController],
@@ -34,6 +36,7 @@ import { SpecialistAgent } from './specialist.agent';
     DataAnalysisAgent,
     MonitorAgent,
     SpecialistAgent,
+    CustomerServiceAgent,
   ],
   exports: [AgentKernelService, ToolRegistryService, AgentGovernorService],
 })

@@ -249,7 +249,7 @@ calls remain the held owner/deployment portion (below).
 | **M3** | **Customer-Service** — customer-scoped (two-layer: RLS + `customerId` filter), fixed-intent allow-list (untrusted-input seam). | `customer-service.agent.ts` |
 | **M4** | **Automation** write-path + the **L2 approval substrate**: reversible write executes bounded (L3); financial/legal/irreversible is *prepared* as a `pending` approval a human decides once. | `automation.agent.ts`, `approval.service.ts`, migration 21, perm `agents.approve` |
 | **M5** | Assisted compliance: Automation **prepares** India IRN / e-way payloads for approval (deterministic build, no transmission). | `compliance.util.ts`, `automation.agent.ts` |
-| **LLM-1** | Reasoning layer: pluggable `LlmProvider` (Anthropic adapter, default `claude-opus-5`, adaptive thinking) behind graceful degradation; a bounded tool-use loop where the model *proposes* and the M0 funnel *disposes*; `ctx.reason()` + an `ask` run mode; `GET /agents/llm` + `POST /agents/:name/ask` (gated `agents.manage`); prompt-injection defense (data-not-instructions). The live key is held. | `agents/llm/*`, `agent-kernel.service.ts`, `agents.controller.ts` |
+| **LLM-1** | Reasoning layer: pluggable `LlmProvider` behind graceful degradation; a bounded tool-use loop where the model *proposes* and the M0 funnel *disposes*; `ctx.reason()` + an `ask` run mode; `GET /agents/llm` + `POST /agents/:name/ask` (gated `agents.manage`); prompt-injection defense (data-not-instructions). **Default backend is the inbuilt self-hosted local model** (`LocalLlmProvider`, OpenAI-compatible — no subscription); Anthropic is opt-in. | `agents/llm/*`, `agent-kernel.service.ts`, `agents.controller.ts` |
 | **GST-EXEC** | GST execution scaffold (GW-2/3/4): pluggable `GstComplianceProvider` (disabled default / deterministic fake / held NIC adapter); pure full-schema INV-01 + EWB builders and pre-flight validators; `GstExecutionService` turns an APPROVED IRN/e-way action into transmit→persist onto the invoice — idempotent, duplicate-reconciling, audited, tenant-scoped; `GET /agents/gst` + `POST /agents/approvals/:id/execute` (gated `agents.approve`). Only the live adapter + credentials are held. | `compliance/*`, migration 22, `agents.controller.ts` |
 
 **Held for the owner/deployment portion** (deliberately *not* run in-sandbox): the
@@ -271,17 +271,21 @@ already exist; only transmission + credentials remain owner-held.
 
 ## 7. Technology approach (framework-agnostic)
 
-- **Models:** default to the latest, most capable Claude models, tiered by job —
-  **Haiku** for high-frequency Monitor triage + simple Customer-Service lookups,
-  **Sonnet** for conversational + routine Automation orchestration, **Opus** for
-  Data-Analysis multi-step reasoning + the Specialist council. Tiering is a cost/
-  latency decision (WR-AGT-11), not a capability lock-in; graceful degradation on
-  provider error.
-- **Agent runtime:** a tool-use loop (Anthropic API / Agent SDK-style) with
-  structured/schema-validated outputs so a downstream agent or the policy engine
-  consumes typed results, not free text. The design is runtime-agnostic — the
-  guardrails (§4) are enforced in *our* code (tenant context, policy engine,
-  audit, kill switch), never delegated to the model.
+- **Models — inbuilt first, no subscription.** The default reasoning backend is a
+  **self-hosted, open-source model** the owner runs on their own server
+  (`LocalLlmProvider`, OpenAI-compatible: Ollama / llama.cpp / vLLM), so there is
+  no per-token bill and tenant data never leaves the box. See
+  `docs/deployment/INBUILT-LLM-RUNBOOK.md`. A hosted API (Anthropic) is a strict
+  opt-in (`AGENT_LLM_PROVIDER=anthropic`), never the default. Under *both*, the
+  reasoning layer is fail-safe off when unconfigured — the deterministic agents
+  carry on at zero cost. Model tiering (WR-AGT-11) is a cost/latency decision, not
+  a lock-in.
+- **Agent runtime:** a tool-use loop behind a **pluggable provider seam**
+  (`LlmProvider`: local, Anthropic) with structured/schema-validated outputs so a
+  downstream agent or the policy engine consumes typed results, not free text. The
+  design is runtime- and vendor-agnostic — the guardrails (§4) are enforced in
+  *our* code (tenant context, policy engine, audit, kill switch), never delegated
+  to the model; the model only ever *proposes* tool calls.
 - **Integration substrate:** all external actions (messaging, clearance, payment,
   controller, telematics) go through the shared provider-registry + async queue +
   webhooks backbone (**GW-1 / WR-PLT-3**), so agents call *internal capabilities*,

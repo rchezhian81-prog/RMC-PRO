@@ -58,6 +58,11 @@ export class LlmService {
     return this.provider.modelId();
   }
 
+  /** The active backend's name (e.g. 'local', 'anthropic'). */
+  providerName(): string {
+    return this.provider.name;
+  }
+
   /**
    * Run an agent's conversational loop: build the tool specs from the agent's
    * OWN allow-list (the model can never see a tool the agent may not call),

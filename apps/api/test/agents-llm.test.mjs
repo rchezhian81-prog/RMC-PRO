@@ -50,6 +50,7 @@ async function api(method, path, payload) {
   ok('the LLM provider reports NOT configured in this environment', status.data?.configured === false);
   ok('it still advertises a model id', typeof status.data?.model === 'string' && status.data.model.length > 0);
   ok('specialist is in the ask-enabled set', Array.isArray(status.data?.askEnabledAgents) && status.data.askEnabledAgents.includes('specialist'));
+  ok('the default backend is the inbuilt local provider (non-subscription)', status.data?.provider === 'local');
 
   console.log('\n=== ask degrades gracefully without a key ===');
   const ask = await api('POST', '/agents/specialist/ask', { message: 'What GST compliance gaps do we have this month?' });

@@ -228,6 +228,7 @@ export class AgentsController {
   llmStatus() {
     return {
       configured: this.llm.isConfigured(),
+      provider: this.llm.providerName(),
       model: this.llm.modelId(),
       askEnabledAgents: [...ASK_ENABLED_AGENTS],
     };

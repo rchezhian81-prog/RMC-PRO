@@ -22,6 +22,7 @@ import { StockTransactionPlantNotNull1720000017000 } from './migrations/17200000
 import { UsersTenantModulesRls1720000018000 } from './migrations/1720000018000-UsersTenantModulesRls';
 import { AgentSubstrate1720000019000 } from './migrations/1720000019000-AgentSubstrate';
 import { AgentRunParent1720000020000 } from './migrations/1720000020000-AgentRunParent';
+import { AgentApprovals1720000021000 } from './migrations/1720000021000-AgentApprovals';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -59,6 +60,7 @@ export const AppDataSource = new DataSource({
     UsersTenantModulesRls1720000018000,
     AgentSubstrate1720000019000,
     AgentRunParent1720000020000,
+    AgentApprovals1720000021000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

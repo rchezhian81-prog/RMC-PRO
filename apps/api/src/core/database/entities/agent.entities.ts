@@ -153,3 +153,65 @@ export class AgentRunStep {
   @Column({ name: 'detail', type: 'jsonb', nullable: true })
   detail!: Record<string, unknown> | null;
 }
+
+/**
+ * A high-risk action an agent PREPARED for a human to approve (M4 — the L2
+ * substrate). The agent never executes a financial/legal/irreversible action; it
+ * records one here as `pending`, and a human with `agents.approve` decides. The
+ * prepared `payload` is secret-scrubbed. Executing an *approved* action is a
+ * separate, deliberate step (and, for messaging/clearance, waits on the consent
+ * engine / live integrations — held for deployment).
+ */
+@Entity('agent_approval_requests')
+@Index('idx_agent_approvals_tenant_status', ['tenantId', 'status', 'createdAt'])
+export class AgentApprovalRequest {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  /** The run that prepared this action (null if prepared outside a run). */
+  @Column({ name: 'run_id', type: 'uuid', nullable: true })
+  runId!: string | null;
+
+  @Column({ name: 'agent_name', type: 'varchar' })
+  agentName!: string;
+
+  /** What kind of action, e.g. `payment_reminder`, `einvoice_irn`. */
+  @Column({ name: 'action_kind', type: 'varchar' })
+  actionKind!: string;
+
+  @Column({ name: 'title', type: 'varchar' })
+  title!: string;
+
+  /** The prepared action details (secret-scrubbed). Never executed by the agent. */
+  @Column({ name: 'payload', type: 'jsonb', nullable: true })
+  payload!: Record<string, unknown> | null;
+
+  /** The action's reversibility class, for the reviewer's context. */
+  @Column({ name: 'reversibility', type: 'varchar', nullable: true })
+  reversibility!: string | null;
+
+  /** pending | approved | rejected | cancelled. */
+  @Column({ name: 'status', type: 'varchar', default: 'pending' })
+  status!: string;
+
+  @Column({ name: 'requested_by', type: 'uuid', nullable: true })
+  requestedBy!: string | null;
+
+  @Column({ name: 'decided_by', type: 'uuid', nullable: true })
+  decidedBy!: string | null;
+
+  @Column({ name: 'decided_at', type: 'timestamptz', nullable: true })
+  decidedAt!: Date | null;
+
+  @Column({ name: 'decision_reason', type: 'varchar', nullable: true })
+  decisionReason!: string | null;
+}

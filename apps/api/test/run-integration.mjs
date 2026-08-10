@@ -56,6 +56,7 @@ const TESTS = [
   'test/sync-pagination.test.mjs',
   'test/rls-users.test.mjs',
   'test/agents-substrate.test.mjs',
+  'test/agents-insight.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',

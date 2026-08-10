@@ -231,6 +231,31 @@ auto-filing GST returns, auto-committing customer contracts, auto-issuing
 invoices/IRN without sign-off, auto-accepting/rejecting a concrete load. No agent
 is ever L5.
 
+### 6.1 Build status — M0–M5 shipped (merged to `main`)
+
+The rollout above is now **built and merged**, each milestone verified against a
+real Postgres 16 (unit + integration) and CI-green. All of it is deterministic
+and LLM-free — the guardrails are enforced in our code, not a model. What lands
+here is the *safe skeleton*; the LLM and the live external calls are the held
+owner/deployment portion (below).
+
+| Milestone | Shipped | Where |
+|---|---|---|
+| **M0** | Guardrail substrate: kernel/orchestrator funnel, policy engine, tool registry (least-privilege), governor (kill switch + budgets), append-only run/step audit, all tenant-isolated (FORCE RLS). Diagnostics probe. | `apps/api/src/agents/*`, migration 19 |
+| **M1** | **Data-Analysis** + **Monitor**, read-only (KPIs; overdue-AR/credit/low-stock alerts). | `data-analysis.agent.ts`, `monitor.agent.ts` |
+| **M2** | **Specialist** advisory (cited compliance / AR-risk findings) + inter-agent **escalation** (least-privilege allow-list, depth guard, parent/child run linkage). | `specialist.agent.ts`, migration 20 |
+| **M3** | **Customer-Service** — customer-scoped (two-layer: RLS + `customerId` filter), fixed-intent allow-list (untrusted-input seam). | `customer-service.agent.ts` |
+| **M4** | **Automation** write-path + the **L2 approval substrate**: reversible write executes bounded (L3); financial/legal/irreversible is *prepared* as a `pending` approval a human decides once. | `automation.agent.ts`, `approval.service.ts`, migration 21, perm `agents.approve` |
+| **M5** | Assisted compliance: Automation **prepares** India IRN / e-way payloads for approval (deterministic build, no transmission). | `compliance.util.ts`, `automation.agent.ts` |
+
+**Held for the owner/deployment portion** (deliberately *not* built in-sandbox):
+the LLM wiring + free-text handling; live IRP/e-way **transmission** (GW-2/3/4);
+outbound messaging + the **consent engine** (GW-12) that gates it; the shared
+external provider-registry/queue backbone (GW-1); and the scale infra
+(HA/PITR/secrets-vault, GW-16). Every M4/M5 write today is *prepare-and-block* —
+an approved action's execution against a real external system is the next step,
+taken with the owner before/at deployment.
+
 ## 7. Technology approach (framework-agnostic)
 
 - **Models:** default to the latest, most capable Claude models, tiered by job —

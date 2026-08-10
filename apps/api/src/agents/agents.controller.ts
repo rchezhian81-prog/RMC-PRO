@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
@@ -11,6 +11,7 @@ import { ToolRegistryService } from './tool-registry.service';
 import { AGENT_DIAGNOSTICS } from './diagnostics.agent';
 import { AGENT_DATA_ANALYSIS } from './data-analysis.agent';
 import { AGENT_MONITOR } from './monitor.agent';
+import { AGENT_SPECIALIST } from './specialist.agent';
 
 class SetControlsDto {
   /** The kill switch: true pauses all agent runs for this tenant. */
@@ -24,6 +25,7 @@ class RunDiagnosticsDto {
   @IsOptional() @IsBoolean() mark?: boolean;
   @IsOptional() @IsBoolean() tryPayment?: boolean;
   @IsOptional() @IsBoolean() tryUnknownTool?: boolean;
+  @IsOptional() @IsBoolean() tryEscalate?: boolean;
 }
 
 class RunAnalysisDto {
@@ -33,6 +35,13 @@ class RunAnalysisDto {
 
 class RunMonitorDto {
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) stockThreshold?: number;
+  /** When set, Monitor escalates to the Specialist for a cited AR-risk assessment. */
+  @IsOptional() @IsBoolean() consultSpecialist?: boolean;
+}
+
+class RunSpecialistDto {
+  @IsOptional() @IsIn(['all', 'compliance', 'ar_risk']) topic?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(365) windowDays?: number;
 }
 
 /**
@@ -108,6 +117,18 @@ export class AgentsController {
       agentName: AGENT_MONITOR,
       actorUserId: u.userId,
       taskKind: 'monitor',
+      input: { ...dto },
+    });
+  }
+
+  /** Run the read-only Specialist agent: cited advisory (compliance / AR risk). */
+  @Post('specialist/run')
+  runSpecialist(@CurrentUser() u: AuthUser, @Body() dto: RunSpecialistDto) {
+    return this.kernel.runTask({
+      tenantId: u.tenantId as string,
+      agentName: AGENT_SPECIALIST,
+      actorUserId: u.userId,
+      taskKind: 'specialist',
       input: { ...dto },
     });
   }

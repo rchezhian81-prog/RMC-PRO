@@ -78,7 +78,7 @@ export class DiagnosticsAgent implements OnModuleInit {
       tools: [echo.name, mark.name, simulatePayment.name],
       handler: async (ctx) => {
         const input = ctx.input as {
-          msg?: string; mark?: boolean; tryPayment?: boolean; tryUnknownTool?: boolean;
+          msg?: string; mark?: boolean; tryPayment?: boolean; tryUnknownTool?: boolean; tryEscalate?: boolean;
         };
         const echoed = await ctx.callTool('diag.echo', { msg: input.msg ?? 'ping' });
         await ctx.note('diagnostics: echo ok');
@@ -87,6 +87,8 @@ export class DiagnosticsAgent implements OnModuleInit {
         // the run status accordingly (blocked / failed).
         if (input.tryPayment) await ctx.callTool('diag.simulate_payment', { amount: 1 });
         if (input.tryUnknownTool) await ctx.callTool('diag.does_not_exist', {});
+        // Diagnostics has no `canEscalateTo`, so this must be refused (M2 scope check).
+        if (input.tryEscalate) await ctx.escalate('specialist', {});
         return { echo: echoed };
       },
     };

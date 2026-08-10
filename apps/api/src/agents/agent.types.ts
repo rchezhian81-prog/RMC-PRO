@@ -64,6 +64,13 @@ export interface AgentRunContext {
    * tenant-scoped execution → audit. Throws a typed AgentError on any stop.
    */
   callTool: <T = unknown>(toolName: string, args?: unknown) => Promise<T>;
+  /**
+   * Escalate to another agent for deep reasoning (e.g. Monitor → Specialist).
+   * The target MUST be in this agent's `canEscalateTo` allow-list, and nesting
+   * is depth-bounded. Runs the target as a linked child run through the same
+   * guardrail funnel and returns its result.
+   */
+  escalate: (targetAgent: string, input?: Record<string, unknown>) => Promise<AgentRunResult>;
   /** Record a free-text note as a step in the run trail (no side effects). */
   note: (message: string, detail?: Record<string, unknown>) => Promise<void>;
 }
@@ -74,7 +81,18 @@ export interface AgentDef {
   description: string;
   /** The ONLY tool names this agent may call (least privilege, WR-AGT-3). */
   tools: string[];
+  /**
+   * The ONLY agents this one may escalate to (least privilege for escalation).
+   * Omitted/empty means it may not escalate at all. A Specialist typically
+   * escalates to no one — escalation never flows into more autonomy.
+   */
+  canEscalateTo?: string[];
   handler: (ctx: AgentRunContext) => Promise<unknown>;
+}
+
+/** Pure: may an agent with this allow-list escalate to `target`? */
+export function escalationAllowed(canEscalateTo: string[] | undefined, target: string): boolean {
+  return (canEscalateTo ?? []).includes(target);
 }
 
 export type RunStatus = 'completed' | 'failed' | 'aborted' | 'blocked' | 'killed';
@@ -95,7 +113,9 @@ export type AgentErrorCode =
   | 'TOOL_OUT_OF_SCOPE'
   | 'ACTION_BLOCKED'
   | 'BUDGET_EXCEEDED'
-  | 'AUTOMATION_PAUSED';
+  | 'AUTOMATION_PAUSED'
+  | 'ESCALATION_NOT_ALLOWED'
+  | 'ESCALATION_DEPTH';
 
 export class AgentError extends Error {
   constructor(

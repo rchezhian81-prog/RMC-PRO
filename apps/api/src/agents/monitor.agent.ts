@@ -94,15 +94,24 @@ export class MonitorAgent implements OnModuleInit {
     this.registry.registerTool(checks);
     this.registry.registerAgent({
       name: AGENT_MONITOR,
-      description: 'Read-only operational watchtower (M1).',
+      description: 'Read-only operational watchtower (M1); may consult the Specialist (M2).',
       tools: [checks.name],
+      // M2: Monitor may hand a finding to the Specialist for a cited recommendation.
+      canEscalateTo: ['specialist'],
       handler: async (ctx) => {
-        const input = ctx.input as { stockThreshold?: number };
+        const input = ctx.input as { stockThreshold?: number; consultSpecialist?: boolean };
         const r = await ctx.callTool<{ alertCount: number }>('monitor.checks', {
           stockThreshold: input.stockThreshold,
         });
         await ctx.note(`monitor: ${r.alertCount} alert(s)`);
-        return r;
+
+        let consultation: { runId: string; status: string } | undefined;
+        if (input.consultSpecialist) {
+          // Escalate for a deeper, cited assessment — a linked child run.
+          const child = await ctx.escalate('specialist', { topic: 'ar_risk' });
+          consultation = { runId: child.runId, status: child.status };
+        }
+        return { ...r, consultation };
       },
     });
   }

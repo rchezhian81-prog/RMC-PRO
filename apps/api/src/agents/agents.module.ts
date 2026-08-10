@@ -11,6 +11,9 @@ import { SpecialistAgent } from './specialist.agent';
 import { CustomerServiceAgent } from './customer-service.agent';
 import { AutomationAgent } from './automation.agent';
 import { ApprovalService } from './approval.service';
+import { LlmService } from './llm/llm.service';
+import { AnthropicLlmProvider } from './llm/anthropic.provider';
+import { LLM_PROVIDER } from './llm/llm.types';
 
 /**
  * The multi-agent substrate (M0). Wires the orchestrator kernel, the guardrail
@@ -26,8 +29,14 @@ import { ApprovalService } from './approval.service';
  * agent — the first with WRITE tools — plus the L2 approval substrate
  * (ApprovalService): a reversible write executes bounded (L3), and a
  * financial/legal/irreversible action is PREPARED for a human, never
- * auto-executed. Still no LLM; the agents run deterministic, tenant-scoped work
- * through the M0 funnel.
+ * auto-executed.
+ *
+ * LLM-1 adds the reasoning layer (LlmService + a pluggable provider bound behind
+ * LLM_PROVIDER). Agents can now `ctx.reason()` / be `/ask`-ed: the model proposes
+ * tool calls, but the SAME M0 funnel disposes — scope, policy (the hard rule),
+ * budgets, tenant isolation, and audit are unchanged. Without an API key the
+ * layer degrades gracefully and every deterministic path keeps working; the live
+ * key is held for deployment.
  */
 @Module({
   controllers: [AgentsController],
@@ -36,6 +45,10 @@ import { ApprovalService } from './approval.service';
     PolicyEngineService,
     AgentGovernorService,
     ApprovalService,
+    // LLM reasoning layer (LLM-1): the provider is bound behind a token so the
+    // real Anthropic adapter can be swapped/absent without touching the kernel.
+    { provide: LLM_PROVIDER, useClass: AnthropicLlmProvider },
+    LlmService,
     AgentKernelService,
     DiagnosticsAgent,
     DataAnalysisAgent,
@@ -44,6 +57,6 @@ import { ApprovalService } from './approval.service';
     CustomerServiceAgent,
     AutomationAgent,
   ],
-  exports: [AgentKernelService, ToolRegistryService, AgentGovernorService, ApprovalService],
+  exports: [AgentKernelService, ToolRegistryService, AgentGovernorService, ApprovalService, LlmService],
 })
 export class AgentsModule {}

@@ -52,7 +52,30 @@ export interface AgentToolDef<TArgs = unknown, TResult = unknown> {
   description: string;
   /** RBAC permission a human would need for the same action (parity/audit). */
   permission?: string;
+  /**
+   * JSON Schema (draft 2020-12, an `object`) for the tool's input, exposed to the
+   * LLM so it can propose calls (LLM-1). Optional: a tool with no parameters is
+   * advertised with an empty-object schema. This is advisory to the model only —
+   * it never widens what the tool actually does; the executor still validates.
+   */
+  parameters?: Record<string, unknown>;
   execute: (ctx: ToolContext<TArgs>) => Promise<TResult>;
+}
+
+/** What a bounded reasoning turn returns to an agent handler (LLM-1). */
+export interface AgentReasonResult {
+  /** True when no LLM provider is configured — nothing was sent to any model. */
+  degraded: boolean;
+  /** Machine-readable cause when degraded (e.g. 'llm_not_configured'). */
+  reason?: string;
+  /** The model's final text (or a terminal note). */
+  text: string;
+  /** Model turns taken and tool calls the model requested (each ran the funnel). */
+  iterations: number;
+  toolCalls: number;
+  /** The model that answered (or would have), and how the loop ended. */
+  model: string;
+  stopReason: string;
 }
 
 /** The context an agent handler is given to do its work through the kernel. */
@@ -77,6 +100,13 @@ export interface AgentRunContext {
   escalate: (targetAgent: string, input?: Record<string, unknown>) => Promise<AgentRunResult>;
   /** Record a free-text note as a step in the run trail (no side effects). */
   note: (message: string, detail?: Record<string, unknown>) => Promise<void>;
+  /**
+   * Reason with the LLM over THIS agent's allow-listed tools (LLM-1). The model
+   * may only PROPOSE tool calls; each one is routed through the same guardrail
+   * funnel as `callTool`, so scope/policy/budget/tenant/audit all still apply.
+   * Degrades gracefully (no model call) when no provider is configured.
+   */
+  reason: (userMessage: string, opts?: { system?: string; maxIterations?: number }) => Promise<AgentReasonResult>;
 }
 
 /** A registered agent: a named handler with an explicit tool allow-list. */

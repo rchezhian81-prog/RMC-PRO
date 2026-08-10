@@ -28,6 +28,13 @@ export class DataAnalysisAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'reports.view',
       description: 'KPI snapshot for a window: orders, invoiced revenue/tax, receipts, outstanding.',
+      parameters: {
+        type: 'object',
+        properties: {
+          windowDays: { type: 'integer', minimum: 1, maximum: 365, description: 'Look-back window in days (default 30).' },
+        },
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const days = clampInt((ctx.args as { windowDays?: unknown })?.windowDays, 30, 1, 365);
         const [orders] = await ctx.manager.query(
@@ -73,6 +80,14 @@ export class DataAnalysisAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'reports.view',
       description: 'Top customers by invoiced revenue in a window.',
+      parameters: {
+        type: 'object',
+        properties: {
+          windowDays: { type: 'integer', minimum: 1, maximum: 365, description: 'Look-back window in days (default 30).' },
+          topN: { type: 'integer', minimum: 1, maximum: 50, description: 'How many customers to return (default 5).' },
+        },
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const a = (ctx.args ?? {}) as { windowDays?: unknown; topN?: unknown };
         const days = clampInt(a.windowDays, 30, 1, 365);

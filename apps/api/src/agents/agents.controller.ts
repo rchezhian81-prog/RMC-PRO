@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -15,6 +15,22 @@ import { AGENT_SPECIALIST } from './specialist.agent';
 import { AGENT_CUSTOMER_SERVICE } from './customer-service.agent';
 import { AGENT_AUTOMATION } from './automation.agent';
 import { ApprovalService } from './approval.service';
+import { LlmService } from './llm/llm.service';
+
+/**
+ * Agents that expose the conversational LLM `/ask` mode. These are the ones whose
+ * tools are self-contained (they need no mandatory out-of-band scope like a single
+ * customerId): read-only analytics/advisory plus the Automation agent (whose
+ * high-risk tools are BLOCKED by policy anyway, so ask can only prepare or read).
+ * Diagnostics (internal probe) and Customer-Service (mandatory customer scope)
+ * are intentionally excluded.
+ */
+const ASK_ENABLED_AGENTS = new Set<string>([
+  AGENT_DATA_ANALYSIS,
+  AGENT_MONITOR,
+  AGENT_SPECIALIST,
+  AGENT_AUTOMATION,
+]);
 
 class SetControlsDto {
   /** The kill switch: true pauses all agent runs for this tenant. */
@@ -70,6 +86,13 @@ class DecideApprovalDto {
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }
 
+class AskAgentDto {
+  /** The operator's question/instruction to the agent (treated as the task). */
+  @IsString() @MaxLength(4000) message!: string;
+  /** Optional extra operator instruction folded into the system prompt. */
+  @IsOptional() @IsString() @MaxLength(2000) system?: string;
+}
+
 /**
  * Tenant-scoped control surface for the multi-agent substrate (M0). Gated by the
  * new `agents.manage` permission, which only Company Owner / Company Admin hold —
@@ -86,6 +109,7 @@ export class AgentsController {
     private readonly kernel: AgentKernelService,
     private readonly registry: ToolRegistryService,
     private readonly approvals: ApprovalService,
+    private readonly llm: LlmService,
   ) {}
 
   /** The registered agents and their tool allow-lists (the security contract). */
@@ -188,6 +212,45 @@ export class AgentsController {
       actorUserId: u.userId,
       taskKind: 'automation',
       input: { ...dto },
+    });
+  }
+
+  // ---- LLM reasoning (`/ask`) — the model proposes, the kernel disposes ----
+
+  /**
+   * Whether an LLM provider is configured for this deployment, and which model.
+   * The UI uses this to decide whether to offer `/ask`; when false, `/ask` still
+   * responds but degrades gracefully (no model call).
+   */
+  @Get('llm')
+  llmStatus() {
+    return {
+      configured: this.llm.isConfigured(),
+      model: this.llm.modelId(),
+      askEnabledAgents: [...ASK_ENABLED_AGENTS],
+    };
+  }
+
+  /**
+   * Ask an agent a free-form question. The LLM reasons over ONLY this agent's
+   * allow-listed tools; every tool it proposes is routed through the same
+   * guardrail funnel as a deterministic run (scope → policy → budget →
+   * tenant-scoped execute → audit), so the model cannot widen its access, bypass
+   * the hard rule, or cross tenants. Without a configured key it degrades to a
+   * clear "not configured" outcome. Gated by `agents.manage` (class default).
+   */
+  @Post(':name/ask')
+  ask(@CurrentUser() u: AuthUser, @Param('name') name: string, @Body() dto: AskAgentDto) {
+    if (!ASK_ENABLED_AGENTS.has(name)) {
+      throw new BadRequestException(`agent '${name}' does not support ask mode`);
+    }
+    return this.kernel.runTask({
+      tenantId: u.tenantId as string,
+      agentName: name,
+      actorUserId: u.userId,
+      taskKind: 'ask',
+      mode: 'ask',
+      input: { message: dto.message, system: dto.system },
     });
   }
 

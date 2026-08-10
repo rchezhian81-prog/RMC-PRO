@@ -57,6 +57,20 @@ export class AutomationAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'agents.approve',
       description: 'Reversible write: record a PENDING approval request for a human to decide. Never executes the action.',
+      parameters: {
+        type: 'object',
+        properties: {
+          actionKind: { type: 'string', maxLength: 64, description: 'A short code for the action, e.g. payment_reminder.' },
+          title: { type: 'string', maxLength: 200, description: 'Human-readable title for the reviewer.' },
+          payload: { type: 'object', description: 'Structured details the reviewer needs to decide.' },
+          reversibility: {
+            type: 'string',
+            enum: ['reversible', 'irreversible', 'financial', 'legal', 'safety'],
+            description: 'The class of the underlying action (recorded for the reviewer).',
+          },
+        },
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const a = (ctx.args ?? {}) as {
           actionKind?: string; title?: string; payload?: Record<string, unknown>; reversibility?: string;
@@ -81,6 +95,7 @@ export class AutomationAgent implements OnModuleInit {
       reversibility: 'financial',
       permission: 'receipts.create',
       description: 'Financial-class stand-in: MUST be blocked by policy and never auto-execute.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
       execute: async () => {
         throw new Error('SAFETY VIOLATION: a financial action executed without approval');
       },
@@ -95,6 +110,12 @@ export class AutomationAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'agents.approve',
       description: 'Reversible write: PREPARE an India e-invoice (IRN) payload for approval. No IRP call.',
+      parameters: {
+        type: 'object',
+        properties: { invoiceId: { type: 'string', description: 'UUID of the invoice to prepare an IRN payload for.' } },
+        required: ['invoiceId'],
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const inv = await loadInvoice(ctx);
         const req = await this.approvals.prepare(ctx.manager, {
@@ -113,6 +134,12 @@ export class AutomationAgent implements OnModuleInit {
       reversibility: 'reversible',
       permission: 'agents.approve',
       description: 'Reversible write: PREPARE an India e-way-bill (Part-A) payload for approval. No e-way call.',
+      parameters: {
+        type: 'object',
+        properties: { invoiceId: { type: 'string', description: 'UUID of the invoice to prepare an e-way payload for.' } },
+        required: ['invoiceId'],
+        additionalProperties: false,
+      },
       execute: async (ctx) => {
         const inv = await loadInvoice(ctx);
         const req = await this.approvals.prepare(ctx.manager, {

@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { ToolRegistryService } from './tool-registry.service';
 import { PolicyEngineService } from './policy-engine.service';
 import { AgentGovernorService, actionAllowed, stepAllowed } from './agent-governor.service';
+import { LlmService } from './llm/llm.service';
 import {
   AgentError,
   AgentRunContext,
@@ -19,6 +20,12 @@ interface RunTaskParams {
   actorUserId: string | null;
   taskKind?: string;
   input?: Record<string, unknown>;
+  /**
+   * 'handler' (default) runs the agent's deterministic handler. 'ask' runs the
+   * LLM reasoning loop over the agent's allow-listed tools instead (LLM-1) — the
+   * model proposes tool calls, the guardrail funnel still disposes.
+   */
+  mode?: 'handler' | 'ask';
 }
 
 /** Internal run parameters carry escalation depth + the parent run id. */
@@ -58,6 +65,7 @@ export class AgentKernelService {
     private readonly governor: AgentGovernorService,
     private readonly db: TenantDbService,
     private readonly audit: AuditService,
+    private readonly llm: LlmService,
   ) {}
 
   /** Public entry point — starts a top-level run (no parent, depth 0). */
@@ -97,66 +105,77 @@ export class AgentKernelService {
       return ++seq;
     };
 
+    // The guardrailed tool call — the single funnel every action passes through,
+    // whether the agent's deterministic handler or the LLM (via ctx.reason) asks
+    // for it. Extracted as a local so `reason` can reuse the exact same path.
+    const callTool = async <T>(toolName: string, args?: unknown): Promise<T> => {
+      let stepSeq: number;
+      try {
+        stepSeq = nextStep();
+      } catch (e) {
+        await this.recordStep(tenantId, run.id, ++seq, {
+          stepType: 'blocked', toolName, policyVerdict: 'block',
+          detail: { reason: 'step budget exceeded', cap: controls.maxStepsPerRun },
+        });
+        throw e;
+      }
+
+      // scope — least privilege.
+      let tool;
+      try {
+        tool = this.registry.resolveTool(agentName, toolName);
+      } catch (e) {
+        await this.recordStep(tenantId, run.id, stepSeq, {
+          stepType: 'blocked', toolName, policyVerdict: 'block', detail: { reason: 'out of scope' },
+        });
+        throw e;
+      }
+
+      // policy — the hard rule.
+      const decision = this.policy.decide(tool);
+      if (decision.verdict === 'block') {
+        await this.recordStep(tenantId, run.id, stepSeq, {
+          stepType: 'blocked', toolName, toolKind: tool.kind, reversibility: tool.reversibility,
+          policyVerdict: 'block', detail: { reason: decision.reason },
+        });
+        throw new AgentError('ACTION_BLOCKED', decision.reason, { toolName, reversibility: tool.reversibility });
+      }
+
+      // action budget — writes only.
+      if (tool.kind === 'write') {
+        if (!actionAllowed(usage.actions, controls.maxActionsPerRun)) {
+          await this.recordStep(tenantId, run.id, stepSeq, {
+            stepType: 'blocked', toolName, toolKind: 'write', reversibility: tool.reversibility,
+            policyVerdict: decision.verdict, detail: { reason: 'action budget exceeded', cap: controls.maxActionsPerRun },
+          });
+          throw new AgentError('BUDGET_EXCEEDED', `action budget ${controls.maxActionsPerRun} exceeded`, { toolName });
+        }
+        usage.actions += 1;
+      }
+
+      // execute — inside the tenant transaction (RLS-bound).
+      const result = await this.db.runInTenant(tenantId, (m) =>
+        tool.execute({ tenantId, actorUserId, runId: run.id, manager: m, args: args ?? {} }),
+      );
+      await this.recordStep(tenantId, run.id, stepSeq, {
+        stepType: 'tool_call', toolName, toolKind: tool.kind, reversibility: tool.reversibility,
+        policyVerdict: decision.verdict, detail: { ok: true },
+      });
+      return result as T;
+    };
+
+    const note = async (message: string, detail?: Record<string, unknown>): Promise<void> => {
+      await this.recordStep(tenantId, run.id, ++seq, {
+        stepType: 'note', detail: detail ? { message, detail } : { message },
+      });
+    };
+
     const ctx: AgentRunContext = {
       tenantId,
       actorUserId,
       runId: run.id,
       input,
-      callTool: async <T>(toolName: string, args?: unknown): Promise<T> => {
-        let stepSeq: number;
-        try {
-          stepSeq = nextStep();
-        } catch (e) {
-          await this.recordStep(tenantId, run.id, ++seq, {
-            stepType: 'blocked', toolName, policyVerdict: 'block',
-            detail: { reason: 'step budget exceeded', cap: controls.maxStepsPerRun },
-          });
-          throw e;
-        }
-
-        // scope — least privilege.
-        let tool;
-        try {
-          tool = this.registry.resolveTool(agentName, toolName);
-        } catch (e) {
-          await this.recordStep(tenantId, run.id, stepSeq, {
-            stepType: 'blocked', toolName, policyVerdict: 'block', detail: { reason: 'out of scope' },
-          });
-          throw e;
-        }
-
-        // policy — the hard rule.
-        const decision = this.policy.decide(tool);
-        if (decision.verdict === 'block') {
-          await this.recordStep(tenantId, run.id, stepSeq, {
-            stepType: 'blocked', toolName, toolKind: tool.kind, reversibility: tool.reversibility,
-            policyVerdict: 'block', detail: { reason: decision.reason },
-          });
-          throw new AgentError('ACTION_BLOCKED', decision.reason, { toolName, reversibility: tool.reversibility });
-        }
-
-        // action budget — writes only.
-        if (tool.kind === 'write') {
-          if (!actionAllowed(usage.actions, controls.maxActionsPerRun)) {
-            await this.recordStep(tenantId, run.id, stepSeq, {
-              stepType: 'blocked', toolName, toolKind: 'write', reversibility: tool.reversibility,
-              policyVerdict: decision.verdict, detail: { reason: 'action budget exceeded', cap: controls.maxActionsPerRun },
-            });
-            throw new AgentError('BUDGET_EXCEEDED', `action budget ${controls.maxActionsPerRun} exceeded`, { toolName });
-          }
-          usage.actions += 1;
-        }
-
-        // execute — inside the tenant transaction (RLS-bound).
-        const result = await this.db.runInTenant(tenantId, (m) =>
-          tool.execute({ tenantId, actorUserId, runId: run.id, manager: m, args: args ?? {} }),
-        );
-        await this.recordStep(tenantId, run.id, stepSeq, {
-          stepType: 'tool_call', toolName, toolKind: tool.kind, reversibility: tool.reversibility,
-          policyVerdict: decision.verdict, detail: { ok: true },
-        });
-        return result as T;
-      },
+      callTool,
       escalate: async (targetAgent: string, subInput?: Record<string, unknown>): Promise<AgentRunResult> => {
         const stepSeq = nextStep();
         // escalation scope — least privilege for escalation.
@@ -186,18 +205,52 @@ export class AgentKernelService {
         });
         return child;
       },
-      note: async (message: string, detail?: Record<string, unknown>) => {
-        await this.recordStep(tenantId, run.id, ++seq, {
-          stepType: 'note', detail: detail ? { message, detail } : { message },
+      note,
+      reason: async (userMessage: string, opts?: { system?: string; maxIterations?: number }) => {
+        const r = await this.llm.runAgentLoop({
+          agentName,
+          agentDescription: agent.description,
+          userMessage,
+          system: opts?.system,
+          callTool: (toolName, toolInput) => callTool(toolName, toolInput),
+          note,
+          maxIterations: opts?.maxIterations,
         });
+        // Record the reasoning turn as an audited step (no side effects itself;
+        // any tool calls it made were already recorded through callTool).
+        await this.recordStep(tenantId, run.id, ++seq, {
+          stepType: 'note',
+          detail: {
+            reason: {
+              degraded: r.degraded, iterations: r.iterations, toolCalls: r.toolCalls,
+              model: r.model, stopReason: r.stopReason,
+            },
+          },
+        });
+        return {
+          degraded: r.degraded, reason: r.reason, text: r.text, iterations: r.iterations,
+          toolCalls: r.toolCalls, model: r.model, stopReason: r.stopReason,
+        };
       },
     };
+
+    // 'ask' mode swaps the agent's deterministic handler for the LLM loop over
+    // this agent's own allow-listed tools. The funnel is identical either way.
+    const runHandler =
+      params.mode === 'ask'
+        ? async (c: AgentRunContext): Promise<unknown> => {
+            const askInput = c.input as { message?: unknown; system?: unknown };
+            const message = typeof askInput.message === 'string' ? askInput.message : '';
+            const system = typeof askInput.system === 'string' ? askInput.system : undefined;
+            return c.reason(message, { system });
+          }
+        : agent.handler;
 
     let status: RunStatus = 'completed';
     let outcome: Record<string, unknown> | null = null;
     let reason: string | undefined;
     try {
-      const result = await agent.handler(ctx);
+      const result = await runHandler(ctx);
       outcome = { result: result ?? null };
     } catch (e) {
       status = this.classify(e);

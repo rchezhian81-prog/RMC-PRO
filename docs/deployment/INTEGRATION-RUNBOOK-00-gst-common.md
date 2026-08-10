@@ -41,6 +41,18 @@ credentials to do it.
 > runs it. **Only two things remain for go-live:** implement `nic.provider.ts`
 > against your GSP (§3–4 + runbooks 01/02), and supply credentials (§7). Set
 > `GST_PROVIDER=nic` to switch on; it defaults to `disabled` (prepare-only).
+>
+> **Update 2 — `nic.provider.ts` is now a fill-in-the-blanks skeleton.** The
+> handshake crypto is implemented and unit-tested (`nic-crypto.util.ts`:
+> AppKey / RSA-PKCS1 / AES-256-ECB), and the encrypted transport (wrap → POST →
+> unwrap → error/duplicate map), the per-GSTIN session cache, and the thin
+> business methods are all in place. What is left is marked with `TODO(deploy)` at
+> each seam: the exact endpoint **paths**, request/response **field names**, the
+> duplicate **error codes**, expiry parsing, and — the one piece the scaffold
+> cannot supply — `resolveTenantCreds()`, which must read each tenant's portal
+> username/password from the encrypted per-tenant store (§7). Confirm every
+> `TODO(deploy)` against your GSP and run the sandbox plan (runbooks 01/02 §8–9)
+> before setting `GST_PROVIDER=nic`.
 
 ## 2. Decision: go through a GSP/ASP, behind one interface (GW-1)
 

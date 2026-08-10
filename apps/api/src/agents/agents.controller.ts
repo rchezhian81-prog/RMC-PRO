@@ -60,6 +60,9 @@ class RunAutomationDto {
   @IsOptional() @IsIn(['reversible', 'irreversible', 'financial', 'legal', 'safety']) reversibility?: string;
   /** Test/hard-rule path: attempt a financial commit (must be blocked). */
   @IsOptional() @IsBoolean() tryCommit?: boolean;
+  /** M5: prepare a compliance payload (IRN or e-way) for the given invoice. */
+  @IsOptional() @IsIn(['einvoice', 'eway']) compliance?: string;
+  @IsOptional() @IsUUID() invoiceId?: string;
 }
 
 class DecideApprovalDto {

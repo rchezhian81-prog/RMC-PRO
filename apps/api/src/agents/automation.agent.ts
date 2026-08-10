@@ -1,7 +1,25 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ToolRegistryService } from './tool-registry.service';
 import { ApprovalService } from './approval.service';
-import type { AgentToolDef } from './agent.types';
+import { buildEinvoicePayload, buildEwayPayload } from './compliance.util';
+import type { AgentToolDef, ToolContext } from './agent.types';
+
+/** Columns the compliance-prepare tools read, projected to camelCase. */
+const INVOICE_SELECT = `SELECT id, invoice_no AS "invoiceNo", invoice_date AS "invoiceDate",
+  total_amount AS "totalAmount", taxable_amount AS "taxableAmount",
+  cgst_amount AS "cgstAmount", sgst_amount AS "sgstAmount", igst_amount AS "igstAmount",
+  cess_amount AS "cessAmount", place_of_supply AS "placeOfSupply", gstin,
+  distance_km AS "distanceKm", transport_mode AS "transportMode", vehicle_no AS "vehicleNo",
+  einvoice_status AS "einvoiceStatus", eway_status AS "ewayStatus", invoice_status AS "invoiceStatus"
+  FROM invoices WHERE id = $1`;
+
+async function loadInvoice(ctx: ToolContext): Promise<Record<string, unknown>> {
+  const invoiceId = (ctx.args as { invoiceId?: unknown })?.invoiceId;
+  if (!invoiceId || typeof invoiceId !== 'string') throw new Error('a compliance prepare requires an invoiceId');
+  const [inv] = await ctx.manager.query(INVOICE_SELECT, [invoiceId]);
+  if (!inv) throw new Error('invoice not found');
+  return inv;
+}
 
 export const AGENT_AUTOMATION = 'automation';
 
@@ -68,22 +86,69 @@ export class AutomationAgent implements OnModuleInit {
       },
     };
 
-    for (const t of [openApproval, commitFinancial]) this.registry.registerTool(t);
+    // M5 — assisted compliance: PREPARE India IRN / e-way payloads for approval.
+    // Preparing is a reversible write; the underlying action's class ('legal') is
+    // recorded on the approval request for the reviewer. No IRP/e-way API call.
+    const prepareEinvoice: AgentToolDef = {
+      name: 'automation.prepare_einvoice',
+      kind: 'write',
+      reversibility: 'reversible',
+      permission: 'agents.approve',
+      description: 'Reversible write: PREPARE an India e-invoice (IRN) payload for approval. No IRP call.',
+      execute: async (ctx) => {
+        const inv = await loadInvoice(ctx);
+        const req = await this.approvals.prepare(ctx.manager, {
+          tenantId: ctx.tenantId, runId: ctx.runId, agentName: AGENT_AUTOMATION,
+          actionKind: 'einvoice_irn', title: `Generate IRN for ${inv.invoiceNo}`,
+          payload: buildEinvoicePayload(inv as never), reversibility: 'legal',
+          requestedBy: ctx.actorUserId,
+        });
+        return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
+      },
+    };
+
+    const prepareEway: AgentToolDef = {
+      name: 'automation.prepare_eway',
+      kind: 'write',
+      reversibility: 'reversible',
+      permission: 'agents.approve',
+      description: 'Reversible write: PREPARE an India e-way-bill (Part-A) payload for approval. No e-way call.',
+      execute: async (ctx) => {
+        const inv = await loadInvoice(ctx);
+        const req = await this.approvals.prepare(ctx.manager, {
+          tenantId: ctx.tenantId, runId: ctx.runId, agentName: AGENT_AUTOMATION,
+          actionKind: 'eway_bill', title: `Generate e-way bill for ${inv.invoiceNo}`,
+          payload: buildEwayPayload(inv as never), reversibility: 'legal',
+          requestedBy: ctx.actorUserId,
+        });
+        return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
+      },
+    };
+
+    for (const t of [openApproval, commitFinancial, prepareEinvoice, prepareEway]) this.registry.registerTool(t);
 
     this.registry.registerAgent({
       name: AGENT_AUTOMATION,
-      description: 'Prepares reversible/high-risk actions for human approval (M4).',
-      tools: [openApproval.name, commitFinancial.name],
+      description: 'Prepares reversible/high-risk actions (incl. IRN/e-way) for human approval (M4/M5).',
+      tools: [openApproval.name, commitFinancial.name, prepareEinvoice.name, prepareEway.name],
       handler: async (ctx) => {
         const input = ctx.input as {
           actionKind?: string; title?: string; payload?: Record<string, unknown>;
           reversibility?: string; tryCommit?: boolean;
+          compliance?: 'einvoice' | 'eway'; invoiceId?: string;
         };
         // Demonstrate the hard rule: a financial action is blocked, never auto-run.
         if (input.tryCommit) {
           await ctx.callTool('automation.commit_financial', {}); // throws ACTION_BLOCKED → run 'blocked'
         }
-        // The normal path: PREPARE the action for a human instead of executing it.
+        // M5 — prepare a compliance payload for approval (no transmission).
+        if (input.compliance === 'einvoice' || input.compliance === 'eway') {
+          const tool = input.compliance === 'einvoice' ? 'automation.prepare_einvoice' : 'automation.prepare_eway';
+          const prepared = await ctx.callTool(tool, { invoiceId: input.invoiceId });
+          await ctx.note(`automation: prepared ${input.compliance} for approval`);
+          return { prepared };
+        }
+        // The default path: PREPARE a generic action for a human instead of executing it.
         const prepared = await ctx.callTool('automation.open_approval', {
           actionKind: input.actionKind ?? 'payment_reminder',
           title: input.title ?? 'Payment reminder (prepared)',

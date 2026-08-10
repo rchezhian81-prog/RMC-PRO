@@ -15,3 +15,4 @@ export * from './billing.entities';
 export * from './sync.entities';
 export * from './notification.entities';
 export * from './audit.entities';
+export * from './agent.entities';

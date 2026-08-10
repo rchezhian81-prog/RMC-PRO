@@ -57,6 +57,9 @@ import {
   SyncConflict,
   NotificationLog,
   AuditLog,
+  AgentControl,
+  AgentRun,
+  AgentRunStep,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -119,4 +122,7 @@ export const ENTITIES = [
   SyncConflict,
   NotificationLog,
   AuditLog,
+  AgentControl,
+  AgentRun,
+  AgentRunStep,
 ];

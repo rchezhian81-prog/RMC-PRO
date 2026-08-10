@@ -22,6 +22,7 @@ import { SyncModule } from './sync/sync.module';
 import { AiModule } from './ai/ai.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuditModule } from './audit/audit.module';
+import { AgentsModule } from './agents/agents.module';
 
 /**
  * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
@@ -57,6 +58,7 @@ import { AuditModule } from './audit/audit.module';
     AiModule,
     AlertsModule,
     AuditModule,
+    AgentsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

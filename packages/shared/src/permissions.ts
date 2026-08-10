@@ -76,6 +76,11 @@ export const PERMISSIONS = {
   SYNC_MANAGE: 'sync.manage',
   DEVICES_MANAGE: 'devices.manage',
   SUPPORT_ACCESS: 'support.access',
+
+  // Agentic layer — manage the multi-agent substrate for this tenant: the
+  // automation kill switch, the per-run budgets, and the run trail. A tenant
+  // admin control, held by Company Owner/Admin only (see SYSTEM_ROLE_KEYS).
+  AGENTS_MANAGE: 'agents.manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

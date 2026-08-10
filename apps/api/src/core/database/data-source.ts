@@ -20,6 +20,7 @@ import { UserTokenVersion1720000015000 } from './migrations/1720000015000-UserTo
 import { DataIntegrityChecks1720000016000 } from './migrations/1720000016000-DataIntegrityChecks';
 import { StockTransactionPlantNotNull1720000017000 } from './migrations/1720000017000-StockTransactionPlantNotNull';
 import { UsersTenantModulesRls1720000018000 } from './migrations/1720000018000-UsersTenantModulesRls';
+import { AgentSubstrate1720000019000 } from './migrations/1720000019000-AgentSubstrate';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -55,6 +56,7 @@ export const AppDataSource = new DataSource({
     DataIntegrityChecks1720000016000,
     StockTransactionPlantNotNull1720000017000,
     UsersTenantModulesRls1720000018000,
+    AgentSubstrate1720000019000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

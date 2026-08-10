@@ -261,6 +261,13 @@ external provider-registry/queue backbone (GW-1); and the scale infra
 an approved action's execution against a real external system is the next step,
 taken with the owner before/at deployment.
 
+The IRP/e-way live integration (GW-2/3/4) is now planned in deployment runbooks —
+`docs/deployment/INTEGRATION-RUNBOOK-00-gst-common.md` (shared substrate: provider
+abstraction, auth/encryption, the approval→execution step, secrets, idempotency,
+rollback), `…-01-irp-einvoice.md` (IRN), `…-02-eway-bill.md` (e-way). They attach
+to the *existing* M5 prepare-and-approve pipeline and the invoice columns that
+already exist; only transmission + credentials remain owner-held.
+
 ## 7. Technology approach (framework-agnostic)
 
 - **Models:** default to the latest, most capable Claude models, tiered by job —

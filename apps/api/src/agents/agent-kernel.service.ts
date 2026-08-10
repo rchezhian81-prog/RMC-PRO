@@ -10,6 +10,7 @@ import {
   AgentRunContext,
   AgentRunResult,
   RunStatus,
+  escalationAllowed,
 } from './agent.types';
 
 interface RunTaskParams {
@@ -20,29 +21,32 @@ interface RunTaskParams {
   input?: Record<string, unknown>;
 }
 
+/** Internal run parameters carry escalation depth + the parent run id. */
+interface RunTaskInternal extends RunTaskParams {
+  depth: number;
+  parentRunId: string | null;
+}
+
+/** Escalation nesting bound — a backstop against escalation loops. */
+const MAX_ESCALATION_DEPTH = 3;
+
 /**
- * The supervisor/orchestrator (M0). It owns the guardrail funnel that EVERY
- * agent action passes through, in order:
+ * The supervisor/orchestrator (M0 + M2). It owns the guardrail funnel that EVERY
+ * agent action passes through:
  *
  *   kill switch → create run → [ per tool call: step budget → scope → policy →
  *   action budget → tenant-scoped execution → audit step ] → finalise run.
  *
- * The guarantees are enforced here in our code, never delegated to a model:
- *   - tenant isolation: every DB touch runs inside `runInTenant`, so RLS makes a
- *     cross-tenant read/write impossible (WR-AGT-2);
- *   - least privilege: the tool registry rejects any tool outside the agent's
- *     allow-list (WR-AGT-3);
- *   - the hard rule: the policy engine blocks every financial/legal/safety/
- *     irreversible action for human approval — no such action ever auto-runs
- *     (WR-AGT-4);
- *   - bounded work: the governor's kill switch and per-run budgets stop a paused
- *     tenant and a runaway loop (WR-AGT-6);
- *   - audit: every step and every run outcome is written to the append-only
- *     trail, and the run lifecycle is cross-linked into `audit_logs` (WR-AGT-5).
+ * M2 adds inter-agent escalation (e.g. Monitor → Specialist): an agent may hand a
+ * sub-task to another agent, but ONLY one in its own `canEscalateTo` allow-list,
+ * bounded by `MAX_ESCALATION_DEPTH`, and the escalated run is a first-class,
+ * audited child linked by `parent_run_id`. Escalation never grants more
+ * privilege — the child runs through this same funnel with its own budgets.
  *
- * M0 wires no LLM: an "agent" is a registered handler. The point of M0 is that
- * the guardrails are real, tested, and in place before any agent is given a
- * model or a write tool.
+ * Every guarantee is enforced here in our code, never delegated to a model:
+ * tenant isolation (runInTenant), least privilege (registry + escalation
+ * allow-list), the hard rule (policy engine blocks non-reversible writes),
+ * bounded work (kill switch + budgets + depth), and audit (every step + run).
  */
 @Injectable()
 export class AgentKernelService {
@@ -56,53 +60,60 @@ export class AgentKernelService {
     private readonly audit: AuditService,
   ) {}
 
-  async runTask(params: RunTaskParams): Promise<AgentRunResult> {
-    const { tenantId, agentName, actorUserId } = params;
+  /** Public entry point — starts a top-level run (no parent, depth 0). */
+  runTask(params: RunTaskParams): Promise<AgentRunResult> {
+    return this.runTaskInternal({ ...params, depth: 0, parentRunId: null });
+  }
+
+  private async runTaskInternal(params: RunTaskInternal): Promise<AgentRunResult> {
+    const { tenantId, agentName, actorUserId, depth, parentRunId } = params;
     const taskKind = params.taskKind ?? null;
     const input = params.input ?? {};
 
-    // Resolve the agent up front — an unknown agent is rejected before any run
-    // row exists (the registry throws a typed UNKNOWN_AGENT error).
     const agent = this.registry.getAgent(agentName);
     const controls = await this.governor.getControls(tenantId);
 
-    // Kill switch: a paused tenant runs nothing. Record the refusal as a run so
-    // the attempt is visible in the trail, then return.
+    // Kill switch: a paused tenant runs nothing (top-level or escalated).
     if (controls.automationPaused) {
-      const killed = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'killed', 'refused: automation paused');
+      const killed = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'killed', 'refused: automation paused', parentRunId);
       await this.recordStep(tenantId, killed.id, 1, {
-        stepType: 'blocked',
-        policyVerdict: 'block',
-        detail: { reason: 'automation paused (kill switch)' },
+        stepType: 'blocked', policyVerdict: 'block', detail: { reason: 'automation paused (kill switch)' },
       });
       await this.finalizeRun(tenantId, killed.id, 'killed', 0, 0, { reason: 'automation paused' });
       await this.auditRun(tenantId, actorUserId, killed.id, agentName, taskKind, 'killed', { steps: 0, actions: 0 });
       return { runId: killed.id, status: 'killed', stepsUsed: 0, actionsUsed: 0, outcome: { reason: 'automation paused' }, reason: 'automation paused' };
     }
 
-    const run = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'running', `agent ${agentName} run`);
+    const run = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'running', `agent ${agentName} run`, parentRunId);
 
     const usage = { steps: 0, actions: 0 };
     let seq = 0;
+    const nextStep = (): number => {
+      // Shared step budget across tool calls AND escalations.
+      if (!stepAllowed(usage.steps, controls.maxStepsPerRun)) {
+        throw new AgentError('BUDGET_EXCEEDED', `step budget ${controls.maxStepsPerRun} exceeded`);
+      }
+      usage.steps += 1;
+      return ++seq;
+    };
 
     const ctx: AgentRunContext = {
       tenantId,
       actorUserId,
       input,
       callTool: async <T>(toolName: string, args?: unknown): Promise<T> => {
-        const stepSeq = ++seq;
-
-        // 1) step budget — the runaway-loop backstop.
-        if (!stepAllowed(usage.steps, controls.maxStepsPerRun)) {
-          await this.recordStep(tenantId, run.id, stepSeq, {
+        let stepSeq: number;
+        try {
+          stepSeq = nextStep();
+        } catch (e) {
+          await this.recordStep(tenantId, run.id, ++seq, {
             stepType: 'blocked', toolName, policyVerdict: 'block',
             detail: { reason: 'step budget exceeded', cap: controls.maxStepsPerRun },
           });
-          throw new AgentError('BUDGET_EXCEEDED', `step budget ${controls.maxStepsPerRun} exceeded`, { toolName });
+          throw e;
         }
-        usage.steps += 1;
 
-        // 2) scope — least privilege; a tool outside the allow-list is rejected.
+        // scope — least privilege.
         let tool;
         try {
           tool = this.registry.resolveTool(agentName, toolName);
@@ -113,7 +124,7 @@ export class AgentKernelService {
           throw e;
         }
 
-        // 3) policy — the hard rule; non-reversible writes are blocked.
+        // policy — the hard rule.
         const decision = this.policy.decide(tool);
         if (decision.verdict === 'block') {
           await this.recordStep(tenantId, run.id, stepSeq, {
@@ -123,7 +134,7 @@ export class AgentKernelService {
           throw new AgentError('ACTION_BLOCKED', decision.reason, { toolName, reversibility: tool.reversibility });
         }
 
-        // 4) action budget — writes only.
+        // action budget — writes only.
         if (tool.kind === 'write') {
           if (!actionAllowed(usage.actions, controls.maxActionsPerRun)) {
             await this.recordStep(tenantId, run.id, stepSeq, {
@@ -135,7 +146,7 @@ export class AgentKernelService {
           usage.actions += 1;
         }
 
-        // 5) execute — inside the tenant transaction, so the tool is RLS-bound.
+        // execute — inside the tenant transaction (RLS-bound).
         const result = await this.db.runInTenant(tenantId, (m) =>
           tool.execute({ tenantId, actorUserId, manager: m, args: args ?? {} }),
         );
@@ -144,6 +155,35 @@ export class AgentKernelService {
           policyVerdict: decision.verdict, detail: { ok: true },
         });
         return result as T;
+      },
+      escalate: async (targetAgent: string, subInput?: Record<string, unknown>): Promise<AgentRunResult> => {
+        const stepSeq = nextStep();
+        // escalation scope — least privilege for escalation.
+        if (!escalationAllowed(agent.canEscalateTo, targetAgent)) {
+          await this.recordStep(tenantId, run.id, stepSeq, {
+            stepType: 'blocked', policyVerdict: 'block',
+            detail: { reason: 'escalation not allowed', targetAgent },
+          });
+          throw new AgentError('ESCALATION_NOT_ALLOWED', `agent '${agentName}' may not escalate to '${targetAgent}'`, { targetAgent });
+        }
+        if (depth >= MAX_ESCALATION_DEPTH) {
+          await this.recordStep(tenantId, run.id, stepSeq, {
+            stepType: 'blocked', policyVerdict: 'block',
+            detail: { reason: 'escalation depth exceeded', depth, cap: MAX_ESCALATION_DEPTH },
+          });
+          throw new AgentError('ESCALATION_DEPTH', `escalation depth ${MAX_ESCALATION_DEPTH} exceeded`, { targetAgent });
+        }
+        // Run the target as a linked child through the same funnel.
+        const child = await this.runTaskInternal({
+          tenantId, agentName: targetAgent, actorUserId,
+          taskKind: `escalation:${agentName}`, input: subInput ?? {},
+          depth: depth + 1, parentRunId: run.id,
+        });
+        await this.recordStep(tenantId, run.id, stepSeq, {
+          stepType: 'escalation',
+          detail: { targetAgent, childRunId: child.runId, childStatus: child.status },
+        });
+        return child;
       },
       note: async (message: string, detail?: Record<string, unknown>) => {
         await this.recordStep(tenantId, run.id, ++seq, {
@@ -176,7 +216,7 @@ export class AgentKernelService {
   private classify(e: unknown): RunStatus {
     if (e instanceof AgentError) {
       if (e.code === 'ACTION_BLOCKED') return 'blocked';
-      if (e.code === 'BUDGET_EXCEEDED') return 'aborted';
+      if (e.code === 'BUDGET_EXCEEDED' || e.code === 'ESCALATION_DEPTH') return 'aborted';
     }
     return 'failed';
   }
@@ -188,10 +228,11 @@ export class AgentKernelService {
     actorUserId: string | null,
     status: RunStatus | 'running',
     summary: string,
+    parentRunId: string | null,
   ): Promise<AgentRun> {
     return this.db.runInTenant(tenantId, (m) => {
       const repo = m.getRepository(AgentRun);
-      return repo.save(repo.create({ tenantId, agentName, taskKind, status, createdBy: actorUserId, summary }));
+      return repo.save(repo.create({ tenantId, agentName, taskKind, status, createdBy: actorUserId, summary, parentRunId }));
     });
   }
 

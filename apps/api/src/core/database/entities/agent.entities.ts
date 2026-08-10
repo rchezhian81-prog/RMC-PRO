@@ -77,6 +77,10 @@ export class AgentRun {
   @Column({ name: 'task_kind', type: 'varchar', nullable: true })
   taskKind!: string | null;
 
+  /** Set when this run was spawned by another agent escalating (M2). */
+  @Column({ name: 'parent_run_id', type: 'uuid', nullable: true })
+  parentRunId!: string | null;
+
   /** running | completed | failed | aborted | blocked | killed. */
   @Column({ name: 'status', type: 'varchar', default: 'running' })
   status!: string;

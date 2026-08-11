@@ -77,12 +77,16 @@ class RunAutomationDto {
   @IsOptional() @IsIn(['reversible', 'irreversible', 'financial', 'legal', 'safety']) reversibility?: string;
   /** Test/hard-rule path: attempt a financial commit (must be blocked). */
   @IsOptional() @IsBoolean() tryCommit?: boolean;
-  /** M5: prepare a compliance payload for the given invoice — generate or cancel an IRN / e-way. */
-  @IsOptional() @IsIn(['einvoice', 'eway', 'einvoice_cancel', 'eway_cancel']) compliance?: string;
+  /** M5: prepare a compliance payload — generate/cancel an IRN or e-way, or update/extend a live e-way. */
+  @IsOptional() @IsIn(['einvoice', 'eway', 'einvoice_cancel', 'eway_cancel', 'eway_update_vehicle', 'eway_extend']) compliance?: string;
   @IsOptional() @IsUUID() invoiceId?: string;
-  /** Cancellation reason (1=Duplicate, 2=Data entry mistake, 3=Order cancelled, 4=Other). */
-  @IsOptional() @IsIn(['1', '2', '3', '4']) reasonCode?: string;
+  /** Cancel / update / extend reason code (per-action set; validated again at execute). */
+  @IsOptional() @IsIn(['1', '2', '3', '4', '99']) reasonCode?: string;
   @IsOptional() @IsString() @MaxLength(100) remarks?: string;
+  /** e-way Part-B vehicle update: the new vehicle number. */
+  @IsOptional() @IsString() @MaxLength(20) vehicleNo?: string;
+  /** e-way validity extension: distance (km) still to travel. */
+  @IsOptional() @IsInt() @Min(1) @Max(100000) remainingDistanceKm?: number;
 }
 
 class DecideApprovalDto {

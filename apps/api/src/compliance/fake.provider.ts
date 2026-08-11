@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import type {
   CancelResult,
+  EwbExtendInput,
+  EwbModifyResult,
   EwbRequest,
   EwbResult,
+  EwbUpdateVehicleInput,
   GstComplianceProvider,
   GstSession,
   IrnRequest,
@@ -83,6 +86,18 @@ export class FakeGstProvider implements GstComplianceProvider {
   async cancelEwayBill(session: GstSession, ewayBillNo: string, reasonCode?: string, remarks?: string): Promise<CancelResult> {
     this.calls.push({ op: 'cancelEwayBill', arg: { ewayBillNo, reasonCode, remarks } });
     return { reference: ewayBillNo, cancelledAt: new Date().toISOString() };
+  }
+
+  async updateEwayVehicle(session: GstSession, ewayBillNo: string, input: EwbUpdateVehicleInput): Promise<EwbModifyResult> {
+    this.calls.push({ op: 'updateEwayVehicle', arg: { ewayBillNo, ...input } });
+    // A Part-B vehicle update does not change validity; echo a stable value.
+    return { ewayBillNo, validUpto: new Date(Date.now() + 86_400_000).toISOString(), updatedAt: new Date().toISOString() };
+  }
+
+  async extendEwayValidity(session: GstSession, ewayBillNo: string, input: EwbExtendInput): Promise<EwbModifyResult> {
+    this.calls.push({ op: 'extendEwayValidity', arg: { ewayBillNo, ...input } });
+    const days = Math.max(1, Math.ceil(input.remainingDistanceKm / 200));
+    return { ewayBillNo, validUpto: new Date(Date.now() + days * 86_400_000).toISOString(), updatedAt: new Date().toISOString() };
   }
 }
 

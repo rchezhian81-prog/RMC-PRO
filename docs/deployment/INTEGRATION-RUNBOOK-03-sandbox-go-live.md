@@ -39,11 +39,12 @@ unit- and integration-tested against the deterministic **fake** provider:
 test a path that can't run:
 
 - **Executable actions:** `einvoice_irn`, `eway_bill`, `einvoice_cancel`,
-  `eway_cancel` (`GST_ACTION_KINDS` in `gst.types.ts`). Generate **and cancel**
-  (within the 24h window) are wired; **vehicle-update / extend are still documented
-  (02 §7) but not wired** — the execution service rejects any other `actionKind`
-  with `NOT_GST_ACTION`. Cancellation is its own approval action (`einvoice_cancel`
-  / `eway_cancel`) with a reason code (1–4); the 24h window is portal-enforced.
+  `eway_cancel`, `eway_update_vehicle`, `eway_extend` (`GST_ACTION_KINDS` in
+  `gst.types.ts`). The **full e-way lifecycle is now wired** — generate, cancel
+  (24h window), Part-B vehicle update, and validity extension. Each is its own
+  approval action with a reason code; the 24h cancel / 8h extension windows are
+  portal-enforced. The execution service rejects any unknown `actionKind` with
+  `NOT_GST_ACTION`.
 - **Execution is synchronous** via `POST …/execute` (operator/worker call). The
   durable on-approval queue (GW-1) is a later change; it does not block sandbox.
 - **`GST_ENV` is documentary only** — no code reads it. Sandbox-vs-production is
@@ -236,8 +237,38 @@ curl -sS -X POST …/api/v1/agents/automation/run \
 
 > The **24h window is portal-enforced** — a too-late cancel comes back as a portal
 > rejection surfaced as `failed`. For an IRN past 24h, issue a **credit note** (its
-> own IRN); an e-way simply lapses at `validUpto`. **Vehicle-update / extend
-> (02 §7) are still not wired** — skip those steps this session.
+> own IRN); an e-way simply lapses at `validUpto`.
+
+### 5e. e-way Part-B update + validity extension (live e-way; runbook 02 §7)
+
+Modify a **live** (generated, not cancelled) e-way bill in place — each its own approval:
+
+```bash
+# Part-B vehicle change (reasonCode 1=Breakdown, 2=Transshipment, 3=Others, 4=First-time)
+curl -sS -X POST …/api/v1/agents/automation/run \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"compliance":"eway_update_vehicle","invoiceId":"<INV_ID>","vehicleNo":"TN09XY9999","reasonCode":"1","remarks":"breakdown"}'
+# → approve → execute → { status:"updated", reference:"<EWB>", detail:{ vehicleNo, validUpto } }
+
+# validity extension (reasonCode 1=Natural calamity, 2=Law&order, 3=Transshipment, 4=Accident, 99=Others)
+curl -sS -X POST …/api/v1/agents/automation/run \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"compliance":"eway_extend","invoiceId":"<INV_ID>","remainingDistanceKm":120,"reasonCode":"4","remarks":"detour"}'
+# → approve → execute → { status:"extended", reference:"<EWB>", detail:{ validUpto } }
+```
+
+- [ ] Vehicle update → `status:"updated"`; invoice `vehicle_no` changed;
+      `eway_status` stays `generated`; audit `gst.eway.vehicle_updated`.
+- [ ] Extend → `status:"extended"`; invoice `eway_valid_until` advanced;
+      audit `gst.eway.extended`.
+- [ ] Guardrails: modifying a not-`generated` e-way → `failed` (pre-flight); an
+      out-of-set reason code or a `remainingDistanceKm ≤ 0` is a **400** at the API.
+
+> The **8-hour extension window** (before/after expiry, goods in transit) is
+> **portal-enforced** — a too-early/late extend surfaces as `failed`. Unlike
+> generate/cancel, update/extend have **no terminal state**, so they are **not
+> idempotent** — re-executing re-applies (matching reality: you can genuinely
+> update the vehicle twice). Execute each once.
 
 ---
 
@@ -255,6 +286,8 @@ unit test in `test/unit/nic-protocol.test.mjs` (protocol) before re-running §5.
 | HTTP headers | `nic.provider.ts` · ~L231 | `client-id`, `client-secret`, `Gstin`, `AuthToken` | Header names/casing (some GSPs use `Gstin` vs `gstin`, bearer vs `AuthToken`). |
 | Cancel request fields (IRN) | `nic.provider.ts` · `cancelIrn` | `Irn`, `CnlRsn`, `CnlRem` | Confirm the IRN-cancel field names. |
 | Cancel request fields (e-way) | `nic.provider.ts` · `cancelEwayBill` | `ewbNo`, `cancelRsnCode`, `cancelRmrk` (path `…/ewayapi/canewb`) | Confirm the e-way cancel field names + path (some GSPs fold cancel into `ewayapi` via an action code). |
+| Vehicle-update fields (VEHEWB) | `nic.provider.ts` · `updateEwayVehicle` | `ewbNo`, `vehicleNo`, `fromPlace`, `fromState`, `reasonCode`, `reasonRem`, `transMode`, `transDocNo/Date` (path `…/ewayapi/vehewb`) | Confirm field names + path (often an action code on `ewayapi`). |
+| Extend-validity fields (EXTENDVALIDITY) | `nic.provider.ts` · `extendEwayValidity` | `ewbNo`, `remainingDistance`, `extnRsnCode`, `extnRemarks`, `consignmentStatus`, `transitType` (path `…/ewayapi/extendvalidity`) | Confirm field names + path; `fromPlace`/`fromState` come from the seller profile. |
 | RSA public key format | `nic-crypto.util.ts` · ~L26 | expects PEM in `GST_RSA_PUBLIC_KEY_PEM` | If your GSP hands a base64/DER cert, convert to PEM once at deploy. |
 | Buyer pincode | `gst-execution.service.ts` · `loadContext` (~L214) | `pincode: ''` | Source buyer `Pin` if the portal marks it mandatory. |
 | Duplicate / error codes | `nic-protocol.util.ts` (`NIC_CODES`, `classify`, `extractDuplicate*`) | NIC §7 codes (e.g. `2150` duplicate IRN) | Confirm the codes your GSP surfaces for duplicate / auth-expired / rejected. |
@@ -321,14 +354,13 @@ Owner + GSP actions (this checklist):
 
 - [ ] Sandbox creds working; every `TODO(deploy)` seam confirmed (§6).
 - [ ] Sandbox end-to-end green: IRN generate + duplicate-reconcile; e-way Path A +
-      standalone; IRN + e-way **cancel**; QR decodes; EWB on challan; negatives
-      rejected in pre-flight.
+      standalone; IRN + e-way **cancel**; e-way **vehicle update + extend**; QR
+      decodes; EWB on challan; negatives rejected in pre-flight.
 - [ ] Prod creds issued + vaulted; one pilot invoice + dispatch signed off (§8).
 
 Known fast-follows (not blockers for a sandbox pass, decide before broad rollout):
 
-- [ ] **Vehicle-update / extend** (02 §7) as their own approval actions +
-      executor branches (still unwired — §0). IRN + e-way **cancel are wired**.
+- [x] Full e-way lifecycle wired: generate, cancel, Part-B vehicle update, extend.
 - [ ] Durable on-approval execution queue (GW-1) replacing the synchronous
       `execute` call.
 - [ ] Metrics + alerts (runbook 00 §9); buyer pincode sourcing if mandatory.

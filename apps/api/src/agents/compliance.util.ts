@@ -1,5 +1,5 @@
 import { num } from './insights.util';
-import { GST_CANCEL_REASON_CODES } from '../compliance/gst.types';
+import { GST_CANCEL_REASON_CODES, EWB_UPDATE_REASON_CODES, EWB_EXTEND_REASON_CODES } from '../compliance/gst.types';
 
 /**
  * Pure builders for India compliance payloads the Automation agent PREPARES for
@@ -116,5 +116,73 @@ export function buildEwayCancelPayload(inv: InvoiceLike, reasonCode: unknown, re
     reasonCode: cancelReasonCode(reasonCode),
     remarks: (remarks ?? '').toString().slice(0, 100) || null,
     note: 'READY-ONLY: cancel e-way bill (within 24h) — transmission held for deployment',
+  };
+}
+
+/** Validate an e-way Part-B vehicle-update reason code (1–4); throws on an unknown code. */
+export function ewbUpdateReasonCode(code: unknown): string {
+  const c = String(code ?? '').trim();
+  if (!EWB_UPDATE_REASON_CODES.has(c)) {
+    throw new Error(
+      `invalid vehicle-update reason code '${c}' (expected 1=Breakdown, 2=Transshipment, 3=Others, 4=First-time)`,
+    );
+  }
+  return c;
+}
+
+/** Validate an e-way validity-extension reason code (1–4, 99); throws on an unknown code. */
+export function ewbExtendReasonCode(code: unknown): string {
+  const c = String(code ?? '').trim();
+  if (!EWB_EXTEND_REASON_CODES.has(c)) {
+    throw new Error(
+      `invalid extension reason code '${c}' (expected 1=Natural calamity, 2=Law&order, 3=Transshipment, 4=Accident, 99=Others)`,
+    );
+  }
+  return c;
+}
+
+/**
+ * Build the payload for UPDATING the Part-B vehicle on a live e-way bill, PREPARED
+ * for approval. The e-way number is read from the invoice by the execution service;
+ * the payload carries the new vehicle + the reason for the change.
+ */
+export function buildEwayUpdateVehiclePayload(
+  inv: InvoiceLike,
+  vehicleNo: unknown,
+  reasonCode: unknown,
+  remarks?: string,
+): Record<string, unknown> {
+  const veh = String(vehicleNo ?? '').trim().toUpperCase();
+  if (!veh) throw new Error('a new vehicle number is required to update the e-way Part-B');
+  return {
+    action: 'update_vehicle',
+    docNo: inv.invoiceNo,
+    vehicleNo: veh,
+    reasonCode: ewbUpdateReasonCode(reasonCode),
+    remarks: (remarks ?? '').toString().slice(0, 100) || null,
+    note: 'READY-ONLY: update e-way Part-B vehicle — transmission held for deployment',
+  };
+}
+
+/**
+ * Build the payload for EXTENDING a live e-way bill's validity, PREPARED for
+ * approval. Allowed within 8h before/after expiry while goods are in transit; the
+ * portal is the authority on that window. Requires the remaining distance (km).
+ */
+export function buildEwayExtendPayload(
+  inv: InvoiceLike,
+  remainingDistanceKm: unknown,
+  reasonCode: unknown,
+  remarks?: string,
+): Record<string, unknown> {
+  const dist = num(remainingDistanceKm);
+  if (!(dist > 0)) throw new Error('remaining distance (km) must be greater than 0 to extend an e-way bill');
+  return {
+    action: 'extend',
+    docNo: inv.invoiceNo,
+    remainingDistanceKm: dist,
+    reasonCode: ewbExtendReasonCode(reasonCode),
+    remarks: (remarks ?? '').toString().slice(0, 100) || null,
+    note: 'READY-ONLY: extend e-way validity — transmission held for deployment',
   };
 }

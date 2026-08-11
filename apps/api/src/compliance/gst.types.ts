@@ -16,10 +16,20 @@
 export const GST_PROVIDER = 'GST_COMPLIANCE_PROVIDER';
 
 /** The approval action kinds this pipeline can execute. */
-export const GST_ACTION_KINDS = new Set(['einvoice_irn', 'eway_bill', 'einvoice_cancel', 'eway_cancel']);
+export const GST_ACTION_KINDS = new Set([
+  'einvoice_irn',
+  'eway_bill',
+  'einvoice_cancel',
+  'eway_cancel',
+  'eway_update_vehicle',
+  'eway_extend',
+]);
 
 /** The subset of {@link GST_ACTION_KINDS} that CANCEL an existing government reference. */
 export const GST_CANCEL_KINDS = new Set(['einvoice_cancel', 'eway_cancel']);
+
+/** The subset that MODIFY a live e-way bill in place (Part-B vehicle / validity). */
+export const GST_EWAY_MODIFY_KINDS = new Set(['eway_update_vehicle', 'eway_extend']);
 
 /** An authenticated portal session (opaque to callers; provider-owned). */
 export interface GstSession {
@@ -54,6 +64,40 @@ export interface EwbResult {
 export interface CancelResult {
   reference: string;
   cancelledAt: string;
+}
+
+/** Input for an e-way Part-B vehicle update (VEHEWB). */
+export interface EwbUpdateVehicleInput {
+  vehicleNo: string;
+  reasonCode: string;
+  remarks?: string;
+  transMode?: string;
+  fromPlace?: string;
+  fromStateCode?: string;
+  transDocNo?: string;
+  transDocDate?: string;
+}
+
+/** Input for an e-way validity extension (EXTENDVALIDITY). */
+export interface EwbExtendInput {
+  remainingDistanceKm: number;
+  reasonCode: string;
+  remarks?: string;
+  vehicleNo?: string;
+  transMode?: string;
+  fromPlace?: string;
+  fromStateCode?: string;
+  /** 'M' = in movement, 'T' = in transit. */
+  consignmentStatus?: string;
+  transitType?: string;
+}
+
+/** Result of an in-place e-way modification (vehicle update / validity extension). */
+export interface EwbModifyResult {
+  ewayBillNo: string;
+  /** The e-way's validity after the call (a new value for an extension). */
+  validUpto: string;
+  updatedAt: string;
 }
 
 /**
@@ -102,6 +146,8 @@ export interface GstComplianceProvider {
   cancelIrn(session: GstSession, irn: string, reasonCode: string, remarks: string): Promise<CancelResult>;
   generateEwayBill(session: GstSession, request: EwbRequest): Promise<EwbResult>;
   cancelEwayBill(session: GstSession, ewayBillNo: string, reasonCode: string, remarks: string): Promise<CancelResult>;
+  updateEwayVehicle(session: GstSession, ewayBillNo: string, input: EwbUpdateVehicleInput): Promise<EwbModifyResult>;
+  extendEwayValidity(session: GstSession, ewayBillNo: string, input: EwbExtendInput): Promise<EwbModifyResult>;
 }
 
 /**
@@ -110,3 +156,9 @@ export interface GstComplianceProvider {
  * on the 24-hour window; we validate the code locally to fail fast.
  */
 export const GST_CANCEL_REASON_CODES = new Set(['1', '2', '3', '4']);
+
+/** e-way Part-B vehicle-update reasons: 1=Breakdown, 2=Transshipment, 3=Others, 4=First-time. */
+export const EWB_UPDATE_REASON_CODES = new Set(['1', '2', '3', '4']);
+
+/** e-way extension reasons: 1=Natural calamity, 2=Law&order, 3=Transshipment, 4=Accident, 99=Others. */
+export const EWB_EXTEND_REASON_CODES = new Set(['1', '2', '3', '4', '99']);

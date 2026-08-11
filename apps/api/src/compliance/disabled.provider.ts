@@ -1,7 +1,10 @@
 import type {
   CancelResult,
+  EwbExtendInput,
+  EwbModifyResult,
   EwbRequest,
   EwbResult,
+  EwbUpdateVehicleInput,
   GstComplianceProvider,
   GstSession,
   IrnRequest,
@@ -40,6 +43,12 @@ export class DisabledGstProvider implements GstComplianceProvider {
     return this.off();
   }
   async cancelEwayBill(_session: GstSession, _ewayBillNo: string, _reasonCode: string, _remarks: string): Promise<CancelResult> {
+    return this.off();
+  }
+  async updateEwayVehicle(_session: GstSession, _ewayBillNo: string, _input: EwbUpdateVehicleInput): Promise<EwbModifyResult> {
+    return this.off();
+  }
+  async extendEwayValidity(_session: GstSession, _ewayBillNo: string, _input: EwbExtendInput): Promise<EwbModifyResult> {
     return this.off();
   }
 }

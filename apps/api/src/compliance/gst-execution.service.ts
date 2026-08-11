@@ -4,9 +4,12 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { AuditService } from '../audit/audit.service';
 import { AgentApprovalRequest } from '../core/database/entities';
 import {
+  EWB_EXTEND_REASON_CODES,
+  EWB_UPDATE_REASON_CODES,
   GST_ACTION_KINDS,
   GST_CANCEL_KINDS,
   GST_CANCEL_REASON_CODES,
+  GST_EWAY_MODIFY_KINDS,
   GST_PROVIDER,
   GstProviderError,
   type EwbResult,
@@ -31,6 +34,8 @@ export type GstExecutionOutcome =
   | { status: 'already_cancelled'; reference: string }
   | { status: 'generated'; reference: string; detail: Record<string, unknown> }
   | { status: 'cancelled'; reference: string }
+  | { status: 'updated'; reference: string; detail: Record<string, unknown> }
+  | { status: 'extended'; reference: string; detail: Record<string, unknown> }
   | { status: 'reconciled'; reference: string }
   | { status: 'failed'; errors: string[] };
 
@@ -53,6 +58,19 @@ interface CancelContext {
   ewayBillNo: string | null;
   einvoiceStatus: string;
   ewayStatus: string;
+}
+
+/** The context an in-place e-way MODIFY (vehicle update / extend) needs. */
+interface EwayModifyContext {
+  invoiceId: string;
+  invoiceNo: string;
+  sellerGstin: string;
+  sellerStateCode: string;
+  sellerLocation: string;
+  ewayBillNo: string | null;
+  ewayStatus: string;
+  transportMode: string | null;
+  vehicleNo: string | null;
 }
 
 /**
@@ -100,13 +118,20 @@ export class GstExecutionService {
       if (!appr.entityId) {
         throw new BadRequestException({ code: 'NO_ENTITY', message: 'approval has no invoice reference' });
       }
-      return GST_CANCEL_KINDS.has(appr.actionKind)
-        ? { appr, kind: 'cancel' as const, cancel: await this.loadCancelContext(m, appr.entityId, appr.actionKind) }
-        : { appr, kind: 'generate' as const, ctx: await this.loadContext(m, appr.entityId, appr.actionKind) };
+      if (GST_CANCEL_KINDS.has(appr.actionKind)) {
+        return { appr, kind: 'cancel' as const, cancel: await this.loadCancelContext(m, appr.entityId, appr.actionKind) };
+      }
+      if (GST_EWAY_MODIFY_KINDS.has(appr.actionKind)) {
+        return { appr, kind: 'modify' as const, modify: await this.loadEwayModifyContext(m, appr.entityId) };
+      }
+      return { appr, kind: 'generate' as const, ctx: await this.loadContext(m, appr.entityId, appr.actionKind) };
     });
 
     const { appr } = loaded;
-    const invoiceId = loaded.kind === 'cancel' ? loaded.cancel.invoiceId : loaded.ctx.invoiceId;
+    const invoiceId =
+      loaded.kind === 'cancel' ? loaded.cancel.invoiceId
+      : loaded.kind === 'modify' ? loaded.modify.invoiceId
+      : loaded.ctx.invoiceId;
 
     // Provider off → skip. Prepare-only behaviour is preserved; nothing mutates.
     if (!this.provider.isConfigured()) {
@@ -119,6 +144,11 @@ export class GstExecutionService {
     // portal-enforced; we validate the reason code and the current status locally.)
     if (loaded.kind === 'cancel') {
       return this.executeCancel(tenantId, appr, loaded.cancel, actorUserId);
+    }
+
+    // In-place e-way modification (Part-B vehicle change / validity extension).
+    if (loaded.kind === 'modify') {
+      return this.executeEwayModify(tenantId, appr, loaded.modify, actorUserId);
     }
 
     const { ctx } = loaded;
@@ -364,6 +394,105 @@ export class GstExecutionService {
     }
   }
 
+  /** The context an in-place e-way modify needs: the reference, status, and dispatch details. */
+  private async loadEwayModifyContext(m: EntityManager, invoiceId: string): Promise<EwayModifyContext> {
+    const [inv] = await m.query(
+      `SELECT id, invoice_no AS "invoiceNo", eway_bill_no AS "ewayBillNo", eway_status AS "ewayStatus",
+              transport_mode AS "transportMode", vehicle_no AS "vehicleNo"
+         FROM invoices WHERE id = $1`,
+      [invoiceId],
+    );
+    if (!inv) throw new NotFoundException({ code: 'NOT_FOUND', message: 'invoice not found' });
+    const [company] = await m.query(`SELECT gstin, city FROM companies LIMIT 1`);
+    const gstin: string = company?.gstin ?? '';
+    return {
+      invoiceId,
+      invoiceNo: inv.invoiceNo,
+      sellerGstin: gstin,
+      sellerStateCode: gstin ? stateCodeOf(gstin) : '',
+      sellerLocation: company?.city ?? '',
+      ewayBillNo: inv.ewayBillNo ?? null,
+      ewayStatus: inv.ewayStatus ?? 'not_generated',
+      transportMode: inv.transportMode ?? null,
+      vehicleNo: inv.vehicleNo ?? null,
+    };
+  }
+
+  /**
+   * Modify a LIVE e-way bill in place: a Part-B vehicle change or a validity
+   * extension. Guardrails: the e-way must be 'generated' (not cancelled/absent);
+   * the per-action reason code is validated before any portal call; a vehicle
+   * update needs a new vehicle number, an extension a positive remaining distance.
+   * The 8-hour extension window is portal-enforced (too-early/late → 'failed').
+   * Unlike generate/cancel these have no terminal state, so they are NOT
+   * idempotent — each execute is a fresh portal action.
+   */
+  private async executeEwayModify(
+    tenantId: string,
+    appr: AgentApprovalRequest,
+    c: EwayModifyContext,
+    actorUserId: string | null,
+  ): Promise<GstExecutionOutcome> {
+    const isUpdate = appr.actionKind === 'eway_update_vehicle';
+    const verb = isUpdate ? 'update vehicle on' : 'extend';
+    const fail = async (errors: string[], stage: string): Promise<GstExecutionOutcome> => {
+      await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage, errors });
+      return { status: 'failed', errors };
+    };
+
+    // The e-way must be live to modify it.
+    if (c.ewayStatus !== 'generated' || !c.ewayBillNo) {
+      return fail([`cannot ${verb} e-way: status is '${c.ewayStatus}', expected 'generated'`], 'eway_modify_preflight');
+    }
+    if (!c.sellerGstin) {
+      return fail(['seller GSTIN is not configured on the company profile'], 'eway_modify_preflight');
+    }
+
+    const reasonCode = String(appr.payload?.reasonCode ?? '').trim();
+    const remarks = typeof appr.payload?.remarks === 'string' ? appr.payload.remarks : '';
+
+    try {
+      const session = await this.provider.authenticate(tenantId, c.sellerGstin);
+      if (isUpdate) {
+        if (!EWB_UPDATE_REASON_CODES.has(reasonCode)) {
+          return fail([`invalid vehicle-update reason code '${reasonCode}' (expected 1–4)`], 'eway_modify_preflight');
+        }
+        const vehicleNo = String(appr.payload?.vehicleNo ?? '').trim();
+        if (!vehicleNo) return fail(['a new vehicle number is required'], 'eway_modify_preflight');
+        const res = await this.provider.updateEwayVehicle(session, c.ewayBillNo, {
+          vehicleNo, reasonCode, remarks,
+          transMode: c.transportMode ?? undefined, fromPlace: c.sellerLocation, fromStateCode: c.sellerStateCode,
+        });
+        await this.persistEwayModify(tenantId, c.invoiceId, { vehicleNo });
+        await this.record(tenantId, actorUserId, 'gst.eway.vehicle_updated', c.invoiceId, appr, {
+          ewayBillNo: res.ewayBillNo, vehicleNo, reasonCode,
+        });
+        return { status: 'updated', reference: res.ewayBillNo, detail: { vehicleNo, validUpto: res.validUpto } };
+      }
+
+      if (!EWB_EXTEND_REASON_CODES.has(reasonCode)) {
+        return fail([`invalid extension reason code '${reasonCode}' (expected 1–4 or 99)`], 'eway_modify_preflight');
+      }
+      const remainingDistanceKm = Number(appr.payload?.remainingDistanceKm ?? 0);
+      if (!(remainingDistanceKm > 0)) return fail(['remaining distance (km) must be greater than 0'], 'eway_modify_preflight');
+      const res = await this.provider.extendEwayValidity(session, c.ewayBillNo, {
+        remainingDistanceKm, reasonCode, remarks, vehicleNo: c.vehicleNo ?? undefined,
+        transMode: c.transportMode ?? undefined, fromPlace: c.sellerLocation, fromStateCode: c.sellerStateCode,
+        consignmentStatus: 'M',
+      });
+      await this.persistEwayModify(tenantId, c.invoiceId, { validUpto: res.validUpto });
+      await this.record(tenantId, actorUserId, 'gst.eway.extended', c.invoiceId, appr, {
+        ewayBillNo: res.ewayBillNo, validUpto: res.validUpto, reasonCode,
+      });
+      return { status: 'extended', reference: res.ewayBillNo, detail: { validUpto: res.validUpto } };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.log.warn(`GST e-way modify failed for invoice ${c.invoiceId}: ${message}`);
+      await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'eway_modify_transmit', error: message });
+      return { status: 'failed', errors: [message] };
+    }
+  }
+
   private currentStatus(tenantId: string, invoiceId: string): Promise<{ einvoice: string; eway: string; irn: string | null; ewayBillNo: string | null }> {
     return this.db.runInTenant(tenantId, async (m) => {
       const [r] = await m.query(
@@ -400,6 +529,17 @@ export class GstExecutionService {
   private setStatus(tenantId: string, invoiceId: string, isEinvoice: boolean, status: string): Promise<unknown> {
     const col = isEinvoice ? 'einvoice_status' : 'eway_status';
     return this.db.runInTenant(tenantId, (m) => m.query(`UPDATE invoices SET ${col} = $2, updated_at = now() WHERE id = $1`, [invoiceId, status]));
+  }
+
+  /** Persist an in-place e-way change: the new vehicle (update) or new validity (extend). */
+  private persistEwayModify(tenantId: string, invoiceId: string, fields: { vehicleNo?: string; validUpto?: string }): Promise<unknown> {
+    return this.db.runInTenant(tenantId, (m) =>
+      m.query(
+        `UPDATE invoices SET vehicle_no = coalesce($2, vehicle_no),
+                eway_valid_until = coalesce($3, eway_valid_until), updated_at = now() WHERE id = $1`,
+        [invoiceId, fields.vehicleNo ?? null, fields.validUpto ?? null],
+      ),
+    );
   }
 
   private record(

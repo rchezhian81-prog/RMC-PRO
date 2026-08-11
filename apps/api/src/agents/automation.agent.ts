@@ -1,7 +1,10 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ToolRegistryService } from './tool-registry.service';
 import { ApprovalService } from './approval.service';
-import { buildEinvoicePayload, buildEwayPayload, buildEinvoiceCancelPayload, buildEwayCancelPayload } from './compliance.util';
+import {
+  buildEinvoicePayload, buildEwayPayload, buildEinvoiceCancelPayload, buildEwayCancelPayload,
+  buildEwayUpdateVehiclePayload, buildEwayExtendPayload,
+} from './compliance.util';
 import type { AgentToolDef, ToolContext } from './agent.types';
 
 /** Columns the compliance-prepare tools read, projected to camelCase. */
@@ -219,35 +222,108 @@ export class AutomationAgent implements OnModuleInit {
       },
     };
 
+    // M5 — assisted compliance: PREPARE an in-place modification of a LIVE e-way
+    // bill for approval — a Part-B vehicle change (breakdown/transshipment) or a
+    // validity extension (goods still in transit). Each is its own approval; the
+    // e-way number is read from the invoice. No e-way API call.
+    const prepareEwayUpdateVehicle: AgentToolDef = {
+      name: 'automation.prepare_eway_update_vehicle',
+      kind: 'write',
+      reversibility: 'reversible',
+      permission: 'agents.approve',
+      description: 'Reversible write: PREPARE an e-way Part-B vehicle update for approval. No e-way call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: { type: 'string', description: 'UUID of the invoice whose e-way Part-B vehicle should change.' },
+          vehicleNo: { type: 'string', description: 'The new vehicle registration number.' },
+          reasonCode: { type: 'string', description: 'Reason: 1=Breakdown, 2=Transshipment, 3=Others, 4=First-time.' },
+          remarks: { type: 'string', maxLength: 100, description: 'Free-text remarks for the change.' },
+        },
+        required: ['invoiceId', 'vehicleNo', 'reasonCode'],
+        additionalProperties: false,
+      },
+      execute: async (ctx) => {
+        const inv = await loadInvoice(ctx);
+        const a = (ctx.args ?? {}) as { vehicleNo?: string; reasonCode?: string; remarks?: string };
+        const req = await this.approvals.prepare(ctx.manager, {
+          tenantId: ctx.tenantId, runId: ctx.runId, agentName: AGENT_AUTOMATION,
+          actionKind: 'eway_update_vehicle', title: `Update e-way vehicle for ${inv.invoiceNo}`,
+          payload: buildEwayUpdateVehiclePayload(inv as never, a.vehicleNo, a.reasonCode, a.remarks), reversibility: 'legal',
+          requestedBy: ctx.actorUserId,
+          entityType: 'invoice', entityId: inv.id as string,
+        });
+        return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
+      },
+    };
+
+    const prepareEwayExtend: AgentToolDef = {
+      name: 'automation.prepare_eway_extend',
+      kind: 'write',
+      reversibility: 'reversible',
+      permission: 'agents.approve',
+      description: 'Reversible write: PREPARE an e-way validity extension for approval. No e-way call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: { type: 'string', description: 'UUID of the invoice whose e-way validity should be extended.' },
+          remainingDistanceKm: { type: 'number', description: 'Distance (km) still to travel.' },
+          reasonCode: { type: 'string', description: 'Reason: 1=Natural calamity, 2=Law&order, 3=Transshipment, 4=Accident, 99=Others.' },
+          remarks: { type: 'string', maxLength: 100, description: 'Free-text remarks for the extension.' },
+        },
+        required: ['invoiceId', 'remainingDistanceKm', 'reasonCode'],
+        additionalProperties: false,
+      },
+      execute: async (ctx) => {
+        const inv = await loadInvoice(ctx);
+        const a = (ctx.args ?? {}) as { remainingDistanceKm?: number; reasonCode?: string; remarks?: string };
+        const req = await this.approvals.prepare(ctx.manager, {
+          tenantId: ctx.tenantId, runId: ctx.runId, agentName: AGENT_AUTOMATION,
+          actionKind: 'eway_extend', title: `Extend e-way validity for ${inv.invoiceNo}`,
+          payload: buildEwayExtendPayload(inv as never, a.remainingDistanceKm, a.reasonCode, a.remarks), reversibility: 'legal',
+          requestedBy: ctx.actorUserId,
+          entityType: 'invoice', entityId: inv.id as string,
+        });
+        return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
+      },
+    };
+
     const complianceTools: Record<string, string> = {
       einvoice: 'automation.prepare_einvoice',
       eway: 'automation.prepare_eway',
       einvoice_cancel: 'automation.prepare_einvoice_cancel',
       eway_cancel: 'automation.prepare_eway_cancel',
+      eway_update_vehicle: 'automation.prepare_eway_update_vehicle',
+      eway_extend: 'automation.prepare_eway_extend',
     };
-    const allTools = [openApproval, commitFinancial, prepareEinvoice, prepareEway, prepareEinvoiceCancel, prepareEwayCancel];
+    const allTools = [
+      openApproval, commitFinancial, prepareEinvoice, prepareEway,
+      prepareEinvoiceCancel, prepareEwayCancel, prepareEwayUpdateVehicle, prepareEwayExtend,
+    ];
     for (const t of allTools) this.registry.registerTool(t);
 
     this.registry.registerAgent({
       name: AGENT_AUTOMATION,
-      description: 'Prepares reversible/high-risk actions (incl. IRN/e-way generate + cancel) for human approval (M4/M5).',
+      description: 'Prepares reversible/high-risk actions (incl. IRN/e-way generate, cancel, update, extend) for human approval (M4/M5).',
       tools: allTools.map((t) => t.name),
       handler: async (ctx) => {
         const input = ctx.input as {
           actionKind?: string; title?: string; payload?: Record<string, unknown>;
           reversibility?: string; tryCommit?: boolean;
-          compliance?: 'einvoice' | 'eway' | 'einvoice_cancel' | 'eway_cancel'; invoiceId?: string;
-          reasonCode?: string; remarks?: string;
+          compliance?: 'einvoice' | 'eway' | 'einvoice_cancel' | 'eway_cancel' | 'eway_update_vehicle' | 'eway_extend';
+          invoiceId?: string; reasonCode?: string; remarks?: string;
+          vehicleNo?: string; remainingDistanceKm?: number;
         };
         // Demonstrate the hard rule: a financial action is blocked, never auto-run.
         if (input.tryCommit) {
           await ctx.callTool('automation.commit_financial', {}); // throws ACTION_BLOCKED → run 'blocked'
         }
-        // M5 — prepare a compliance payload (generate or cancel) for approval (no transmission).
+        // M5 — prepare a compliance payload (generate / cancel / update / extend) for approval.
         const complianceTool = input.compliance ? complianceTools[input.compliance] : undefined;
         if (complianceTool) {
           const prepared = await ctx.callTool(complianceTool, {
             invoiceId: input.invoiceId, reasonCode: input.reasonCode, remarks: input.remarks,
+            vehicleNo: input.vehicleNo, remainingDistanceKm: input.remainingDistanceKm,
           });
           await ctx.note(`automation: prepared ${input.compliance} for approval`);
           return { prepared };

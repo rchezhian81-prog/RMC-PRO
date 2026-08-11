@@ -54,6 +54,9 @@ export interface InvoiceHeader {
   vehicleNo?: string | null;
   transporterId?: string | null;
   transporterName?: string | null;
+  /** Transport document no + date — required by non-road e-way Part B (rail/air/ship). */
+  transDocNo?: string | null;
+  transDocDate?: string | null; // 'yyyy-mm-dd'
 }
 
 export interface InvoiceLine {
@@ -155,24 +158,56 @@ export function validateIrnPreflight(
 export interface EwbPreflightOptions {
   /** State-configurable consignment threshold; default ₹50,000. */
   thresholdValue?: number;
+  /**
+   * Intra-state Part-B exemption: some states exempt an intra-state move shorter
+   * than this many km. When set and the move is intra-state (same state code) and
+   * shorter than this, no e-way is required. Default 0 (no exemption).
+   */
+  intraStateExemptBelowKm?: number;
 }
 
 export function validateEwbPreflight(
   h: InvoiceHeader,
+  lines: InvoiceLine[],
   seller: SellerParty,
   buyer: BuyerParty,
   opts: EwbPreflightOptions = {},
 ): PreflightResult {
   const errors: string[] = [];
   const threshold = opts.thresholdValue ?? 50_000;
-  if (num(h.total) <= threshold) errors.push(`consignment value ₹${num(h.total)} is at/below the ₹${threshold} threshold`);
+  const distance = num(h.distanceKm);
+  const intraState = !!seller.stateCode && seller.stateCode === buyer.stateCode;
+
+  if (num(h.total) <= threshold) {
+    errors.push(`consignment value ₹${num(h.total)} is at/below the ₹${threshold} threshold`);
+  }
+  // Intra-state short-haul exemption (state-configurable) — no e-way required.
+  const exemptKm = opts.intraStateExemptBelowKm ?? 0;
+  if (exemptKm > 0 && intraState && distance > 0 && distance < exemptKm) {
+    errors.push(`intra-state move of ${distance} km is under the ${exemptKm} km exemption — no e-way bill required`);
+  }
+
   if (!isGstin(seller.gstin)) errors.push('from (seller) GSTIN is missing or malformed');
   if (buyer.gstin != null && buyer.gstin !== '' && !isGstin(buyer.gstin)) errors.push('to (buyer) GSTIN is malformed');
-  if (num(h.distanceKm) <= 0) errors.push('transport distance (km) is missing or ≤ 0');
+  if (!buyer.stateCode) errors.push('to (destination) state code is missing');
+  if (distance <= 0) errors.push('transport distance (km) is missing or ≤ 0');
+
+  if (!lines.length) errors.push('invoice has no line items');
+  for (const l of lines) {
+    if (!l.hsn || !HSN_RE.test(l.hsn)) errors.push(`line ${l.slNo}: HSN/SAC missing or invalid`);
+  }
+
+  // Part B by transport mode.
   const mode = (h.transportMode ?? 'road').toLowerCase();
   if (mode === 'road') {
     const hasVehicle = h.vehicleNo && VEHICLE_RE.test(h.vehicleNo);
-    if (!hasVehicle && !h.transporterId) errors.push('road transport needs a valid vehicle number or a transporter id (Part B)');
+    if (!hasVehicle && !h.transporterId) {
+      errors.push('road transport needs a valid vehicle number or a transporter id (Part B)');
+    }
+  } else if (mode === 'rail' || mode === 'air' || mode === 'ship') {
+    if (!h.transDocNo || !h.transDocDate) {
+      errors.push(`${mode} transport needs a transport document number and date (Part B)`);
+    }
   }
   return errors.length ? { ok: false, errors } : { ok: true };
 }
@@ -248,27 +283,75 @@ export function buildIrnRequest(
   };
 }
 
-export function buildEwbRequest(h: InvoiceHeader, seller: SellerParty, buyer: BuyerParty): EwbRequest {
+/** One e-way `itemList` entry (NIC EWB schema — HSN + qty + assessable + rates). */
+function buildEwbItem(l: InvoiceLine): Record<string, unknown> {
+  const inter = num(l.igst) > 0;
+  const gstRate = round2(num(l.gstRate));
+  const assess = round2(num(l.taxable));
+  const cesAmt = round2(num(l.cess));
+  const cessRate = l.cessRate != null ? round2(num(l.cessRate)) : assess > 0 ? round2((cesAmt / assess) * 100) : 0;
+  return {
+    productName: l.description ?? `Item ${l.slNo}`,
+    productDesc: l.description ?? undefined,
+    hsnCode: l.hsn ? Number(l.hsn) : undefined, // NIC EWB hsnCode is numeric
+    quantity: round2(num(l.qty)),
+    qtyUnit: l.unit ?? 'NOS',
+    taxableAmount: assess,
+    sgstRate: inter ? 0 : round2(gstRate / 2),
+    cgstRate: inter ? 0 : round2(gstRate / 2),
+    igstRate: inter ? gstRate : 0,
+    cessRate,
+  };
+}
+
+export interface EwbBuildOptions {
+  /** EWB document type: INV (tax invoice, default), CHL (delivery challan), BIL, BOE. */
+  docType?: 'INV' | 'CHL' | 'BIL' | 'BOE';
+  /** Sub-supply type code (1=supply default, e.g. job-work / branch transfer). */
+  subSupplyType?: string;
+  /** R = regular (default), O = over-dimensional cargo. */
+  vehicleType?: 'R' | 'O';
+}
+
+export function buildEwbRequest(
+  h: InvoiceHeader,
+  lines: InvoiceLine[],
+  seller: SellerParty,
+  buyer: BuyerParty,
+  opts: EwbBuildOptions = {},
+): EwbRequest {
   const mode = (h.transportMode ?? 'road').toLowerCase();
+  const nonRoad = mode === 'rail' || mode === 'air' || mode === 'ship';
   return {
     validityDays: ewayValidityDays(h.distanceKm),
+    // ---- Part A ----
     supplyType: 'O', // outward
-    subSupplyType: '1', // supply
-    docType: 'INV',
+    subSupplyType: opts.subSupplyType ?? '1', // supply
+    docType: opts.docType ?? 'INV',
     docNo: h.docNo,
     docDate: toPortalDate(h.docDate),
     fromGstin: seller.gstin,
-    fromPincode: seller.pincode,
+    fromPincode: pinNum(seller.pincode),
     fromStateCode: seller.stateCode,
     toGstin: buyer.gstin ?? 'URP',
-    toPincode: buyer.pincode,
+    toPincode: pinNum(buyer.pincode),
     toStateCode: buyer.stateCode,
+    itemList: lines.map(buildEwbItem),
+    totalValue: round2(h.taxable), // assessable value
+    cgstValue: round2(h.cgst),
+    sgstValue: round2(h.sgst),
+    igstValue: round2(h.igst),
+    cessValue: round2(h.cess),
+    otherValue: round2(h.roundOff), // round-off / other charges (may be negative)
     totInvValue: round2(h.total),
     transDistance: num(h.distanceKm),
+    // ---- Part B ----
     transMode: transModeCode[mode] ?? '1',
-    vehicleType: 'R',
-    vehicleNo: h.vehicleNo ?? undefined,
+    vehicleType: opts.vehicleType ?? 'R',
+    vehicleNo: mode === 'road' ? h.vehicleNo ?? undefined : undefined,
     transporterId: h.transporterId ?? undefined,
     transporterName: h.transporterName ?? undefined,
+    transDocNo: nonRoad ? h.transDocNo ?? undefined : undefined,
+    transDocDate: nonRoad ? toPortalDate(h.transDocDate ?? null) ?? undefined : undefined,
   };
 }

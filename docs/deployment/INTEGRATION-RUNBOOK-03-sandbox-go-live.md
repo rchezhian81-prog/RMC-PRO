@@ -123,6 +123,21 @@ LOGIN=… RMC_PASSWORD=… bash scripts/ops/verify-agents.sh     # §4 "gst mode
 If `configured:false`, one of the four env vars in §2 is missing/blank — fix and
 restart before going further.
 
+**One-command gate check (§2–§5 in one shot).** `gst-go-live-preflight.sh` is the
+read-only preflight for the whole go-live: it verifies the provider mode, that
+each tenant GSTIN has credentials whose last `/test` **succeeded**, and that the
+execution queue is not stuck or dead-lettering. It transmits nothing (GETs + one
+login POST) and exits non-zero if any gate fails, so you can gate a deploy on it.
+
+```bash
+LOGIN='owner@<DOMAIN>' RMC_PASSWORD='…' bash scripts/ops/gst-go-live-preflight.sh
+# the login must hold settings.manage + agents.approve (Company Owner / Admin)
+```
+
+- [ ] Green (or only the expected warnings) before you trust a live run. A fresh
+      deploy fails on "no credentials" until §4 is done, and warns on a GSTIN that
+      is configured but not yet `/test`ed.
+
 ---
 
 ## 4. Store the tenant's portal credentials (via the app, encrypted)

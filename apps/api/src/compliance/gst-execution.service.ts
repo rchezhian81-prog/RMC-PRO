@@ -114,13 +114,16 @@ export class GstExecutionService {
     try {
       const session = await this.provider.authenticate(tenantId, ctx.seller.gstin);
       if (ctx.isEinvoice) {
-        // Path A (runbook 02 §4): if the e-way isn't done yet and the transport
-        // details are complete (EWB pre-flight passes), ask the IRP to generate
-        // the e-way in the SAME call by including EwbDtls — one call, no second
-        // auth. If they're incomplete, generate the IRN alone (the e-way can be
-        // filed separately) rather than risk the portal rejecting the IRN.
+        // Path A (runbook 02 §4): generate the e-way in the SAME call as the IRN
+        // by including EwbDtls — one call, no second auth. This is OPT-IN via the
+        // approval payload (`includeEway: true`), because the e-way is a separate
+        // legal document: filing it silently under an IRN approval would bypass
+        // its own `eway_bill` approval. It's included only when explicitly
+        // requested AND the e-way isn't done yet AND the transport details are
+        // complete (an incomplete EwbDtls would make the portal reject the IRN).
+        const wantsEway = appr.payload?.includeEway === true;
         const includeEwb =
-          now.eway !== 'generated' && validateEwbPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer).ok;
+          wantsEway && now.eway !== 'generated' && validateEwbPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer).ok;
         const res = await this.provider.generateIrn(
           session,
           buildIrnRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer, { includeEwb }),

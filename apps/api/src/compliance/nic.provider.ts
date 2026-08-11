@@ -9,6 +9,7 @@ import type {
   IrnResult,
 } from './gst.types';
 import { GstProviderError } from './gst.types';
+import type { GstCredentialStore } from './gst-credential-store.service';
 import { aesDecrypt, aesDecryptToBuffer, aesEncryptBase64, genAppKey, rsaEncryptBase64 } from './nic-crypto.util';
 import {
   NIC_CODES,
@@ -45,8 +46,15 @@ export class NicGstProvider implements GstComplianceProvider {
   readonly name = 'nic';
   private readonly log = new Logger(NicGstProvider.name);
 
-  /** Session material per seller GSTIN. The `sek` (session key) never leaves here. */
+  /** The tenant's portal credentials come from the encrypted store (runbook 00 §7). */
+  constructor(private readonly credStore: GstCredentialStore) {}
+
+  /** Session material per tenant+GSTIN. The `sek` (session key) never leaves here. */
   private readonly sessions = new Map<string, { authToken: string; sek: Buffer; expiresAt: number }>();
+
+  private sessionKey(tenantId: string, gstin: string): string {
+    return `${tenantId}:${gstin}`;
+  }
 
   // ---- endpoint paths (TODO(deploy): confirm exact paths/versions with your GSP) ----
   private static readonly PATHS = {
@@ -67,16 +75,17 @@ export class NicGstProvider implements GstComplianceProvider {
 
   // ---- auth ----
 
-  async authenticate(gstin: string): Promise<GstSession> {
+  async authenticate(tenantId: string, gstin: string): Promise<GstSession> {
+    const k = this.sessionKey(tenantId, gstin);
     // Reuse a cached, unexpired session (5-min skew guard).
-    const cached = this.sessions.get(gstin);
+    const cached = this.sessions.get(k);
     if (cached && cached.expiresAt > Date.now() + 5 * 60_000) {
-      return { gstin, authToken: cached.authToken, expiresAt: cached.expiresAt };
+      return { tenantId, gstin, authToken: cached.authToken, expiresAt: cached.expiresAt };
     }
 
-    // TODO(deploy): the portal user_name/password are PER TENANT and live in the
-    // encrypted per-tenant credential store (runbook 00 §7), NOT in env.
-    const creds = await this.resolveTenantCreds(gstin);
+    // The portal user_name/password are PER TENANT — resolved (decrypted) from the
+    // encrypted credential store, never from env/repo (runbook 00 §7).
+    const creds = await this.resolveTenantCreds(tenantId, gstin);
 
     const appKey = genAppKey();
     // TODO(deploy): confirm the auth payload field names/casing with your GSP.
@@ -105,8 +114,8 @@ export class NicGstProvider implements GstComplianceProvider {
     const sek = aesDecryptToBuffer(appKey, authData.Sek);
     const expiresAt = parseNicExpiry(authData.TokenExpiry, Date.now());
 
-    this.sessions.set(gstin, { authToken: authData.AuthToken, sek, expiresAt });
-    return { gstin, authToken: authData.AuthToken, expiresAt };
+    this.sessions.set(k, { authToken: authData.AuthToken, sek, expiresAt });
+    return { tenantId, gstin, authToken: authData.AuthToken, expiresAt };
   }
 
   // ---- business calls (thin: wrap → POST → classify → unwrap → map) ----
@@ -144,7 +153,7 @@ export class NicGstProvider implements GstComplianceProvider {
     kind: NicKind,
   ): Promise<Record<string, unknown>> {
     const attempt = async (): Promise<CallStep<Record<string, unknown>>> => {
-      const s = this.sessions.get(session.gstin);
+      const s = this.sessions.get(this.sessionKey(session.tenantId, session.gstin));
       if (!s) return { fail: new GstProviderError('AUTH_FAILED', 'no active session; call authenticate() first') };
 
       let resp: Record<string, unknown>;
@@ -175,8 +184,8 @@ export class NicGstProvider implements GstComplianceProvider {
     return runResilientCall({
       attempt,
       reauth: async () => {
-        this.sessions.delete(session.gstin);
-        await this.authenticate(session.gstin);
+        this.sessions.delete(this.sessionKey(session.tenantId, session.gstin));
+        await this.authenticate(session.tenantId, session.gstin);
       },
       retries: this.maxRetries(),
       onExhausted: () => new GstProviderError('PORTAL_UNAVAILABLE', `${kind}: portal unavailable after retries`),
@@ -243,13 +252,10 @@ export class NicGstProvider implements GstComplianceProvider {
     return Number.isFinite(n) && n >= 0 ? n : 2;
   }
 
-  private async resolveTenantCreds(gstin: string): Promise<{ username: string; password: string }> {
-    // TODO(deploy): read the tenant's portal API username/password from the
-    // encrypted per-tenant store (runbook 00 §7). Held — never from env/repo.
-    throw new GstProviderError(
-      'NOT_IMPLEMENTED',
-      `per-tenant portal credentials for GSTIN ${gstin} are not wired — see INTEGRATION-RUNBOOK-00 §7`,
-    );
+  private resolveTenantCreds(tenantId: string, gstin: string): Promise<{ username: string; password: string }> {
+    // Decrypt the tenant's portal username/password from the encrypted store.
+    // Fail-closed: throws NO_CREDENTIALS when unconfigured (runbook 00 §7).
+    return this.credStore.resolve(tenantId, gstin);
   }
 
   private irpBase(): string {

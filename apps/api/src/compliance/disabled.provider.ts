@@ -27,7 +27,7 @@ export class DisabledGstProvider implements GstComplianceProvider {
     throw new GstProviderError('PROVIDER_DISABLED', 'GST provider is disabled (prepare-only mode)');
   }
 
-  async authenticate(_gstin: string): Promise<GstSession> {
+  async authenticate(_tenantId: string, _gstin: string): Promise<GstSession> {
     return this.off();
   }
   async generateIrn(_session: GstSession, _request: IrnRequest): Promise<IrnResult> {

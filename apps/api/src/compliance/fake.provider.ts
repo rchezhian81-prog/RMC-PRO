@@ -32,9 +32,9 @@ export class FakeGstProvider implements GstComplianceProvider {
     return true;
   }
 
-  async authenticate(gstin: string): Promise<GstSession> {
-    this.calls.push({ op: 'authenticate', arg: gstin });
-    return { gstin, authToken: 'fake-token', expiresAt: Number.MAX_SAFE_INTEGER };
+  async authenticate(tenantId: string, gstin: string): Promise<GstSession> {
+    this.calls.push({ op: 'authenticate', arg: { tenantId, gstin } });
+    return { tenantId, gstin, authToken: 'fake-token', expiresAt: Number.MAX_SAFE_INTEGER };
   }
 
   async generateIrn(session: GstSession, request: IrnRequest): Promise<IrnResult> {

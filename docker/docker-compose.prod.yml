@@ -122,6 +122,16 @@ services:
       # AI features (optional). Empty key => AI stays off; app runs normally.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      # GST e-invoice/e-way (IRP) — off by default (prepare-only). See runbook 01/02.
+      GST_PROVIDER: ${GST_PROVIDER:-disabled}
+      GST_IRP_BASE_URL: ${GST_IRP_BASE_URL:-}
+      GST_EWB_BASE_URL: ${GST_EWB_BASE_URL:-}
+      GST_GSP_CLIENT_ID: ${GST_GSP_CLIENT_ID:-}
+      GST_GSP_CLIENT_SECRET: ${GST_GSP_CLIENT_SECRET:-}
+      GST_RSA_PUBLIC_KEY_PEM: ${GST_RSA_PUBLIC_KEY_PEM:-}
+      GST_IRP_MAX_RETRIES: ${GST_IRP_MAX_RETRIES:-2}
+      # AES-256-GCM master key for per-tenant GST-portal credentials (at rest).
+      GST_CRED_ENC_KEY: ${GST_CRED_ENC_KEY:-}
     expose: ['4000']
     depends_on:
       postgres:

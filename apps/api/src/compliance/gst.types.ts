@@ -20,6 +20,8 @@ export const GST_ACTION_KINDS = new Set(['einvoice_irn', 'eway_bill']);
 
 /** An authenticated portal session (opaque to callers; provider-owned). */
 export interface GstSession {
+  /** The tenant this session belongs to — credentials are resolved per tenant. */
+  tenantId: string;
   gstin: string;
   authToken: string;
   /** Epoch ms when the token expires (providers cache/refresh around this). */
@@ -55,6 +57,7 @@ export interface CancelResult {
 export type GstErrorCode =
   | 'PROVIDER_DISABLED'
   | 'NOT_IMPLEMENTED'
+  | 'NO_CREDENTIALS'
   | 'AUTH_FAILED'
   | 'DUPLICATE_IRN'
   | 'DUPLICATE_EWB'
@@ -86,7 +89,8 @@ export interface EwbRequest extends Record<string, unknown> {
 export interface GstComplianceProvider {
   readonly name: string;
   isConfigured(): boolean;
-  authenticate(gstin: string): Promise<GstSession>;
+  /** Authenticate the seller GSTIN using the tenant's stored portal credentials. */
+  authenticate(tenantId: string, gstin: string): Promise<GstSession>;
   generateIrn(session: GstSession, request: IrnRequest): Promise<IrnResult>;
   cancelIrn(session: GstSession, irn: string, reasonCode: string, remarks: string): Promise<CancelResult>;
   generateEwayBill(session: GstSession, request: EwbRequest): Promise<EwbResult>;

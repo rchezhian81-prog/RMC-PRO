@@ -62,6 +62,7 @@ import {
   AgentRunStep,
   AgentApprovalRequest,
   TenantGstCredential,
+  GstExecutionJob,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -129,4 +130,5 @@ export const ENTITIES = [
   AgentRunStep,
   AgentApprovalRequest,
   TenantGstCredential,
+  GstExecutionJob,
 ];

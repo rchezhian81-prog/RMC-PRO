@@ -4,6 +4,8 @@ import { DisabledGstProvider } from './disabled.provider';
 import { FakeGstProvider } from './fake.provider';
 import { NicGstProvider } from './nic.provider';
 import { GstExecutionService } from './gst-execution.service';
+import { GstJobService } from './gst-execution-job.service';
+import { GstExecutionWorker } from './gst-execution.worker';
 import { GstCredentialStore } from './gst-credential-store.service';
 import { GstCredentialsController } from './gst-credentials.controller';
 import { validateMasterKeyConfig } from './gst-cred-crypto.util';
@@ -38,10 +40,12 @@ function selectProvider(store: GstCredentialStore): GstComplianceProvider {
     GstCredentialStore,
     { provide: GST_PROVIDER, useFactory: selectProvider, inject: [GstCredentialStore] },
     GstExecutionService,
+    GstJobService,
+    GstExecutionWorker,
     TenantGuard,
     PermissionsGuard,
   ],
-  exports: [GstExecutionService, GstCredentialStore],
+  exports: [GstExecutionService, GstJobService, GstCredentialStore],
 })
 export class ComplianceModule implements OnModuleInit {
   private readonly log = new Logger(ComplianceModule.name);

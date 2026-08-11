@@ -45,8 +45,12 @@ test a path that can't run:
   approval action with a reason code; the 24h cancel / 8h extension windows are
   portal-enforced. The execution service rejects any unknown `actionKind` with
   `NOT_GST_ACTION`.
-- **Execution is synchronous** via `POST …/execute` (operator/worker call). The
-  durable on-approval queue (GW-1) is a later change; it does not block sandbox.
+- **Two execution paths, same idempotent core.** Approving a GST action ENQUEUES
+  a durable job (GW-1, `gst_execution_jobs`). It runs either synchronously via
+  `POST …/execute` (operator/worker call — reconciles the job) or via the
+  background worker / an operator drain (`POST …/gst/jobs/drain`). The worker is
+  **opt-in** (`GST_WORKER_ENABLED=true`); off by default, so a synchronous-only
+  deployment is unchanged. Retries back off and dead-letter after `max_attempts`.
 - **`GST_ENV` is documentary only** — no code reads it. Sandbox-vs-production is
   carried entirely by `GST_IRP_BASE_URL` / `GST_EWB_BASE_URL`. Setting `GST_ENV`
   does no harm and labels the deployment, but point the **base URLs** at sandbox.
@@ -361,6 +365,7 @@ Owner + GSP actions (this checklist):
 Known fast-follows (not blockers for a sandbox pass, decide before broad rollout):
 
 - [x] Full e-way lifecycle wired: generate, cancel, Part-B vehicle update, extend.
-- [ ] Durable on-approval execution queue (GW-1) replacing the synchronous
-      `execute` call.
+- [x] Durable on-approval execution queue (GW-1): approve enqueues a job; a
+      worker (opt-in `GST_WORKER_ENABLED`) or an operator drain processes it with
+      backoff + dead-letter; the synchronous `execute` still works and reconciles.
 - [ ] Metrics + alerts (runbook 00 §9); buyer pincode sourcing if mandatory.

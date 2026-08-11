@@ -1,4 +1,4 @@
-import { Column, Entity, Unique } from 'typeorm';
+import { Column, Entity, Index, Unique } from 'typeorm';
 import { TenantScopedEntity } from './base.entity';
 
 /**
@@ -45,4 +45,57 @@ export class TenantGstCredential extends TenantScopedEntity {
 
   @Column({ name: 'last_test_message', type: 'varchar', nullable: true })
   lastTestMessage!: string | null;
+}
+
+/**
+ * A durable, on-approval GST execution job (GW-1). When a human APPROVES a GST
+ * action (IRN / e-way generate, cancel, update, extend), a job is enqueued here
+ * instead of the request thread calling the slow, rate-limited portal inline. A
+ * background worker (or an operator drain) processes queued jobs by running the
+ * idempotent {@link GstExecutionService.execute}, retrying transient failures with
+ * backoff and dead-lettering after `max_attempts`. One job per approval.
+ *
+ * Tenant-scoped under FORCE RLS with the same NULLIF-guarded clause as the other
+ * tenant tables, PLUS an `app.platform` clause so the cross-tenant worker can scan
+ * for due jobs. The invoice mutations still happen tenant-scoped inside execute().
+ */
+@Entity('gst_execution_jobs')
+@Unique('uq_gst_execution_jobs_approval', ['approvalId'])
+@Index('idx_gst_execution_jobs_due', ['status', 'nextRunAt'])
+export class GstExecutionJob extends TenantScopedEntity {
+  /** The approval this job executes (one job per approval). */
+  @Column({ name: 'approval_id', type: 'uuid' })
+  approvalId!: string;
+
+  /** The invoice the action targets. */
+  @Column({ name: 'invoice_id', type: 'uuid' })
+  invoiceId!: string;
+
+  /** einvoice_irn | eway_bill | einvoice_cancel | eway_cancel | eway_update_vehicle | eway_extend. */
+  @Column({ name: 'action_kind', type: 'varchar' })
+  actionKind!: string;
+
+  /** queued | running | done | failed | dead. */
+  @Column({ name: 'status', type: 'varchar', default: 'queued' })
+  status!: string;
+
+  @Column({ name: 'attempts', type: 'int', default: 0 })
+  attempts!: number;
+
+  @Column({ name: 'max_attempts', type: 'int', default: 5 })
+  maxAttempts!: number;
+
+  /** The execute() outcome status of the last run (generated/cancelled/failed/…). */
+  @Column({ name: 'last_outcome', type: 'varchar', nullable: true })
+  lastOutcome!: string | null;
+
+  @Column({ name: 'last_error', type: 'varchar', nullable: true })
+  lastError!: string | null;
+
+  /** When this job is next eligible to run (backoff pushes it forward on failure). */
+  @Column({ name: 'next_run_at', type: 'timestamptz', default: () => 'now()' })
+  nextRunAt!: Date;
+
+  @Column({ name: 'requested_by', type: 'uuid', nullable: true })
+  requestedBy!: string | null;
 }

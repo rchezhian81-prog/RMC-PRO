@@ -8,6 +8,8 @@ import {
   DeliveryStatusHistory,
   Dispatch,
   Driver,
+  Invoice,
+  InvoiceChallan,
   Site,
   Vehicle,
 } from '../core/database/entities';
@@ -127,6 +129,11 @@ export class DeliveryChallanService {
       const site = challan.siteId ? await m.getRepository(Site).findOne({ where: { id: challan.siteId } }) : null;
       const vehicle = challan.vehicleId ? await m.getRepository(Vehicle).findOne({ where: { id: challan.vehicleId } }) : null;
       const driver = challan.driverId ? await m.getRepository(Driver).findOne({ where: { id: challan.driverId } }) : null;
+      // If this challan has been invoiced and that invoice has an e-way bill,
+      // carry the EWB number onto the dispatch document (runbook 02 §6).
+      const link = await m.getRepository(InvoiceChallan).findOne({ where: { challanId: id } });
+      const invoice = link ? await m.getRepository(Invoice).findOne({ where: { id: link.invoiceId } }) : null;
+      const eway = invoice && invoice.ewayStatus === 'generated' ? invoice : null;
       const data: ChallanPdfData = {
         companyName: company?.companyName ?? 'Company',
         companyGstin: company?.gstin ?? null,
@@ -142,6 +149,10 @@ export class DeliveryChallanService {
         quantityM3: challan.quantityM3,
         slump: challan.slump ?? null,
         receiverName: challan.receiverName ?? null,
+        ewayBillNo: eway?.ewayBillNo ?? null,
+        ewayValidUntil: eway?.ewayValidUntil
+          ? new Date(eway.ewayValidUntil).toISOString().replace('T', ' ').slice(0, 16)
+          : null,
       };
       return { data, challan };
     });

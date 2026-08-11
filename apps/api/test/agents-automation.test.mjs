@@ -112,7 +112,7 @@ async function api(method, path, payload) {
 
   const cat = await api('GET', '/agents/catalog');
   const auto = (cat.data ?? []).find((a) => a.name === 'automation');
-  ok('the automation agent is in the catalog with its tools', auto?.tools?.length === 6);
+  ok('the automation agent is in the catalog with its tools', auto?.tools?.length === 8);
 
   console.log(`\nAGENT AUTOMATION TEST: ${pass} passed`);
   process.exit(0);

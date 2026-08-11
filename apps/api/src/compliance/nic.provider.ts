@@ -1,8 +1,11 @@
 import { Logger } from '@nestjs/common';
 import type {
   CancelResult,
+  EwbExtendInput,
+  EwbModifyResult,
   EwbRequest,
   EwbResult,
+  EwbUpdateVehicleInput,
   GstComplianceProvider,
   GstSession,
   IrnRequest,
@@ -63,6 +66,8 @@ export class NicGstProvider implements GstComplianceProvider {
     irnCancel: '/eicore/v1.03/Invoice/Cancel',
     ewbGenerate: '/ewaybillapi/v1.03/ewayapi',
     ewbCancel: '/ewaybillapi/v1.03/ewayapi/canewb',
+    ewbVehicle: '/ewaybillapi/v1.03/ewayapi/vehewb',
+    ewbExtend: '/ewaybillapi/v1.03/ewayapi/extendvalidity',
   };
 
   isConfigured(): boolean {
@@ -148,6 +153,47 @@ export class NicGstProvider implements GstComplianceProvider {
       'EWB',
     );
     return { reference: String(d.ewayBillNo ?? d.ewbNo ?? ewayBillNo), cancelledAt: String(d.cancelDate ?? new Date().toISOString()) };
+  }
+
+  async updateEwayVehicle(session: GstSession, ewayBillNo: string, input: EwbUpdateVehicleInput): Promise<EwbModifyResult> {
+    // TODO(deploy): confirm the VEHEWB field names + path with your GSP.
+    const d = await this.call(session, this.ewbBase(), NicGstProvider.PATHS.ewbVehicle, {
+      ewbNo: Number(ewayBillNo) || ewayBillNo,
+      vehicleNo: input.vehicleNo,
+      fromPlace: input.fromPlace ?? '',
+      fromState: Number(input.fromStateCode) || input.fromStateCode || '',
+      reasonCode: Number(input.reasonCode) || input.reasonCode,
+      reasonRem: input.remarks ?? '',
+      transMode: input.transMode ?? '1',
+      transDocNo: input.transDocNo ?? '',
+      transDocDate: input.transDocDate ?? '',
+    }, 'EWB');
+    return {
+      ewayBillNo: String(d.ewayBillNo ?? d.ewbNo ?? ewayBillNo),
+      validUpto: String(d.validUpto ?? ''),
+      updatedAt: String(d.vehUpdDate ?? new Date().toISOString()),
+    };
+  }
+
+  async extendEwayValidity(session: GstSession, ewayBillNo: string, input: EwbExtendInput): Promise<EwbModifyResult> {
+    // TODO(deploy): confirm the EXTENDVALIDITY field names + path with your GSP.
+    const d = await this.call(session, this.ewbBase(), NicGstProvider.PATHS.ewbExtend, {
+      ewbNo: Number(ewayBillNo) || ewayBillNo,
+      vehicleNo: input.vehicleNo ?? '',
+      fromPlace: input.fromPlace ?? '',
+      fromState: Number(input.fromStateCode) || input.fromStateCode || '',
+      remainingDistance: input.remainingDistanceKm,
+      transMode: input.transMode ?? '1',
+      extnRsnCode: Number(input.reasonCode) || input.reasonCode,
+      extnRemarks: input.remarks ?? '',
+      consignmentStatus: input.consignmentStatus ?? 'M',
+      transitType: input.transitType ?? '',
+    }, 'EWB');
+    return {
+      ewayBillNo: String(d.ewayBillNo ?? d.ewbNo ?? ewayBillNo),
+      validUpto: String(d.validUpto ?? ''),
+      updatedAt: String(d.updatedDate ?? new Date().toISOString()),
+    };
   }
 
   // ---- encrypted transport + §7 retry policy ----

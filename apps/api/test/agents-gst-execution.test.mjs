@@ -172,6 +172,31 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   ok('cancelling a not-generated e-way fails', cancelUngenerated.exec.data?.status === 'failed');
   ok('the failure explains it was not generated', JSON.stringify(cancelUngenerated.exec.data?.errors ?? []).match(/generated/i) !== null);
 
+  console.log('\n=== e-way vehicle update + extend (live e-way) ===');
+  // A fresh invoice with a freshly generated (not cancelled) e-way to modify.
+  const modInv = await seedInvoice();
+  await prepareApproveExecute('eway', modInv.invId);
+  const upd = await prepareApproveExecute('eway_update_vehicle', modInv.invId, { vehicleNo: 'TN09XY9999', reasonCode: '1', remarks: 'breakdown' });
+  ok('the vehicle update reports updated', upd.exec.data?.status === 'updated');
+  const [uv] = await owner.query(`SELECT vehicle_no, eway_status FROM invoices WHERE id=$1`, [modInv.invId]);
+  ok('the invoice carries the new vehicle', uv.vehicle_no === 'TN09XY9999');
+  ok('eway_status stays generated after a vehicle update', uv.eway_status === 'generated');
+
+  const ext = await prepareApproveExecute('eway_extend', modInv.invId, { remainingDistanceKm: 120, reasonCode: '4', remarks: 'accident detour' });
+  ok('the extend reports extended', ext.exec.data?.status === 'extended');
+  const [ev] = await owner.query(`SELECT eway_valid_until, eway_status FROM invoices WHERE id=$1`, [modInv.invId]);
+  ok('the invoice validity is set + still generated', !!ev.eway_valid_until && ev.eway_status === 'generated');
+
+  console.log('\n=== e-way modify guardrails ===');
+  // Modifying a not-generated e-way is refused in the execute pre-flight.
+  const noEway = await seedInvoice();
+  const badModify = await prepareApproveExecute('eway_extend', noEway.invId, { remainingDistanceKm: 50, reasonCode: '1' });
+  ok('extending a not-generated e-way fails', badModify.exec.data?.status === 'failed');
+  ok('the failure explains it was not generated', JSON.stringify(badModify.exec.data?.errors ?? []).match(/generated/i) !== null);
+  // An out-of-set extension reason code is rejected at the API boundary.
+  const badExtendReason = await api('POST', '/agents/automation/run', { compliance: 'eway_extend', invoiceId: modInv.invId, remainingDistanceKm: 50, reasonCode: '7' });
+  ok('an invalid extension reason code is a 400', badExtendReason.status === 400);
+
   console.log('\n=== pre-flight failure transmits nothing ===');
   const bad = await seedInvoice({ hsn: null });
   const badExec = await prepareApproveExecute('einvoice', bad.invId);

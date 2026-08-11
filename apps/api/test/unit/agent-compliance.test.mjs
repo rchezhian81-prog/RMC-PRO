@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   ewayValidityDays, buildEinvoicePayload, buildEwayPayload, invoiceNeedsEway,
   buildEinvoiceCancelPayload, buildEwayCancelPayload, cancelReasonCode,
+  buildEwayUpdateVehiclePayload, buildEwayExtendPayload, ewbUpdateReasonCode, ewbExtendReasonCode,
 } from '../../dist/agents/compliance.util.js';
 
 test('e-way validity is 1 day per 200 km, minimum 1', () => {
@@ -75,6 +76,35 @@ test('cancel payloads carry the reason + remarks and a READY-ONLY note', () => {
 
   // An invalid reason code is rejected at prepare time (before any approval).
   assert.throws(() => buildEinvoiceCancelPayload(inv, '9'), /invalid cancellation reason code/);
+});
+
+test('e-way modify reason codes validate per action', () => {
+  for (const c of ['1', '2', '3', '4']) assert.equal(ewbUpdateReasonCode(c), c);
+  assert.throws(() => ewbUpdateReasonCode('99'), /vehicle-update reason code/); // 99 not valid for update
+  for (const c of ['1', '2', '3', '4', '99']) assert.equal(ewbExtendReasonCode(c), c);
+  assert.throws(() => ewbExtendReasonCode('5'), /extension reason code/);
+});
+
+test('e-way vehicle-update payload carries the new vehicle + reason', () => {
+  const p = buildEwayUpdateVehiclePayload(inv, 'tn09xy9999', '1', 'breakdown');
+  assert.equal(p.action, 'update_vehicle');
+  assert.equal(p.vehicleNo, 'TN09XY9999'); // upper-cased + trimmed
+  assert.equal(p.reasonCode, '1');
+  assert.equal(p.remarks, 'breakdown');
+  assert.match(String(p.note), /update e-way Part-B/);
+  assert.throws(() => buildEwayUpdateVehiclePayload(inv, '  ', '1'), /vehicle number is required/);
+  assert.throws(() => buildEwayUpdateVehiclePayload(inv, 'TN01', '9'), /vehicle-update reason code/);
+});
+
+test('e-way extend payload carries remaining distance + reason', () => {
+  const p = buildEwayExtendPayload(inv, 120, '4');
+  assert.equal(p.action, 'extend');
+  assert.equal(p.remainingDistanceKm, 120);
+  assert.equal(p.reasonCode, '4');
+  assert.equal(p.remarks, null);
+  assert.match(String(p.note), /extend e-way validity/);
+  assert.throws(() => buildEwayExtendPayload(inv, 0, '1'), /remaining distance/);
+  assert.throws(() => buildEwayExtendPayload(inv, 100, '5'), /extension reason code/);
 });
 
 test('e-way payload carries consignment value + computed validity', () => {

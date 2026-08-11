@@ -35,6 +35,7 @@
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.15.1",
     "pg": "^8.13.1",
+    "qrcode-generator": "^2.0.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "svg-to-pdfkit": "^0.1.8",

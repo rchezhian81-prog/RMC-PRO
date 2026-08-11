@@ -235,6 +235,11 @@ export class InvoiceService {
         })),
         taxableAmount: full.taxableAmount, cgstAmount: full.cgstAmount, sgstAmount: full.sgstAmount,
         igstAmount: full.igstAmount, cessAmount: full.cessAmount, roundOff: full.roundOff, totalAmount: full.totalAmount,
+        // e-invoice (IRP) — drives the signed-QR block when the IRN is generated.
+        irn: full.irn ?? null,
+        signedQrCode: full.signedQrCode ?? null,
+        ackNo: full.ackNumber ?? null,
+        ackDate: full.ackDate ? new Date(full.ackDate).toISOString().replace('T', ' ').slice(0, 16) : null,
       };
       return { data, invoice: full };
     });

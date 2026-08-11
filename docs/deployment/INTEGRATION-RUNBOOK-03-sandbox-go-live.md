@@ -1,0 +1,312 @@
+# GST Integration Runbook 03 — Sandbox Go-Live Checklist (IRP + e-way)
+
+> The single, ordered checklist to take the GST integration from **prepare-only**
+> to a **green sandbox run** and then to production, matched to the code as it
+> ships today. Runbooks 00/01/02 explain the *why* and the field-level schema;
+> this one is the *do-this-in-order* companion the owner + GSP execute together.
+>
+> - Common substrate, auth/crypto, idempotency, rollback → `INTEGRATION-RUNBOOK-00-gst-common.md`
+> - IRN schema, cancel, error codes, sandbox plan → `INTEGRATION-RUNBOOK-01-irp-einvoice.md`
+> - e-way Part A/B, Path A/B, sandbox plan → `INTEGRATION-RUNBOOK-02-eway-bill.md`
+> - Higher-level deploy pass → `DEPLOY-PASS-02-agents-llm-gst.md` (Step B)
+>
+> **Default is safe.** With `GST_PROVIDER` unset the app is prepare-only — the
+> Automation agent PREPARES payloads for human approval and stops. Nothing in this
+> checklist transmits until you deliberately flip the provider AND supply
+> credentials. Rollback is one flag (§9).
+
+---
+
+## 0. Where the code already is (your starting line)
+
+Everything except the GSP-specific wire details and the credentials is built,
+unit- and integration-tested against the deterministic **fake** provider:
+
+| Piece | Where | State |
+|---|---|---|
+| Provider seam (`disabled` \| `fake` \| `nic`/`gsp`) | `apps/api/src/compliance/compliance.module.ts` (`selectProvider`) | Built. `GST_PROVIDER` selects it; default `disabled`. |
+| Full INV-01 / EWB builders + pre-flight | `gst-payload.util.ts` (`buildIrnRequest`, `buildEwbRequest`, `validateIrnPreflight`, `validateEwbPreflight`) | Built + tested (unit `test/unit/gst-*`). |
+| Live NIC/GSP adapter (handshake crypto, encrypted transport, §7 error/retry) | `nic.provider.ts`, `nic-crypto.util.ts`, `nic-protocol.util.ts` | Built. **`TODO(deploy)` seams remain** — see §6. |
+| Execution service (approve → validate → transmit → persist → audit; idempotent, duplicate-reconciling) | `gst-execution.service.ts` | Built + integration-tested. |
+| Path A (e-way inside the IRN call, opt-in via `payload.includeEway`) | preparer `agents/compliance.util.ts`; executor `gst-execution.service.ts` | Built + tested. |
+| Encrypted per-tenant credential store (AES-256-GCM, fail-closed) | `gst-credential-store.service.ts`, `gst-cred-crypto.util.ts`, migration `1720000023000` | Built + tested. |
+| Credential + connectivity-test endpoints | `gst-credentials.controller.ts` (`/compliance/gst-credentials…`) | Built. |
+| Status endpoint | `GET /agents/gst` → `{ configured, provider }` | Built. |
+| Execute endpoint | `POST /agents/approvals/:id/execute` (gated `agents.approve`) | Built. |
+| Signed QR on invoice PDF; EWB no on challan PDF | `sales/pdf.service.ts` | Built (merged). |
+
+**What is NOT yet built** — read before you plan the sandbox session so you don't
+test a path that can't run:
+
+- **Only `einvoice_irn` and `eway_bill` are executable** (`GST_ACTION_KINDS` in
+  `gst.types.ts`). **Cancel / vehicle-update / extend are documented in runbooks
+  01 §6 and 02 §7 but not wired** — the execution service rejects any other
+  `actionKind` with `NOT_GST_ACTION`. So the **cancel steps in 01 §8.6 / 02 §9.5
+  cannot be exercised yet**; verify generate + duplicate-reconcile now, and treat
+  cancellation as a fast-follow (its own approval action + executor branch).
+- **Execution is synchronous** via `POST …/execute` (operator/worker call). The
+  durable on-approval queue (GW-1) is a later change; it does not block sandbox.
+- **`GST_ENV` is documentary only** — no code reads it. Sandbox-vs-production is
+  carried entirely by `GST_IRP_BASE_URL` / `GST_EWB_BASE_URL`. Setting `GST_ENV`
+  does no harm and labels the deployment, but point the **base URLs** at sandbox.
+- **Buyer pincode** is sent empty (`gst-execution.service.ts` `loadContext`, the
+  `customers` table has no pincode column). If your GSP marks buyer `Pin`
+  mandatory, source it before go-live (§6).
+
+---
+
+## 1. Prerequisites (once, before the session)
+
+- [ ] A GSP/ASP (or direct NIC) **sandbox** account: `client-id`, `client-secret`,
+      the portal **RSA public key** (PEM), and a **sandbox portal user/password**
+      for at least one **test GSTIN**. (Runbook 00 §2–3.)
+- [ ] The pilot tenant has the **`billing` module enabled** — the credential
+      controller is `@RequireModule('billing')`. Configuring credentials needs the
+      **`settings.manage`** permission (the company owner bypasses).
+- [ ] Executing an approval needs **`agents.approve`** (same human authority that
+      approves it).
+- [ ] A **32-byte master key** for credential encryption: `openssl rand -hex 32`.
+      This is `GST_CRED_ENC_KEY`. Store it ONLY in the host env/secret store —
+      never in the DB, repo, image, or logs. Losing it means re-entering every
+      tenant's portal password (a key-version re-encrypt).
+
+---
+
+## 2. Set the environment (host / compose env — never the repo)
+
+Names below are read by `nic.provider.ts` (`isConfigured()` + `env()`) and
+`gst-cred-crypto.util.ts`. Values come from your GSP and `openssl`.
+
+```bash
+GST_PROVIDER=nic                 # flip from disabled → nic (or gsp)
+GST_IRP_BASE_URL=https://<gsp-or-nic-sandbox-irp-host>
+GST_EWB_BASE_URL=https://<gsp-or-nic-sandbox-eway-host>   # optional; defaults to IRP host
+GST_GSP_CLIENT_ID=<from your GSP>
+GST_GSP_CLIENT_SECRET=<from your GSP>
+GST_RSA_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----\n…\n-----END PUBLIC KEY-----"
+GST_IRP_MAX_RETRIES=2            # optional; transient-failure backoff retries
+GST_CRED_ENC_KEY=<openssl rand -hex 32>
+# GST_ENV=sandbox                # label only — not read by code (see §0)
+```
+
+`isConfigured()` returns true only when **all four** of `GST_IRP_BASE_URL`,
+`GST_GSP_CLIENT_ID`, `GST_GSP_CLIENT_SECRET`, `GST_RSA_PUBLIC_KEY_PEM` are set.
+Missing any → `GET /agents/gst` reports `configured:false` and `/test` returns
+"provider is not enabled".
+
+Restart the API. On boot, `ComplianceModule.onModuleInit` validates the master
+key format and logs **"GST credential encryption: configured …"** (or the NOT
+message). A malformed `GST_CRED_ENC_KEY` fails fast here — check the log first.
+
+---
+
+## 3. Confirm the switch is live
+
+```bash
+# provider selected + fully configured?
+curl -sS -H "Authorization: Bearer $TOKEN" https://api.<DOMAIN>/api/v1/agents/gst
+# → { "success": true, "data": { "configured": true, "provider": "nic" } }
+
+# or the bundled check (also fails loudly if it ever sees fake in prod):
+LOGIN=… RMC_PASSWORD=… bash scripts/ops/verify-agents.sh     # §4 "gst mode: live NIC/GSP configured"
+```
+
+- [ ] `provider` = `nic` (or `gsp`), `configured` = `true`.
+
+If `configured:false`, one of the four env vars in §2 is missing/blank — fix and
+restart before going further.
+
+---
+
+## 4. Store the tenant's portal credentials (via the app, encrypted)
+
+Per-tenant portal user/password are **never** env vars — they go through the
+credential endpoint, which seals the password with AES-256-GCM before it touches
+the DB. The response is always **redacted** (GSTIN + test status only).
+
+```bash
+# create/replace credentials for one test GSTIN
+curl -sS -X POST https://api.<DOMAIN>/api/v1/compliance/gst-credentials \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"gstin":"<TEST_GSTIN>","username":"<portal-user>","password":"<portal-pass>"}'
+# → { configured:true, lastTestedAt:null, lastTestSuccess:null, … }   (no secret echoed)
+
+# list / inspect (redacted)
+curl -sS -H "Authorization: Bearer $TOKEN" https://api.<DOMAIN>/api/v1/compliance/gst-credentials
+```
+
+- [ ] `POST` returns `configured:true` and **no** username/password in the body.
+- [ ] Requires `settings.manage`; a non-privileged user gets 403 (expected).
+
+Fail-closed behaviours to expect: a missing/invalid `GST_CRED_ENC_KEY` makes the
+`POST` fail with a clear error and **writes nothing**; `resolve()` (used by the
+provider) throws `NO_CREDENTIALS` when a GSTIN has none.
+
+---
+
+## 5. Connectivity test → then the end-to-end sandbox run
+
+### 5a. `/test` — real handshake against the sandbox
+
+```bash
+curl -sS -X POST https://api.<DOMAIN>/api/v1/compliance/gst-credentials/<TEST_GSTIN>/test \
+  -H "Authorization: Bearer $TOKEN"
+# → { …, lastTestSuccess:true, lastTestMessage:"authenticated" }
+```
+
+This performs the actual RSA/AES auth (`nic.provider.authenticate`) against
+`GST_IRP_BASE_URL` and records the outcome (audited, no secret). A failure comes
+back as `lastTestSuccess:false` with a typed message (e.g. `AUTH_FAILED: …`) — the
+first place the `TODO(deploy)` auth field names (§6) show up if they're wrong.
+
+- [ ] `lastTestSuccess:true`. (This validates **IRP** connectivity + creds; the
+      EWB base URL is exercised by the e-way run in 5c.)
+
+### 5b. IRN — prepare → approve → execute (runbook 01 §8)
+
+```bash
+# 1) prepare (creates a pending einvoice_irn approval)
+curl -sS -X POST …/api/v1/agents/automation/run \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"compliance":"einvoice","invoiceId":"<INV_ID>"}'
+# → outcome.result.prepared.approvalId
+# 2) approve
+curl -sS -X POST …/api/v1/agents/approvals/<APPROVAL_ID>/decide \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"decision":"approved"}'
+# 3) execute (transmit → persist)
+curl -sS -X POST …/api/v1/agents/approvals/<APPROVAL_ID>/execute -H "Authorization: Bearer $TOKEN"
+# → { status:"generated", reference:"<64-char IRN>", detail:{ ackNo, ackDate, ewayBillNo? } }
+```
+
+Seed the test invoice as runbook 01 §8.1: B2B, valid test GSTINs, a **6-digit
+HSN on every line**, reconciling totals, real place-of-supply.
+
+- [ ] `status:"generated"`, `reference` is 64 chars.
+- [ ] Invoice now carries `irn`, `ack_number`, `ack_date`, `signed_qr_code`;
+      `einvoice_status = generated`.
+- [ ] The **signed QR decodes** to the IRN + key fields, and prints on the invoice
+      PDF (already wired).
+- [ ] Audit shows `gst.irn.generated` with the IRN + approver.
+- [ ] **Idempotency:** re-`execute` the same approval → `already_generated` (no
+      second call). Re-preparing the same DocNo and executing → duplicate `2150`
+      **reconciled** onto the invoice, not double-filed.
+
+### 5c. e-way — Path A and standalone (runbook 02 §9)
+
+If the IRN invoice qualifies (consignment `> ₹50,000` and `distance_km > 0`), the
+preparer sets `payload.includeEway` and step 5b **already filed the e-way in the
+same IRN call (Path A)** — `detail.ewayBillNo` is populated and `eway_status =
+generated`. Verify that, then exercise the **standalone** e-way path on a fresh
+invoice that has NOT been through an IRN:
+
+```bash
+curl -sS -X POST …/api/v1/agents/automation/run \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"compliance":"eway","invoiceId":"<FRESH_INV_ID>"}'
+# → approve → execute, as above
+```
+
+- [ ] Path A: the IRN invoice has `eway_bill_no` (12 digits) + `eway_valid_until`;
+      `eway_status = generated`; audit `gst.eway.generated { via:"irn" }`.
+- [ ] Standalone: fresh invoice → `status:"generated"`, `eway_bill_no` (12 digits),
+      validity = `ceil(distance/200)` days; audit `gst.eway.generated`.
+- [ ] EWB number prints on the **challan/dispatch** PDF (already wired).
+- [ ] Negative (pre-flight, **no** portal call): missing HSN, malformed GSTIN,
+      non-reconciling totals (IRN); value ≤ threshold, missing vehicle for road,
+      `distance_km ≤ 0` (e-way) → each returns `failed` with a field message.
+
+> **Cancel / update / extend are not executable yet (§0).** Skip 01 §8.6 and
+> 02 §9.5 for this session, or schedule the cancel-action wiring first if a clean
+> cancel is a hard gate for your pilot.
+
+---
+
+## 6. Confirm every `TODO(deploy)` seam against YOUR GSP
+
+These are the exact points the skeleton cannot know without the GSP's spec. Diff
+each current value against your GSP docs; if it differs, edit and add/adjust a
+unit test in `test/unit/nic-protocol.test.mjs` (protocol) before re-running §5.
+
+| Seam | File · line | Current (skeleton) value | Confirm |
+|---|---|---|---|
+| Endpoint paths | `nic.provider.ts` · `PATHS` (~L60) | `auth /eivital/v1.04/auth`, `irnGenerate /eicore/v1.03/Invoice`, `irnCancel /eicore/v1.03/Invoice/Cancel`, `ewbGenerate /ewaybillapi/v1.03/ewayapi` | Exact paths **and casing/version** (runbook 01 §4 lists lowercase `invoice`; NIC/GSP casing varies). |
+| Auth request fields | `nic.provider.ts` · ~L91 | `UserName`, `Password`, `AppKey`, `ForceRefreshAccessToken` | Field names + casing your GSP expects. |
+| Auth response fields | `nic.provider.ts` · ~L107 | `AuthToken`, `Sek`, `TokenExpiry` | Names of token / session-key / expiry in the decrypted `Data`. |
+| HTTP headers | `nic.provider.ts` · ~L231 | `client-id`, `client-secret`, `Gstin`, `AuthToken` | Header names/casing (some GSPs use `Gstin` vs `gstin`, bearer vs `AuthToken`). |
+| Cancel request fields | `nic.provider.ts` · ~L134 | `Irn`, `CnlRsn`, `CnlRem` | (Only relevant once the cancel action is wired — §0.) |
+| RSA public key format | `nic-crypto.util.ts` · ~L26 | expects PEM in `GST_RSA_PUBLIC_KEY_PEM` | If your GSP hands a base64/DER cert, convert to PEM once at deploy. |
+| Buyer pincode | `gst-execution.service.ts` · `loadContext` (~L214) | `pincode: ''` | Source buyer `Pin` if the portal marks it mandatory. |
+| Duplicate / error codes | `nic-protocol.util.ts` (`NIC_CODES`, `classify`, `extractDuplicate*`) | NIC §7 codes (e.g. `2150` duplicate IRN) | Confirm the codes your GSP surfaces for duplicate / auth-expired / rejected. |
+
+A GSP that fronts NIC with plain JSON + OAuth bearer (no RSA/AES) makes the
+adapter *thinner*, not different — keep the same interface; adjust `authenticate`
++ `post` and drop the crypto wrap.
+
+---
+
+## 7. Observability during the run
+
+- Watch the run land: `GET /api/v1/agents/runs` and the approval's audit trail.
+- Audit actions to expect: `gst.credentials.created/tested`, `gst.irn.generated`,
+  `gst.eway.generated` (with `via:"irn"` for Path A), `gst.irn.reconciled` /
+  `gst.eway.reconciled` on duplicates, `gst.execute.failed` on pre-flight/transport
+  failure — each linked to the `approvalId` + approver.
+- **Never** log decrypted payloads, tokens, `Sek`, or credentials (the adapter
+  doesn't; keep it that way in any edits).
+- Metrics/alerts (`gst_irn_*`, `gst_eway_*`, `gst_provider_call_ms`) are runbook 00
+  §9 follow-ups — not required for a sandbox pass, worth wiring before production
+  volume.
+
+---
+
+## 8. Sandbox → production
+
+Only after a **clean sandbox run** (§5 green, incl. duplicate-reconcile):
+
+- [ ] Request production API access from the GSP; get prod `client-id/secret` +
+      prod base URLs. **No production credential is created before sandbox is green.**
+- [ ] Point `GST_IRP_BASE_URL` / `GST_EWB_BASE_URL` at production; set prod
+      `GST_GSP_CLIENT_ID/SECRET`. Keep `GST_PROVIDER=nic`.
+- [ ] Each pilot tenant re-enters its **production** portal user/password via the
+      credential endpoint (§4), then `/test` → success.
+- [ ] `verify-agents.sh` → "gst mode: live NIC/GSP configured"; it **fails loudly**
+      if `GST_PROVIDER=fake` is ever seen in production.
+- [ ] Owner sign-off on **one real production invoice** (IRN) and **one real
+      dispatch** (e-way) for one pilot tenant.
+
+---
+
+## 9. Rollback (instant, zero-migration)
+
+Set **`GST_PROVIDER=disabled`** and restart. The app reverts to prepare-only:
+approvals stop executing, nothing transmits, no data is lost, pending items simply
+wait. This is the whole reason execution sits behind a provider token. The stored
+(encrypted) credentials are untouched and resume working when you re-enable.
+
+---
+
+## 10. Go-live gate (supersedes runbook 00 §10 for what's now built)
+
+Done in code (verify, don't rebuild):
+
+- [x] Full INV-01 / EWB payload mapping + pre-flight — built + unit-tested.
+- [x] Execution service: approve → transmit → persist → audit; idempotent +
+      duplicate-reconciling.
+- [x] Encrypted per-tenant credential store (fail-closed) + endpoints + `/test`.
+- [x] Signed QR on invoice PDF; EWB no on challan PDF.
+- [x] Rollback is one flag (§9).
+
+Owner + GSP actions (this checklist):
+
+- [ ] Sandbox creds working; every `TODO(deploy)` seam confirmed (§6).
+- [ ] Sandbox end-to-end green: IRN generate + duplicate-reconcile; e-way Path A +
+      standalone; QR decodes; EWB on challan; negatives rejected in pre-flight.
+- [ ] Prod creds issued + vaulted; one pilot invoice + dispatch signed off (§8).
+
+Known fast-follows (not blockers for a sandbox pass, decide before broad rollout):
+
+- [ ] **Cancel / vehicle-update / extend** as their own approval actions +
+      executor branches (currently unwired — §0).
+- [ ] Durable on-approval execution queue (GW-1) replacing the synchronous
+      `execute` call.
+- [ ] Metrics + alerts (runbook 00 §9); buyer pincode sourcing if mandatory.

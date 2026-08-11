@@ -81,8 +81,8 @@ async function seedInvoice({ hsn = '38245010' } = {}) {
   return { invId, docNo: 'GSTINV-' + s };
 }
 
-async function prepareApproveExecute(compliance, invId) {
-  const run = await api('POST', '/agents/automation/run', { compliance, invoiceId: invId });
+async function prepareApproveExecute(compliance, invId, extra = {}) {
+  const run = await api('POST', '/agents/automation/run', { compliance, invoiceId: invId, ...extra });
   const approvalId = run.data?.outcome?.result?.prepared?.approvalId;
   await api('POST', `/agents/approvals/${approvalId}/decide`, { decision: 'approved' });
   const exec = await api('POST', `/agents/approvals/${approvalId}/execute`);
@@ -147,6 +147,30 @@ async function prepareApproveExecute(compliance, invId) {
   const [ew] = await owner.query(`SELECT eway_bill_no, eway_valid_until, eway_status FROM invoices WHERE id=$1`, [ewayInvId]);
   ok('the invoice carries a 12-digit e-way number + validity', !!ew.eway_bill_no && ew.eway_bill_no.length === 12 && !!ew.eway_valid_until);
   ok('eway_status flipped to generated', ew.eway_status === 'generated');
+
+  console.log('\n=== IRN cancel: prepare → approve → execute (24h window) ===');
+  const irnCancel = await prepareApproveExecute('einvoice_cancel', invId, { reasonCode: '3', remarks: 'order cancelled' });
+  ok('the IRN cancel reports cancelled', irnCancel.exec.data?.status === 'cancelled');
+  const [irnCancelled] = await owner.query(`SELECT einvoice_status FROM invoices WHERE id=$1`, [invId]);
+  ok('einvoice_status flipped to cancelled', irnCancelled.einvoice_status === 'cancelled');
+  const irnCancelAgain = await api('POST', `/agents/approvals/${irnCancel.approvalId}/execute`);
+  ok('re-cancelling an already-cancelled IRN is a no-op', irnCancelAgain.data?.status === 'already_cancelled');
+
+  console.log('\n=== e-way cancel: prepare → approve → execute ===');
+  const ewayCancel = await prepareApproveExecute('eway_cancel', ewayInvId, { reasonCode: '2' });
+  ok('the e-way cancel reports cancelled', ewayCancel.exec.data?.status === 'cancelled');
+  const [ewCancelled] = await owner.query(`SELECT eway_status FROM invoices WHERE id=$1`, [ewayInvId]);
+  ok('eway_status flipped to cancelled', ewCancelled.eway_status === 'cancelled');
+
+  console.log('\n=== cancel guardrails ===');
+  // An invalid reason code is rejected at the API boundary (before any approval).
+  const badReasonRun = await api('POST', '/agents/automation/run', { compliance: 'einvoice_cancel', invoiceId: invId, reasonCode: '9' });
+  ok('an invalid cancel reason code is a 400', badReasonRun.status === 400);
+  // Cancelling something never generated is refused in the execute pre-flight.
+  const notGen = await seedInvoice();
+  const cancelUngenerated = await prepareApproveExecute('eway_cancel', notGen.invId, { reasonCode: '1' });
+  ok('cancelling a not-generated e-way fails', cancelUngenerated.exec.data?.status === 'failed');
+  ok('the failure explains it was not generated', JSON.stringify(cancelUngenerated.exec.data?.errors ?? []).match(/generated/i) !== null);
 
   console.log('\n=== pre-flight failure transmits nothing ===');
   const bad = await seedInvoice({ hsn: null });

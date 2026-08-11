@@ -62,6 +62,7 @@ export class NicGstProvider implements GstComplianceProvider {
     irnGenerate: '/eicore/v1.03/Invoice',
     irnCancel: '/eicore/v1.03/Invoice/Cancel',
     ewbGenerate: '/ewaybillapi/v1.03/ewayapi',
+    ewbCancel: '/ewaybillapi/v1.03/ewayapi/canewb',
   };
 
   isConfigured(): boolean {
@@ -134,6 +135,19 @@ export class NicGstProvider implements GstComplianceProvider {
     // TODO(deploy): confirm the cancel request field names (CnlRsn/CnlRem).
     const d = await this.call(session, this.irpBase(), NicGstProvider.PATHS.irnCancel, { Irn: irn, CnlRsn: reasonCode, CnlRem: remarks }, 'IRN');
     return { reference: String(d.Irn ?? irn), cancelledAt: String(d.CancelDate ?? new Date().toISOString()) };
+  }
+
+  async cancelEwayBill(session: GstSession, ewayBillNo: string, reasonCode: string, remarks: string): Promise<CancelResult> {
+    // TODO(deploy): confirm the e-way cancel field names (ewbNo/cancelRsnCode/cancelRmrk)
+    // and path — some GSPs fold cancel into the ewayapi endpoint via an action code.
+    const d = await this.call(
+      session,
+      this.ewbBase(),
+      NicGstProvider.PATHS.ewbCancel,
+      { ewbNo: Number(ewayBillNo) || ewayBillNo, cancelRsnCode: Number(reasonCode) || reasonCode, cancelRmrk: remarks },
+      'EWB',
+    );
+    return { reference: String(d.ewayBillNo ?? d.ewbNo ?? ewayBillNo), cancelledAt: String(d.cancelDate ?? new Date().toISOString()) };
   }
 
   // ---- encrypted transport + §7 retry policy ----

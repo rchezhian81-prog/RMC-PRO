@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ToolRegistryService } from './tool-registry.service';
 import { ApprovalService } from './approval.service';
-import { buildEinvoicePayload, buildEwayPayload } from './compliance.util';
+import { buildEinvoicePayload, buildEwayPayload, buildEinvoiceCancelPayload, buildEwayCancelPayload } from './compliance.util';
 import type { AgentToolDef, ToolContext } from './agent.types';
 
 /** Columns the compliance-prepare tools read, projected to camelCase. */
@@ -154,26 +154,101 @@ export class AutomationAgent implements OnModuleInit {
       },
     };
 
-    for (const t of [openApproval, commitFinancial, prepareEinvoice, prepareEway]) this.registry.registerTool(t);
+    // M5 — assisted compliance: PREPARE a cancellation of an already-generated IRN /
+    // e-way for approval. Cancelling is a separate legal action (the 24h-window
+    // correction path), so it gets its OWN approval — never folded into anything
+    // else. The reference to cancel lives on the invoice; the tool carries the
+    // human-chosen reason code (1–4) + remarks. No IRP/e-way API call.
+    const prepareEinvoiceCancel: AgentToolDef = {
+      name: 'automation.prepare_einvoice_cancel',
+      kind: 'write',
+      reversibility: 'reversible',
+      permission: 'agents.approve',
+      description: 'Reversible write: PREPARE a cancellation of an IRN for approval (within 24h). No IRP call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: { type: 'string', description: 'UUID of the invoice whose IRN should be cancelled.' },
+          reasonCode: { type: 'string', description: 'Cancellation reason: 1=Duplicate, 2=Data entry mistake, 3=Order cancelled, 4=Other.' },
+          remarks: { type: 'string', maxLength: 100, description: 'Free-text remarks for the cancellation.' },
+        },
+        required: ['invoiceId', 'reasonCode'],
+        additionalProperties: false,
+      },
+      execute: async (ctx) => {
+        const inv = await loadInvoice(ctx);
+        const a = (ctx.args ?? {}) as { reasonCode?: string; remarks?: string };
+        const req = await this.approvals.prepare(ctx.manager, {
+          tenantId: ctx.tenantId, runId: ctx.runId, agentName: AGENT_AUTOMATION,
+          actionKind: 'einvoice_cancel', title: `Cancel IRN for ${inv.invoiceNo}`,
+          payload: buildEinvoiceCancelPayload(inv as never, a.reasonCode, a.remarks), reversibility: 'legal',
+          requestedBy: ctx.actorUserId,
+          entityType: 'invoice', entityId: inv.id as string,
+        });
+        return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
+      },
+    };
+
+    const prepareEwayCancel: AgentToolDef = {
+      name: 'automation.prepare_eway_cancel',
+      kind: 'write',
+      reversibility: 'reversible',
+      permission: 'agents.approve',
+      description: 'Reversible write: PREPARE a cancellation of an e-way bill for approval (within 24h). No e-way call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          invoiceId: { type: 'string', description: 'UUID of the invoice whose e-way bill should be cancelled.' },
+          reasonCode: { type: 'string', description: 'Cancellation reason: 1=Duplicate, 2=Order cancelled, 3=Data entry mistake, 4=Other.' },
+          remarks: { type: 'string', maxLength: 100, description: 'Free-text remarks for the cancellation.' },
+        },
+        required: ['invoiceId', 'reasonCode'],
+        additionalProperties: false,
+      },
+      execute: async (ctx) => {
+        const inv = await loadInvoice(ctx);
+        const a = (ctx.args ?? {}) as { reasonCode?: string; remarks?: string };
+        const req = await this.approvals.prepare(ctx.manager, {
+          tenantId: ctx.tenantId, runId: ctx.runId, agentName: AGENT_AUTOMATION,
+          actionKind: 'eway_cancel', title: `Cancel e-way bill for ${inv.invoiceNo}`,
+          payload: buildEwayCancelPayload(inv as never, a.reasonCode, a.remarks), reversibility: 'legal',
+          requestedBy: ctx.actorUserId,
+          entityType: 'invoice', entityId: inv.id as string,
+        });
+        return { approvalId: req.id, status: req.status, actionKind: req.actionKind };
+      },
+    };
+
+    const complianceTools: Record<string, string> = {
+      einvoice: 'automation.prepare_einvoice',
+      eway: 'automation.prepare_eway',
+      einvoice_cancel: 'automation.prepare_einvoice_cancel',
+      eway_cancel: 'automation.prepare_eway_cancel',
+    };
+    const allTools = [openApproval, commitFinancial, prepareEinvoice, prepareEway, prepareEinvoiceCancel, prepareEwayCancel];
+    for (const t of allTools) this.registry.registerTool(t);
 
     this.registry.registerAgent({
       name: AGENT_AUTOMATION,
-      description: 'Prepares reversible/high-risk actions (incl. IRN/e-way) for human approval (M4/M5).',
-      tools: [openApproval.name, commitFinancial.name, prepareEinvoice.name, prepareEway.name],
+      description: 'Prepares reversible/high-risk actions (incl. IRN/e-way generate + cancel) for human approval (M4/M5).',
+      tools: allTools.map((t) => t.name),
       handler: async (ctx) => {
         const input = ctx.input as {
           actionKind?: string; title?: string; payload?: Record<string, unknown>;
           reversibility?: string; tryCommit?: boolean;
-          compliance?: 'einvoice' | 'eway'; invoiceId?: string;
+          compliance?: 'einvoice' | 'eway' | 'einvoice_cancel' | 'eway_cancel'; invoiceId?: string;
+          reasonCode?: string; remarks?: string;
         };
         // Demonstrate the hard rule: a financial action is blocked, never auto-run.
         if (input.tryCommit) {
           await ctx.callTool('automation.commit_financial', {}); // throws ACTION_BLOCKED → run 'blocked'
         }
-        // M5 — prepare a compliance payload for approval (no transmission).
-        if (input.compliance === 'einvoice' || input.compliance === 'eway') {
-          const tool = input.compliance === 'einvoice' ? 'automation.prepare_einvoice' : 'automation.prepare_eway';
-          const prepared = await ctx.callTool(tool, { invoiceId: input.invoiceId });
+        // M5 — prepare a compliance payload (generate or cancel) for approval (no transmission).
+        const complianceTool = input.compliance ? complianceTools[input.compliance] : undefined;
+        if (complianceTool) {
+          const prepared = await ctx.callTool(complianceTool, {
+            invoiceId: input.invoiceId, reasonCode: input.reasonCode, remarks: input.remarks,
+          });
           await ctx.note(`automation: prepared ${input.compliance} for approval`);
           return { prepared };
         }

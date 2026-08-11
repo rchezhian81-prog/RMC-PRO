@@ -16,7 +16,10 @@
 export const GST_PROVIDER = 'GST_COMPLIANCE_PROVIDER';
 
 /** The approval action kinds this pipeline can execute. */
-export const GST_ACTION_KINDS = new Set(['einvoice_irn', 'eway_bill']);
+export const GST_ACTION_KINDS = new Set(['einvoice_irn', 'eway_bill', 'einvoice_cancel', 'eway_cancel']);
+
+/** The subset of {@link GST_ACTION_KINDS} that CANCEL an existing government reference. */
+export const GST_CANCEL_KINDS = new Set(['einvoice_cancel', 'eway_cancel']);
 
 /** An authenticated portal session (opaque to callers; provider-owned). */
 export interface GstSession {
@@ -98,4 +101,12 @@ export interface GstComplianceProvider {
   generateIrn(session: GstSession, request: IrnRequest): Promise<IrnResult>;
   cancelIrn(session: GstSession, irn: string, reasonCode: string, remarks: string): Promise<CancelResult>;
   generateEwayBill(session: GstSession, request: EwbRequest): Promise<EwbResult>;
+  cancelEwayBill(session: GstSession, ewayBillNo: string, reasonCode: string, remarks: string): Promise<CancelResult>;
 }
+
+/**
+ * India cancellation reason codes (shared by IRN and e-way): 1=Duplicate,
+ * 2=Data entry mistake, 3=Order cancelled, 4=Other. The portal is the authority
+ * on the 24-hour window; we validate the code locally to fail fast.
+ */
+export const GST_CANCEL_REASON_CODES = new Set(['1', '2', '3', '4']);

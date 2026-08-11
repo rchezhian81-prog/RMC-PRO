@@ -39,4 +39,7 @@ export class DisabledGstProvider implements GstComplianceProvider {
   async generateEwayBill(_session: GstSession, _request: EwbRequest): Promise<EwbResult> {
     return this.off();
   }
+  async cancelEwayBill(_session: GstSession, _ewayBillNo: string, _reasonCode: string, _remarks: string): Promise<CancelResult> {
+    return this.off();
+  }
 }

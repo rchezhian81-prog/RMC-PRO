@@ -38,12 +38,12 @@ unit- and integration-tested against the deterministic **fake** provider:
 **What is NOT yet built** — read before you plan the sandbox session so you don't
 test a path that can't run:
 
-- **Only `einvoice_irn` and `eway_bill` are executable** (`GST_ACTION_KINDS` in
-  `gst.types.ts`). **Cancel / vehicle-update / extend are documented in runbooks
-  01 §6 and 02 §7 but not wired** — the execution service rejects any other
-  `actionKind` with `NOT_GST_ACTION`. So the **cancel steps in 01 §8.6 / 02 §9.5
-  cannot be exercised yet**; verify generate + duplicate-reconcile now, and treat
-  cancellation as a fast-follow (its own approval action + executor branch).
+- **Executable actions:** `einvoice_irn`, `eway_bill`, `einvoice_cancel`,
+  `eway_cancel` (`GST_ACTION_KINDS` in `gst.types.ts`). Generate **and cancel**
+  (within the 24h window) are wired; **vehicle-update / extend are still documented
+  (02 §7) but not wired** — the execution service rejects any other `actionKind`
+  with `NOT_GST_ACTION`. Cancellation is its own approval action (`einvoice_cancel`
+  / `eway_cancel`) with a reason code (1–4); the 24h window is portal-enforced.
 - **Execution is synchronous** via `POST …/execute` (operator/worker call). The
   durable on-approval queue (GW-1) is a later change; it does not block sandbox.
 - **`GST_ENV` is documentary only** — no code reads it. Sandbox-vs-production is
@@ -215,9 +215,29 @@ curl -sS -X POST …/api/v1/agents/automation/run \
       non-reconciling totals (IRN); value ≤ threshold, missing vehicle for road,
       `distance_km ≤ 0` (e-way) → each returns `failed` with a field message.
 
-> **Cancel / update / extend are not executable yet (§0).** Skip 01 §8.6 and
-> 02 §9.5 for this session, or schedule the cancel-action wiring first if a clean
-> cancel is a hard gate for your pilot.
+### 5d. Cancel — IRN and e-way (within 24h; runbook 01 §6 / 02 §7)
+
+Cancellation is its own approval action, so a human authorises each one:
+
+```bash
+# cancel an IRN (reasonCode 1=Duplicate, 2=Data entry mistake, 3=Order cancelled, 4=Other)
+curl -sS -X POST …/api/v1/agents/automation/run \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"compliance":"einvoice_cancel","invoiceId":"<INV_ID>","reasonCode":"3","remarks":"order cancelled"}'
+# → approve → execute → { status:"cancelled", reference:"<IRN>" }
+# e-way: compliance:"eway_cancel" (same shape)
+```
+
+- [ ] IRN cancel → `status:"cancelled"`; `einvoice_status = cancelled`; audit `gst.irn.cancelled`.
+- [ ] e-way cancel → `status:"cancelled"`; `eway_status = cancelled`; audit `gst.eway.cancelled`.
+- [ ] Idempotency: re-executing a cancelled action → `already_cancelled`.
+- [ ] Guardrails: an invalid reason code is a **400** at the API; cancelling a
+      not-yet-generated document returns `failed` (pre-flight, no portal call).
+
+> The **24h window is portal-enforced** — a too-late cancel comes back as a portal
+> rejection surfaced as `failed`. For an IRN past 24h, issue a **credit note** (its
+> own IRN); an e-way simply lapses at `validUpto`. **Vehicle-update / extend
+> (02 §7) are still not wired** — skip those steps this session.
 
 ---
 
@@ -233,7 +253,8 @@ unit test in `test/unit/nic-protocol.test.mjs` (protocol) before re-running §5.
 | Auth request fields | `nic.provider.ts` · ~L91 | `UserName`, `Password`, `AppKey`, `ForceRefreshAccessToken` | Field names + casing your GSP expects. |
 | Auth response fields | `nic.provider.ts` · ~L107 | `AuthToken`, `Sek`, `TokenExpiry` | Names of token / session-key / expiry in the decrypted `Data`. |
 | HTTP headers | `nic.provider.ts` · ~L231 | `client-id`, `client-secret`, `Gstin`, `AuthToken` | Header names/casing (some GSPs use `Gstin` vs `gstin`, bearer vs `AuthToken`). |
-| Cancel request fields | `nic.provider.ts` · ~L134 | `Irn`, `CnlRsn`, `CnlRem` | (Only relevant once the cancel action is wired — §0.) |
+| Cancel request fields (IRN) | `nic.provider.ts` · `cancelIrn` | `Irn`, `CnlRsn`, `CnlRem` | Confirm the IRN-cancel field names. |
+| Cancel request fields (e-way) | `nic.provider.ts` · `cancelEwayBill` | `ewbNo`, `cancelRsnCode`, `cancelRmrk` (path `…/ewayapi/canewb`) | Confirm the e-way cancel field names + path (some GSPs fold cancel into `ewayapi` via an action code). |
 | RSA public key format | `nic-crypto.util.ts` · ~L26 | expects PEM in `GST_RSA_PUBLIC_KEY_PEM` | If your GSP hands a base64/DER cert, convert to PEM once at deploy. |
 | Buyer pincode | `gst-execution.service.ts` · `loadContext` (~L214) | `pincode: ''` | Source buyer `Pin` if the portal marks it mandatory. |
 | Duplicate / error codes | `nic-protocol.util.ts` (`NIC_CODES`, `classify`, `extractDuplicate*`) | NIC §7 codes (e.g. `2150` duplicate IRN) | Confirm the codes your GSP surfaces for duplicate / auth-expired / rejected. |
@@ -300,13 +321,14 @@ Owner + GSP actions (this checklist):
 
 - [ ] Sandbox creds working; every `TODO(deploy)` seam confirmed (§6).
 - [ ] Sandbox end-to-end green: IRN generate + duplicate-reconcile; e-way Path A +
-      standalone; QR decodes; EWB on challan; negatives rejected in pre-flight.
+      standalone; IRN + e-way **cancel**; QR decodes; EWB on challan; negatives
+      rejected in pre-flight.
 - [ ] Prod creds issued + vaulted; one pilot invoice + dispatch signed off (§8).
 
 Known fast-follows (not blockers for a sandbox pass, decide before broad rollout):
 
-- [ ] **Cancel / vehicle-update / extend** as their own approval actions +
-      executor branches (currently unwired — §0).
+- [ ] **Vehicle-update / extend** (02 §7) as their own approval actions +
+      executor branches (still unwired — §0). IRN + e-way **cancel are wired**.
 - [ ] Durable on-approval execution queue (GW-1) replacing the synchronous
       `execute` call.
 - [ ] Metrics + alerts (runbook 00 §9); buyer pincode sourcing if mandatory.

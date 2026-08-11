@@ -61,8 +61,8 @@ export class FakeGstProvider implements GstComplianceProvider {
     return result;
   }
 
-  async cancelIrn(session: GstSession, irn: string): Promise<CancelResult> {
-    this.calls.push({ op: 'cancelIrn', arg: irn });
+  async cancelIrn(session: GstSession, irn: string, reasonCode?: string, remarks?: string): Promise<CancelResult> {
+    this.calls.push({ op: 'cancelIrn', arg: { irn, reasonCode, remarks } });
     return { reference: irn, cancelledAt: new Date().toISOString() };
   }
 
@@ -78,6 +78,11 @@ export class FakeGstProvider implements GstComplianceProvider {
       });
     }
     return { ewayBillNo, ewayBillDate: base.toISOString(), validUpto: validUpto.toISOString() };
+  }
+
+  async cancelEwayBill(session: GstSession, ewayBillNo: string, reasonCode?: string, remarks?: string): Promise<CancelResult> {
+    this.calls.push({ op: 'cancelEwayBill', arg: { ewayBillNo, reasonCode, remarks } });
+    return { reference: ewayBillNo, cancelledAt: new Date().toISOString() };
   }
 }
 

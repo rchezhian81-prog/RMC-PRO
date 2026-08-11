@@ -54,10 +54,16 @@ ok('error.code = VALIDATION_ERROR', bad.body?.error?.code === 'VALIDATION_ERROR'
 ok('error.fields.gstin present', !!bad.body?.error?.fields?.gstin);
 ok('error.fields.creditLimit present', !!bad.body?.error?.fields?.creditLimit);
 
-// Good: accepted.
+// Bad: an invalid buyer PIN is rejected per-field.
+const badPin = await j('POST', '/customers', { customerCode: 'QA-PIN-' + Date.now(), customerName: 'Pin Co', pincode: '12345' }, tok);
+ok('bad pincode rejected with 400', badPin.status === 400);
+ok('error.fields.pincode present', !!badPin.body?.error?.fields?.pincode);
+
+// Good: accepted, and the buyer PIN round-trips (feeds GST BuyerDtls.Pin).
 const code = 'QA-OK-' + Date.now();
-const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z5', creditLimit: 5000, creditDays: 30, mobile: '9943602633' }, tok);
+const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z5', creditLimit: 5000, creditDays: 30, mobile: '9943602633', pincode: '600002' }, tok);
 ok('valid customer created (2xx)', good.status >= 200 && good.status < 300 && good.body?.success === true);
+ok('the buyer pincode is persisted + returned', good.body?.data?.pincode === '600002');
 
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

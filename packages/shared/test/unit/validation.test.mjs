@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidGstin, isValidMobile, isNonNegativeNumber, validateMasterFields } from '../../dist/index.js';
+import { isValidGstin, isValidMobile, isNonNegativeNumber, isValidPincode, validateMasterFields } from '../../dist/index.js';
 
 test('isValidGstin accepts a well-formed GSTIN and rejects junk', () => {
   assert.equal(isValidGstin('33ABCDE1234F1Z5'), true);
@@ -28,6 +28,21 @@ test('isNonNegativeNumber', () => {
   assert.equal(isNonNegativeNumber(-1), false);
   assert.equal(isNonNegativeNumber('abc'), false);
   assert.equal(isNonNegativeNumber(Infinity), false);
+});
+
+test('isValidPincode accepts a 6-digit Indian PIN and rejects junk', () => {
+  assert.equal(isValidPincode('600002'), true);
+  assert.equal(isValidPincode(' 110001 '), true); // trims
+  assert.equal(isValidPincode('012345'), false); // must not start with 0
+  assert.equal(isValidPincode('12345'), false); // too short
+  assert.equal(isValidPincode('1234567'), false); // too long
+  assert.equal(isValidPincode('6000A2'), false); // non-digit
+});
+
+test('validateMasterFields validates pincode only when provided', () => {
+  assert.equal(validateMasterFields({ pincode: '600002' }).pincode, undefined); // valid → no error
+  assert.equal(validateMasterFields({}).pincode, undefined); // absent → not validated
+  assert.ok(validateMasterFields({ pincode: '12345' }).pincode); // provided-but-wrong → error
 });
 
 test('validateMasterFields flags the exact QA-bad payload', () => {

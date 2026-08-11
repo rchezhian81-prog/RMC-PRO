@@ -293,7 +293,7 @@ export class GstExecutionService {
          FROM companies LIMIT 1`,
     );
     const [customer] = inv.customerId
-      ? await m.query(`SELECT customer_name AS "name", gstin, billing_address AS "addr", city, state FROM customers WHERE id = $1`, [inv.customerId])
+      ? await m.query(`SELECT customer_name AS "name", gstin, billing_address AS "addr", city, state, pincode FROM customers WHERE id = $1`, [inv.customerId])
       : [undefined];
 
     const sellerGstin: string = company?.gstin ?? '';
@@ -315,7 +315,7 @@ export class GstExecutionService {
       posStateCode: inv.placeOfSupply ?? (buyerGstin ? stateCodeOf(buyerGstin) : ''),
       address1: customer?.addr ?? '',
       location: customer?.city ?? '',
-      pincode: '', // customers table has no pincode; supply at deploy if the portal requires it
+      pincode: customer?.pincode ?? '', // buyer PIN → BuyerDtls.Pin / e-way toPincode (dropped if absent/invalid)
       stateCode: buyerGstin ? stateCodeOf(buyerGstin) : inv.placeOfSupply ?? '',
     };
 

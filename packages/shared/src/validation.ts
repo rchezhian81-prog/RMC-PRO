@@ -30,6 +30,14 @@ export function isNonNegativeNumber(value: unknown): boolean {
   return Number.isFinite(n) && n >= 0;
 }
 
+/** Indian PIN code: exactly 6 digits, first digit 1–9 (0 never starts a PIN). */
+export const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
+
+/** Validate a 6-digit Indian PIN code (the GST buyer/seller `Pin`). */
+export function isValidPincode(value: string): boolean {
+  return PINCODE_REGEX.test(value.trim());
+}
+
 /**
  * Validate one master record's shared fields. Returns a map of field → message
  * for every problem found (empty object = valid). Field names match the DTO/API
@@ -51,6 +59,10 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   const mobile = str('mobile');
   if (mobile && !isValidMobile(mobile)) {
     errors.mobile = 'Enter a valid 10-digit mobile number.';
+  }
+  const pincode = str('pincode');
+  if (pincode && !isValidPincode(pincode)) {
+    errors.pincode = 'Enter a valid 6-digit PIN code.';
   }
   for (const k of ['creditLimit', 'creditDays', 'capacityM3', 'openingBalance']) {
     if (dto[k] !== undefined && dto[k] !== null && dto[k] !== '' && !isNonNegativeNumber(dto[k])) {

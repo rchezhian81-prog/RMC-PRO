@@ -12,6 +12,8 @@ export class Customer extends TenantScopedEntity {
   @Column({ name: 'billing_address', type: 'varchar', nullable: true }) billingAddress!: string | null;
   @Column({ name: 'city', type: 'varchar', nullable: true }) city!: string | null;
   @Column({ name: 'state', type: 'varchar', nullable: true }) state!: string | null;
+  /** 6-digit PIN of the buyer's billing address — GST BuyerDtls.Pin / e-way toPincode. */
+  @Column({ name: 'pincode', type: 'varchar', length: 6, nullable: true }) pincode!: string | null;
   @Column({ name: 'contact_person', type: 'varchar', nullable: true }) contactPerson!: string | null;
   @Column({ name: 'mobile', type: 'varchar', nullable: true }) mobile!: string | null;
   @Column({ name: 'email', type: 'varchar', nullable: true }) email!: string | null;

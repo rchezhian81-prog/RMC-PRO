@@ -54,9 +54,11 @@ test a path that can't run:
 - **`GST_ENV` is documentary only** — no code reads it. Sandbox-vs-production is
   carried entirely by `GST_IRP_BASE_URL` / `GST_EWB_BASE_URL`. Setting `GST_ENV`
   does no harm and labels the deployment, but point the **base URLs** at sandbox.
-- **Buyer pincode** is sent empty (`gst-execution.service.ts` `loadContext`, the
-  `customers` table has no pincode column). If your GSP marks buyer `Pin`
-  mandatory, source it before go-live (§6).
+- **Buyer pincode** is now sourced from the customer master (`customers.pincode`,
+  validated 6-digit) → `BuyerDtls.Pin` / e-way `toPincode`. Existing customers
+  carry a NULL pincode until edited; a missing/blank PIN is still dropped from the
+  payload (`pinNum`), so **populate each B2B buyer's PIN** if your GSP marks it
+  mandatory (surfaces as a portal reject on the sandbox `/test` otherwise).
 
 ---
 
@@ -293,7 +295,7 @@ unit test in `test/unit/nic-protocol.test.mjs` (protocol) before re-running §5.
 | Vehicle-update fields (VEHEWB) | `nic.provider.ts` · `updateEwayVehicle` | `ewbNo`, `vehicleNo`, `fromPlace`, `fromState`, `reasonCode`, `reasonRem`, `transMode`, `transDocNo/Date` (path `…/ewayapi/vehewb`) | Confirm field names + path (often an action code on `ewayapi`). |
 | Extend-validity fields (EXTENDVALIDITY) | `nic.provider.ts` · `extendEwayValidity` | `ewbNo`, `remainingDistance`, `extnRsnCode`, `extnRemarks`, `consignmentStatus`, `transitType` (path `…/ewayapi/extendvalidity`) | Confirm field names + path; `fromPlace`/`fromState` come from the seller profile. |
 | RSA public key format | `nic-crypto.util.ts` · ~L26 | expects PEM in `GST_RSA_PUBLIC_KEY_PEM` | If your GSP hands a base64/DER cert, convert to PEM once at deploy. |
-| Buyer pincode | `gst-execution.service.ts` · `loadContext` (~L214) | `pincode: ''` | Source buyer `Pin` if the portal marks it mandatory. |
+| Buyer pincode | `customers.pincode` → `loadContext` | sourced (6-digit, validated) | Populate each B2B buyer's PIN; a blank one is dropped from the payload. |
 | Duplicate / error codes | `nic-protocol.util.ts` (`NIC_CODES`, `classify`, `extractDuplicate*`) | NIC §7 codes (e.g. `2150` duplicate IRN) | Confirm the codes your GSP surfaces for duplicate / auth-expired / rejected. |
 
 A GSP that fronts NIC with plain JSON + OAuth bearer (no RSA/AES) makes the
@@ -378,4 +380,5 @@ Known fast-follows (not blockers for a sandbox pass, decide before broad rollout
 - [x] Metrics + alerts (runbook 00 §9): `gst_transmissions_total` /
       `gst_execution_seconds` / `gst_jobs_total` on `/metrics`; `gst_auth_failed`
       + `gst_job_deadlettered` ops alerts via the existing webhook alerter.
-- [ ] Buyer pincode sourcing if the portal marks it mandatory.
+- [x] Buyer pincode sourced from the customer master (`customers.pincode` →
+      `BuyerDtls.Pin` / e-way `toPincode`), validated 6-digit.

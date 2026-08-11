@@ -30,8 +30,20 @@ export function ewayValidityDays(distanceKm: number | null | undefined): number 
   return km > 0 ? Math.max(1, Math.ceil(km / 200)) : 1;
 }
 
+/**
+ * Whether an IRN's invoice ALSO warrants an e-way bill — the signal that lets the
+ * preparer flag Path A (generate both in one IRP call). A hint only: it uses the
+ * consignment value (> threshold) and that goods actually move (distance > 0);
+ * the execution service re-runs the full EWB pre-flight and embeds EwbDtls only
+ * if that passes, so an over-eager hint never mis-files an e-way.
+ */
+export function invoiceNeedsEway(inv: InvoiceLike, threshold = 50_000): boolean {
+  return num(inv.totalAmount) > threshold && num(inv.distanceKm) > 0;
+}
+
 /** Build the India e-invoice (INV-01 subset) payload for IRN generation. */
 export function buildEinvoicePayload(inv: InvoiceLike): Record<string, unknown> {
+  const includeEway = invoiceNeedsEway(inv);
   return {
     schema: 'INV-01',
     docType: 'INV',
@@ -45,7 +57,13 @@ export function buildEinvoicePayload(inv: InvoiceLike): Record<string, unknown> 
     igst: num(inv.igstAmount),
     cess: num(inv.cessAmount),
     totalAmount: num(inv.totalAmount),
-    note: 'READY-ONLY: no IRP/IRN call — transmission held for deployment',
+    // Path A: generate the e-way in the SAME IRN call when this B2B dispatch also
+    // needs one. Read by the execution service (gst-execution.service), which
+    // re-validates the EWB pre-flight before actually including EwbDtls.
+    includeEway,
+    note: includeEway
+      ? 'READY-ONLY: IRN + e-way in one call (Path A) — transmission held for deployment'
+      : 'READY-ONLY: no IRP/IRN call — transmission held for deployment',
   };
 }
 

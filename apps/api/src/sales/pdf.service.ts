@@ -44,6 +44,9 @@ export interface ChallanPdfData {
   quantityM3: string | number;
   slump?: string | null;
   receiverName?: string | null;
+  /** e-way bill (from the linked invoice) — printed on the dispatch document. */
+  ewayBillNo?: string | null;
+  ewayValidUntil?: string | null;
 }
 
 export interface WeighbridgePdfData {
@@ -359,6 +362,11 @@ export class PdfService {
       row('Site / Project', data.siteName ?? '-');
       row('Vehicle', data.vehicleNo ?? '-');
       row('Driver', data.driverName ?? '-');
+      // E-way bill must travel with the goods — print it on the dispatch document.
+      if (data.ewayBillNo) {
+        const validity = data.ewayValidUntil ? ` (valid till ${data.ewayValidUntil})` : '';
+        row('E-Way Bill', `${data.ewayBillNo}${validity}`);
+      }
       doc.moveDown(0.6);
 
       // Delivery details box.

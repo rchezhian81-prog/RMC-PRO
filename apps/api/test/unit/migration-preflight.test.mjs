@@ -1,0 +1,131 @@
+/**
+ * Unit tests for the migration-preflight source of truth
+ * (core/database/integrity-constraints.ts).
+ *
+ * Two things are pinned:
+ *   1. The violation-query builders emit the exact SQL the preflight runs.
+ *   2. A DRIFT GUARD: the declarative constraint list stays in lock-step with the
+ *      migration that actually adds the constraints
+ *      (1720000016000-DataIntegrityChecks). If a future migration adds a
+ *      chk_*_nonneg CHECK or an FK the preflight doesn't know about, this fails —
+ *      so the deploy gate can never silently miss a new constraint.
+ *
+ * Imports the COMPILED output, so `pnpm --filter @rmc/api build` must run first.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import {
+  NONNEG_CONSTRAINTS,
+  FK_CONSTRAINTS,
+  nonNegViolationPredicate,
+  nonNegViolationQuery,
+  nonNegCountQuery,
+  fkViolationQuery,
+  fkCountQuery,
+  tableExistsQuery,
+} from '../../dist/core/database/integrity-constraints.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const migrationSrc = readFileSync(
+  resolve(here, '../../src/core/database/migrations/1720000016000-DataIntegrityChecks.ts'),
+  'utf8',
+);
+
+const byTable = (list, table) => list.find((c) => c.table === table);
+
+// ── query builders ───────────────────────────────────────────────────────────
+
+test('nonNegViolationPredicate ORs a "< 0" test across every column', () => {
+  const customers = byTable(NONNEG_CONSTRAINTS, 'customers');
+  assert.equal(nonNegViolationPredicate(customers), 'credit_limit < 0 OR credit_days < 0');
+});
+
+test('nonNegViolationQuery selects the full offending rows', () => {
+  const customers = byTable(NONNEG_CONSTRAINTS, 'customers');
+  assert.equal(
+    nonNegViolationQuery(customers),
+    'SELECT * FROM customers WHERE credit_limit < 0 OR credit_days < 0',
+  );
+});
+
+test('nonNegCountQuery counts offending rows as an int alias "violations"', () => {
+  const customers = byTable(NONNEG_CONSTRAINTS, 'customers');
+  assert.equal(
+    nonNegCountQuery(customers),
+    'SELECT count(*)::int AS violations FROM customers WHERE credit_limit < 0 OR credit_days < 0',
+  );
+});
+
+test('fk queries find rows whose FK points at a missing parent', () => {
+  const fk = FK_CONSTRAINTS[0]; // vehicles.driver_id -> drivers.id
+  assert.equal(
+    fkViolationQuery(fk),
+    'SELECT t.* FROM vehicles t LEFT JOIN drivers r ON r.id = t.driver_id ' +
+      'WHERE t.driver_id IS NOT NULL AND r.id IS NULL',
+  );
+  assert.equal(
+    fkCountQuery(fk),
+    'SELECT count(*)::int AS violations FROM vehicles t LEFT JOIN drivers r ON r.id = t.driver_id ' +
+      'WHERE t.driver_id IS NOT NULL AND r.id IS NULL',
+  );
+});
+
+test('tableExistsQuery uses to_regclass so a missing table is null, not an error', () => {
+  assert.equal(tableExistsQuery('customers'), "SELECT to_regclass('public.customers') AS oid");
+});
+
+test('the customers non-negativity check is present (the constraint that caused the outage)', () => {
+  const customers = byTable(NONNEG_CONSTRAINTS, 'customers');
+  assert.ok(customers, 'customers must be covered');
+  assert.equal(customers.constraint, 'chk_customers_nonneg');
+  assert.deepEqual(customers.columns, ['credit_limit', 'credit_days']);
+});
+
+// ── drift guard vs the migration ─────────────────────────────────────────────
+
+test('every declared non-negativity constraint matches the migration (name + columns)', () => {
+  for (const c of NONNEG_CONSTRAINTS) {
+    assert.match(
+      migrationSrc,
+      new RegExp(`ALTER TABLE ${c.table} ADD CONSTRAINT ${c.constraint}`),
+      `${c.constraint} must be added on ${c.table} in the migration`,
+    );
+    for (const col of c.columns) {
+      assert.match(
+        migrationSrc,
+        new RegExp(`${col}\\s*>=\\s*0`),
+        `${c.table}.${col} must be constrained >= 0 in the migration`,
+      );
+    }
+  }
+});
+
+test('every declared FK constraint matches the migration', () => {
+  for (const c of FK_CONSTRAINTS) {
+    assert.match(migrationSrc, new RegExp(`ADD CONSTRAINT ${c.constraint}`));
+    assert.match(
+      migrationSrc,
+      new RegExp(`FOREIGN KEY \\(${c.column}\\)\\s*REFERENCES ${c.refTable}\\(${c.refColumn}\\)`),
+      `${c.constraint} must reference ${c.refTable}(${c.refColumn})`,
+    );
+  }
+});
+
+test('DRIFT GUARD: no chk_*_nonneg constraint in the migration is missing from the preflight', () => {
+  // Reverse direction: if someone adds a new nonneg CHECK to the migration but
+  // forgets the preflight, the deploy gate would silently skip it. Catch that.
+  const declared = new Set(NONNEG_CONSTRAINTS.map((c) => c.constraint));
+  const inMigration = [...migrationSrc.matchAll(/ADD CONSTRAINT (chk_\w+_nonneg)\b/g)].map(
+    (m) => m[1],
+  );
+  assert.ok(inMigration.length >= NONNEG_CONSTRAINTS.length, 'sanity: migration parsed');
+  for (const name of inMigration) {
+    assert.ok(
+      declared.has(name),
+      `${name} is enforced by the migration but missing from NONNEG_CONSTRAINTS — the preflight would not catch violations of it`,
+    );
+  }
+});

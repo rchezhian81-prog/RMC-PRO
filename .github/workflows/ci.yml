@@ -34,11 +34,11 @@ jobs:
         run: pnpm build
 
       # Fast, DB-free unit tests over the pure logic (GST money-math, validators,
-      # password policy, tenant-status, RBAC role defaults, logo-upload security,
-      # sanitize, module catalogue) with a c8 coverage summary printed to the
-      # log. Runs on the already-built dist; no coverage floor is enforced yet
-      # (visibility first) — the whole-app behaviour is covered by the
-      # integration + e2e jobs.
+      # password policy, tenant-status, RBAC role defaults, RBAC guards + access,
+      # the RLS tenant-context guard, logo-upload security, sanitize, module
+      # catalogue) with a c8 coverage summary printed to the log. Runs on the
+      # already-built dist; no coverage floor is enforced yet (visibility first)
+      # — the whole-app behaviour is covered by the integration + e2e jobs.
       - name: Unit tests + coverage
         run: pnpm coverage
 

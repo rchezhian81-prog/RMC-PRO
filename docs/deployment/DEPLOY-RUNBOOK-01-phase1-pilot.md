@@ -78,10 +78,18 @@ docker build -f apps/web/Dockerfile \
 ## 4. Database migrate + production bootstrap (one-shot)
 The `migrate` service applies migrations as the **owner** role, then runs the
 idempotent `seed:prod` (catalogs/plans + one super admin from `SUPERADMIN_*`). It uses
-compiled JS — no ts-node:
+compiled JS — no ts-node.
+
+**On an UPGRADE over existing data, gate the migrate step with the preflight
+first** (read-only; catches rows that would make a new CHECK/FK abort the ALTER
+and block startup — see `scripts/ops/README.md`):
 ```bash
 docker compose --env-file .env.production -f docker/docker-compose.prod.yml \
   up -d postgres
+./scripts/ops/migration-preflight.sh   # must exit 0 before migrating; on exit 1 it prints the rows to fix
+```
+Then migrate:
+```bash
 docker compose --env-file .env.production -f docker/docker-compose.prod.yml \
   run --rm migrate
 ```

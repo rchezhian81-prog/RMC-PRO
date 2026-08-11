@@ -1,0 +1,147 @@
+/**
+ * The DB data-integrity constraints, expressed as DATA so a deploy can check the
+ * live rows against them BEFORE the migration that adds them runs.
+ *
+ * Why this exists: a constraint-adding migration (see
+ * `DataIntegrityChecks1720000016000`) runs inside the deploy's one-shot `migrate`
+ * step, and `api` only starts once `migrate` completes. If an existing row
+ * violates a new CHECK/FK, the ALTER aborts, `migrate` exits non-zero, and the
+ * API never starts — a full outage discovered only *after* the deploy has torn
+ * the old app down. This module lets `migration-preflight.ts` detect exactly that
+ * data, read-only, while the old app is still serving, so the deploy can be
+ * stopped and the data fixed first.
+ *
+ * SINGLE SOURCE OF TRUTH: keep this in lock-step with the constraint migrations.
+ * When a future migration adds a CHECK or FK that an existing row could violate,
+ * add it here too — the preflight (scripts/ops/migration-preflight.sh) then
+ * guards the next deploy, and a unit test asserts the two never drift.
+ *
+ * Column names are the DB (snake_case) names, matching the migration SQL.
+ */
+
+/** A non-negativity CHECK: every listed column must be `>= 0` on every row. */
+export interface NonNegConstraint {
+  /** Table the CHECK is attached to. */
+  table: string;
+  /** DB constraint name, so operators can cross-reference the migration. */
+  constraint: string;
+  /** Columns that must each be `>= 0`. */
+  columns: string[];
+}
+
+/**
+ * Mirrors `DataIntegrityChecks1720000016000.up()`. Order matches the migration so
+ * a preflight report reads in the same sequence a failing migrate would.
+ */
+export const NONNEG_CONSTRAINTS: NonNegConstraint[] = [
+  {
+    table: 'invoices',
+    constraint: 'chk_invoices_nonneg',
+    columns: [
+      'taxable_amount',
+      'cgst_amount',
+      'sgst_amount',
+      'igst_amount',
+      'cess_amount',
+      'total_amount',
+      'amount_paid',
+    ],
+  },
+  {
+    table: 'invoice_items',
+    constraint: 'chk_invoice_items_nonneg',
+    columns: [
+      'quantity',
+      'rate',
+      'taxable_amount',
+      'gst_rate',
+      'cgst_amount',
+      'sgst_amount',
+      'igst_amount',
+      'cess_amount',
+      'line_total',
+    ],
+  },
+  {
+    table: 'payments',
+    constraint: 'chk_payments_nonneg',
+    columns: ['amount', 'allocated_amount', 'unallocated_amount'],
+  },
+  {
+    table: 'payment_allocations',
+    constraint: 'chk_payment_allocations_nonneg',
+    columns: ['allocated_amount'],
+  },
+  {
+    table: 'customers',
+    constraint: 'chk_customers_nonneg',
+    columns: ['credit_limit', 'credit_days'],
+  },
+  {
+    table: 'materials',
+    constraint: 'chk_materials_nonneg',
+    columns: ['minimum_stock', 'reorder_level', 'standard_rate'],
+  },
+  {
+    table: 'vehicles',
+    constraint: 'chk_vehicles_nonneg',
+    columns: ['capacity_m3'],
+  },
+];
+
+/** A referential-integrity FK: `column` must point at an existing `refTable` row. */
+export interface ForeignKeyConstraint {
+  table: string;
+  column: string;
+  refTable: string;
+  refColumn: string;
+  constraint: string;
+}
+
+export const FK_CONSTRAINTS: ForeignKeyConstraint[] = [
+  {
+    table: 'vehicles',
+    column: 'driver_id',
+    refTable: 'drivers',
+    refColumn: 'id',
+    constraint: 'fk_vehicles_driver',
+  },
+];
+
+/** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */
+export function nonNegViolationPredicate(c: NonNegConstraint): string {
+  return c.columns.map((col) => `${col} < 0`).join(' OR ');
+}
+
+/** Rows that would fail `c` — full rows, so an operator can see what to fix. */
+export function nonNegViolationQuery(c: NonNegConstraint): string {
+  return `SELECT * FROM ${c.table} WHERE ${nonNegViolationPredicate(c)}`;
+}
+
+/** Fast count of rows that would fail `c`. */
+export function nonNegCountQuery(c: NonNegConstraint): string {
+  return `SELECT count(*)::int AS violations FROM ${c.table} WHERE ${nonNegViolationPredicate(c)}`;
+}
+
+/** Rows whose FK column points at a missing parent (would fail the FK add). */
+export function fkViolationQuery(c: ForeignKeyConstraint): string {
+  return (
+    `SELECT t.* FROM ${c.table} t ` +
+    `LEFT JOIN ${c.refTable} r ON r.${c.refColumn} = t.${c.column} ` +
+    `WHERE t.${c.column} IS NOT NULL AND r.${c.refColumn} IS NULL`
+  );
+}
+
+/** Fast count of FK-orphan rows. */
+export function fkCountQuery(c: ForeignKeyConstraint): string {
+  return (
+    `SELECT count(*)::int AS violations FROM ${c.table} t ` +
+    `LEFT JOIN ${c.refTable} r ON r.${c.refColumn} = t.${c.column} ` +
+    `WHERE t.${c.column} IS NOT NULL AND r.${c.refColumn} IS NULL`
+  );
+}
+
+/** Guard used before querying a table that a very old schema might not have yet. */
+export function tableExistsQuery(table: string): string {
+  return `SELECT to_regclass('public.${table}') AS oid`;
+}

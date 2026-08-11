@@ -88,6 +88,52 @@ kicked out — the session now refreshes silently.
 
 ---
 
+# Ops — migration preflight (pre-deploy gate)
+
+`migration-preflight.sh` is the guard that stops a bad migration from taking the
+app down. A constraint-adding migration runs in the deploy's one-shot `migrate`
+step, and `api` only starts once `migrate` **succeeds**. If a live row violates a
+new CHECK/FK, the ALTER aborts, `migrate` exits non-zero, and the API never
+comes back — an outage found only *after* the old app was torn down. (This is
+exactly what happened: two customer rows with a negative `credit_limit` blocked
+`chk_customers_nonneg`, and `app.mixnovas.com` returned 502 until the data was
+fixed.)
+
+Run it **before** `docker compose … up -d` on every deploy that ships a new
+image, while the old app is still serving:
+
+```bash
+cd /opt/rmc
+git pull --ff-only origin <deploy-branch>
+./scripts/ops/migration-preflight.sh      # <-- gate: must pass before deploying
+# only if it PASSES:
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d
+```
+
+It's **read-only** — it just `SELECT`s the live data against the integrity
+constraints the migrations will add (kept in one place in
+`apps/api/src/core/database/integrity-constraints.ts`, in lock-step with the
+constraint migrations). It runs in a throwaway container built from the new API
+image, using the `migrate` service's own env (owner DB role, so it sees every
+tenant's rows exactly as the migration's ALTER would).
+
+Exit codes: `0` = safe to migrate · `1` = violations found (it prints the
+offending rows — fix them, then re-run) · `2` = could not run (fail closed — do
+not deploy). On a `1`, fix the data first, e.g.:
+
+```bash
+# example: the credit_limit case that caused the incident
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml exec -T postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE customers SET credit_limit = 0 WHERE credit_limit < 0;"'
+./scripts/ops/migration-preflight.sh      # re-run until it PASSES
+```
+
+When a future migration adds a new CHECK or FK, add it to
+`integrity-constraints.ts` too — a unit test fails if the preflight and the
+migration drift apart, so the gate can't silently miss a new constraint.
+
+---
+
 # Ops — SSH key-only hardening
 
 `ssh-hardening.sh` disables SSH password login (key-only) and forbids root

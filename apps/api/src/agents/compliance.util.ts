@@ -1,4 +1,5 @@
 import { num } from './insights.util';
+import { GST_CANCEL_REASON_CODES } from '../compliance/gst.types';
 
 /**
  * Pure builders for India compliance payloads the Automation agent PREPARES for
@@ -78,5 +79,42 @@ export function buildEwayPayload(inv: InvoiceLike): Record<string, unknown> {
     transportMode: inv.transportMode ?? null,
     vehicleNo: inv.vehicleNo ?? null,
     note: 'READY-ONLY: Part-A/Part-B not transmitted — held for deployment',
+  };
+}
+
+/** Normalise + validate a cancellation reason code (1–4); throws on an unknown code. */
+export function cancelReasonCode(code: unknown): string {
+  const c = String(code ?? '').trim();
+  if (!GST_CANCEL_REASON_CODES.has(c)) {
+    throw new Error(
+      `invalid cancellation reason code '${c}' (expected 1=Duplicate, 2=Data entry mistake, 3=Order cancelled, 4=Other)`,
+    );
+  }
+  return c;
+}
+
+/**
+ * Build the payload for CANCELLING an already-generated IRN, PREPARED for approval.
+ * The government reference (the IRN itself) is read from the invoice row by the
+ * execution service; the payload carries only the human-supplied reason + remarks.
+ */
+export function buildEinvoiceCancelPayload(inv: InvoiceLike, reasonCode: unknown, remarks?: string): Record<string, unknown> {
+  return {
+    action: 'cancel',
+    docNo: inv.invoiceNo,
+    reasonCode: cancelReasonCode(reasonCode),
+    remarks: (remarks ?? '').toString().slice(0, 100) || null,
+    note: 'READY-ONLY: cancel IRN (within 24h) — transmission held for deployment',
+  };
+}
+
+/** Build the payload for CANCELLING an already-generated e-way bill, PREPARED for approval. */
+export function buildEwayCancelPayload(inv: InvoiceLike, reasonCode: unknown, remarks?: string): Record<string, unknown> {
+  return {
+    action: 'cancel',
+    docNo: inv.invoiceNo,
+    reasonCode: cancelReasonCode(reasonCode),
+    remarks: (remarks ?? '').toString().slice(0, 100) || null,
+    note: 'READY-ONLY: cancel e-way bill (within 24h) — transmission held for deployment',
   };
 }

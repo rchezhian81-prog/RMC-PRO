@@ -5,7 +5,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ewayValidityDays, buildEinvoicePayload, buildEwayPayload, invoiceNeedsEway } from '../../dist/agents/compliance.util.js';
+import {
+  ewayValidityDays, buildEinvoicePayload, buildEwayPayload, invoiceNeedsEway,
+  buildEinvoiceCancelPayload, buildEwayCancelPayload, cancelReasonCode,
+} from '../../dist/agents/compliance.util.js';
 
 test('e-way validity is 1 day per 200 km, minimum 1', () => {
   assert.equal(ewayValidityDays(200), 1);
@@ -47,6 +50,31 @@ test('e-invoice payload flags includeEway (Path A) when the invoice also needs a
   const small = buildEinvoicePayload({ ...inv, totalAmount: '40000' });
   assert.equal(small.includeEway, false);
   assert.doesNotMatch(String(small.note), /Path A/);
+});
+
+test('cancelReasonCode accepts 1–4 and rejects anything else', () => {
+  for (const c of ['1', '2', '3', '4']) assert.equal(cancelReasonCode(c), c);
+  assert.equal(cancelReasonCode(3), '3'); // coerces a number
+  for (const bad of ['0', '5', '9', '', null, undefined, 'x']) {
+    assert.throws(() => cancelReasonCode(bad), /invalid cancellation reason code/);
+  }
+});
+
+test('cancel payloads carry the reason + remarks and a READY-ONLY note', () => {
+  const irn = buildEinvoiceCancelPayload(inv, '3', 'order cancelled');
+  assert.equal(irn.action, 'cancel');
+  assert.equal(irn.docNo, 'INV0001');
+  assert.equal(irn.reasonCode, '3');
+  assert.equal(irn.remarks, 'order cancelled');
+  assert.match(String(irn.note), /cancel IRN/);
+
+  const eway = buildEwayCancelPayload(inv, '2'); // no remarks → null
+  assert.equal(eway.reasonCode, '2');
+  assert.equal(eway.remarks, null);
+  assert.match(String(eway.note), /cancel e-way/);
+
+  // An invalid reason code is rejected at prepare time (before any approval).
+  assert.throws(() => buildEinvoiceCancelPayload(inv, '9'), /invalid cancellation reason code/);
 });
 
 test('e-way payload carries consignment value + computed validity', () => {

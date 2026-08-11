@@ -5,6 +5,8 @@ import { AuditService } from '../audit/audit.service';
 import { AgentApprovalRequest } from '../core/database/entities';
 import {
   GST_ACTION_KINDS,
+  GST_CANCEL_KINDS,
+  GST_CANCEL_REASON_CODES,
   GST_PROVIDER,
   GstProviderError,
   type EwbResult,
@@ -26,7 +28,9 @@ import {
 export type GstExecutionOutcome =
   | { status: 'skipped'; reason: string }
   | { status: 'already_generated'; reference: string }
+  | { status: 'already_cancelled'; reference: string }
   | { status: 'generated'; reference: string; detail: Record<string, unknown> }
+  | { status: 'cancelled'; reference: string }
   | { status: 'reconciled'; reference: string }
   | { status: 'failed'; errors: string[] };
 
@@ -37,6 +41,18 @@ interface LoadedContext {
   lines: InvoiceLine[];
   seller: SellerParty;
   buyer: BuyerParty;
+}
+
+/** The lighter context a CANCEL needs: the existing reference + seller GSTIN + status. */
+interface CancelContext {
+  invoiceId: string;
+  invoiceNo: string;
+  isEinvoice: boolean;
+  sellerGstin: string;
+  irn: string | null;
+  ewayBillNo: string | null;
+  einvoiceStatus: string;
+  ewayStatus: string;
 }
 
 /**
@@ -84,16 +100,28 @@ export class GstExecutionService {
       if (!appr.entityId) {
         throw new BadRequestException({ code: 'NO_ENTITY', message: 'approval has no invoice reference' });
       }
-      return { appr, ctx: await this.loadContext(m, appr.entityId, appr.actionKind) };
+      return GST_CANCEL_KINDS.has(appr.actionKind)
+        ? { appr, kind: 'cancel' as const, cancel: await this.loadCancelContext(m, appr.entityId, appr.actionKind) }
+        : { appr, kind: 'generate' as const, ctx: await this.loadContext(m, appr.entityId, appr.actionKind) };
     });
 
-    const { appr, ctx } = loaded;
+    const { appr } = loaded;
+    const invoiceId = loaded.kind === 'cancel' ? loaded.cancel.invoiceId : loaded.ctx.invoiceId;
 
     // Provider off → skip. Prepare-only behaviour is preserved; nothing mutates.
     if (!this.provider.isConfigured()) {
-      await this.record(tenantId, actorUserId, 'gst.execute.skipped', ctx.invoiceId, appr, { reason: 'provider_disabled' });
+      await this.record(tenantId, actorUserId, 'gst.execute.skipped', invoiceId, appr, { reason: 'provider_disabled' });
       return { status: 'skipped', reason: 'provider_disabled' };
     }
+
+    // Cancellation is its own path: no build/pre-flight, just authenticate → cancel
+    // the EXISTING reference → flip status to 'cancelled' → audit. (24h window is
+    // portal-enforced; we validate the reason code and the current status locally.)
+    if (loaded.kind === 'cancel') {
+      return this.executeCancel(tenantId, appr, loaded.cancel, actorUserId);
+    }
+
+    const { ctx } = loaded;
 
     // Idempotency — already generated for this action? Nothing to do.
     const now = await this.currentStatus(tenantId, ctx.invoiceId);
@@ -243,6 +271,97 @@ export class GstExecutionService {
     }));
 
     return { invoiceId, isEinvoice: actionKind === 'einvoice_irn', header, seller, buyer, lines };
+  }
+
+  /** The lighter load a CANCEL needs: the existing reference, statuses, seller GSTIN. */
+  private async loadCancelContext(m: EntityManager, invoiceId: string, actionKind: string): Promise<CancelContext> {
+    const [inv] = await m.query(
+      `SELECT id, invoice_no AS "invoiceNo", irn, einvoice_status AS "einvoiceStatus",
+              eway_bill_no AS "ewayBillNo", eway_status AS "ewayStatus"
+         FROM invoices WHERE id = $1`,
+      [invoiceId],
+    );
+    if (!inv) throw new NotFoundException({ code: 'NOT_FOUND', message: 'invoice not found' });
+    const [company] = await m.query(`SELECT gstin FROM companies LIMIT 1`);
+    return {
+      invoiceId,
+      invoiceNo: inv.invoiceNo,
+      isEinvoice: actionKind === 'einvoice_cancel',
+      sellerGstin: company?.gstin ?? '',
+      irn: inv.irn ?? null,
+      ewayBillNo: inv.ewayBillNo ?? null,
+      einvoiceStatus: inv.einvoiceStatus ?? 'not_generated',
+      ewayStatus: inv.ewayStatus ?? 'not_generated',
+    };
+  }
+
+  /**
+   * Cancel an already-generated IRN / e-way against the provider and flip the
+   * invoice status to 'cancelled'. Guardrails: idempotent (already-cancelled is a
+   * no-op); refuses anything not currently 'generated'; validates the reason code
+   * (1–4) before any portal call. The 24-hour window is portal-enforced — a
+   * too-late cancel comes back as a portal rejection surfaced as 'failed' (issue a
+   * credit note for IRN; an e-way simply lapses at validUpto).
+   */
+  private async executeCancel(
+    tenantId: string,
+    appr: AgentApprovalRequest,
+    c: CancelContext,
+    actorUserId: string | null,
+  ): Promise<GstExecutionOutcome> {
+    const status = c.isEinvoice ? c.einvoiceStatus : c.ewayStatus;
+    const ref = c.isEinvoice ? c.irn : c.ewayBillNo;
+    const label = c.isEinvoice ? 'e-invoice' : 'e-way bill';
+
+    // Idempotency — already cancelled? Nothing to do.
+    if (status === 'cancelled') return { status: 'already_cancelled', reference: ref ?? '' };
+
+    // Can only cancel something that was actually generated.
+    if (status !== 'generated' || !ref) {
+      const errors = [`cannot cancel: ${label} status is '${status}', expected 'generated'`];
+      await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'cancel_preflight', errors });
+      return { status: 'failed', errors };
+    }
+
+    // Reason code (1–4) — validate before any portal call.
+    const reasonCode = String(appr.payload?.reasonCode ?? '').trim();
+    if (!GST_CANCEL_REASON_CODES.has(reasonCode)) {
+      const errors = [`invalid cancellation reason code '${reasonCode}' (expected 1–4)`];
+      await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'cancel_preflight', errors });
+      return { status: 'failed', errors };
+    }
+    const remarks = typeof appr.payload?.remarks === 'string' ? appr.payload.remarks : '';
+
+    if (!c.sellerGstin) {
+      const errors = ['seller GSTIN is not configured on the company profile'];
+      await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'cancel_preflight', errors });
+      return { status: 'failed', errors };
+    }
+
+    try {
+      const session = await this.provider.authenticate(tenantId, c.sellerGstin);
+      const res = c.isEinvoice
+        ? await this.provider.cancelIrn(session, ref, reasonCode, remarks)
+        : await this.provider.cancelEwayBill(session, ref, reasonCode, remarks);
+      await this.setStatus(tenantId, c.invoiceId, c.isEinvoice, 'cancelled');
+      await this.record(tenantId, actorUserId, c.isEinvoice ? 'gst.irn.cancelled' : 'gst.eway.cancelled', c.invoiceId, appr, {
+        reference: res.reference, reasonCode,
+      });
+      return { status: 'cancelled', reference: res.reference };
+    } catch (e) {
+      // The portal says it is already cancelled → reconcile our row (idempotent).
+      if (e instanceof GstProviderError && e.code === 'PORTAL_REJECTED' && /cancel/i.test(e.message)) {
+        await this.setStatus(tenantId, c.invoiceId, c.isEinvoice, 'cancelled');
+        await this.record(tenantId, actorUserId, c.isEinvoice ? 'gst.irn.cancelled' : 'gst.eway.cancelled', c.invoiceId, appr, {
+          reference: ref, reasonCode, reconciled: true,
+        });
+        return { status: 'already_cancelled', reference: ref };
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      this.log.warn(`GST cancel failed for invoice ${c.invoiceId}: ${message}`);
+      await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'cancel_transmit', error: message });
+      return { status: 'failed', errors: [message] };
+    }
   }
 
   private currentStatus(tenantId: string, invoiceId: string): Promise<{ einvoice: string; eway: string; irn: string | null; ewayBillNo: string | null }> {

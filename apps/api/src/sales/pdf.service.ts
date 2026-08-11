@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import SVGtoPDF from 'svg-to-pdfkit';
+import { qrMatrix } from './qr.util';
 
 export interface QuotationPdfItem {
   gradeLabel: string;
@@ -108,6 +109,11 @@ export interface InvoicePdfData extends CompanyBlock {
   cessAmount: string | number;
   roundOff: string | number;
   totalAmount: string | number;
+  /** e-invoice (IRP) fields — drawn as a signed-QR block when present. */
+  irn?: string | null;
+  signedQrCode?: string | null;
+  ackNo?: string | null;
+  ackDate?: string | null;
 }
 
 const money = (v: string | number): string =>
@@ -146,6 +152,57 @@ function drawLogoBand(
     doc.x = left;
     doc.y = top;
     return false;
+  }
+}
+
+/**
+ * Draw the e-invoice signed-QR block (runbook 01 §5): the government QR printed
+ * as pdfkit rectangles from the module matrix, with the IRN / Ack details beside
+ * it. Purely additive and never fatal — like the logo, a QR problem must never be
+ * the reason an invoice fails to render: on any error it falls back to printing
+ * the IRN as text so the e-invoice is still identifiable.
+ */
+function drawEinvoiceBlock(
+  doc: PDFKit.PDFDocument,
+  data: InvoicePdfData,
+  left: number,
+  right: number,
+): void {
+  if (!data.signedQrCode) return;
+  const details = (x: number, startY: number): void => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text('e-Invoice (IRP)', x, startY, { width: right - x });
+    doc.font('Helvetica').fontSize(7.5).fillColor('#333');
+    if (data.irn) doc.text(`IRN: ${data.irn}`, x, doc.y, { width: right - x });
+    if (data.ackNo) doc.text(`Ack No: ${data.ackNo}`, x, doc.y, { width: right - x });
+    if (data.ackDate) doc.text(`Ack Date: ${data.ackDate}`, x, doc.y, { width: right - x });
+    doc.fillColor('#000');
+  };
+  try {
+    const matrix = qrMatrix(data.signedQrCode, 'M');
+    const modules = matrix.length;
+    const cell = Math.max(1, Math.floor(96 / modules)); // aim for a ~96pt box
+    const size = cell * modules;
+    // Keep the block whole: start a new page if it wouldn't fit above the footer.
+    if (doc.y + size + 24 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    doc.moveDown(0.8);
+    const topY = doc.y;
+    doc.fillColor('#000');
+    for (let r = 0; r < modules; r++) {
+      const row = matrix[r];
+      if (!row) continue;
+      for (let c = 0; c < modules; c++) {
+        if (row[c]) doc.rect(left + c * cell, topY + r * cell, cell, cell).fill();
+      }
+    }
+    details(left + size + 14, topY);
+    doc.x = left;
+    doc.y = Math.max(doc.y, topY + size);
+  } catch {
+    // QR could not be built — still show the IRN so the e-invoice is traceable.
+    doc.moveDown(0.8);
+    doc.x = left;
+    details(left, doc.y);
+    doc.x = left;
   }
 }
 
@@ -493,6 +550,9 @@ export class PdfService {
         doc.font('Helvetica').fontSize(9).fillColor('#555').text(bankBits.join('   '), { align: 'left' });
         doc.fillColor('#000');
       }
+
+      // e-invoice signed QR + IRN (only when the invoice has an IRN).
+      drawEinvoiceBlock(doc, data, left, right);
 
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text('System-generated tax invoice.', { align: 'center' });

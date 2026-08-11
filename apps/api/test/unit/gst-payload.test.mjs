@@ -59,13 +59,13 @@ test('IRN pre-flight rejects missing HSN, bad GSTIN, and non-reconciling totals'
 });
 
 test('e-way pre-flight enforces threshold, distance, and Part-B for road', () => {
-  assert.deepEqual(validateEwbPreflight(header, seller, buyer), { ok: true });
+  assert.deepEqual(validateEwbPreflight(header, lines, seller, buyer), { ok: true });
   // at/below threshold
-  assert.equal(validateEwbPreflight({ ...header, total: 40000 }, seller, buyer).ok, false);
+  assert.equal(validateEwbPreflight({ ...header, total: 40000 }, lines, seller, buyer).ok, false);
   // no distance
-  assert.equal(validateEwbPreflight({ ...header, distanceKm: 0 }, seller, buyer).ok, false);
+  assert.equal(validateEwbPreflight({ ...header, distanceKm: 0 }, lines, seller, buyer).ok, false);
   // road with no vehicle and no transporter
-  assert.equal(validateEwbPreflight({ ...header, vehicleNo: null }, seller, buyer).ok, false);
+  assert.equal(validateEwbPreflight({ ...header, vehicleNo: null }, lines, seller, buyer).ok, false);
 });
 
 test('buildIrnRequest emits INV-01 essentials', () => {
@@ -80,7 +80,7 @@ test('buildIrnRequest emits INV-01 essentials', () => {
 });
 
 test('buildEwbRequest carries Part-A/B + computed validity', () => {
-  const req = buildEwbRequest(header, seller, buyer);
+  const req = buildEwbRequest(header, lines, seller, buyer);
   assert.equal(req.docNo, 'INV-001');
   assert.equal(req.transMode, '1'); // road
   assert.equal(req.vehicleNo, 'TN01AB1234');
@@ -94,7 +94,7 @@ test('fake provider round-trips a deterministic IRN + e-way (and reconciles a du
   const irn = await p.generateIrn(s, buildIrnRequest(header, lines, seller, buyer));
   assert.equal(irn.irn.length, 64); // SHA-256 hex, like a real IRN
   assert.equal(irn.irn, (await p.generateIrn(s, buildIrnRequest(header, lines, seller, buyer))).irn); // deterministic
-  const ewb = await p.generateEwayBill(s, buildEwbRequest(header, seller, buyer));
+  const ewb = await p.generateEwayBill(s, buildEwbRequest(header, lines, seller, buyer));
   assert.equal(ewb.ewayBillNo.length, 12);
 
   const dup = new FakeGstProvider({ duplicate: true });

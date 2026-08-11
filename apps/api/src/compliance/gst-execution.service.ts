@@ -103,7 +103,7 @@ export class GstExecutionService {
     // Pre-flight (pure) — reject master-data problems before any portal call.
     const pf = ctx.isEinvoice
       ? validateIrnPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer)
-      : validateEwbPreflight(ctx.header, ctx.seller, ctx.buyer);
+      : validateEwbPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer);
     if (!pf.ok) {
       await this.setStatus(tenantId, ctx.invoiceId, ctx.isEinvoice, 'failed');
       await this.record(tenantId, actorUserId, 'gst.execute.failed', ctx.invoiceId, appr, { stage: 'preflight', errors: pf.errors });
@@ -119,7 +119,7 @@ export class GstExecutionService {
         await this.record(tenantId, actorUserId, 'gst.irn.generated', ctx.invoiceId, appr, { irn: res.irn, ackNo: res.ackNo });
         return { status: 'generated', reference: res.irn, detail: { ackNo: res.ackNo, ackDate: res.ackDate } };
       }
-      const res = await this.provider.generateEwayBill(session, buildEwbRequest(ctx.header, ctx.seller, ctx.buyer));
+      const res = await this.provider.generateEwayBill(session, buildEwbRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer));
       await this.persistEwb(tenantId, ctx.invoiceId, res, ctx.header);
       await this.record(tenantId, actorUserId, 'gst.eway.generated', ctx.invoiceId, appr, { ewayBillNo: res.ewayBillNo });
       return { status: 'generated', reference: res.ewayBillNo, detail: { validUpto: res.validUpto } };

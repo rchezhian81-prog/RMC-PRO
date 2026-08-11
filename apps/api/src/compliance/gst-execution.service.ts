@@ -112,7 +112,7 @@ export class GstExecutionService {
 
     // Phase 2 — transmit OUTSIDE any transaction.
     try {
-      const session = await this.provider.authenticate(ctx.seller.gstin);
+      const session = await this.provider.authenticate(tenantId, ctx.seller.gstin);
       if (ctx.isEinvoice) {
         const res = await this.provider.generateIrn(session, buildIrnRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer));
         await this.persistIrn(tenantId, ctx.invoiceId, res);

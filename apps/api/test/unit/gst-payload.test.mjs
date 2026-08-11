@@ -90,7 +90,7 @@ test('buildEwbRequest carries Part-A/B + computed validity', () => {
 
 test('fake provider round-trips a deterministic IRN + e-way (and reconciles a duplicate)', async () => {
   const p = new FakeGstProvider();
-  const s = await p.authenticate(seller.gstin);
+  const s = await p.authenticate('tenant-1', seller.gstin);
   const irn = await p.generateIrn(s, buildIrnRequest(header, lines, seller, buyer));
   assert.equal(irn.irn.length, 64); // SHA-256 hex, like a real IRN
   assert.equal(irn.irn, (await p.generateIrn(s, buildIrnRequest(header, lines, seller, buyer))).irn); // deterministic
@@ -107,5 +107,5 @@ test('fake provider round-trips a deterministic IRN + e-way (and reconciles a du
 test('disabled provider is off and throws if invoked', async () => {
   const p = new DisabledGstProvider();
   assert.equal(p.isConfigured(), false);
-  await assert.rejects(() => p.authenticate('33ABCDE1234F1Z5'), (e) => e.code === 'PROVIDER_DISABLED');
+  await assert.rejects(() => p.authenticate('tenant-1', '33ABCDE1234F1Z5'), (e) => e.code === 'PROVIDER_DISABLED');
 });

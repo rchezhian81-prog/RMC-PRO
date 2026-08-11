@@ -37,8 +37,11 @@ export interface BuyerParty {
 export interface InvoiceHeader {
   docNo: string;
   docDate: string | null; // 'yyyy-mm-dd' from the DB
+  docType?: 'INV' | 'CRN' | 'DBN'; // INV-01 DocDtls.Typ (invoice / credit note / debit note)
   supplyType?: string; // B2B | EXPWP | …
   reverseCharge?: boolean;
+  /** True only for the rare intra-state supply charged as IGST (INV-01 IgstOnIntra). */
+  igstOnIntra?: boolean;
   taxable: number;
   cgst: number;
   sgst: number;
@@ -66,6 +69,12 @@ export interface InvoiceLine {
   igst: number;
   cess: number;
   total: number;
+  /** Goods vs service (INV-01 IsServc). RMC concrete is goods → default false. */
+  isService?: boolean;
+  /** Cess rate %; if absent it is derived from cess ÷ assessable value. */
+  cessRate?: number | null;
+  /** Optional product description (INV-01 PrdDesc). */
+  description?: string | null;
 }
 
 // ---- helpers ----
@@ -98,6 +107,18 @@ export function toPortalDate(iso: string | null): string | null {
   if (!iso) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+/**
+ * INV-01 wants Pin as a 6-digit NUMBER, not a string. Returns the number for a
+ * well-formed pincode, or undefined so JSON.stringify drops the field rather than
+ * sending a malformed one (the portal then reports the missing mandatory field,
+ * which is more actionable than a type rejection). Export/URP pincode handling is
+ * a deploy concern — see the runbook.
+ */
+export function pinNum(pin: string | null | undefined): number | undefined {
+  const s = String(pin ?? '').trim();
+  return /^\d{6}$/.test(s) ? Number(s) : undefined;
 }
 
 export type PreflightResult = { ok: true } | { ok: false; errors: string[] };
@@ -160,6 +181,40 @@ export function validateEwbPreflight(
 
 const transModeCode: Record<string, string> = { road: '1', rail: '2', air: '3', ship: '4' };
 
+/**
+ * One INV-01 `ItemList` entry. NIC mandates `IsServc` (goods/service), a gross
+ * `TotAmt` (Qty × UnitPrice, before discount) distinct from the assessable
+ * `AssAmt`, and a cess RATE alongside the cess amount. `CesRt` is taken from the
+ * line when given, else derived from cess ÷ assessable value (0 when no cess).
+ */
+function buildIrnItem(l: InvoiceLine): Record<string, unknown> {
+  const qty = round2(num(l.qty));
+  const unitPrice = round2(num(l.unitPrice));
+  const assess = round2(num(l.taxable));
+  const cesAmt = round2(num(l.cess));
+  const cesRt =
+    l.cessRate != null ? round2(num(l.cessRate)) : assess > 0 ? round2((cesAmt / assess) * 100) : 0;
+  return {
+    SlNo: String(l.slNo),
+    PrdDesc: l.description ?? undefined,
+    IsServc: l.isService ? 'Y' : 'N',
+    HsnCd: l.hsn,
+    Qty: qty,
+    Unit: l.unit ?? 'NOS',
+    UnitPrice: unitPrice,
+    TotAmt: round2(qty * unitPrice), // gross (before discount)
+    Discount: 0,
+    AssAmt: assess, // assessable value (taxable)
+    GstRt: round2(num(l.gstRate)),
+    IgstAmt: round2(num(l.igst)),
+    CgstAmt: round2(num(l.cgst)),
+    SgstAmt: round2(num(l.sgst)),
+    CesRt: cesRt,
+    CesAmt: cesAmt,
+    TotItemVal: round2(num(l.total)),
+  };
+}
+
 export function buildIrnRequest(
   h: InvoiceHeader,
   lines: InvoiceLine[],
@@ -172,24 +227,19 @@ export function buildIrnRequest(
       TaxSch: 'GST',
       SupTyp: h.supplyType ?? 'B2B',
       RegRev: h.reverseCharge ? 'Y' : 'N',
+      IgstOnIntra: h.igstOnIntra ? 'Y' : 'N',
     },
-    DocDtls: { Typ: 'INV', No: h.docNo, Dt: toPortalDate(h.docDate) },
+    DocDtls: { Typ: h.docType ?? 'INV', No: h.docNo, Dt: toPortalDate(h.docDate) },
     SellerDtls: {
       Gstin: seller.gstin, LglNm: seller.legalName, TrdNm: seller.tradeName ?? undefined,
       Addr1: seller.address1, Addr2: seller.address2 ?? undefined,
-      Loc: seller.location, Pin: seller.pincode, Stcd: seller.stateCode,
+      Loc: seller.location, Pin: pinNum(seller.pincode), Stcd: seller.stateCode,
     },
     BuyerDtls: {
       Gstin: buyer.gstin ?? 'URP', LglNm: buyer.legalName, Pos: buyer.posStateCode,
-      Addr1: buyer.address1, Loc: buyer.location, Pin: buyer.pincode, Stcd: buyer.stateCode,
+      Addr1: buyer.address1, Loc: buyer.location, Pin: pinNum(buyer.pincode), Stcd: buyer.stateCode,
     },
-    ItemList: lines.map((l) => ({
-      SlNo: String(l.slNo), HsnCd: l.hsn, Qty: round2(num(l.qty)), Unit: l.unit ?? 'NOS',
-      UnitPrice: round2(num(l.unitPrice)), TotAmt: round2(num(l.taxable)), AssAmt: round2(num(l.taxable)),
-      GstRt: round2(num(l.gstRate)), IgstAmt: round2(num(l.igst)),
-      CgstAmt: round2(num(l.cgst)), SgstAmt: round2(num(l.sgst)), CesAmt: round2(num(l.cess)),
-      TotItemVal: round2(num(l.total)),
-    })),
+    ItemList: lines.map(buildIrnItem),
     ValDtls: {
       AssVal: round2(h.taxable), CgstVal: round2(h.cgst), SgstVal: round2(h.sgst),
       IgstVal: round2(h.igst), CesVal: round2(h.cess), RndOffAmt: round2(h.roundOff),

@@ -34,6 +34,10 @@ export interface IrnResult {
   ackNo: string;
   ackDate: string;
   signedQrCode: string;
+  /** Present when the e-way bill was generated in the SAME call (Path A, EwbDtls). */
+  ewayBillNo?: string;
+  ewayBillDate?: string;
+  validUpto?: string;
 }
 
 /** Result of a successful e-way bill generation. */

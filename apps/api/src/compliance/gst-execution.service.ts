@@ -114,10 +114,30 @@ export class GstExecutionService {
     try {
       const session = await this.provider.authenticate(tenantId, ctx.seller.gstin);
       if (ctx.isEinvoice) {
-        const res = await this.provider.generateIrn(session, buildIrnRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer));
+        // Path A (runbook 02 §4): if the e-way isn't done yet and the transport
+        // details are complete (EWB pre-flight passes), ask the IRP to generate
+        // the e-way in the SAME call by including EwbDtls — one call, no second
+        // auth. If they're incomplete, generate the IRN alone (the e-way can be
+        // filed separately) rather than risk the portal rejecting the IRN.
+        const includeEwb =
+          now.eway !== 'generated' && validateEwbPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer).ok;
+        const res = await this.provider.generateIrn(
+          session,
+          buildIrnRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer, { includeEwb }),
+        );
         await this.persistIrn(tenantId, ctx.invoiceId, res);
         await this.record(tenantId, actorUserId, 'gst.irn.generated', ctx.invoiceId, appr, { irn: res.irn, ackNo: res.ackNo });
-        return { status: 'generated', reference: res.irn, detail: { ackNo: res.ackNo, ackDate: res.ackDate } };
+        // The IRP returned the e-way in the same response — persist it too.
+        if (res.ewayBillNo) {
+          await this.persistEwb(
+            tenantId,
+            ctx.invoiceId,
+            { ewayBillNo: res.ewayBillNo, ewayBillDate: res.ewayBillDate ?? '', validUpto: res.validUpto ?? '' },
+            ctx.header,
+          );
+          await this.record(tenantId, actorUserId, 'gst.eway.generated', ctx.invoiceId, appr, { ewayBillNo: res.ewayBillNo, via: 'irn' });
+        }
+        return { status: 'generated', reference: res.irn, detail: { ackNo: res.ackNo, ackDate: res.ackDate, ewayBillNo: res.ewayBillNo } };
       }
       const res = await this.provider.generateEwayBill(session, buildEwbRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer));
       await this.persistEwb(tenantId, ctx.invoiceId, res, ctx.header);

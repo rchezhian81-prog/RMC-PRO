@@ -47,6 +47,14 @@ export class FakeGstProvider implements GstComplianceProvider {
       ackDate: today(),
       signedQrCode: `QR|${irn.slice(0, 24)}`,
     };
+    // Path A: when EwbDtls is included, the portal returns the e-way bill too.
+    const ewb = request.EwbDtls as { Distance?: unknown } | undefined;
+    if (ewb) {
+      const days = Math.max(1, Math.ceil(Number(ewb.Distance ?? 0) / 200));
+      result.ewayBillNo = digits(hash64(`${session.gstin}|ewb|${docNo}`), 12);
+      result.ewayBillDate = today();
+      result.validUpto = new Date(Date.now() + days * 86_400_000).toISOString();
+    }
     if (this.opts.duplicate) {
       throw new GstProviderError('DUPLICATE_IRN', `IRN already generated for ${docNo}`, { ...result });
     }

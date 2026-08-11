@@ -250,13 +250,42 @@ function buildIrnItem(l: InvoiceLine): Record<string, unknown> {
   };
 }
 
+export interface IrnBuildOptions {
+  /**
+   * Include EwbDtls so the IRP returns the e-way bill in the SAME call (Path A,
+   * runbook 02 §4) — no separate EWB auth. Only set this when the transport
+   * details are complete (the EWB pre-flight passes); an incomplete EwbDtls makes
+   * the portal reject the whole IRN request.
+   */
+  includeEwb?: boolean;
+  /** R = regular (default), O = over-dimensional cargo — for the EwbDtls block. */
+  vehicleType?: 'R' | 'O';
+}
+
+/** Part-B transport block embedded in the INV-01 to generate the e-way inline. */
+function buildEwbDtls(h: InvoiceHeader, vehicleType: 'R' | 'O'): Record<string, unknown> {
+  const mode = (h.transportMode ?? 'road').toLowerCase();
+  const nonRoad = mode === 'rail' || mode === 'air' || mode === 'ship';
+  return {
+    TransId: h.transporterId ?? undefined,
+    TransName: h.transporterName ?? undefined,
+    TransMode: transModeCode[mode] ?? '1',
+    Distance: num(h.distanceKm),
+    VehNo: mode === 'road' ? h.vehicleNo ?? undefined : undefined,
+    VehType: vehicleType,
+    TransDocNo: nonRoad ? h.transDocNo ?? undefined : undefined,
+    TransDocDt: nonRoad ? toPortalDate(h.transDocDate ?? null) ?? undefined : undefined,
+  };
+}
+
 export function buildIrnRequest(
   h: InvoiceHeader,
   lines: InvoiceLine[],
   seller: SellerParty,
   buyer: BuyerParty,
+  opts: IrnBuildOptions = {},
 ): IrnRequest {
-  return {
+  const req: IrnRequest = {
     Version: '1.1',
     TranDtls: {
       TaxSch: 'GST',
@@ -281,6 +310,8 @@ export function buildIrnRequest(
       TotInvVal: round2(h.total),
     },
   };
+  if (opts.includeEwb) req.EwbDtls = buildEwbDtls(h, opts.vehicleType ?? 'R');
+  return req;
 }
 
 /** One e-way `itemList` entry (NIC EWB schema — HSN + qty + assessable + rates). */

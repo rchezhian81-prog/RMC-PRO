@@ -6,8 +6,10 @@
  *   - GET /agents/gst reports the fake provider is configured;
  *   - prepare (M5) → approve → EXECUTE an IRN action writes irn/ack/QR onto the
  *     invoice and flips einvoice_status to 'generated';
+ *   - Path A: because that invoice also warrants an e-way, the preparer flags
+ *     includeEway and the IRN call files the e-way in the same response;
  *   - re-executing is idempotent ('already_generated', no second call);
- *   - the same for an e-way bill (eway_bill_no + validity persisted);
+ *   - a standalone e-way bill on a fresh invoice (eway_bill_no + validity persisted);
  *   - a pre-flight failure (missing HSN) fails cleanly with einvoice_status
  *     'failed' and NO IRN — nothing was transmitted;
  *   - executing an approval that is not approved is refused.
@@ -126,10 +128,23 @@ async function prepareApproveExecute(compliance, invId) {
   const again = await api('POST', `/agents/approvals/${approvalId}/execute`);
   ok('re-executing an already-generated IRN is a no-op', again.data?.status === 'already_generated');
 
-  console.log('\n=== e-way: prepare → approve → execute ===');
-  const ewExec = await prepareApproveExecute('eway', invId);
+  console.log('\n=== Path A: the IRN call also filed the e-way ===');
+  // This invoice qualifies for Path A (₹2,95,000 over 350 km), so the compliance
+  // preparer set includeEway on the IRN approval and the IRN execution above filed
+  // the e-way in the SAME call. Assert it landed — in the response and on the row.
+  ok('the IRN response also carried a 12-digit e-way (Path A)',
+    typeof exec.data?.detail?.ewayBillNo === 'string' && exec.data.detail.ewayBillNo.length === 12);
+  const [pathA] = await owner.query(`SELECT eway_bill_no, eway_valid_until, eway_status FROM invoices WHERE id=$1`, [invId]);
+  ok('Path A persisted the e-way onto the invoice',
+    !!pathA.eway_bill_no && pathA.eway_bill_no.length === 12 && !!pathA.eway_valid_until && pathA.eway_status === 'generated');
+
+  console.log('\n=== e-way (standalone): prepare → approve → execute ===');
+  // A fresh invoice that has NOT been through an IRN — exercises the standalone
+  // eway_bill execution path (the non-Path-A route).
+  const { invId: ewayInvId } = await seedInvoice();
+  const ewExec = await prepareApproveExecute('eway', ewayInvId);
   ok('the e-way execution reports generated', ewExec.exec.data?.status === 'generated');
-  const [ew] = await owner.query(`SELECT eway_bill_no, eway_valid_until, eway_status FROM invoices WHERE id=$1`, [invId]);
+  const [ew] = await owner.query(`SELECT eway_bill_no, eway_valid_until, eway_status FROM invoices WHERE id=$1`, [ewayInvId]);
   ok('the invoice carries a 12-digit e-way number + validity', !!ew.eway_bill_no && ew.eway_bill_no.length === 12 && !!ew.eway_valid_until);
   ok('eway_status flipped to generated', ew.eway_status === 'generated');
 

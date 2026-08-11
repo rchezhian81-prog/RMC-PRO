@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ewayValidityDays, buildEinvoicePayload, buildEwayPayload } from '../../dist/agents/compliance.util.js';
+import { ewayValidityDays, buildEinvoicePayload, buildEwayPayload, invoiceNeedsEway } from '../../dist/agents/compliance.util.js';
 
 test('e-way validity is 1 day per 200 km, minimum 1', () => {
   assert.equal(ewayValidityDays(200), 1);
@@ -31,6 +31,22 @@ test('e-invoice payload carries the INV-01 essentials as numbers', () => {
   assert.equal(p.totalAmount, 295000);
   assert.equal(p.igst, 45000);
   assert.match(String(p.note), /READY-ONLY/);
+});
+
+test('invoiceNeedsEway flags Path A only for an over-threshold moving consignment', () => {
+  assert.equal(invoiceNeedsEway(inv), true); // ₹2,95,000 over 350 km
+  assert.equal(invoiceNeedsEway({ ...inv, totalAmount: '40000' }), false); // below ₹50,000
+  assert.equal(invoiceNeedsEway({ ...inv, distanceKm: 0 }), false); // no movement
+  assert.equal(invoiceNeedsEway({ ...inv, totalAmount: '120000' }, 100000), true); // configurable threshold
+});
+
+test('e-invoice payload flags includeEway (Path A) when the invoice also needs an e-way', () => {
+  assert.equal(buildEinvoicePayload(inv).includeEway, true);
+  assert.match(String(buildEinvoicePayload(inv).note), /Path A/);
+  // A small local-delivery invoice under the threshold → IRN only.
+  const small = buildEinvoicePayload({ ...inv, totalAmount: '40000' });
+  assert.equal(small.includeEway, false);
+  assert.doesNotMatch(String(small.note), /Path A/);
 });
 
 test('e-way payload carries consignment value + computed validity', () => {

@@ -234,6 +234,16 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   const drain2 = await api('POST', '/agents/gst/jobs/drain');
   ok('a second drain re-runs nothing', (drain2.data?.processed ?? -1) === 0);
 
+  console.log('\n=== GST metrics exposed on /metrics ===');
+  const ROOT = process.env.API_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
+  const metricsRes = await fetch(`${ROOT}/metrics`, { headers: { Authorization: `Bearer ${process.env.METRICS_TOKEN}` } });
+  const metricsBody = await metricsRes.text();
+  ok('metrics scrape is 200', metricsRes.status === 200);
+  ok('gst_transmissions_total records generated results', /gst_transmissions_total\{[^}]*result="generated"[^}]*\} \d+/.test(metricsBody));
+  ok('gst_execution_seconds histogram is exposed', metricsBody.includes('gst_execution_seconds_bucket'));
+  ok('gst_jobs_total records enqueued + done events',
+    /gst_jobs_total\{event="enqueued"\} \d+/.test(metricsBody) && /gst_jobs_total\{event="done"\} \d+/.test(metricsBody));
+
   await owner.destroy();
   console.log(`\nAGENT GST EXECUTION TEST: ${pass} passed`);
   process.exit(0);

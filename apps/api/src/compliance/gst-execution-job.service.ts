@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { MetricsService } from '../common/metrics.service';
+import { ErrorAlertService } from '../common/error-alert.service';
 import { GstExecutionJob } from '../core/database/entities';
 import { GstExecutionService, type GstExecutionOutcome } from './gst-execution.service';
+
+const JOBS_METRIC_HELP = 'GST execution queue job lifecycle events (enqueued/done/retried/deadlettered/skipped).';
 
 /** Outcome statuses that mean the action is DONE — the job is complete. */
 const JOB_TERMINAL_DONE = new Set([
@@ -74,7 +78,13 @@ export class GstJobService {
   constructor(
     private readonly execution: GstExecutionService,
     private readonly db: TenantDbService,
+    private readonly metrics: MetricsService,
+    private readonly alerter: ErrorAlertService,
   ) {}
+
+  private countJob(event: string): void {
+    this.metrics.incCounter('gst_jobs_total', JOBS_METRIC_HELP, { event });
+  }
 
   /** Enqueue a job for an approved GST action. Idempotent — one job per approval. */
   async enqueue(input: EnqueueInput): Promise<{ enqueued: boolean; jobId: string | null }> {
@@ -88,6 +98,7 @@ export class GstJobService {
       ),
     );
     const jobId: string | null = rows?.[0]?.id ?? null;
+    if (jobId) this.countJob('enqueued');
     return { enqueued: !!jobId, jobId };
   }
 
@@ -190,31 +201,44 @@ export class GstJobService {
   /** Write the job's terminal/retry state from the execution outcome. */
   private async finalize(tenantId: string, jobId: string, claimed: ClaimedJob, outcome: GstExecutionOutcome): Promise<void> {
     const target = jobStatusForOutcome(outcome.status);
-    await this.db.runInTenant(tenantId, async (m) => {
-      if (target === 'done') {
-        await m.query(
+    if (target === 'done') {
+      await this.db.runInTenant(tenantId, (m) =>
+        m.query(
           `UPDATE gst_execution_jobs SET status='done', last_outcome=$2, last_error=NULL, updated_at=now() WHERE id=$1`,
           [jobId, outcome.status],
-        );
-        return;
-      }
-      if (target === 'failed') {
-        const attempts = Number(claimed.attempts) + 1;
-        const dead = attempts >= Number(claimed.maxAttempts);
-        const nextRunAt = dead ? new Date() : new Date(Date.now() + backoffMs(attempts));
-        await m.query(
+        ),
+      );
+      this.countJob('done');
+      return;
+    }
+    if (target === 'failed') {
+      const attempts = Number(claimed.attempts) + 1;
+      const dead = attempts >= Number(claimed.maxAttempts);
+      const nextRunAt = dead ? new Date() : new Date(Date.now() + backoffMs(attempts));
+      await this.db.runInTenant(tenantId, (m) =>
+        m.query(
           `UPDATE gst_execution_jobs
               SET status=$2, attempts=$3, last_outcome=$4, last_error=$5, next_run_at=$6, updated_at=now()
             WHERE id=$1`,
           [jobId, dead ? 'dead' : 'queued', attempts, outcome.status, outcomeError(outcome), nextRunAt],
-        );
-        return;
-      }
-      // 'queued' (skipped / provider off) — release the claim back to queued.
-      await m.query(
-        `UPDATE gst_execution_jobs SET status='queued', last_outcome=$2, updated_at=now() WHERE id=$1`,
-        [jobId, outcome.status],
+        ),
       );
-    });
+      this.countJob(dead ? 'deadlettered' : 'retried');
+      if (dead) {
+        // A dead-lettered job needs a human — it exhausted its retries.
+        void this.alerter.captureOps({
+          key: 'gst_job_deadlettered',
+          message: `GST execution job dead-lettered after ${attempts} attempts (job ${jobId}, approval ${claimed.approvalId})`,
+          tenantId,
+          detail: { jobId, approvalId: claimed.approvalId, lastError: outcomeError(outcome) },
+        });
+      }
+      return;
+    }
+    // 'queued' (skipped / provider off) — release the claim back to queued.
+    await this.db.runInTenant(tenantId, (m) =>
+      m.query(`UPDATE gst_execution_jobs SET status='queued', last_outcome=$2, updated_at=now() WHERE id=$1`, [jobId, outcome.status]),
+    );
+    this.countJob('skipped');
   }
 }

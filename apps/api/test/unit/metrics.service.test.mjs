@@ -68,6 +68,36 @@ test('exposition includes process gauges and build info, and is well-formed', ()
   }
 });
 
+test('generic counters aggregate by label set and render with HELP/TYPE', () => {
+  const m = new MetricsService();
+  m.incCounter('gst_transmissions_total', 'GST transmissions.', { action: 'einvoice_irn', result: 'generated', provider: 'fake' });
+  m.incCounter('gst_transmissions_total', 'GST transmissions.', { action: 'einvoice_irn', result: 'generated', provider: 'fake' });
+  m.incCounter('gst_transmissions_total', 'GST transmissions.', { action: 'eway_bill', result: 'failed', provider: 'fake' });
+  const out = m.render();
+  assert.match(out, /# TYPE gst_transmissions_total counter/);
+  // Same label set (order-independent) → one series of 2.
+  assert.match(out, /gst_transmissions_total\{action="einvoice_irn",provider="fake",result="generated"\} 2/);
+  assert.match(out, /gst_transmissions_total\{action="eway_bill",provider="fake",result="failed"\} 1/);
+});
+
+test('generic histograms record buckets/sum/count per label set', () => {
+  const m = new MetricsService();
+  m.observeSeconds('gst_execution_seconds', 'GST execute duration.', 0.03, { action: 'einvoice_irn', provider: 'fake' });
+  m.observeSeconds('gst_execution_seconds', 'GST execute duration.', 2.0, { action: 'einvoice_irn', provider: 'fake' });
+  const out = m.render();
+  assert.match(out, /# TYPE gst_execution_seconds histogram/);
+  assert.match(out, /gst_execution_seconds_bucket\{action="einvoice_irn",provider="fake",le="0.05"\} 1/);
+  assert.match(out, /gst_execution_seconds_bucket\{action="einvoice_irn",provider="fake",le="\+Inf"\} 2/);
+  assert.match(out, /gst_execution_seconds_count\{action="einvoice_irn",provider="fake"\} 2/);
+});
+
+test('a label-free counter renders without empty braces', () => {
+  const m = new MetricsService();
+  m.incCounter('gst_jobs_total', 'jobs.', { event: 'enqueued' });
+  const out = m.render();
+  assert.match(out, /gst_jobs_total\{event="enqueued"\} 1/);
+});
+
 test('bad durations are clamped, not propagated', () => {
   const m = new MetricsService();
   m.observeHttp('GET', '/x', 200, Number.NaN);

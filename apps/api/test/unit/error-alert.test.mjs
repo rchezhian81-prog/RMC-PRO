@@ -149,6 +149,41 @@ test('missing message/method/path degrade gracefully', async () => {
   }
 });
 
+test('captureOps delivers a structured, redacted ops alert (not gated on HTTP status)', async () => {
+  const { server, received } = captureServer();
+  await listen(server);
+  try {
+    const svc = new ErrorAlertService({ webhookUrl: urlOf(server) }, {});
+    const r = await svc.captureOps({ key: 'gst_auth_failed', message: 'auth failed token=abc123', tenantId: 't-1' }, 1_000);
+    assert.equal(r, 'sent');
+    const p = received[0];
+    assert.equal(p.msg, 'ops_alert');
+    assert.equal(p.key, 'gst_auth_failed');
+    assert.equal(p.tenantId, 't-1');
+    assert.equal(p.level, 'alert');
+    assert.ok(!p.error.includes('abc123') && p.error.includes('[redacted]')); // secret scrubbed
+    assert.ok(p.text.includes('gst_auth_failed'));
+  } finally {
+    await closed(server);
+  }
+});
+
+test('captureOps dedups a recurring condition by key, then re-sends after cooldown', async () => {
+  const { server, received } = captureServer();
+  await listen(server);
+  try {
+    const svc = new ErrorAlertService({ webhookUrl: urlOf(server), dedupWindowMs: 60_000 }, {});
+    assert.equal(await svc.captureOps({ key: 'gst_job_deadlettered', message: 'job A' }, 1_000), 'sent');
+    assert.equal(await svc.captureOps({ key: 'gst_job_deadlettered', message: 'job B' }, 1_500), 'deduped'); // same key
+    assert.equal(received.length, 1);
+    assert.equal(await svc.captureOps({ key: 'gst_job_deadlettered', message: 'job C' }, 1_000 + 60_001), 'sent');
+    assert.equal(received.length, 2);
+    assert.equal(received[1].suppressedSincePrev, 1);
+  } finally {
+    await closed(server);
+  }
+});
+
 test('a slow webhook is aborted on timeout (delivery does not hang the caller)', async () => {
   const { server } = captureServer((_req, res) => { setTimeout(() => { res.writeHead(200); res.end('late'); }, 200); });
   await listen(server);

@@ -126,12 +126,20 @@ export function extractDuplicateEwb(resp: Record<string, unknown>): EwbResult | 
 
 /** Map a decrypted IRN success payload to the provider result. */
 export function mapIrnData(d: Record<string, unknown>): IrnResult {
-  return {
+  const result: IrnResult = {
     irn: String(d.Irn),
     ackNo: String(d.AckNo),
     ackDate: String(d.AckDt),
     signedQrCode: String(d.SignedQRCode),
   };
+  // Path A: the IRP returns the e-way bill in the same response when EwbDtls was
+  // sent. Carry it so the execution service can persist both from one call.
+  if (d.EwbNo != null && String(d.EwbNo) !== '') {
+    result.ewayBillNo = String(d.EwbNo);
+    result.ewayBillDate = d.EwbDt != null ? String(d.EwbDt) : '';
+    result.validUpto = d.EwbValidTill != null ? String(d.EwbValidTill) : '';
+  }
+  return result;
 }
 
 /** Map a decrypted e-way success payload to the provider result. */

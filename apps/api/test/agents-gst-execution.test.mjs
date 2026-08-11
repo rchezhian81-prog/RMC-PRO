@@ -211,6 +211,29 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   const refused = await api('POST', `/agents/approvals/${pendingId}/execute`);
   ok('executing a still-pending approval is a 409', refused.status === 409);
 
+  console.log('\n=== durable execution queue (GW-1): approve → enqueue → drain ===');
+  const qInv = await seedInvoice();
+  const qRun = await api('POST', '/agents/automation/run', { compliance: 'einvoice', invoiceId: qInv.invId });
+  const qApprovalId = qRun.data?.outcome?.result?.prepared?.approvalId;
+  // Approve — but do NOT call execute; the durable queue is the processor here.
+  await api('POST', `/agents/approvals/${qApprovalId}/decide`, { decision: 'approved' });
+  const jobsBefore = await api('GET', '/agents/gst/jobs');
+  const queuedJob = (jobsBefore.data ?? []).find((j) => j.approvalId === qApprovalId);
+  ok('approving a GST action enqueues a durable job', !!queuedJob && queuedJob.status === 'queued');
+  const [preRow] = await owner.query(`SELECT irn, einvoice_status FROM invoices WHERE id=$1`, [qInv.invId]);
+  ok('the invoice is not run inline on approval (still not_generated)', preRow.irn === null && preRow.einvoice_status === 'not_generated');
+  // Drain the queue (operator trigger) — exercises the worker path deterministically.
+  const drain = await api('POST', '/agents/gst/jobs/drain');
+  ok('draining processes the queued job', (drain.data?.processed ?? 0) >= 1);
+  const [postRow] = await owner.query(`SELECT irn, einvoice_status FROM invoices WHERE id=$1`, [qInv.invId]);
+  ok('the queue generated the IRN', !!postRow.irn && postRow.einvoice_status === 'generated');
+  const jobsAfter = await api('GET', '/agents/gst/jobs');
+  const doneJob = (jobsAfter.data ?? []).find((j) => j.approvalId === qApprovalId);
+  ok('the job is marked done after draining', doneJob?.status === 'done');
+  // Idempotency: a second drain finds nothing queued (the job is already done).
+  const drain2 = await api('POST', '/agents/gst/jobs/drain');
+  ok('a second drain re-runs nothing', (drain2.data?.processed ?? -1) === 0);
+
   await owner.destroy();
   console.log(`\nAGENT GST EXECUTION TEST: ${pass} passed`);
   process.exit(0);

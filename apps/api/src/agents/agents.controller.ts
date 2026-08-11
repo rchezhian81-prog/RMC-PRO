@@ -17,6 +17,8 @@ import { AGENT_AUTOMATION } from './automation.agent';
 import { ApprovalService } from './approval.service';
 import { LlmService } from './llm/llm.service';
 import { GstExecutionService } from '../compliance/gst-execution.service';
+import { GstJobService } from '../compliance/gst-execution-job.service';
+import { GST_ACTION_KINDS } from '../compliance/gst.types';
 
 /**
  * Agents that expose the conversational LLM `/ask` mode. These are the ones whose
@@ -119,6 +121,7 @@ export class AgentsController {
     private readonly approvals: ApprovalService,
     private readonly llm: LlmService,
     private readonly gst: GstExecutionService,
+    private readonly jobs: GstJobService,
   ) {}
 
   /** The registered agents and their tool allow-lists (the security contract). */
@@ -273,11 +276,31 @@ export class AgentsController {
     return this.approvals.list(u.tenantId as string, status ?? 'pending');
   }
 
-  /** Approve or reject a prepared action. Decided once — a second decision 409s. */
+  /**
+   * Approve or reject a prepared action. Decided once — a second decision 409s.
+   * Approving a GST action ENQUEUES a durable execution job (GW-1); the action is
+   * then run by the background worker (if enabled) or an operator drain / the
+   * synchronous execute endpoint. Enqueue is idempotent and best-effort — a failed
+   * enqueue never fails the decision (the synchronous execute path still works).
+   */
   @Post('approvals/:id/decide')
   @RequirePermissions('agents.approve')
-  decideApproval(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: DecideApprovalDto) {
-    return this.approvals.decide(u.tenantId as string, id, dto.decision, u.userId, dto.reason);
+  async decideApproval(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: DecideApprovalDto) {
+    const decided = await this.approvals.decide(u.tenantId as string, id, dto.decision, u.userId, dto.reason);
+    if (decided.status === 'approved' && GST_ACTION_KINDS.has(decided.actionKind) && decided.entityId) {
+      try {
+        await this.jobs.enqueue({
+          tenantId: u.tenantId as string,
+          approvalId: decided.id,
+          invoiceId: decided.entityId,
+          actionKind: decided.actionKind,
+          requestedBy: u.userId,
+        });
+      } catch {
+        // Durability is best-effort here; the synchronous execute endpoint still runs it.
+      }
+    }
+    return decided;
   }
 
   // ---- GST live execution (the approved-action transmission step; GW-2/3/4) ----
@@ -289,15 +312,35 @@ export class AgentsController {
   }
 
   /**
-   * Execute an APPROVED GST action (IRN or e-way) against the configured provider
-   * and persist the government response onto the invoice. Gated by `agents.approve`
-   * — the same human authority that approved it. Idempotent; with no provider
-   * configured it skips (prepare-only preserved). This is the operator/worker
-   * entrypoint until the durable queue backbone (GW-1) lands.
+   * Execute an APPROVED GST action (IRN or e-way) synchronously against the
+   * configured provider and persist the government response onto the invoice.
+   * Gated by `agents.approve` — the same human authority that approved it.
+   * Idempotent; with no provider configured it skips (prepare-only preserved).
+   * Reconciles the durable job (GW-1) so a later drain does not re-run it.
    */
   @Post('approvals/:id/execute')
   @RequirePermissions('agents.approve')
-  executeApproval(@CurrentUser() u: AuthUser, @Param('id') id: string) {
-    return this.gst.execute(u.tenantId as string, id, u.userId);
+  async executeApproval(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    const outcome = await this.gst.execute(u.tenantId as string, id, u.userId);
+    await this.jobs.reconcileManual(u.tenantId as string, id, outcome);
+    return outcome;
+  }
+
+  /** The durable GST execution queue (GW-1) for this tenant — status per job. */
+  @Get('gst/jobs')
+  @RequirePermissions('agents.approve')
+  gstJobs(@CurrentUser() u: AuthUser) {
+    return this.jobs.listForTenant(u.tenantId as string);
+  }
+
+  /**
+   * Drain this tenant's due GST jobs now — the operator "process the queue"
+   * trigger (the background worker does this automatically when enabled). Each
+   * claim is atomic, so this never double-runs a job the worker is handling.
+   */
+  @Post('gst/jobs/drain')
+  @RequirePermissions('agents.approve')
+  drainGstJobs(@CurrentUser() u: AuthUser) {
+    return this.jobs.drainForTenant(u.tenantId as string, 50, u.userId);
   }
 }

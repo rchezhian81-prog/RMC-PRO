@@ -25,6 +25,7 @@ import { AgentRunParent1720000020000 } from './migrations/1720000020000-AgentRun
 import { AgentApprovals1720000021000 } from './migrations/1720000021000-AgentApprovals';
 import { ApprovalEntityRef1720000022000 } from './migrations/1720000022000-ApprovalEntityRef';
 import { GstCredentials1720000023000 } from './migrations/1720000023000-GstCredentials';
+import { GstExecutionJobs1720000024000 } from './migrations/1720000024000-GstExecutionJobs';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -65,6 +66,7 @@ export const AppDataSource = new DataSource({
     AgentApprovals1720000021000,
     ApprovalEntityRef1720000022000,
     GstCredentials1720000023000,
+    GstExecutionJobs1720000024000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

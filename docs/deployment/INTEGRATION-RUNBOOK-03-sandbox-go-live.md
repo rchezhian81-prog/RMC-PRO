@@ -311,9 +311,16 @@ adapter *thinner*, not different — keep the same interface; adjust `authentica
   failure — each linked to the `approvalId` + approver.
 - **Never** log decrypted payloads, tokens, `Sek`, or credentials (the adapter
   doesn't; keep it that way in any edits).
-- Metrics/alerts (`gst_irn_*`, `gst_eway_*`, `gst_provider_call_ms`) are runbook 00
-  §9 follow-ups — not required for a sandbox pass, worth wiring before production
-  volume.
+- **Metrics** on `/metrics` (token-gated): `gst_transmissions_total{action,result,
+  provider}` (every generate/cancel/update/extend outcome), `gst_execution_seconds`
+  (execute duration histogram), and `gst_jobs_total{event}` (queue lifecycle:
+  enqueued/done/retried/deadlettered/skipped). Point Prometheus/Grafana at these
+  for a failure-rate panel and a queue-depth alert.
+- **Alerts** flow through the existing ops alerter (`ALERT_WEBHOOK_URL` + the
+  always-on `{"level":"alert"}` log line, deduped/circuit-broken): `gst_auth_failed`
+  when the portal rejects credentials, and `gst_job_deadlettered` when a job
+  exhausts its retries. A "queue stuck / rising" alert is a Prometheus rule over
+  `gst_jobs_total` — no extra code.
 
 ---
 
@@ -368,4 +375,7 @@ Known fast-follows (not blockers for a sandbox pass, decide before broad rollout
 - [x] Durable on-approval execution queue (GW-1): approve enqueues a job; a
       worker (opt-in `GST_WORKER_ENABLED`) or an operator drain processes it with
       backoff + dead-letter; the synchronous `execute` still works and reconciles.
-- [ ] Metrics + alerts (runbook 00 §9); buyer pincode sourcing if mandatory.
+- [x] Metrics + alerts (runbook 00 §9): `gst_transmissions_total` /
+      `gst_execution_seconds` / `gst_jobs_total` on `/metrics`; `gst_auth_failed`
+      + `gst_job_deadlettered` ops alerts via the existing webhook alerter.
+- [ ] Buyer pincode sourcing if the portal marks it mandatory.

@@ -42,7 +42,9 @@ async function bootstrap() {
   // error code rather than guessing from the status alone. The filter also
   // raises an ops alert on 5xx (deduped/throttled; POSTs to ALERT_WEBHOOK_URL
   // when set, and always logs a structured alert line).
-  app.useGlobalFilters(new ErrorFilter(new ErrorAlertService()));
+  // Share the one DI-managed alerter (MetricsModule) so its dedup / circuit
+  // breaker span both the HTTP filter and domain callers (GST auth / dead-letter).
+  app.useGlobalFilters(new ErrorFilter(app.get(ErrorAlertService)));
   app.enableCors({
     origin: corsOrigins(),
     credentials: true,

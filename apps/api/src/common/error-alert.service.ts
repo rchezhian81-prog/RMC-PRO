@@ -130,6 +130,59 @@ export class ErrorAlertService {
     }
   }
 
+  /**
+   * Raise an OPERATIONAL alert that is not an HTTP 5xx — e.g. a GST portal auth
+   * failure or a dead-lettered execution job. Shares the same dedup window,
+   * circuit breaker and webhook delivery as {@link capture}, keyed by `key` so a
+   * recurring condition pages once per window. Never throws.
+   */
+  async captureOps(
+    event: { key: string; message: string; tenantId?: string | null; detail?: Record<string, unknown> },
+    now: number = Date.now(),
+  ): Promise<'sent' | 'deduped' | 'stormed' | 'ignored'> {
+    try {
+      if (!event?.key) return 'ignored';
+      const sig = `ops:${event.key}`;
+      const prev = this.lastSent.get(sig);
+      if (prev && now - prev.at < this.cfg.dedupWindowMs) {
+        prev.suppressed += 1;
+        return 'deduped';
+      }
+      this.sentTimes = this.sentTimes.filter((t) => now - t < this.cfg.dedupWindowMs);
+      if (this.sentTimes.length >= this.cfg.maxPerWindow) {
+        if (now - this.stormLoggedAt >= this.cfg.dedupWindowMs) {
+          this.stormLoggedAt = now;
+          this.emitLog({ level: 'alert', msg: 'error_alert_storm_suppressed', windowMs: this.cfg.dedupWindowMs, cap: this.cfg.maxPerWindow });
+        }
+        return 'stormed';
+      }
+      const suppressed = prev?.suppressed ?? 0;
+      this.lastSent.set(sig, { at: now, suppressed: 0 });
+      this.sentTimes.push(now);
+
+      const summary =
+        `⚠️ ${event.key}: ${scrub(event.message)}` + (suppressed > 0 ? ` (+${suppressed} similar suppressed)` : '');
+      const payload = {
+        level: 'alert',
+        msg: 'ops_alert',
+        service: 'rmc-api',
+        at: new Date(now).toISOString(),
+        key: event.key,
+        tenantId: event.tenantId ?? null,
+        error: scrub(event.message),
+        detail: event.detail ?? null,
+        suppressedSincePrev: suppressed,
+        text: summary,
+        content: summary,
+      };
+      this.emitLog(payload);
+      await this.deliver(payload);
+      return 'sent';
+    } catch {
+      return 'ignored';
+    }
+  }
+
   private buildPayload(event: ErrorAlertEvent, suppressedSincePrev: number, now: number): Record<string, unknown> {
     const where = `${event.method ?? '?'} ${normalizePath(event.path) || '?'}`;
     const summary =

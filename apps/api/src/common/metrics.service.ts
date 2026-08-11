@@ -41,6 +41,33 @@ interface Hist {
   count: number;
 }
 
+interface CounterSeries {
+  value: number;
+  labels: Record<string, string>;
+}
+interface HistSeries {
+  hist: Hist;
+  labels: Record<string, string>;
+}
+
+/** Stable series key from a label set (order-independent). */
+function labelKey(labels: Record<string, string>): string {
+  return Object.keys(labels)
+    .sort()
+    .map((k) => `${k}=${labels[k]}`)
+    .join(',');
+}
+/** Prometheus label string (sorted, escaped), e.g. `a="1",b="2"`. */
+function labelStr(labels: Record<string, string>): string {
+  return Object.keys(labels)
+    .sort()
+    .map((k) => `${escapeLabel(k)}="${escapeLabel(labels[k]!)}"`)
+    .join(',');
+}
+function newHist(): Hist {
+  return { counts: new Array(BUCKETS.length).fill(0), sum: 0, count: 0 };
+}
+
 @Injectable()
 export class MetricsService {
   /** method|route|status -> count */
@@ -49,6 +76,53 @@ export class MetricsService {
   private readonly durations = new Map<string, Hist>();
   private readonly routes = new Set<string>();
   private readonly startedAt = Date.now();
+
+  /** Generic application counters: name -> { help, labelKey -> series }. */
+  private readonly counters = new Map<string, { help: string; series: Map<string, CounterSeries> }>();
+  /** Generic application histograms (seconds): name -> { help, labelKey -> series }. */
+  private readonly histograms = new Map<string, { help: string; series: Map<string, HistSeries> }>();
+
+  /** Increment a labelled application counter (e.g. gst_transmissions_total). Never throws. */
+  incCounter(name: string, help: string, labels: Record<string, string> = {}, by = 1): void {
+    try {
+      let c = this.counters.get(name);
+      if (!c) {
+        c = { help, series: new Map() };
+        this.counters.set(name, c);
+      }
+      const key = labelKey(labels);
+      const s = c.series.get(key);
+      if (s) s.value += by;
+      else c.series.set(key, { value: by, labels });
+    } catch {
+      /* metrics must never affect the caller */
+    }
+  }
+
+  /** Observe a duration (seconds) into a labelled application histogram. Never throws. */
+  observeSeconds(name: string, help: string, seconds: number, labels: Record<string, string> = {}): void {
+    try {
+      let h = this.histograms.get(name);
+      if (!h) {
+        h = { help, series: new Map() };
+        this.histograms.set(name, h);
+      }
+      const key = labelKey(labels);
+      let s = h.series.get(key);
+      if (!s) {
+        s = { hist: newHist(), labels };
+        h.series.set(key, s);
+      }
+      const d = Number.isFinite(seconds) && seconds >= 0 ? seconds : 0;
+      s.hist.sum += d;
+      s.hist.count += 1;
+      for (let i = 0; i < BUCKETS.length; i++) {
+        if (d <= BUCKETS[i]!) s.hist.counts[i]! += 1;
+      }
+    } catch {
+      /* metrics must never affect the caller */
+    }
+  }
 
   /** True once we have hit the route cap — new routes fold into `other`. */
   private cappedRoute(route: string): string {
@@ -126,6 +200,32 @@ export class MetricsService {
     lines.push('# HELP rmc_build_info Build/version info (always 1).');
     lines.push('# TYPE rmc_build_info gauge');
     lines.push(`rmc_build_info{service="rmc-api",version="${escapeLabel(process.env.APP_VERSION || '0.1.0')}"} 1`);
+
+    // Generic application counters (e.g. gst_transmissions_total, gst_jobs_total).
+    for (const [name, c] of this.counters) {
+      lines.push(`# HELP ${name} ${c.help}`);
+      lines.push(`# TYPE ${name} counter`);
+      for (const s of c.series.values()) {
+        const lbl = labelStr(s.labels);
+        lines.push(`${name}${lbl ? `{${lbl}}` : ''} ${s.value}`);
+      }
+    }
+
+    // Generic application histograms in seconds (e.g. gst_execution_seconds).
+    for (const [name, h] of this.histograms) {
+      lines.push(`# HELP ${name} ${h.help}`);
+      lines.push(`# TYPE ${name} histogram`);
+      for (const s of h.series.values()) {
+        const lbl = labelStr(s.labels);
+        const sep = lbl ? ',' : '';
+        for (let i = 0; i < BUCKETS.length; i++) {
+          lines.push(`${name}_bucket{${lbl}${sep}le="${BUCKETS[i]}"} ${s.hist.counts[i]}`);
+        }
+        lines.push(`${name}_bucket{${lbl}${sep}le="+Inf"} ${s.hist.count}`);
+        lines.push(`${name}_sum${lbl ? `{${lbl}}` : ''} ${s.hist.sum}`);
+        lines.push(`${name}_count${lbl ? `{${lbl}}` : ''} ${s.hist.count}`);
+      }
+    }
 
     return lines.join('\n') + '\n';
   }

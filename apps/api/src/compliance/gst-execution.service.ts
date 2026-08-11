@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Inject, Injectable, Logger, Not
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { AuditService } from '../audit/audit.service';
+import { MetricsService } from '../common/metrics.service';
+import { ErrorAlertService } from '../common/error-alert.service';
 import { AgentApprovalRequest } from '../core/database/entities';
 import {
   EWB_EXTEND_REASON_CODES,
@@ -95,6 +97,8 @@ export class GstExecutionService {
     @Inject(GST_PROVIDER) private readonly provider: GstComplianceProvider,
     private readonly db: TenantDbService,
     private readonly audit: AuditService,
+    private readonly metrics: MetricsService,
+    private readonly alerter: ErrorAlertService,
   ) {}
 
   isConfigured(): boolean {
@@ -104,7 +108,47 @@ export class GstExecutionService {
     return this.provider.name;
   }
 
+  /**
+   * Execute an approved GST action, recording the transmission metrics around the
+   * inner run (`gst_transmissions_total{action,result,provider}` +
+   * `gst_execution_seconds`). A resolve/validation error (404/409) throws out
+   * before any transmission and is not counted.
+   */
   async execute(tenantId: string, approvalId: string, actorUserId: string | null): Promise<GstExecutionOutcome> {
+    const started = Date.now();
+    const ref = { actionKind: 'unknown' };
+    const outcome = await this.executeInner(tenantId, approvalId, actorUserId, ref);
+    this.metrics.incCounter(
+      'gst_transmissions_total',
+      'GST portal transmissions by action, result and provider.',
+      { action: ref.actionKind, result: outcome.status, provider: this.provider.name },
+    );
+    this.metrics.observeSeconds(
+      'gst_execution_seconds',
+      'GST execute() duration in seconds by action and provider.',
+      (Date.now() - started) / 1000,
+      { action: ref.actionKind, provider: this.provider.name },
+    );
+    return outcome;
+  }
+
+  /** Raise an ops alert (deduped) when the portal rejects our credentials. */
+  private alertOnAuthFailure(tenantId: string, e: unknown): void {
+    if (e instanceof GstProviderError && e.code === 'AUTH_FAILED') {
+      void this.alerter.captureOps({
+        key: 'gst_auth_failed',
+        message: `GST portal authentication failed (provider ${this.provider.name})`,
+        tenantId,
+      });
+    }
+  }
+
+  private async executeInner(
+    tenantId: string,
+    approvalId: string,
+    actorUserId: string | null,
+    ref: { actionKind: string },
+  ): Promise<GstExecutionOutcome> {
     // Phase 1 — resolve + validate inside a tenant transaction (no network here).
     const loaded = await this.db.runInTenant(tenantId, async (m) => {
       const appr = await m.getRepository(AgentApprovalRequest).findOne({ where: { id: approvalId, tenantId } });
@@ -128,6 +172,7 @@ export class GstExecutionService {
     });
 
     const { appr } = loaded;
+    ref.actionKind = appr.actionKind;
     const invoiceId =
       loaded.kind === 'cancel' ? loaded.cancel.invoiceId
       : loaded.kind === 'modify' ? loaded.modify.invoiceId
@@ -220,6 +265,7 @@ export class GstExecutionService {
       }
       const message = e instanceof Error ? e.message : String(e);
       this.log.warn(`GST execution failed for invoice ${ctx.invoiceId}: ${message}`);
+      this.alertOnAuthFailure(tenantId, e);
       await this.setStatus(tenantId, ctx.invoiceId, ctx.isEinvoice, 'failed');
       await this.record(tenantId, actorUserId, 'gst.execute.failed', ctx.invoiceId, appr, { stage: 'transmit', error: message });
       return { status: 'failed', errors: [message] };
@@ -389,6 +435,7 @@ export class GstExecutionService {
       }
       const message = e instanceof Error ? e.message : String(e);
       this.log.warn(`GST cancel failed for invoice ${c.invoiceId}: ${message}`);
+      this.alertOnAuthFailure(tenantId, e);
       await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'cancel_transmit', error: message });
       return { status: 'failed', errors: [message] };
     }
@@ -488,6 +535,7 @@ export class GstExecutionService {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       this.log.warn(`GST e-way modify failed for invoice ${c.invoiceId}: ${message}`);
+      this.alertOnAuthFailure(tenantId, e);
       await this.record(tenantId, actorUserId, 'gst.execute.failed', c.invoiceId, appr, { stage: 'eway_modify_transmit', error: message });
       return { status: 'failed', errors: [message] };
     }

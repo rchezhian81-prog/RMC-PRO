@@ -152,6 +152,7 @@ export const AUDIT_ACTIONS = {
   CREDIT_HOLD_REJECT: 'credit_hold.reject',
   ORDER_CANCEL: 'order.cancel',
   INVOICE_CANCEL: 'invoice.cancel',
+  INVOICE_TRANSPORT: 'invoice.transport_update',
   QUOTATION_APPROVE: 'quotation.approve',
   QUOTATION_REJECT: 'quotation.reject',
   RATE_CONTRACT_APPROVE: 'rate_contract.approve',

@@ -12,6 +12,7 @@ import {
   Material,
   Site,
   Supplier,
+  Transporter,
   Vehicle,
 } from '../core/database/entities';
 import {
@@ -21,6 +22,7 @@ import {
   MaterialsService,
   SitesService,
   SuppliersService,
+  TransportersService,
   VehiclesService,
 } from './masters.services';
 
@@ -90,6 +92,16 @@ export class DriversController extends BaseCrudController<Driver> {
 @UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class GradesController extends BaseCrudController<ConcreteGrade> {
   constructor(protected readonly service: GradesService) {
+    super();
+  }
+}
+
+@Controller('transporters')
+@CrudResource('masters')
+@RequireModule('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
+export class TransportersController extends BaseCrudController<Transporter> {
+  constructor(protected readonly service: TransportersService) {
     super();
   }
 }

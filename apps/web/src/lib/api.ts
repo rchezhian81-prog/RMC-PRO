@@ -773,6 +773,26 @@ export const purchaseApi = {
   createPayment: (b: Record<string, unknown>) => post('/vendor-payments', b),
 };
 
+// ---- Fleet maintenance & fuel log (Plan D3) ----
+export const fleetApi = {
+  schedules: (vehicleId?: string) => apiFetch<Row[]>(`/vehicle-service-schedules${vehicleId ? `?vehicleId=${vehicleId}` : ''}`),
+  createSchedule: (b: Record<string, unknown>) => post('/vehicle-service-schedules', b),
+  updateSchedule: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/vehicle-service-schedules/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  jobs: (vehicleId?: string, status?: string) => {
+    const qs = new URLSearchParams();
+    if (vehicleId) qs.set('vehicleId', vehicleId);
+    if (status) qs.set('status', status);
+    const s = qs.toString();
+    return apiFetch<Row[]>(`/vehicle-maintenance-jobs${s ? `?${s}` : ''}`);
+  },
+  createJob: (b: Record<string, unknown>) => post('/vehicle-maintenance-jobs', b),
+  completeJob: (id: string, b?: Record<string, unknown>) => post(`/vehicle-maintenance-jobs/${id}/complete`, b),
+  cancelJob: (id: string) => post(`/vehicle-maintenance-jobs/${id}/cancel`),
+  fuelLogs: (vehicleId?: string) => apiFetch<Row[]>(`/vehicle-fuel-logs${vehicleId ? `?vehicleId=${vehicleId}` : ''}`),
+  createFuelLog: (b: Record<string, unknown>) => post('/vehicle-fuel-logs', b),
+  fuelSummary: (vehicleId: string) => apiFetch<Row>(`/vehicle-fuel-logs/summary/${vehicleId}`),
+};
+
 // ---- Dashboard, reports center, sync (Sprint 10) ----
 export const dashboardApi = {
   summary: () => apiFetch<Row>('/dashboard/summary'),

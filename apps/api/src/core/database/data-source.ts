@@ -38,6 +38,7 @@ import { ReceivablesMaturity1720000033000 } from './migrations/1720000033000-Rec
 import { Purchase1720000034000 } from './migrations/1720000034000-Purchase';
 import { WeighbridgeIndicator1720000035000 } from './migrations/1720000035000-WeighbridgeIndicator';
 import { BatchingIntegration1720000036000 } from './migrations/1720000036000-BatchingIntegration';
+import { FleetMaintenance1720000037000 } from './migrations/1720000037000-FleetMaintenance';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -91,6 +92,7 @@ export const AppDataSource = new DataSource({
     Purchase1720000034000,
     WeighbridgeIndicator1720000035000,
     BatchingIntegration1720000036000,
+    FleetMaintenance1720000037000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

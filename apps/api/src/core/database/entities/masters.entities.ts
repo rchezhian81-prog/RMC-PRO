@@ -82,6 +82,7 @@ export class Vehicle extends TenantScopedEntity {
   @Column({ name: 'fitness_expiry', type: 'date', nullable: true }) fitnessExpiry!: string | null;
   @Column({ name: 'permit_expiry', type: 'date', nullable: true }) permitExpiry!: string | null;
   @Column({ name: 'pollution_expiry', type: 'date', nullable: true }) pollutionExpiry!: string | null;
+  @Column({ name: 'road_tax_expiry', type: 'date', nullable: true }) roadTaxExpiry!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'available' }) status!: string;
 }
 

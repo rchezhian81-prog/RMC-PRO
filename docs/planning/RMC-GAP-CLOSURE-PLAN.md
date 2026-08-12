@@ -45,7 +45,7 @@ breadth on top of that spine**, not rework of it.
 
 | # | Epic | Track | Priority | Depends on | Est. PRs | Status |
 |---|------|-------|----------|-----------|----------|--------|
-| D1 | Fleet renewal / compliance alerts | Fleet | Critical | — | 1 | **next** |
+| D1 | Fleet renewal / compliance alerts | Fleet | Critical | — | 1 | **done** |
 | A1 | Material & UOM master depth | Batching | Critical | — | 1–2 | planned |
 | A2 | Aggregate moisture & w/c correction | Batching | Critical | A1 | 2 | planned |
 | A3 | QC / Lab module (`qc`) | Batching | Critical | A1 | 2–3 | planned |

@@ -1,7 +1,7 @@
 export interface FieldDef {
   key: string;
   label: string;
-  type?: 'text' | 'number';
+  type?: 'text' | 'number' | 'date';
   required?: boolean;
 }
 
@@ -73,23 +73,29 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   vehicles: {
     path: 'vehicles',
     title: 'Vehicles',
-    columns: ['vehicleNo', 'vehicleType', 'capacityM3', 'ownershipType', 'status'],
+    columns: ['vehicleNo', 'vehicleType', 'capacityM3', 'insuranceExpiry', 'fitnessExpiry', 'status'],
     fields: [
       { key: 'vehicleNo', label: 'Vehicle No', required: true },
       { key: 'vehicleType', label: 'Type' },
       { key: 'capacityM3', label: 'Capacity (m³)', type: 'number' },
       { key: 'ownershipType', label: 'Ownership' },
+      { key: 'insuranceExpiry', label: 'Insurance expiry', type: 'date' },
+      { key: 'fitnessExpiry', label: 'Fitness (FC) expiry', type: 'date' },
+      { key: 'permitExpiry', label: 'Permit expiry', type: 'date' },
+      { key: 'pollutionExpiry', label: 'Pollution (PUC) expiry', type: 'date' },
+      { key: 'roadTaxExpiry', label: 'Road tax expiry', type: 'date' },
     ],
   },
   drivers: {
     path: 'drivers',
     title: 'Drivers',
-    columns: ['driverCode', 'driverName', 'mobile', 'licenseNo', 'status'],
+    columns: ['driverCode', 'driverName', 'mobile', 'licenseNo', 'licenseExpiry', 'status'],
     fields: [
       { key: 'driverCode', label: 'Code', required: true },
       { key: 'driverName', label: 'Name', required: true },
       { key: 'mobile', label: 'Mobile' },
       { key: 'licenseNo', label: 'License No' },
+      { key: 'licenseExpiry', label: 'License expiry', type: 'date' },
     ],
   },
   transporters: {

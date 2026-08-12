@@ -160,13 +160,51 @@ async function main() {
   invoice = await api('POST', `/invoices/${invoice.id}/issue`);
   log(`  ✓ issued ${invoice.invoiceNo || invoice.id}`);
 
-  // ---- G. Receipt (full payment) ----
+  // ---- G. Receipt lifecycle (Plan C1): cheque → bounce/reversal → advance →
+  //         realise → apply → write-off. Proves allocation AND reversal end to end.
   step('7/8', 'Receipt');
-  const receipt = await api('POST', '/receipts', {
-    customerId: customer.id, amount: total, receiptDate: TODAY, paymentMode: 'neft', bankReference: 'TEST-UTR',
+  const must = (cond, m) => { if (!cond) throw new Error(`receipt-lifecycle: ${m}`); };
+  const near = (a, b) => Math.abs(Number(a) - Number(b)) < 0.01;
+  const invAfter = async () => api('GET', `/invoices/${invoice.id}`);
+
+  // G1. A cheque covering the whole invoice — money-in-transit until it clears.
+  const cheque = await api('POST', '/receipts', {
+    customerId: customer.id, amount: total, receiptDate: TODAY, paymentMode: 'cheque', bankReference: 'CHQ-0001',
     allocations: [{ invoiceId: invoice.id, amount: total }],
   });
-  log(`  ✓ receipt ${receipt.receiptNo || receipt.id} · ₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })} allocated`);
+  must(cheque.clearingStatus === 'pending', `new cheque should be pending, got ${cheque.clearingStatus}`);
+  must(near((await invAfter()).outstandingAmount, 0), 'invoice should be fully allocated after the cheque');
+  log(`  ✓ cheque ${cheque.receiptNo} recorded (pending) · invoice outstanding → 0`);
+
+  // G2. The cheque bounces (NSF): every allocation reverses, invoice restored.
+  const bounced = await api('POST', `/receipts/${cheque.id}/bounce`, { reason: 'NSF — insufficient funds' });
+  must(bounced.status === 'reversed' && bounced.clearingStatus === 'bounced', `bounced receipt state wrong: ${bounced.status}/${bounced.clearingStatus}`);
+  must(near((await invAfter()).outstandingAmount, total), 'invoice outstanding should be restored after bounce');
+  log(`  ✓ cheque bounced · allocation reversed · invoice outstanding → ₹${total.toLocaleString('en-IN')}`);
+
+  // G3. A customer advance (unallocated), taken by cheque, then cleared.
+  const advanceAmt = Math.round(total * 0.9);
+  const residual = total - advanceAmt;
+  let advance = await api('POST', '/receipts', {
+    customerId: customer.id, amount: advanceAmt, receiptDate: TODAY, paymentMode: 'cheque', bankReference: 'CHQ-0002',
+  });
+  must(advance.isAdvance === true && near(advance.unallocatedAmount, advanceAmt), 'advance should be fully unallocated');
+  advance = await api('POST', `/receipts/${advance.id}/realise`, {});
+  must(advance.clearingStatus === 'realised', `advance cheque should be realised, got ${advance.clearingStatus}`);
+  log(`  ✓ advance ${advance.receiptNo} · ₹${advanceAmt.toLocaleString('en-IN')} realised`);
+
+  // G4. Apply the advance to the open invoice (allocation across invoices).
+  advance = await api('POST', `/receipts/${advance.id}/apply`, {});
+  must(near(advance.unallocatedAmount, 0), 'advance should be fully applied');
+  must(near((await invAfter()).outstandingAmount, residual), `invoice outstanding should be ₹${residual} after applying the advance`);
+  log(`  ✓ advance applied · invoice outstanding → ₹${residual.toLocaleString('en-IN')}`);
+
+  // G5. Write off the small residual as a bad debt.
+  const writtenOff = await api('POST', `/invoices/${invoice.id}/writeoff`, { amount: residual, reason: 'Small residual — bad debt' });
+  must(writtenOff.paymentStatus === 'written_off', `invoice should read written_off, got ${writtenOff.paymentStatus}`);
+  must(near(writtenOff.outstandingAmount, 0) && near(writtenOff.writtenOffAmount, residual), 'write-off figures wrong');
+  invoice = writtenOff;
+  log(`  ✓ residual ₹${residual.toLocaleString('en-IN')} written off · invoice settled (paid + written off)`);
 
   // ---- Summary ----
   step('8/8', 'Cycle complete');
@@ -176,7 +214,7 @@ async function main() {
   log(`Batch     : ${ticket.batchTicketNo || ticket.ticketNo || ticket.id} (stock consumed)`);
   log(`Dispatch  : ${dispatch.dispatchNo || dispatch.id}`);
   log(`Challan   : ${challan.challanNo || challan.id} (delivered)`);
-  log(`Invoice   : ${invoice.invoiceNo || invoice.id} · ₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (issued, paid)`);
+  log(`Invoice   : ${invoice.invoiceNo || invoice.id} · ₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (issued · settled via advance + write-off)`);
   log(`\n✓ Full order-to-cash cycle worked end to end for ${QTY_M3} m³ of ${grade.gradeCode}.`);
   log(`Check it in the app: Sales → Quotations, Orders, Dispatch, Billing → Invoices / Receipts.`);
 }

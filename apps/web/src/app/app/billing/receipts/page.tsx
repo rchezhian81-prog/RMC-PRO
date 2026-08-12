@@ -5,6 +5,7 @@ import { crud, invoicesApi, receiptsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
+import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
@@ -12,7 +13,7 @@ import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function ReceiptsPage() {
-  const { prompt } = useConfirm();
+  const { prompt, confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [customers, setCustomers] = useState<Row[]>([]);
   const [customerId, setCustomerId] = useState('');
@@ -42,6 +43,19 @@ export default function ReceiptsPage() {
     }
     const all = await invoicesApi.list('issued');
     setOpenInvoices(all.filter((i) => i.customerId === cid && Number(i.outstandingAmount) > 0));
+  }
+
+  /** Run a receipt action, then refresh and report — errors surface inline. */
+  async function act(fn: () => Promise<unknown>, okMsg: string) {
+    setError(null);
+    setMsg(null);
+    try {
+      await fn();
+      await reload();
+      setMsg(okMsg);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
   }
 
   async function create() {
@@ -166,11 +180,17 @@ export default function ReceiptsPage() {
                 <Th numeric>Amount</Th>
                 <Th numeric>Allocated</Th>
                 <Th numeric>Unallocated</Th>
+                <Th>Status</Th>
                 <Th />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const reversed = String(r.status) === 'reversed';
+                const clearing = String(r.clearingStatus ?? '');
+                const canBounce = !reversed && (clearing === 'pending' || clearing === 'realised');
+                const canApply = !reversed && Number(r.unallocatedAmount) > 0;
+                return (
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.receiptNo ?? '')}</Td>
                   <Td>{String(r.receiptDate ?? '—')}</Td>
@@ -178,23 +198,61 @@ export default function ReceiptsPage() {
                   <Td numeric>₹{money(r.amount)}</Td>
                   <Td numeric>₹{money(r.allocatedAmount)}</Td>
                   <Td numeric>₹{money(r.unallocatedAmount)}</Td>
+                  <Td><StatusBadge status={clearing || String(r.status ?? '')} /></Td>
                   <Td style={{ textAlign: 'right' }}>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={async () => {
-                        const m = await prompt({ title: 'Share receipt', label: 'Recipient mobile', defaultValue: '' });
-                        if (m !== null) {
-                          await receiptsApi.share(String(r.id), m);
-                          setMsg('WhatsApp message logged.');
-                        }
-                      }}
-                    >
-                      Share
-                    </Button>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      {clearing === 'pending' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => act(() => receiptsApi.realise(String(r.id)), `Receipt ${String(r.receiptNo)} marked realised.`)}
+                        >
+                          Realise
+                        </Button>
+                      )}
+                      {canApply && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => act(() => receiptsApi.apply(String(r.id)), `Applied advance on ${String(r.receiptNo)}.`)}
+                        >
+                          Apply advance
+                        </Button>
+                      )}
+                      {canBounce && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            act(async () => {
+                              if (!(await confirm({ title: 'Bounce cheque', message: `Reverse receipt ${String(r.receiptNo)}? Every allocation is restored to its invoice.`, confirmLabel: 'Bounce' }))) return;
+                              const reason = await prompt({ title: 'Bounce cheque', label: 'Reason', defaultValue: '' });
+                              if (reason === null) return;
+                              await receiptsApi.bounce(String(r.id), reason);
+                            }, `Receipt ${String(r.receiptNo)} reversed.`)
+                          }
+                        >
+                          Bounce
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={async () => {
+                          const m = await prompt({ title: 'Share receipt', label: 'Recipient mobile', defaultValue: '' });
+                          if (m !== null) {
+                            await receiptsApi.share(String(r.id), m);
+                            setMsg('WhatsApp message logged.');
+                          }
+                        }}
+                      >
+                        Share
+                      </Button>
+                    </div>
                   </Td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </Table>
         ) : (

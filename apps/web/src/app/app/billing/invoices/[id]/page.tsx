@@ -127,6 +127,29 @@ export default function InvoiceDetail() {
               Cancel
             </Button>
           )}
+          {status === 'issued' && Number(inv.outstandingAmount) > 0 && getAccess().has('invoice_cancellation.approve') && (
+            <Button
+              variant="secondary"
+              onClick={() =>
+                run(async () => {
+                  const a = await prompt({
+                    title: 'Write off outstanding',
+                    message: 'Write off part or all of the outstanding balance as a bad debt. The amount paid is left unchanged.',
+                    label: 'Amount (₹)',
+                    defaultValue: String(inv.outstandingAmount ?? ''),
+                  });
+                  if (a === null) return;
+                  const amount = Number(a);
+                  if (!(amount > 0)) throw new Error('Enter an amount greater than zero');
+                  const r = await prompt({ title: 'Write off outstanding', label: 'Reason', defaultValue: '' });
+                  if (r === null) return;
+                  await invoicesApi.writeoff(id, amount, r);
+                }, 'Outstanding written off')
+              }
+            >
+              Write off
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -172,6 +195,7 @@ export default function InvoiceDetail() {
           <TotalRow label="Total" value={`₹${money(inv.totalAmount)}`} strong />
         </div>
         <TotalRow label="Paid" value={money(inv.amountPaid)} />
+        {Number(inv.writtenOffAmount) > 0 && <TotalRow label="Written off" value={money(inv.writtenOffAmount)} tone="var(--mn-danger)" />}
         <TotalRow
           label="Outstanding"
           value={`₹${money(inv.outstandingAmount)}`}

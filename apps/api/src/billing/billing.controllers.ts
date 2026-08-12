@@ -35,6 +35,9 @@ export class InvoiceController {
   @Post(':id/cancel') @RequirePermissions('invoice_cancellation.approve')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.cancel(tid(u), id, u.userId, dto.reason as string); }
 
+  @Post(':id/writeoff') @RequirePermissions('invoice_cancellation.approve')
+  writeOff(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.writeOff(tid(u), id, u.userId, Number(dto.amount ?? 0), dto.reason as string); }
+
   @Post(':id/share') @RequirePermissions('whatsapp.send')
   share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }
 
@@ -63,6 +66,15 @@ export class ReceiptController {
 
   @Post() @RequirePermissions('receipts.create')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
+
+  @Post(':id/realise') @RequirePermissions('receipts.create')
+  realise(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.realise(tid(u), id); }
+
+  @Post(':id/bounce') @RequirePermissions('receipts.create')
+  bounce(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.bounce(tid(u), id, u.userId, dto.reason as string); }
+
+  @Post(':id/apply') @RequirePermissions('receipts.create')
+  apply(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.applyAdvance(tid(u), id); }
 
   @Post(':id/share') @RequirePermissions('whatsapp.send')
   share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }

@@ -51,7 +51,7 @@ breadth on top of that spine**, not rework of it.
 | A3 | QC / Lab module (`qc`) | Batching | Critical | A1 | 2–3 | **done** |
 | B2 | Pricing & GST depth (quote→invoice) | Order-to-cash | Important | — | 2 | **done** |
 | B1 | Pour scheduling | Order-to-cash | Important | — | 2 | **done** |
-| C1 | Receivables maturity | Billing | Important | — | 1–2 | planned |
+| C1 | Receivables maturity | Billing | Important | — | 1–2 | **done** |
 | D2 | Purchase / AP-lite (`purchase`) | Procurement | Critical | A1 | 3 | planned |
 | E1 | Weighbridge hardware bridge | Weighbridge | Important | — | 2 | planned |
 | A4 | Batching Integration (`batching_integration`) | Batching | Important | A2 | 2 | planned |
@@ -130,13 +130,28 @@ RMC batching correctness gap (currently 0 lines).
   schedule; track scheduled-vs-delivered m³. **DoD:** schedule CRUD + a
   schedule-vs-delivered report.
 
-### C1 · Receivables maturity
+### C1 · Receivables maturity ✅
 **Goal:** Close the AR loop.
 - Cheque lifecycle (deposited → realised / NSF-bounced) with reversal on bounce;
   apply a held advance to later invoices; credit/debit notes; write-offs with
   reason master; feed issued invoices + receipts into credit exposure (today
   exposure = opening + confirmed orders only). **DoD:** allocation + reversal
   unit/integration tested.
+- **Delivered:** cheque clearing lifecycle on receipts (`clearing_status`:
+  pending → realised | bounced) with `POST /receipts/:id/realise` and
+  `/bounce` (bounce reverses every allocation, restoring each invoice's
+  outstanding + payment status); apply a held advance across a customer's oldest
+  open invoices (`/receipts/:id/apply`, greedy `allocateAcrossInvoices` helper);
+  invoice bad-debt write-off (`POST /invoices/:id/writeoff`, `written_off_amount`
+  column, `written_off` payment status). Both new mutations audited
+  (`receipt.bounce`, `invoice.writeoff`). Web: receipts list gains realise /
+  bounce / apply actions + a clearing badge; invoice detail gains a write-off
+  action + written-off total. **Tests:** allocation unit-tested
+  (`receipt-allocation.test.mjs`); the order-to-cash integration cycle now drives
+  cheque → bounce (reversal) → advance → realise → apply → write-off end to end.
+- **Deferred:** credit/debit notes; a structured write-off/bounce reason master
+  (reasons are free-text today); folding issued invoices + receipts into the live
+  credit-exposure calculation.
 
 ### D2 · Purchase / AP-lite (`purchase`)
 **Goal:** Own procurement of cement/aggregate/admixture/diesel.

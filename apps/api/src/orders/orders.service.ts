@@ -8,9 +8,11 @@ import {
   Order,
   OrderItem,
   OrderStatusHistory,
+  PourScheduleSlot,
 } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { summariseGst, isInterstateSupply } from '../billing/tax.util';
+import { summarisePourSchedule } from './pour-schedule.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 import { CreditService, type CreditAssessment } from './credit.service';
@@ -62,7 +64,58 @@ export class OrdersService {
       })),
       isInterstateSupply(company?.state, customer?.state),
     );
-    return { ...order, items, history, creditHolds: holds, taxSummary };
+
+    // Pour schedule + scheduled-vs-delivered (delivered = confirmed batch tickets).
+    const pourSlots = await m
+      .getRepository(PourScheduleSlot)
+      .find({ where: { orderId: id }, order: { slotDate: 'ASC', sequenceNo: 'ASC', createdAt: 'ASC' } });
+    const orderedM3 = items.reduce((a, it) => a + num(it.quantityM3), 0);
+    const [delivered] = await m.query(
+      `SELECT COALESCE(sum(batch_quantity_m3), 0)::float AS m3 FROM batch_tickets WHERE order_id = $1 AND status = 'confirmed'`,
+      [id],
+    );
+    const pourSummary = summarisePourSchedule(
+      pourSlots.map((s) => ({ quantityM3: num(s.quantityM3), status: s.status })),
+      orderedM3,
+      num(delivered?.m3),
+    );
+    return { ...order, items, history, creditHolds: holds, taxSummary, pourSlots, pourSummary };
+  }
+
+  // ---- Pour schedule (Plan B1) -------------------------------------------
+  addPourSlot(tenantId: string, orderId: string, dto: Record<string, unknown>) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const order = await m.getRepository(Order).findOne({ where: { id: orderId } });
+      if (!order) throw notFound();
+      const qty = num(dto.quantityM3);
+      if (qty <= 0) throw badReq('Slot quantity (m³) must be greater than zero');
+      if (!dto.slotDate) throw badReq('Slot date is required');
+      const repo = m.getRepository(PourScheduleSlot);
+      await repo.save(
+        repo.create({
+          tenantId, orderId,
+          siteId: (dto.siteId as string) || order.siteId || null,
+          slotDate: String(dto.slotDate),
+          startTime: (dto.startTime as string) || null,
+          quantityM3: String(qty),
+          truckSpacingMinutes: dto.truckSpacingMinutes ? num(dto.truckSpacingMinutes) : null,
+          pumpRequired: dto.pumpRequired === true || dto.pumpRequired === 'true',
+          sequenceNo: dto.sequenceNo ? num(dto.sequenceNo) : 0,
+          remarks: (dto.remarks as string) || null,
+        }),
+      );
+      return this.loadFull(m, orderId);
+    });
+  }
+
+  removePourSlot(tenantId: string, orderId: string, slotId: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(PourScheduleSlot);
+      const slot = await repo.findOne({ where: { id: slotId, orderId } });
+      if (!slot) throw notFound();
+      await repo.delete(slotId);
+      return this.loadFull(m, orderId);
+    });
   }
 
   get(tenantId: string, id: string) {

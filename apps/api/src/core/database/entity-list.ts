@@ -63,6 +63,13 @@ import {
   AgentApprovalRequest,
   TenantGstCredential,
   GstExecutionJob,
+  Transporter,
+  Uom,
+  UomConversion,
+  PourScheduleSlot,
+  QcSlumpTest,
+  QcCubeSet,
+  QcCubeResult,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -131,4 +138,11 @@ export const ENTITIES = [
   AgentApprovalRequest,
   TenantGstCredential,
   GstExecutionJob,
+  Transporter,
+  Uom,
+  UomConversion,
+  PourScheduleSlot,
+  QcSlumpTest,
+  QcCubeSet,
+  QcCubeResult,
 ];

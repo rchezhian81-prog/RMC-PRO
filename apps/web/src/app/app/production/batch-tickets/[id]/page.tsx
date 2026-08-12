@@ -13,6 +13,8 @@ import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const AGGREGATE_TYPES = ['fine_aggregate', 'coarse_aggregate'];
+const isAggregate = (m: Row) => AGGREGATE_TYPES.includes(String(m.materialType));
 
 export default function BatchTicketDetail() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +22,7 @@ export default function BatchTicketDetail() {
   const { confirm: askConfirm } = useConfirm();
   const [t, setT] = useState<Row | null>(null);
   const [actuals, setActuals] = useState<Record<string, string>>({});
+  const [moist, setMoist] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -28,6 +31,7 @@ export default function BatchTicketDetail() {
     setT(ticket);
     const mats = (ticket.materials as Row[]) ?? [];
     setActuals(Object.fromEntries(mats.map((m) => [String(m.id), String(m.actualQuantity ?? '')])));
+    setMoist(Object.fromEntries(mats.map((m) => [String(m.id), m.measuredMoisturePct == null ? '' : String(m.measuredMoisturePct)])));
   }, [id]);
 
   useEffect(() => {
@@ -52,9 +56,32 @@ export default function BatchTicketDetail() {
       () =>
         batchTicketsApi.updateActuals(
           id,
-          mats.map((m) => ({ id: m.id, actualQuantity: Number(actuals[String(m.id)] || 0) })),
+          mats.map((m) => {
+            const mo = moist[String(m.id)];
+            return {
+              id: m.id,
+              actualQuantity: Number(actuals[String(m.id)] || 0),
+              ...(isAggregate(m) && mo !== '' && mo !== undefined ? { measuredMoisturePct: Number(mo) } : {}),
+            };
+          }),
         ),
       'Actuals saved',
+    );
+  }
+
+  /** Push measured aggregate moisture only — the server recomputes corrected
+   *  targets and mix water and re-seeds actuals to the corrected weight. */
+  async function applyMoisture() {
+    const mats = (t?.materials as Row[]) ?? [];
+    await run(
+      () =>
+        batchTicketsApi.updateActuals(
+          id,
+          mats
+            .filter(isAggregate)
+            .map((m) => ({ id: m.id, measuredMoisturePct: Number(moist[String(m.id)] || 0) })),
+        ),
+      'Moisture applied — aggregate weights and mix water corrected.',
     );
   }
 
@@ -105,12 +132,14 @@ export default function BatchTicketDetail() {
         </div>
       )}
 
-      <Card title="Material — target vs actual" padded={false}>
+      <Card title="Material — design → moisture-corrected → actual" padded={false}>
         <Table>
           <thead>
             <tr>
               <Th>Material</Th>
-              <Th numeric>Target</Th>
+              <Th numeric>Design (SSD)</Th>
+              <Th numeric>Moisture %</Th>
+              <Th numeric>Batch target</Th>
               <Th numeric>Actual</Th>
               <Th>UOM</Th>
               <Th numeric>Variance %</Th>
@@ -123,6 +152,22 @@ export default function BatchTicketDetail() {
               <tr key={m.id}>
                 <Td>{String(m.materialLabel ?? '')}</Td>
                 <Td numeric>{fmt(m.targetQuantity)}</Td>
+                <Td numeric>
+                  {draft && isAggregate(m) ? (
+                    <Input
+                      type="number"
+                      step="any"
+                      style={{ width: 80, textAlign: 'right' }}
+                      value={moist[String(m.id)] ?? ''}
+                      onChange={(e) => setMoist({ ...moist, [String(m.id)]: e.target.value })}
+                    />
+                  ) : m.measuredMoisturePct == null ? (
+                    '—'
+                  ) : (
+                    `${fmt(m.measuredMoisturePct)}%`
+                  )}
+                </Td>
+                <Td numeric>{fmt(m.correctedTargetQuantity ?? m.targetQuantity)}</Td>
                 <Td numeric>
                   {draft ? (
                     <Input
@@ -144,8 +189,21 @@ export default function BatchTicketDetail() {
             ))}
           </tbody>
         </Table>
+        {(() => {
+          const free = mats.filter(isAggregate).reduce((s, m) => s + Number(m.freeWaterQuantity ?? 0), 0);
+          return free
+            ? (
+              <p style={{ margin: '12px 16px 0', fontSize: 12.5, color: 'var(--mn-muted)' }}>
+                Aggregate free water: {fmt(free)} — mix water adjusted to hold the design water/cement ratio.
+              </p>
+            )
+            : null;
+        })()}
         {draft && (
           <div style={{ margin: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {mats.some(isAggregate) && (
+              <Button variant="secondary" onClick={applyMoisture}>Apply moisture</Button>
+            )}
             <Button variant="secondary" onClick={saveActuals}>Save actuals</Button>
             <Button onClick={() => confirm(false)}>Confirm batch</Button>
             <Button variant="secondary" onClick={() => run(() => batchTicketsApi.cancel(id), 'Ticket cancelled')}>Cancel</Button>

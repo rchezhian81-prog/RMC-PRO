@@ -83,4 +83,11 @@ export class BatchTicketMaterial extends TenantScopedEntity {
   @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;
   @Column({ name: 'tolerance_percentage', type: 'numeric', precision: 6, scale: 2, default: 2 }) tolerancePercentage!: string;
   @Column({ name: 'within_tolerance', type: 'boolean', default: true }) withinTolerance!: boolean;
+  // Moisture correction (Plan A2) — snapshot of the material's batching props +
+  // the corrected (moist) target the operator should weigh out.
+  @Column({ name: 'material_type', type: 'varchar', nullable: true }) materialType!: string | null;
+  @Column({ name: 'water_absorption_pct', type: 'numeric', precision: 6, scale: 3, nullable: true }) waterAbsorptionPct!: string | null;
+  @Column({ name: 'measured_moisture_pct', type: 'numeric', precision: 6, scale: 3, nullable: true }) measuredMoisturePct!: string | null;
+  @Column({ name: 'corrected_target_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true }) correctedTargetQuantity!: string | null;
+  @Column({ name: 'free_water_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true }) freeWaterQuantity!: string | null;
 }

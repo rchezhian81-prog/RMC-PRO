@@ -42,6 +42,7 @@ import { FleetMaintenance1720000037000 } from './migrations/1720000037000-FleetM
 import { Expenses1720000038000 } from './migrations/1720000038000-Expenses';
 import { ReturnedConcrete1720000039000 } from './migrations/1720000039000-ReturnedConcrete';
 import { ImportJobs1720000040000 } from './migrations/1720000040000-ImportJobs';
+import { DocumentCorrections1720000041000 } from './migrations/1720000041000-DocumentCorrections';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -99,6 +100,7 @@ export const AppDataSource = new DataSource({
     Expenses1720000038000,
     ReturnedConcrete1720000039000,
     ImportJobs1720000040000,
+    DocumentCorrections1720000041000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

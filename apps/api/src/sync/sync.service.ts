@@ -11,6 +11,7 @@ import {
   StockBalance,
   SyncConflict,
 } from '../core/database/entities';
+import { NumberingService } from '../sales/numbering.service';
 
 const notFound = (msg = 'Not found') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: msg });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -96,7 +97,10 @@ export interface PushResult {
  */
 @Injectable()
 export class SyncService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly numbering: NumberingService,
+  ) {}
 
   // ---- Devices ----------------------------------------------------------
   registerDevice(tenantId: string, dto: Record<string, unknown>, userId: string) {
@@ -153,46 +157,45 @@ export class SyncService {
   }
 
   // ---- Number reservations ---------------------------------------------
+  /**
+   * Reserve a contiguous block of document numbers (Plan F2). A `deviceId`
+   * reserves for an offline device (the original path); omitting it is an online
+   * reservation. An explicit `plantId` draws from that plant's series, otherwise
+   * the tenant-wide series (unchanged for offline devices). The allocation +
+   * FY roll-over run through the shared NumberingService.
+   */
   reserveNumbers(tenantId: string, dto: Record<string, unknown>) {
-    const deviceId = String(dto.deviceId ?? '');
+    const deviceId = dto.deviceId ? String(dto.deviceId) : null;
     const documentType = String(dto.documentType ?? '');
     const count = Math.max(1, Math.min(1000, Number(dto.count ?? 0) || 0));
-    if (!deviceId || !documentType) throw badReq('deviceId and documentType are required');
+    const requestedPlantId = (dto.plantId as string) || null;
+    if (!documentType) throw badReq('documentType is required');
     return this.db.runInTenant(tenantId, async (m) => {
-      const device = await m.getRepository(Device).findOne({ where: { id: deviceId } });
-      if (!device) throw notFound('Device not found');
-
-      const rows: Array<{ id: string; prefix: string | null; current_number: number; padding_length: number }> =
-        await m.query(
-          `SELECT id, prefix, current_number, padding_length FROM number_series
-           WHERE tenant_id = $1 AND document_type = $2 AND is_active = true
-           ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
-          [tenantId, documentType],
-        );
-      let series: (typeof rows)[number] | undefined = rows[0];
-      if (!series) {
-        const ins: typeof rows = await m.query(
-          `INSERT INTO number_series (tenant_id, document_type, prefix, current_number, padding_length)
-           VALUES ($1, $2, $3, 0, 4) RETURNING id, prefix, current_number, padding_length`,
-          [tenantId, documentType, documentType.slice(0, 3).toUpperCase() + '-'],
-        );
-        series = ins[0];
+      let reservationPlantId = requestedPlantId;
+      if (deviceId) {
+        const device = await m.getRepository(Device).findOne({ where: { id: deviceId } });
+        if (!device) throw notFound('Device not found');
+        if (!reservationPlantId) reservationPlantId = device.plantId;
       }
-      if (!series) throw badReq(`Could not allocate number series for ${documentType}`);
-      const numberFrom = Number(series.current_number) + 1;
-      const numberTo = Number(series.current_number) + count;
-      await m.query(`UPDATE number_series SET current_number = $1, updated_at = now() WHERE id = $2`, [numberTo, series.id]);
+
+      // Series scoping uses an EXPLICIT plantId only — an offline device without
+      // one keeps drawing from the tenant-wide series, exactly as before.
+      const block = await this.numbering.reserve(m, tenantId, documentType, count, { plantId: requestedPlantId });
 
       const repo = m.getRepository(LocalNumberReservation);
       const reservation = await repo.save(
         repo.create({
-          tenantId, deviceId, plantId: device.plantId, documentType,
-          prefix: series.prefix, paddingLength: Number(series.padding_length) || 4,
-          numberFrom, numberTo, usedCount: 0, status: 'active',
+          tenantId, deviceId, plantId: reservationPlantId, documentType,
+          prefix: block.prefix, paddingLength: block.paddingLength,
+          numberFrom: block.numberFrom, numberTo: block.numberTo, usedCount: 0, status: 'active',
         }),
       );
-      const fmt = (n: number) => `${series.prefix ?? ''}${String(n).padStart(Number(series.padding_length) || 4, '0')}`;
-      return { ...reservation, sampleFrom: fmt(numberFrom), sampleTo: fmt(numberTo) };
+      return {
+        ...reservation,
+        financialYear: block.financialYear,
+        sampleFrom: block.numbers[0],
+        sampleTo: block.numbers[block.numbers.length - 1],
+      };
     });
   }
 

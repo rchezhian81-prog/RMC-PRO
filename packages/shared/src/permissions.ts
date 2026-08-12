@@ -83,6 +83,13 @@ export const PERMISSIONS = {
   VENDOR_BILLS_APPROVE: 'vendor_bills.approve',
   VENDOR_PAYMENTS_CREATE: 'vendor_payments.create',
 
+  // Fleet maintenance & fuel log (D3). Recording a service/breakdown job and
+  // logging fuel are separate keys from viewing, so a driver or dispatcher can
+  // be allowed to log fuel without editing the maintenance plan.
+  FLEET_VIEW: 'fleet.view',
+  FLEET_MAINTENANCE_RECORD: 'fleet.maintenance.record',
+  FLEET_FUEL_RECORD: 'fleet.fuel.record',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -178,6 +185,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
     P.PURCHASE_VIEW, P.PURCHASE_ORDERS_CREATE, P.GRN_CREATE,
+    P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
     P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 
@@ -203,6 +211,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
   [ROLE_KEYS.DISPATCH_MANAGER]: [
     P.MASTERS_VIEW, P.ORDERS_VIEW,
     P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
+    P.FLEET_VIEW, P.FLEET_FUEL_RECORD,
     P.REPORTS_VIEW, P.WHATSAPP_SEND,
   ],
 
@@ -227,11 +236,14 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.ORDERS_VIEW,
     P.INVOICES_CREATE, P.INVOICE_CANCELLATION_APPROVE, P.RECEIPTS_CREATE,
     P.PURCHASE_VIEW, P.VENDOR_BILLS_CREATE, P.VENDOR_BILLS_APPROVE, P.VENDOR_PAYMENTS_CREATE,
+    P.FLEET_VIEW,
     P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 
   [ROLE_KEYS.FLEET_MANAGER]: [
-    P.MASTERS_VIEW, P.MASTERS_EDIT, P.DISPATCH_UPDATE_STATUS, P.REPORTS_VIEW,
+    P.MASTERS_VIEW, P.MASTERS_EDIT, P.DISPATCH_UPDATE_STATUS,
+    P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
+    P.REPORTS_VIEW,
   ],
 
   // Looks, never touches.

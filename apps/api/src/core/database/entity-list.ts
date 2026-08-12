@@ -80,6 +80,9 @@ import {
   VendorBillItem,
   VendorPayment,
   VendorPaymentAllocation,
+  VehicleServiceSchedule,
+  VehicleMaintenanceJob,
+  VehicleFuelLog,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -165,4 +168,7 @@ export const ENTITIES = [
   VendorBillItem,
   VendorPayment,
   VendorPaymentAllocation,
+  VehicleServiceSchedule,
+  VehicleMaintenanceJob,
+  VehicleFuelLog,
 ];

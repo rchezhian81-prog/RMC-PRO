@@ -55,7 +55,7 @@ breadth on top of that spine**, not rework of it.
 | D2 | Purchase / AP-lite (`purchase`) | Procurement | Critical | A1 | 3 | **done** |
 | E1 | Weighbridge hardware bridge | Weighbridge | Important | — | 2 | **done** |
 | A4 | Batching Integration (`batching_integration`) | Batching | Important | A2 | 2 | **done** |
-| D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | planned |
+| D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | **done** |
 | D4 | Expense capture | Procurement | Important | — | 1–2 | planned |
 | B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | planned |
 | F1 | Excel bulk import framework | Platform | Important | — | 2 | planned |
@@ -194,9 +194,40 @@ RMC batching correctness gap (currently 0 lines).
 **Goal:** Ingest actual batched weights from the plant controller instead of
 hand-keying batch-ticket actuals; reconcile to tickets; enable the module.
 
-### D3 · Fleet maintenance & fuel log
+### D3 · Fleet maintenance & fuel log ✅
 **Goal:** Service schedules, breakdowns and fuel/diesel-per-km for mixers &
 pumps. Builds on D1's fleet data.
+- **Delivered:** three tenant-scoped FORCE-RLS tables over D1's `vehicles`
+  master (migration `1720000037000`): `vehicle_service_schedules` (preventive
+  service per vehicle + type, interval by km and/or days, computed next-due),
+  `vehicle_maintenance_jobs` (service / repair / breakdown events, split
+  labour/parts cost + total, breakdown downtime), and `vehicle_fuel_logs`
+  (diesel fills with computed distance + km/litre). Pure, unit-tested helpers
+  (`fleet.util.ts`): `computeNextDue` (roll an anchor forward by its interval),
+  `serviceDueState` (ok / due_soon / overdue by date **or** odometer),
+  `fuelEfficiency` (km/litre for one full-tank interval) and `summariseFuel`
+  (tank-to-tank mileage + cost-per-km, baseline fill excluded from the average).
+  Service-schedule CRUD annotates each row with the vehicle's resolved current
+  odometer + due state; logging fuel fills distance/km-per-litre from the
+  previous full tank and a `summary/:vehicleId` endpoint rolls up the log;
+  completing a maintenance job that links a schedule advances the schedule
+  (anchor → job odometer/date, next-due recomputed) and is audited
+  (`vehicle_maintenance.complete`). New dashboard alert (danger/warning) for
+  services overdue or due soon, computed via the shared due-state rule
+  (`fleet-maintenance.util.ts`). New permissions `fleet.view` /
+  `fleet.maintenance.record` / `fleet.fuel.record` granted to fleet-manager,
+  plant-manager, dispatch-manager (view + fuel) and accounts (view); `fleet`
+  (a phase-2 module) enabled per-tenant via the Super Admin toggle, as QC /
+  Purchase are. Web: a Fleet nav group with a Maintenance screen (schedules +
+  jobs, incl. breakdowns) and a Fuel Log screen (entries + a per-vehicle
+  mileage / cost-per-km summary). **Tests:** 22 helper unit cases
+  (`fleet-util.test.mjs`) + 5 alert cases (`fleet-maintenance-alerts.test.mjs`);
+  a `fleet-maintenance` integration test drives vehicle → schedule → two fuel
+  fills (asserts km/litre + summary) → service job (asserts the schedule
+  advanced) → breakdown → cancel end to end.
+- **Deferred:** parts/inventory consumption from the store on a job, a tyre-life
+  / per-tyre register, and out-of-order fuel-entry back-fill (mileage is
+  forward-only from the previous full tank).
 
 ### D4 · Expense capture
 **Goal:** Driver bata, fuel, plant/site expenses with cost allocation

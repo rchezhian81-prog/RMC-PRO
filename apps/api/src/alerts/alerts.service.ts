@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { fleetComplianceAlerts, type FleetDoc } from './fleet-compliance.util';
+import { fleetMaintenanceAlerts, type MaintenanceDueRow } from './fleet-maintenance.util';
 
 export type AlertSeverity = 'danger' | 'warning' | 'info';
 
@@ -40,7 +41,7 @@ export class AlertsService {
       const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> =>
         m.query(sql, params) as Promise<T[]>;
 
-      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc] = await Promise.all([
+      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc, serviceDue] = await Promise.all([
         // Receivables, bucketed by age of the invoice and by contractual due date.
         q(`SELECT
              COALESCE(sum(outstanding_amount) FILTER (WHERE invoice_date IS NOT NULL AND CURRENT_DATE - invoice_date > 90), 0)::float AS over90_amount,
@@ -117,6 +118,25 @@ export class AlertsService {
              ) AS cubes_due,
              count(*) FILTER (WHERE acceptance_status = 'rejected') AS cubes_failed
            FROM qc_cube_sets s`),
+
+        // Active vehicle service schedules with the vehicle's current odometer
+        // resolved (the latest reading across fuel logs + maintenance jobs), so
+        // the due-window rule can flag services overdue by date or by kilometres.
+        q<MaintenanceDueRow>(`
+          SELECT v.vehicle_no AS vehicle,
+                 s.service_type AS "serviceType",
+                 to_char(s.next_due_date, 'YYYY-MM-DD') AS "nextDueDate",
+                 s.next_due_odometer::float AS "nextDueOdometer",
+                 GREATEST(
+                   COALESCE((SELECT max(odometer) FROM vehicle_fuel_logs f WHERE f.vehicle_id = s.vehicle_id), 0),
+                   COALESCE((SELECT max(odometer) FROM vehicle_maintenance_jobs j WHERE j.vehicle_id = s.vehicle_id), 0),
+                   COALESCE(s.last_service_odometer, 0)
+                 )::float AS "currentOdometer"
+            FROM vehicle_service_schedules s
+            JOIN vehicles v ON v.id = s.vehicle_id
+           WHERE s.is_active = true
+             AND COALESCE(v.status, '') <> 'inactive'
+             AND (s.next_due_date IS NOT NULL OR s.next_due_odometer IS NOT NULL)`),
       ]);
 
       const r = receivables[0] ?? {};
@@ -263,6 +283,9 @@ export class AlertsService {
 
       // ---- Fleet compliance ----------------------------------------------
       out.push(...fleetComplianceAlerts(fleetDocs, new Date()));
+
+      // ---- Fleet maintenance (service schedules overdue / due soon) ------
+      out.push(...fleetMaintenanceAlerts(serviceDue as MaintenanceDueRow[], new Date()));
 
       // ---- QC / Lab ------------------------------------------------------
       const qcRow = qc[0] ?? {};

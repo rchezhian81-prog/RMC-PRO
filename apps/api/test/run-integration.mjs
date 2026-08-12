@@ -60,6 +60,7 @@ const TESTS = [
   'test/fleet-maintenance.test.mjs',
   'test/expense-capture.test.mjs',
   'test/returned-concrete.test.mjs',
+  'test/bulk-import.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/metrics.test.mjs',

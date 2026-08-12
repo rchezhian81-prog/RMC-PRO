@@ -58,7 +58,7 @@ breadth on top of that spine**, not rework of it.
 | D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | **done** |
 | D4 | Expense capture | Procurement | Important | — | 1–2 | **done** |
 | B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | **done** |
-| F1 | Excel bulk import framework | Platform | Important | — | 2 | planned |
+| F1 | Excel bulk import framework | Platform | Important | — | 2 | **done** |
 | F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | planned |
 
 **Recommended order:** D1 → A1 → A2 → A3 → B2 → B1 → C1 → D2 / E1 → A4 / D3 / D4 → F1 / F2.
@@ -286,10 +286,38 @@ wastage reporting.
   a credit note / billing adjustment for the returned volume, and returning the
   unused concrete to stock as recovered aggregate.
 
-### F1 · Excel bulk import framework
+### F1 · Excel bulk import framework ✅
 **Goal:** Generic template-download → upload → tracked import job
 (success/error counts) for opening balances, item and customer masters —
 onboarding accelerator.
+- **Delivered:** one tenant-scoped FORCE-RLS table `import_jobs` (migration
+  `1720000040000`; entity type, success / error counts, per-row errors as jsonb)
+  and a generic, definition-driven framework. Pure, unit-tested helpers
+  (`import-framework.util.ts`): an `IMPORT_DEFS` registry (customers / materials
+  / suppliers, each column keyed to the entity field), a dependency-free
+  `parseCsv` (quoted fields, embedded commas / newlines, escaped quotes, CRLF,
+  blank-line skipping), `rowsToObjects`, and `buildTemplateCsv`. The import
+  service turns an uploaded CSV into master records one row at a time by
+  **reusing each master's own `create` service** — so an imported row is
+  validated (required fields, GSTIN / mobile / numeric via `validateMasterFields`)
+  and de-duplicated exactly like hand entry; each row succeeds or fails
+  independently and the tallied outcome (with the bad rows' line numbers +
+  messages) is stored as an import job. Endpoints: `GET /imports/definitions`,
+  `GET /imports/:entityType/template` (raw CSV download), `POST /imports/:entityType`
+  (run), `GET /imports` / `:id` (jobs). Not gated behind a subscription module —
+  available to every tenant — but permission-gated: new `imports.view` /
+  `imports.run` (running creates masters, so held separate) granted to
+  plant-manager (+ owner/admin). Web: a Setup → Bulk Import screen (pick a
+  master, download the template, upload a CSV, see the success / error result
+  with per-row errors, and a recent-imports list). **Tests:** 13 helper unit
+  cases (`import-framework.test.mjs`); a `bulk-import` integration test downloads
+  the template, uploads 2 valid + 1 invalid customer rows (asserts the counts +
+  the reported bad-row number + that the customers were created), and re-uploads
+  to prove the same uniqueness rule as hand entry rejects duplicates.
+- **Deferred:** native `.xlsx` parsing (CSV today — Excel opens/saves it); an
+  opening-balance / opening-stock importer (needs plant + material resolution +
+  a ledger post); and asynchronous processing for very large files (imports run
+  synchronously in the request today).
 
 ### F2 · Doc-numbering activation + correction trail
 **Goal:** Activate the dormant FY-reset + per-plant series + online

@@ -96,6 +96,11 @@ export const PERMISSIONS = {
   EXPENSES_MANAGE: 'expenses.manage',
   EXPENSES_POST: 'expenses.post',
 
+  // Bulk import (F1). Running an import creates master records, so it is a
+  // separate key from viewing past import jobs.
+  IMPORTS_VIEW: 'imports.view',
+  IMPORTS_RUN: 'imports.run',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -193,6 +198,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.PURCHASE_VIEW, P.PURCHASE_ORDERS_CREATE, P.GRN_CREATE,
     P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
     P.EXPENSES_VIEW, P.EXPENSES_MANAGE,
+    P.IMPORTS_VIEW, P.IMPORTS_RUN,
     P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 

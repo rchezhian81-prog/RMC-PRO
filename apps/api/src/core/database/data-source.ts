@@ -37,6 +37,7 @@ import { PourSchedule1720000032000 } from './migrations/1720000032000-PourSchedu
 import { ReceivablesMaturity1720000033000 } from './migrations/1720000033000-ReceivablesMaturity';
 import { Purchase1720000034000 } from './migrations/1720000034000-Purchase';
 import { WeighbridgeIndicator1720000035000 } from './migrations/1720000035000-WeighbridgeIndicator';
+import { BatchingIntegration1720000036000 } from './migrations/1720000036000-BatchingIntegration';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -89,6 +90,7 @@ export const AppDataSource = new DataSource({
     ReceivablesMaturity1720000033000,
     Purchase1720000034000,
     WeighbridgeIndicator1720000035000,
+    BatchingIntegration1720000036000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

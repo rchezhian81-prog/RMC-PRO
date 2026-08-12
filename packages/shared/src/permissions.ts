@@ -49,6 +49,8 @@ export const PERMISSIONS = {
 
   // Production & dispatch
   BATCH_TICKETS_CREATE: 'batch_tickets.create',
+  // Batching integration (A4): register controllers + ingest actual batch weights.
+  BATCHING_INGEST: 'batching.ingest',
   DISPATCH_UPDATE_STATUS: 'dispatch.update_status',
   DELIVERY_CHALLANS_CREATE: 'delivery_challans.create',
 
@@ -171,7 +173,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.LEADS_VIEW, P.QUOTATIONS_VIEW, P.QUOTATIONS_CREATE, P.QUOTATIONS_APPROVE,
     P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW, P.ORDERS_CREATE, P.ORDERS_CONFIRM,
     P.CREDIT_HOLD_APPROVE, P.APPROVALS_ACT,
-    P.BATCH_TICKETS_CREATE, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
+    P.BATCH_TICKETS_CREATE, P.BATCHING_INGEST, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
     P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE, P.WEIGHBRIDGE_DEVICE,
     P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
@@ -206,7 +208,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
 
   // At the batching panel: needs the order, the mix and the materials.
   [ROLE_KEYS.BATCHING_OPERATOR]: [
-    P.MASTERS_VIEW, P.ORDERS_VIEW, P.BATCH_TICKETS_CREATE, P.REPORTS_VIEW,
+    P.MASTERS_VIEW, P.ORDERS_VIEW, P.BATCH_TICKETS_CREATE, P.BATCHING_INGEST, P.REPORTS_VIEW,
   ],
 
   // Receives material and keeps the stock straight — including goods receipts

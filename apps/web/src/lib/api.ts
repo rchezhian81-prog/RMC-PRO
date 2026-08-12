@@ -541,6 +541,31 @@ export const batchTicketsApi = {
   cancel: (id: string) => post(`/batch-tickets/${id}/cancel`),
 };
 
+// A4 batching integration: controller registry + ingest actuals into a ticket.
+export interface BatchIngestResult {
+  batchTicketId: string;
+  controllerId: string;
+  controllerName: string;
+  source: string;
+  varianceExceeded: boolean;
+  reconciliation: {
+    matchedCount: number;
+    varianceExceeded: boolean;
+    unmatchedLog: { material: string; actual: number }[];
+    lines: { materialLabel: string | null; matched: boolean; actual: number; variancePercentage: number; withinTolerance: boolean }[];
+  };
+}
+export const batchingControllerApi = {
+  list: () => apiFetch<Row[]>(`/batching-controllers`),
+  create: (b: Record<string, unknown>) => post('/batching-controllers', b),
+  update: (id: string, b: Record<string, unknown>) => post(`/batching-controllers/${id}`, b),
+  ingest: (id: string, batchTicketId: string, rawLog?: string, batchRef?: string) =>
+    apiFetch<BatchIngestResult>(`/batching-controllers/${id}/ingest`, {
+      method: 'POST',
+      body: JSON.stringify({ batchTicketId, ...(rawLog ? { rawLog } : {}), ...(batchRef ? { batchRef } : {}) }),
+    }),
+};
+
 export const stockApi = {
   balances: () => apiFetch<Row[]>('/stock/balances'),
   ledger: (materialId?: string) => apiFetch<Row[]>(`/stock/ledger${materialId ? `?materialId=${materialId}` : ''}`),

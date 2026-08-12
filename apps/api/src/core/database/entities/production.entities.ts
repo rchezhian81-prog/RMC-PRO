@@ -68,6 +68,11 @@ export class BatchTicket extends TenantScopedEntity {
   @Column({ name: 'variance_exceeded', type: 'boolean', default: false }) varianceExceeded!: boolean;
   @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
   @Column({ name: 'notes', type: 'text', nullable: true }) notes!: string | null;
+  // Batching integration (Plan A4): which controller the actuals were ingested
+  // from, the controller's own batch reference, and when they were ingested.
+  @Column({ name: 'controller_id', type: 'uuid', nullable: true }) controllerId!: string | null;
+  @Column({ name: 'controller_batch_ref', type: 'varchar', nullable: true }) controllerBatchRef!: string | null;
+  @Column({ name: 'ingested_at', type: 'timestamptz', nullable: true }) ingestedAt!: Date | null;
 }
 
 /** Material target vs actual consumption for a batch (Doc 6 §10.5). */
@@ -90,4 +95,25 @@ export class BatchTicketMaterial extends TenantScopedEntity {
   @Column({ name: 'measured_moisture_pct', type: 'numeric', precision: 6, scale: 3, nullable: true }) measuredMoisturePct!: string | null;
   @Column({ name: 'corrected_target_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true }) correctedTargetQuantity!: string | null;
   @Column({ name: 'free_water_quantity', type: 'numeric', precision: 14, scale: 3, nullable: true }) freeWaterQuantity!: string | null;
+}
+
+/**
+ * A plant batching controller (Plan A4) — the digital head that prints the
+ * per-batch actuals report. `connectionType='simulated'` drives the
+ * deterministic test/demo source; `tcp`/`file` carry the real connection
+ * details a plant-side agent uses to fetch the batch log. Configuration only;
+ * an ingest never mutates it.
+ */
+@Entity('batching_controllers')
+@Unique('uq_batching_controllers_name', ['tenantId', 'name'])
+export class BatchingController extends TenantScopedEntity {
+  @Column({ name: 'name', type: 'varchar' }) name!: string;
+  @Column({ name: 'plant_id', type: 'uuid', nullable: true }) plantId!: string | null;
+  @Column({ name: 'connection_type', type: 'varchar', default: 'simulated' }) connectionType!: string;
+  @Column({ name: 'host', type: 'varchar', nullable: true }) host!: string | null;
+  @Column({ name: 'port', type: 'int', nullable: true }) port!: number | null;
+  // For 'file' connectors: where the plant-side agent drops the batch log.
+  @Column({ name: 'log_path', type: 'varchar', nullable: true }) logPath!: string | null;
+  @Column({ name: 'make', type: 'varchar', nullable: true }) make!: string | null;
+  @Column({ name: 'is_active', type: 'boolean', default: true }) isActive!: boolean;
 }

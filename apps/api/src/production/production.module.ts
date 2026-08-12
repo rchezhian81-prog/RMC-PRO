@@ -5,6 +5,7 @@ import { NumberingService } from '../sales/numbering.service';
 import {
   BatchQueueController,
   BatchTicketsController,
+  BatchingIntegrationController,
   MixDesignsController,
   ProductionPlansController,
   ProductionReportsController,
@@ -14,14 +15,16 @@ import { MixDesignsService } from './mix-designs.service';
 import { ProductionPlansService } from './production-plans.service';
 import { BatchQueueService } from './batch-queue.service';
 import { BatchTicketsService } from './batch-tickets.service';
+import { BatchingIngestService } from './batching-ingest.service';
 import { StockService } from './stock.service';
 import { ProductionReportsService } from './production-reports.service';
 
 /**
  * Sprint 6 — Production & batching (DEV-PLAN B9). Mix designs, production plans,
  * batch queue, manual batch tickets (variance vs tolerance), inventory reduction
- * from batch consumption, and basic production reports. Dispatch, delivery
- * challan, QC, weighbridge and offline sync are later sprints.
+ * from batch consumption, and basic production reports. Plan A4 adds the
+ * batching-controller integration — ingesting actual batched weights into a
+ * ticket and reconciling them — alongside the manual actuals path.
  */
 @Module({
   controllers: [
@@ -29,6 +32,7 @@ import { ProductionReportsService } from './production-reports.service';
     ProductionPlansController,
     BatchQueueController,
     BatchTicketsController,
+    BatchingIntegrationController,
     StockController,
     ProductionReportsController,
   ],
@@ -37,6 +41,7 @@ import { ProductionReportsService } from './production-reports.service';
     ProductionPlansService,
     BatchQueueService,
     BatchTicketsService,
+    BatchingIngestService,
     StockService,
     ProductionReportsService,
     NumberingService,

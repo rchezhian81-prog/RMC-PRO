@@ -611,6 +611,56 @@ export const invoicesApi = {
   share: (id: string, mobile: string) => post(`/invoices/${id}/share`, { mobile }),
 };
 
+// ---- GST live compliance (IRP / e-way) — prepare → approve → execute ----
+export interface GstStatus {
+  configured: boolean;
+  provider: string;
+}
+export interface GstOutcome {
+  status: string;
+  reference?: string;
+  errors?: string[];
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * Drive one approved GST action end to end: PREPARE it (the automation agent files
+ * a pending approval), APPROVE it (this operator's click is the human decision),
+ * then EXECUTE it. Returns the execution outcome; a 'failed'/'skipped' outcome is
+ * surfaced as an error so the caller shows it instead of a false success.
+ */
+async function runCompliance(
+  invoiceId: string,
+  compliance: 'einvoice' | 'eway' | 'einvoice_cancel' | 'eway_cancel',
+  extra: Record<string, unknown> = {},
+): Promise<GstOutcome> {
+  const run = await apiFetch<{ outcome?: { result?: { prepared?: { approvalId?: string } } } }>(
+    '/agents/automation/run',
+    { method: 'POST', body: JSON.stringify({ compliance, invoiceId, ...extra }) },
+  );
+  const approvalId = run?.outcome?.result?.prepared?.approvalId;
+  if (!approvalId) throw new ApiError('Could not prepare the GST action.');
+  await apiFetch(`/agents/approvals/${approvalId}/decide`, {
+    method: 'POST',
+    body: JSON.stringify({ decision: 'approved' }),
+  });
+  const out = await apiFetch<GstOutcome>(`/agents/approvals/${approvalId}/execute`, { method: 'POST' });
+  if (out?.status === 'failed') throw new ApiError((out.errors ?? []).join('; ') || 'The GST action failed.');
+  if (out?.status === 'skipped') throw new ApiError('GST transmission is not enabled (prepare-only mode).');
+  return out;
+}
+
+export const gstApi = {
+  /** Whether a live GST provider is configured for this deployment. */
+  status: () => apiFetch<GstStatus>('/agents/gst'),
+  generateIrn: (invoiceId: string) => runCompliance(invoiceId, 'einvoice'),
+  cancelIrn: (invoiceId: string, reasonCode: string, remarks?: string) =>
+    runCompliance(invoiceId, 'einvoice_cancel', { reasonCode, ...(remarks ? { remarks } : {}) }),
+  generateEway: (invoiceId: string) => runCompliance(invoiceId, 'eway'),
+  cancelEway: (invoiceId: string, reasonCode: string, remarks?: string) =>
+    runCompliance(invoiceId, 'eway_cancel', { reasonCode, ...(remarks ? { remarks } : {}) }),
+};
+
 export const receiptsApi = {
   list: () => apiFetch<Row[]>('/receipts'),
   get: (id: string) => apiFetch<Row>(`/receipts/${id}`),

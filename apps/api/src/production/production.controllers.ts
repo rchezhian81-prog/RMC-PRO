@@ -9,6 +9,7 @@ import { MixDesignsService } from './mix-designs.service';
 import { ProductionPlansService } from './production-plans.service';
 import { BatchQueueService } from './batch-queue.service';
 import { BatchTicketsService } from './batch-tickets.service';
+import { BatchingIngestService } from './batching-ingest.service';
 import { StockService } from './stock.service';
 import { ProductionReportsService } from './production-reports.service';
 
@@ -124,6 +125,34 @@ export class BatchTicketsController {
   @Post(':id/cancel')
   @RequirePermissions('batch_tickets.create')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.cancel(tid(u), id); }
+}
+
+/**
+ * Batching Integration (Plan A4) — the batching-controller registry + the
+ * ingest of actual batched weights into a draft ticket. Its own module gate
+ * (`batching_integration`), so it activates only for tenants on that plan while
+ * the manual batch-ticket path stays on the `production` module.
+ */
+@Controller('batching-controllers')
+@RequireModule('batching_integration')
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+export class BatchingIntegrationController {
+  constructor(private readonly service: BatchingIngestService) {}
+
+  @Get() @RequirePermissions('batching.ingest')
+  list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+
+  @Get(':id') @RequirePermissions('batching.ingest')
+  get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
+
+  @Post() @RequirePermissions('batching.ingest')
+  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
+
+  @Post(':id') @RequirePermissions('batching.ingest')
+  update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.update(tid(u), id, dto); }
+
+  @Post(':id/ingest') @RequirePermissions('batching.ingest')
+  ingest(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.ingest(tid(u), id, dto, u.userId); }
 }
 
 @Controller('stock')

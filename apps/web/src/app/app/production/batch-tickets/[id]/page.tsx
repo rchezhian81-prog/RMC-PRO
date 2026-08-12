@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { batchTicketsApi, type Row } from '../../../../../lib/api';
+import { batchTicketsApi, batchingControllerApi, type Row } from '../../../../../lib/api';
 import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { Badge, StatusBadge } from '../../../../../components/ui/Badge';
@@ -19,16 +19,23 @@ const isAggregate = (m: Row) => AGGREGATE_TYPES.includes(String(m.materialType))
 export default function BatchTicketDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { confirm: askConfirm } = useConfirm();
+  const { confirm: askConfirm, prompt } = useConfirm();
   const [t, setT] = useState<Row | null>(null);
   const [actuals, setActuals] = useState<Record<string, string>>({});
   const [moist, setMoist] = useState<Record<string, string>>({});
+  const [controllers, setControllers] = useState<Row[]>([]);
+  const [controllerId, setControllerId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const ticket = await batchTicketsApi.get(id);
+    const [ticket, ctrls] = await Promise.all([
+      batchTicketsApi.get(id),
+      batchingControllerApi.list().catch(() => [] as Row[]),
+    ]);
     setT(ticket);
+    setControllers(ctrls);
+    setControllerId((cur) => cur || (ctrls[0] ? String(ctrls[0].id) : ''));
     const mats = (ticket.materials as Row[]) ?? [];
     setActuals(Object.fromEntries(mats.map((m) => [String(m.id), String(m.actualQuantity ?? '')])));
     setMoist(Object.fromEntries(mats.map((m) => [String(m.id), m.measuredMoisturePct == null ? '' : String(m.measuredMoisturePct)])));
@@ -83,6 +90,40 @@ export default function BatchTicketDetail() {
         ),
       'Moisture applied — aggregate weights and mix water corrected.',
     );
+  }
+
+  // ---- A4: ingest actual batched weights from the plant controller ----
+  function summarise(res: Awaited<ReturnType<typeof batchingControllerApi.ingest>>) {
+    const r = res.reconciliation;
+    const unmatched = r.unmatchedLog.length ? ` · ${r.unmatchedLog.length} controller line(s) unmatched` : '';
+    return `Ingested ${r.matchedCount} material(s) from ${res.controllerName}${res.varianceExceeded ? ' — variance exceeds tolerance' : ' — all within tolerance'}${unmatched}`;
+  }
+
+  async function importFromController() {
+    if (!controllerId) { setError('Add a batching controller first, then import.'); return; }
+    await run(async () => {
+      const res = await batchingControllerApi.ingest(controllerId, id);
+      setMsg(summarise(res));
+    });
+  }
+
+  async function pasteLog() {
+    if (!controllerId) { setError('Add a batching controller first, then import.'); return; }
+    const text = await prompt({ title: 'Paste controller batch log', label: 'Batch log (CSV: material, target, actual)', type: 'text' });
+    if (!text) return;
+    await run(async () => {
+      const res = await batchingControllerApi.ingest(controllerId, id, text);
+      setMsg(summarise(res));
+    });
+  }
+
+  async function addController() {
+    const name = await prompt({ title: 'Add batching controller', label: 'Controller name (simulated)', defaultValue: 'Plant controller', type: 'text' });
+    if (!name) return;
+    await run(async () => {
+      const c = await batchingControllerApi.create({ name, connectionType: 'simulated' });
+      setControllerId(String((c as Row)?.id ?? ''));
+    }, 'Simulated controller added');
   }
 
   async function confirm(override = false) {
@@ -199,6 +240,20 @@ export default function BatchTicketDetail() {
             )
             : null;
         })()}
+        {draft && (
+          <div style={{ margin: '16px 16px 0', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12.5, color: 'var(--mn-muted)' }}>Batching controller:</span>
+            <select className="mn-input" style={{ minWidth: 160 }} value={controllerId} onChange={(e) => setControllerId(e.target.value)}>
+              {controllers.length === 0 && <option value="">— none —</option>}
+              {controllers.map((c) => (
+                <option key={String(c.id)} value={String(c.id)}>{String(c.name)}{c.isActive === false ? ' (inactive)' : ''}</option>
+              ))}
+            </select>
+            <Button variant="secondary" onClick={importFromController}>Import from controller</Button>
+            <Button variant="ghost" size="sm" onClick={pasteLog}>Paste log…</Button>
+            <Button variant="ghost" size="sm" onClick={addController}>＋ Add controller</Button>
+          </div>
+        )}
         {draft && (
           <div style={{ margin: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {mats.some(isAggregate) && (

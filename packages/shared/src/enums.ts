@@ -50,3 +50,23 @@ export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export type SyncStatus = 'pending' | 'synced' | 'failed' | 'conflict';
 
 export type InvoiceItemType = 'concrete' | 'pumping' | 'transport' | 'waiting_charge' | 'other';
+
+/**
+ * Material classification for batching (Plan A1). Aggregates carry moisture and
+ * absorption; cement/additive are cementitious; water is the correction target.
+ * A2 uses these types to decide which materials get moisture/water correction.
+ */
+export const MATERIAL_TYPES = [
+  'cement',
+  'fine_aggregate',
+  'coarse_aggregate',
+  'water',
+  'admixture',
+  'additive',
+  'other',
+] as const;
+export type MaterialType = (typeof MATERIAL_TYPES)[number];
+
+/** Unit-of-measure categories — conversions are only valid within one category. */
+export const UOM_CATEGORIES = ['weight', 'volume', 'count', 'length', 'area'] as const;
+export type UomCategory = (typeof UOM_CATEGORIES)[number];

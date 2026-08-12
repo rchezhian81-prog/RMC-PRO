@@ -11,6 +11,8 @@ import {
   Site,
   Supplier,
   Transporter,
+  Uom,
+  UomConversion,
   Vehicle,
 } from '../core/database/entities';
 
@@ -40,6 +42,10 @@ export class SitesService extends TenantCrudService<Site> {
 export class MaterialsService extends TenantCrudService<Material> {
   constructor(db: TenantDbService) {
     super(db, Material, { orderBy: 'materialCode', required: ['materialCode', 'materialName'] });
+  }
+  // material_type + specific gravity / bulk density / absorption / moisture.
+  protected override validateWrite(dto: Record<string, unknown>): void {
+    assertFields(validateMasterFields(dto));
   }
 }
 
@@ -89,6 +95,24 @@ export class TransportersService extends TenantCrudService<Transporter> {
     super(db, Transporter, { orderBy: 'transporterCode', required: ['transporterCode', 'transporterName'] });
   }
   // GSTIN, TRANSIN, mobile.
+  protected override validateWrite(dto: Record<string, unknown>): void {
+    assertFields(validateMasterFields(dto));
+  }
+}
+
+@Injectable()
+export class UomsService extends TenantCrudService<Uom> {
+  constructor(db: TenantDbService) {
+    super(db, Uom, { orderBy: 'uomCode', required: ['uomCode', 'uomName'] });
+  }
+}
+
+@Injectable()
+export class UomConversionsService extends TenantCrudService<UomConversion> {
+  constructor(db: TenantDbService) {
+    super(db, UomConversion, { orderBy: 'fromUom', required: ['fromUom', 'toUom', 'factor'] });
+  }
+  // factor must be a positive number.
   protected override validateWrite(dto: Record<string, unknown>): void {
     assertFields(validateMasterFields(dto));
   }

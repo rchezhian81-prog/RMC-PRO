@@ -3,6 +3,7 @@
  * used by both the API (authoritative) and the web client (immediate feedback),
  * so the two can never drift.
  */
+import { MATERIAL_TYPES } from './enums';
 
 /** Standard 15-character GSTIN: 2 state digits, PAN (5A+4N+1A), entity, Z, check. */
 export const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -81,10 +82,30 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   if (transin && !isValidTransporterId(transin)) {
     errors.transin = 'Enter a valid 15-character GST Transporter ID / TRANSIN.';
   }
-  for (const k of ['creditLimit', 'creditDays', 'capacityM3', 'openingBalance']) {
+  for (const k of [
+    'creditLimit',
+    'creditDays',
+    'capacityM3',
+    'openingBalance',
+    'specificGravity',
+    'bulkDensity',
+    'waterAbsorptionPct',
+    'defaultMoisturePct',
+    'factor',
+  ]) {
     if (dto[k] !== undefined && dto[k] !== null && dto[k] !== '' && !isNonNegativeNumber(dto[k])) {
       errors[k] = 'Enter a number of 0 or more.';
     }
+  }
+  // Percentages that cannot exceed 100 (aggregate absorption / free moisture).
+  for (const k of ['waterAbsorptionPct', 'defaultMoisturePct']) {
+    if (dto[k] !== undefined && dto[k] !== null && dto[k] !== '' && Number(dto[k]) > 100) {
+      errors[k] = 'Enter a percentage between 0 and 100.';
+    }
+  }
+  const materialType = str('materialType');
+  if (materialType && !(MATERIAL_TYPES as readonly string[]).includes(materialType)) {
+    errors.materialType = 'Choose a valid material type.';
   }
   return errors;
 }

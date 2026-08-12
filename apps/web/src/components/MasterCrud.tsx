@@ -198,14 +198,38 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
               {config.fields.map((f) => (
                 <div key={f.key} style={{ minWidth: 150 }}>
                   <Field label={f.label} required={f.required}>
-                    <Input
-                      type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-                      value={form[f.key] ?? ''}
-                      onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                      required={f.required}
-                      aria-invalid={fieldErrors[f.key] ? true : undefined}
-                      style={fieldErrors[f.key] ? { borderColor: 'var(--mn-danger)' } : undefined}
-                    />
+                    {f.options ? (
+                      <select
+                        value={form[f.key] ?? ''}
+                        onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                        required={f.required}
+                        aria-invalid={fieldErrors[f.key] ? true : undefined}
+                        style={{
+                          width: '100%',
+                          padding: '9px 11px',
+                          borderRadius: 8,
+                          border: `1px solid ${fieldErrors[f.key] ? 'var(--mn-danger)' : 'var(--mn-border, #d9d9e3)'}`,
+                          background: 'var(--mn-surface, #fff)',
+                          color: 'inherit',
+                        }}
+                      >
+                        <option value="">—</option>
+                        {f.options.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                        value={form[f.key] ?? ''}
+                        onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                        required={f.required}
+                        aria-invalid={fieldErrors[f.key] ? true : undefined}
+                        style={fieldErrors[f.key] ? { borderColor: 'var(--mn-danger)' } : undefined}
+                      />
+                    )}
                   </Field>
                   {fieldErrors[f.key] && (
                     <p style={{ color: 'var(--mn-danger)', fontSize: 12, margin: '4px 0 0' }}>{fieldErrors[f.key]}</p>

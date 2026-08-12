@@ -9,7 +9,7 @@ import {
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Ruler, ArrowLeftRight,
-  Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel,
+  Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
@@ -141,6 +141,13 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/fleet/maintenance', label: 'Maintenance', icon: <Wrench size={IS} />, perm: 'fleet.view', module: 'fleet' },
       { href: '/app/fleet/fuel', label: 'Fuel Log', icon: <Fuel size={IS} />, perm: 'fleet.view', module: 'fleet' },
+    ],
+  },
+  {
+    title: 'Expenses',
+    items: [
+      { href: '/app/expenses/vouchers', label: 'Expense Vouchers', icon: <Coins size={IS} />, perm: 'expenses.view', module: 'expenses' },
+      { href: '/app/expenses/heads', label: 'Expense Heads', icon: <ListTree size={IS} />, perm: 'expenses.view', module: 'expenses' },
     ],
   },
   {

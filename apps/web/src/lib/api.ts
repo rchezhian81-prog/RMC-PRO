@@ -793,6 +793,29 @@ export const fleetApi = {
   fuelSummary: (vehicleId: string) => apiFetch<Row>(`/vehicle-fuel-logs/summary/${vehicleId}`),
 };
 
+// ---- Expense capture (Plan D4) ----
+export const expensesApi = {
+  groups: () => apiFetch<Row[]>('/expense-groups'),
+  createGroup: (b: Record<string, unknown>) => post('/expense-groups', b),
+  updateGroup: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/expense-groups/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  heads: () => apiFetch<Row[]>('/expense-heads'),
+  createHead: (b: Record<string, unknown>) => post('/expense-heads', b),
+  updateHead: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/expense-heads/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  vouchers: (status?: string) => apiFetch<Row[]>(`/expense-vouchers${status ? `?status=${status}` : ''}`),
+  voucher: (id: string) => apiFetch<Row>(`/expense-vouchers/${id}`),
+  createVoucher: (b: Record<string, unknown>) => post('/expense-vouchers', b),
+  postVoucher: (id: string) => post(`/expense-vouchers/${id}/post`),
+  cancelVoucher: (id: string) => post(`/expense-vouchers/${id}/cancel`),
+  allocationReport: (params: { from?: string; to?: string; plantId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.plantId) qs.set('plantId', params.plantId);
+    const s = qs.toString();
+    return apiFetch<Row>(`/expense-vouchers/report/allocation${s ? `?${s}` : ''}`);
+  },
+};
+
 // ---- Dashboard, reports center, sync (Sprint 10) ----
 export const dashboardApi = {
   summary: () => apiFetch<Row>('/dashboard/summary'),

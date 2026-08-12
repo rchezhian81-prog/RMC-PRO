@@ -83,6 +83,10 @@ import {
   VehicleServiceSchedule,
   VehicleMaintenanceJob,
   VehicleFuelLog,
+  ExpenseGroup,
+  ExpenseHead,
+  ExpenseVoucher,
+  ExpenseVoucherLine,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -171,4 +175,8 @@ export const ENTITIES = [
   VehicleServiceSchedule,
   VehicleMaintenanceJob,
   VehicleFuelLog,
+  ExpenseGroup,
+  ExpenseHead,
+  ExpenseVoucher,
+  ExpenseVoucherLine,
 ];

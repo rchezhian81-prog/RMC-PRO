@@ -26,6 +26,7 @@ import { AgentsModule } from './agents/agents.module';
 import { QcModule } from './qc/qc.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { FleetModule } from './fleet/fleet.module';
+import { ExpensesModule } from './expenses/expenses.module';
 
 /**
  * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
@@ -65,6 +66,7 @@ import { FleetModule } from './fleet/fleet.module';
     QcModule,
     PurchaseModule,
     FleetModule,
+    ExpensesModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

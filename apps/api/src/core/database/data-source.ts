@@ -39,6 +39,7 @@ import { Purchase1720000034000 } from './migrations/1720000034000-Purchase';
 import { WeighbridgeIndicator1720000035000 } from './migrations/1720000035000-WeighbridgeIndicator';
 import { BatchingIntegration1720000036000 } from './migrations/1720000036000-BatchingIntegration';
 import { FleetMaintenance1720000037000 } from './migrations/1720000037000-FleetMaintenance';
+import { Expenses1720000038000 } from './migrations/1720000038000-Expenses';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -93,6 +94,7 @@ export const AppDataSource = new DataSource({
     WeighbridgeIndicator1720000035000,
     BatchingIntegration1720000036000,
     FleetMaintenance1720000037000,
+    Expenses1720000038000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

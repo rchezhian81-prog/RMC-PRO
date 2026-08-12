@@ -28,6 +28,7 @@ export const MODULE_CATALOG: ModuleDef[] = [
   { key: 'qc', name: 'QC / Lab', phase: 2 },
   { key: 'purchase', name: 'Purchase', phase: 2 },
   { key: 'fleet', name: 'Fleet Maintenance & Fuel', phase: 2 },
+  { key: 'expenses', name: 'Expenses', phase: 2 },
   { key: 'customer_portal', name: 'Customer Portal', phase: 4 },
 ];
 

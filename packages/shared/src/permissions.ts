@@ -90,6 +90,12 @@ export const PERMISSIONS = {
   FLEET_MAINTENANCE_RECORD: 'fleet.maintenance.record',
   FLEET_FUEL_RECORD: 'fleet.fuel.record',
 
+  // Expense capture (D4). Posting a voucher commits the spend to the books, so
+  // it is a separate, higher-trust key from drafting one or editing the masters.
+  EXPENSES_VIEW: 'expenses.view',
+  EXPENSES_MANAGE: 'expenses.manage',
+  EXPENSES_POST: 'expenses.post',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -186,6 +192,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
     P.PURCHASE_VIEW, P.PURCHASE_ORDERS_CREATE, P.GRN_CREATE,
     P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
+    P.EXPENSES_VIEW, P.EXPENSES_MANAGE,
     P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 
@@ -237,6 +244,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.INVOICES_CREATE, P.INVOICE_CANCELLATION_APPROVE, P.RECEIPTS_CREATE,
     P.PURCHASE_VIEW, P.VENDOR_BILLS_CREATE, P.VENDOR_BILLS_APPROVE, P.VENDOR_PAYMENTS_CREATE,
     P.FLEET_VIEW,
+    P.EXPENSES_VIEW, P.EXPENSES_MANAGE, P.EXPENSES_POST,
     P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 

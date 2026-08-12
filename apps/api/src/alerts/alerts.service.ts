@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { fleetComplianceAlerts, type FleetDoc } from './fleet-compliance.util';
 
 export type AlertSeverity = 'danger' | 'warning' | 'info';
 
@@ -39,7 +40,7 @@ export class AlertsService {
       const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> =>
         m.query(sql, params) as Promise<T[]>;
 
-      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog] = await Promise.all([
+      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs] = await Promise.all([
         // Receivables, bucketed by age of the invoice and by contractual due date.
         q(`SELECT
              COALESCE(sum(outstanding_amount) FILTER (WHERE invoice_date IS NOT NULL AND CURRENT_DATE - invoice_date > 90), 0)::float AS over90_amount,
@@ -93,6 +94,20 @@ export class AlertsService {
           WHERE status = 'active' AND approval_status = 'approved' AND valid_until IS NOT NULL`),
 
         q(`SELECT count(*) AS waiting FROM batch_queue WHERE queue_status = 'waiting'`),
+
+        // Fleet renewal documents (vehicle FC/insurance/PUC/permit/road-tax + driver
+        // licence) that are already expired or fall due within the warning window.
+        q<FleetDoc>(`
+          SELECT asset, doc, to_char(expiry, 'YYYY-MM-DD') AS expiry FROM (
+            SELECT vehicle_no AS asset, 'Insurance'       AS doc, insurance_expiry AS expiry, status FROM vehicles WHERE insurance_expiry IS NOT NULL
+            UNION ALL SELECT vehicle_no, 'Fitness (FC)',    fitness_expiry,   status FROM vehicles WHERE fitness_expiry   IS NOT NULL
+            UNION ALL SELECT vehicle_no, 'Permit',          permit_expiry,    status FROM vehicles WHERE permit_expiry    IS NOT NULL
+            UNION ALL SELECT vehicle_no, 'Pollution (PUC)', pollution_expiry, status FROM vehicles WHERE pollution_expiry IS NOT NULL
+            UNION ALL SELECT vehicle_no, 'Road tax',        road_tax_expiry,  status FROM vehicles WHERE road_tax_expiry  IS NOT NULL
+            UNION ALL SELECT driver_name, 'Licence',        license_expiry,   status FROM drivers  WHERE license_expiry   IS NOT NULL
+          ) d
+          WHERE COALESCE(status, '') <> 'inactive' AND expiry <= CURRENT_DATE + 30
+          ORDER BY expiry ASC`),
       ]);
 
       const r = receivables[0] ?? {};
@@ -236,6 +251,9 @@ export class AlertsService {
           count: num(o.mixes_pending),
         });
       }
+
+      // ---- Fleet compliance ----------------------------------------------
+      out.push(...fleetComplianceAlerts(fleetDocs, new Date()));
 
       // ---- Always-on context ---------------------------------------------
       out.push({

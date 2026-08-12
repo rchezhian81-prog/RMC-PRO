@@ -199,7 +199,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                 <div key={f.key} style={{ minWidth: 150 }}>
                   <Field label={f.label} required={f.required}>
                     <Input
-                      type={f.type === 'number' ? 'number' : 'text'}
+                      type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                       value={form[f.key] ?? ''}
                       onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
                       required={f.required}

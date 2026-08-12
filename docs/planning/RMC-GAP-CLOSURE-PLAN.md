@@ -59,7 +59,7 @@ breadth on top of that spine**, not rework of it.
 | D4 | Expense capture | Procurement | Important | — | 1–2 | **done** |
 | B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | **done** |
 | F1 | Excel bulk import framework | Platform | Important | — | 2 | **done** |
-| F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | planned |
+| F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | **done** |
 
 **Recommended order:** D1 → A1 → A2 → A3 → B2 → B1 → C1 → D2 / E1 → A4 / D3 / D4 → F1 / F2.
 
@@ -319,10 +319,48 @@ onboarding accelerator.
   a ledger post); and asynchronous processing for very large files (imports run
   synchronously in the request today).
 
-### F2 · Doc-numbering activation + correction trail
+### F2 · Doc-numbering activation + correction trail ✅
 **Goal:** Activate the dormant FY-reset + per-plant series + online
 reserved-number pool in `NumberingService`; add a generic correction/amendment
 entity (old→new value, reason, corrected-by) for edits to posted documents.
+- **Delivered:** the `number_series` schema already carried `plant_id`,
+  `financial_year` and `reset_frequency` — this wires them. Pure, unit-tested
+  helpers (`numbering.util.ts`): `financialYearOf` (Indian Apr–Mar FY as
+  `YYYY-YY`), `formatSeriesNumber`, and `applyYearlyReset` (roll a `yearly`
+  series over to a new FY, restarting at 0001, while adopting-without-resetting a
+  series that had no FY yet). `NumberingService` now resolves the series by
+  (tenant, document type, plant, FY): `next(…, opts?)` gained optional
+  `plantId` / `financialYear` / `date` and applies the FY roll-over, and a new
+  `reserve(…, count, opts?)` allocates a contiguous block (the reserved-number
+  pool). Existing callers pass no options and get the tenant-wide, current-FY
+  series — **unchanged numbering**, now FY-aware. The offline device reservation
+  (`/sync/number-reservations`) was refactored to delegate to the shared
+  `NumberingService.reserve` (removing duplicated SQL and gaining FY-reset) and
+  `deviceId` is now optional, so the same endpoint serves an **online**
+  reservation; an explicit `plantId` draws from that plant's series. **Correction
+  trail:** a tenant-scoped FORCE-RLS `document_corrections` table (migration
+  `1720000041000`) + `POST` / `GET /document-corrections` recording a posted
+  document's field, old → new value, reason and corrected-by; each correction is
+  also written to the system audit log (`document.correction`). New permission
+  `document_corrections.manage` granted to accounts + plant-manager. Web: a
+  Setup → Numbering screen (reserve a block, optionally per plant, + a
+  reservations list) and a Control → Corrections screen (record + filter the
+  amendment trail). **Tests:** 12 helper unit cases (`numbering.test.mjs`); a
+  `numbering-corrections` integration test proves a contiguous online block with
+  the current-FY stamp, an independent per-plant series, and the
+  record-then-list correction flow (with a missing-field rejection). The e2e
+  UAT's offline-reserve → cloud-challan number match confirms the refactor is
+  backward compatible.
+- **Deferred:** embedding the FY inside the document number string by default
+  (a per-series `include_fy` flag — the FY is stored + reset today, and users can
+  already put it in the prefix/suffix); a monthly reset frequency; and
+  auto-wiring the correction trail into every posted-document edit flow (the
+  generic record/list endpoints are in place to call from any of them).
+
+---
+
+**Roadmap complete.** All twelve gap-closure epics (D1, A1–A4, B1–B3, C1, D2–D4,
+E1, F1–F2) are delivered and merged.
 
 ---
 

@@ -159,6 +159,7 @@ export const AUDIT_ACTIONS = {
   VENDOR_PAYMENT_RECORD: 'vendor_payment.record',
   VEHICLE_MAINTENANCE_COMPLETE: 'vehicle_maintenance.complete',
   EXPENSE_VOUCHER_POST: 'expense_voucher.post',
+  DOCUMENT_CORRECTION: 'document.correction',
   QUOTATION_APPROVE: 'quotation.approve',
   QUOTATION_REJECT: 'quotation.reject',
   RATE_CONTRACT_APPROVE: 'rate_contract.approve',

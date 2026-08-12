@@ -5,6 +5,7 @@ import { SyncController, DashboardController, ReportsCatalogController } from '.
 import { SyncService } from './sync.service';
 import { DashboardService } from './dashboard.service';
 import { ReportsService } from './reports.service';
+import { NumberingService } from '../sales/numbering.service';
 
 /**
  * Sprint 10 — Offline sync (B14) + dashboards/reports center (B15-B16).
@@ -13,6 +14,6 @@ import { ReportsService } from './reports.service';
  */
 @Module({
   controllers: [SyncController, DashboardController, ReportsCatalogController],
-  providers: [SyncService, DashboardService, ReportsService, TenantGuard, PermissionsGuard],
+  providers: [SyncService, DashboardService, ReportsService, NumberingService, TenantGuard, PermissionsGuard],
 })
 export class SyncModule {}

@@ -101,6 +101,9 @@ export const PERMISSIONS = {
   IMPORTS_VIEW: 'imports.view',
   IMPORTS_RUN: 'imports.run',
 
+  // Document corrections (F2). Recording an amendment to a posted document.
+  DOCUMENT_CORRECTIONS_MANAGE: 'document_corrections.manage',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -199,6 +202,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
     P.EXPENSES_VIEW, P.EXPENSES_MANAGE,
     P.IMPORTS_VIEW, P.IMPORTS_RUN,
+    P.DOCUMENT_CORRECTIONS_MANAGE,
     P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 
@@ -251,6 +255,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.PURCHASE_VIEW, P.VENDOR_BILLS_CREATE, P.VENDOR_BILLS_APPROVE, P.VENDOR_PAYMENTS_CREATE,
     P.FLEET_VIEW,
     P.EXPENSES_VIEW, P.EXPENSES_MANAGE, P.EXPENSES_POST,
+    P.DOCUMENT_CORRECTIONS_MANAGE,
     P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 

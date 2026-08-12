@@ -88,6 +88,7 @@ import {
   ExpenseVoucher,
   ExpenseVoucherLine,
   ImportJob,
+  DocumentCorrection,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -181,4 +182,5 @@ export const ENTITIES = [
   ExpenseVoucher,
   ExpenseVoucherLine,
   ImportJob,
+  DocumentCorrection,
 ];

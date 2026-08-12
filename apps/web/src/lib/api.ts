@@ -928,6 +928,24 @@ export const syncApi = {
   resolveConflict: (id: string, resolution: string) => post(`/sync/conflicts/${id}/resolve`, { resolution }),
 };
 
+// ---- Document numbering — reserved-number pool (Plan F2) ----
+export const numberingApi = {
+  reservations: () => apiFetch<Row[]>('/sync/number-reservations'),
+  reserve: (b: Record<string, unknown>) => post('/sync/number-reservations', b),
+};
+
+// ---- Document corrections / amendment trail (Plan F2) ----
+export const correctionsApi = {
+  list: (documentType?: string, documentId?: string) => {
+    const qs = new URLSearchParams();
+    if (documentType) qs.set('documentType', documentType);
+    if (documentId) qs.set('documentId', documentId);
+    const s = qs.toString();
+    return apiFetch<Row[]>(`/document-corrections${s ? `?${s}` : ''}`);
+  },
+  record: (b: Record<string, unknown>) => post('/document-corrections', b),
+};
+
 /** Fetch a PDF as a blob (auth header required) and open it in a new tab. */
 export async function openPdf(path: string): Promise<void> {
   const token = getSession()?.token;

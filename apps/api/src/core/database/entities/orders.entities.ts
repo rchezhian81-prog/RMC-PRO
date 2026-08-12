@@ -53,3 +53,22 @@ export class OrderItem extends TenantScopedEntity {
   @Column({ name: 'delivery_interval_minutes', type: 'int', nullable: true }) deliveryIntervalMinutes!: number | null;
   @Column({ name: 'line_status', type: 'varchar', default: 'draft' }) lineStatus!: string;
 }
+
+/**
+ * Pour schedule slot (Plan B1) — a timed delivery in an order's pour plan:
+ * how much concrete, when, at what truck spacing, in what sequence.
+ */
+@Entity('pour_schedule_slots')
+export class PourScheduleSlot extends TenantScopedEntity {
+  @Column({ name: 'order_id', type: 'uuid' }) orderId!: string;
+  @Column({ name: 'site_id', type: 'uuid', nullable: true }) siteId!: string | null;
+  @Column({ name: 'slot_date', type: 'date' }) slotDate!: string;
+  /** Planned start time as HH:MM (local plant time). */
+  @Column({ name: 'start_time', type: 'varchar', nullable: true }) startTime!: string | null;
+  @Column({ name: 'quantity_m3', type: 'numeric', precision: 12, scale: 3, default: 0 }) quantityM3!: string;
+  @Column({ name: 'truck_spacing_minutes', type: 'int', nullable: true }) truckSpacingMinutes!: number | null;
+  @Column({ name: 'pump_required', type: 'boolean', default: false }) pumpRequired!: boolean;
+  @Column({ name: 'sequence_no', type: 'int', default: 0 }) sequenceNo!: number;
+  @Column({ name: 'status', type: 'varchar', default: 'planned' }) status!: string;
+  @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
+}

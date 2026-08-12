@@ -496,6 +496,9 @@ export const ordersApi = {
   creditCheck: (id: string) => apiFetch<Row>(`/orders/${id}/credit-check`),
   confirm: (id: string) => post(`/orders/${id}/confirm`),
   cancel: (id: string, reason: string) => post(`/orders/${id}/cancel`, { reason }),
+  addPourSlot: (id: string, b: Record<string, unknown>) => post(`/orders/${id}/pour-slots`, b),
+  removePourSlot: (id: string, slotId: string) =>
+    apiFetch<Row>(`/orders/${id}/pour-slots/${slotId}`, { method: 'DELETE' }),
 };
 
 export const creditHoldsApi = {

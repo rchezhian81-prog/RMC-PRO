@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { ordersApi, type Row } from '../../../../lib/api';
@@ -9,6 +9,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { StatCard } from '../../../../components/ui/StatCard';
+import { Field, Input } from '../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
@@ -22,6 +23,7 @@ export default function OrderDetail() {
   const [credit, setCredit] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [slot, setSlot] = useState({ slotDate: '', startTime: '', quantityM3: '', truckSpacingMinutes: '', pumpRequired: false });
 
   const load = useCallback(async () => {
     const order = await ordersApi.get(id);
@@ -47,6 +49,20 @@ export default function OrderDetail() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     }
+  }
+
+  async function addSlot(e: FormEvent) {
+    e.preventDefault();
+    await run(async () => {
+      await ordersApi.addPourSlot(id, {
+        slotDate: slot.slotDate,
+        startTime: slot.startTime || undefined,
+        quantityM3: Number(slot.quantityM3 || 0),
+        truckSpacingMinutes: slot.truckSpacingMinutes ? Number(slot.truckSpacingMinutes) : undefined,
+        pumpRequired: slot.pumpRequired,
+      });
+      setSlot({ slotDate: '', startTime: '', quantityM3: '', truckSpacingMinutes: '', pumpRequired: false });
+    }, 'Pour slot added');
   }
 
   if (!o) return <Loading label="Loading order…" />;
@@ -174,6 +190,60 @@ export default function OrderDetail() {
             <div style={{ borderTop: '1px solid var(--mn-border)', margin: '8px 0', paddingTop: 8 }}>
               {row(`Total${s.isInterstate ? ' (inter-state)' : ''}`, s.total, true)}
             </div>
+          </Card>
+        );
+      })()}
+
+      {(() => {
+        const slots = (o.pourSlots as Row[]) ?? [];
+        const ps = o.pourSummary as Row | undefined;
+        return (
+          <Card title="Pour schedule" padded={false}>
+            {ps && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: 16 }}>
+                <StatCard label="Ordered m³" value={String(ps.ordered)} />
+                <StatCard label="Scheduled m³" value={String(ps.scheduled)} />
+                <StatCard label="Unscheduled m³" value={String(ps.unscheduled)} />
+                <StatCard label="Delivered m³" value={String(ps.delivered)} />
+              </div>
+            )}
+            <Table>
+              <thead>
+                <tr>
+                  <Th numeric>Seq</Th><Th>Date</Th><Th>Start</Th><Th numeric>Qty m³</Th>
+                  <Th numeric>Spacing (min)</Th><Th>Pump</Th><Th>Status</Th><Th />
+                </tr>
+              </thead>
+              <tbody>
+                {slots.map((s) => (
+                  <tr key={s.id}>
+                    <Td numeric>{String(s.sequenceNo)}</Td>
+                    <Td>{String(s.slotDate ?? '').slice(0, 10)}</Td>
+                    <Td>{String(s.startTime ?? '—')}</Td>
+                    <Td numeric>{Number(s.quantityM3).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</Td>
+                    <Td numeric>{s.truckSpacingMinutes == null ? '—' : String(s.truckSpacingMinutes)}</Td>
+                    <Td>{s.pumpRequired ? 'Yes' : 'No'}</Td>
+                    <Td>{String(s.status)}</Td>
+                    <Td style={{ textAlign: 'right' }}>
+                      <Button variant="ghost" size="sm" onClick={() => run(() => ordersApi.removePourSlot(id, String(s.id)))}>Remove</Button>
+                    </Td>
+                  </tr>
+                ))}
+                {!slots.length && (
+                  <tr><Td colSpan={8} style={{ color: 'var(--mn-muted)' }}>No slots scheduled yet.</Td></tr>
+                )}
+              </tbody>
+            </Table>
+            <form onSubmit={addSlot} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
+              <div style={{ minWidth: 140 }}><Field label="Date"><Input type="date" value={slot.slotDate} onChange={(e) => setSlot({ ...slot, slotDate: e.target.value })} required /></Field></div>
+              <div style={{ minWidth: 110 }}><Field label="Start time"><Input type="time" value={slot.startTime} onChange={(e) => setSlot({ ...slot, startTime: e.target.value })} /></Field></div>
+              <div style={{ minWidth: 100 }}><Field label="Qty m³"><Input type="number" step="any" value={slot.quantityM3} onChange={(e) => setSlot({ ...slot, quantityM3: e.target.value })} required /></Field></div>
+              <div style={{ minWidth: 120 }}><Field label="Spacing (min)"><Input type="number" value={slot.truckSpacingMinutes} onChange={(e) => setSlot({ ...slot, truckSpacingMinutes: e.target.value })} /></Field></div>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 14, fontSize: 13 }}>
+                <input type="checkbox" checked={slot.pumpRequired} onChange={(e) => setSlot({ ...slot, pumpRequired: e.target.checked })} /> Pump
+              </label>
+              <div style={{ marginBottom: 14 }}><Button type="submit" variant="secondary">Add slot</Button></div>
+            </form>
           </Card>
         );
       })()}

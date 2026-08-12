@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -44,6 +44,18 @@ export class OrdersController {
   @RequirePermissions('orders.confirm')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
     return this.service.cancel(tid(u), id, u.userId, dto.reason as string);
+  }
+
+  @Post(':id/pour-slots')
+  @RequirePermissions('orders.create')
+  addPourSlot(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.service.addPourSlot(tid(u), id, dto);
+  }
+
+  @Delete(':id/pour-slots/:slotId')
+  @RequirePermissions('orders.create')
+  removePourSlot(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('slotId') slotId: string) {
+    return this.service.removePourSlot(tid(u), id, slotId);
   }
 }
 

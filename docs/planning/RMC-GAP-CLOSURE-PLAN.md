@@ -48,7 +48,7 @@ breadth on top of that spine**, not rework of it.
 | D1 | Fleet renewal / compliance alerts | Fleet | Critical | — | 1 | **done** |
 | A1 | Material & UOM master depth | Batching | Critical | — | 1–2 | **done** |
 | A2 | Aggregate moisture & w/c correction | Batching | Critical | A1 | 2 | **done** |
-| A3 | QC / Lab module (`qc`) | Batching | Critical | A1 | 2–3 | planned |
+| A3 | QC / Lab module (`qc`) | Batching | Critical | A1 | 2–3 | **done** |
 | B2 | Pricing & GST depth (quote→invoice) | Order-to-cash | Important | — | 2 | planned |
 | B1 | Pour scheduling | Order-to-cash | Important | — | 2 | planned |
 | C1 | Receivables maturity | Billing | Important | — | 1–2 | planned |

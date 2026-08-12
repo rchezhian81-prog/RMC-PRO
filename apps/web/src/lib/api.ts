@@ -686,6 +686,17 @@ export async function downloadTallyCsv(): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+// ---- QC / Lab (Plan A3) ----
+export const qcApi = {
+  slumpList: () => apiFetch<Row[]>('/qc/slump-tests'),
+  slumpCreate: (b: Record<string, unknown>) => post('/qc/slump-tests', b),
+  cubeSets: (status?: string) => apiFetch<Row[]>(`/qc/cube-sets${status ? `?status=${status}` : ''}`),
+  cubeSet: (id: string) => apiFetch<Row>(`/qc/cube-sets/${id}`),
+  cubeSetCreate: (b: Record<string, unknown>) => post('/qc/cube-sets', b),
+  recordResults: (id: string, results: Record<string, unknown>[]) =>
+    post(`/qc/cube-sets/${id}/results`, { results }),
+};
+
 // ---- Dashboard, reports center, sync (Sprint 10) ----
 export const dashboardApi = {
   summary: () => apiFetch<Row>('/dashboard/summary'),

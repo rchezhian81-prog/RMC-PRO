@@ -106,6 +106,13 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: 'Quality (QC)',
+    items: [
+      { href: '/app/qc/slump', label: 'Slump Tests', icon: <FlaskConical size={IS} />, perm: 'qc.view', module: 'qc' },
+      { href: '/app/qc/cubes', label: 'Cube Sets', icon: <ClipboardList size={IS} />, perm: 'qc.view', module: 'qc' },
+    ],
+  },
+  {
     title: 'Dispatch',
     items: [
       { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, module: 'dispatch' },

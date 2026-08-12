@@ -30,6 +30,7 @@ import { CustomerPincode1720000025000 } from './migrations/1720000025000-Custome
 import { Transporters1720000026000 } from './migrations/1720000026000-Transporters';
 import { VehicleRoadTax1720000027000 } from './migrations/1720000027000-VehicleRoadTax';
 import { MaterialUomDepth1720000028000 } from './migrations/1720000028000-MaterialUomDepth';
+import { BatchMoisture1720000029000 } from './migrations/1720000029000-BatchMoisture';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -75,6 +76,7 @@ export const AppDataSource = new DataSource({
     Transporters1720000026000,
     VehicleRoadTax1720000027000,
     MaterialUomDepth1720000028000,
+    BatchMoisture1720000029000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

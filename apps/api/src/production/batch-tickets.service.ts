@@ -1,15 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
   BatchQueueEntry,
   BatchTicket,
   BatchTicketMaterial,
+  Material,
   MixDesign,
   MixDesignMaterial,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from './stock.service';
+import { applyMoistureCorrection, type MoistureInput } from './moisture-correction.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Batch ticket not found' });
 const badReq = (message: string, extra?: unknown) =>
@@ -101,16 +103,39 @@ export class BatchTicketsService {
         }),
       );
 
-      // Snapshot scaled targets; actual defaults to target until the operator edits.
+      // Snapshot scaled SSD targets, then correct aggregate weights + mix water
+      // for moisture using each material's batching props. Actual defaults to the
+      // corrected (moist) target until the operator edits.
+      const matIds = [...new Set(mixMaterials.map((mm) => mm.materialId).filter((x): x is string => !!x))];
+      const propRows = matIds.length ? await m.getRepository(Material).find({ where: { id: In(matIds) } }) : [];
+      const props = new Map(propRows.map((p) => [p.id, p]));
+      const inputs: MoistureInput[] = mixMaterials.map((mm) => {
+        const p = mm.materialId ? props.get(mm.materialId) : undefined;
+        return {
+          materialType: p?.materialType ?? null,
+          targetSsd: num(mm.targetQuantity) * batchQty,
+          absorptionPct: num(p?.waterAbsorptionPct),
+          moisturePct: num(p?.defaultMoisturePct),
+        };
+      });
+      const { results } = applyMoistureCorrection(inputs);
+
       const matRepo = m.getRepository(BatchTicketMaterial);
-      for (const mm of mixMaterials) {
-        const target = num(mm.targetQuantity) * batchQty;
+      for (let i = 0; i < mixMaterials.length; i++) {
+        const mm = mixMaterials[i]!;
+        const inp = inputs[i]!;
+        const res = results[i]!;
         await matRepo.save(
           matRepo.create({
             tenantId, batchTicketId: ticket.id, materialId: mm.materialId, materialLabel: mm.materialLabel,
-            targetQuantity: String(target), actualQuantity: String(target),
+            targetQuantity: String(inp.targetSsd), actualQuantity: String(res.correctedTarget),
             varianceQuantity: '0', variancePercentage: '0', uom: mm.uom,
             tolerancePercentage: mm.tolerancePercentage, withinTolerance: true,
+            materialType: inp.materialType,
+            waterAbsorptionPct: inp.absorptionPct ? String(inp.absorptionPct) : null,
+            measuredMoisturePct: inp.moisturePct ? String(inp.moisturePct) : null,
+            correctedTargetQuantity: String(res.correctedTarget),
+            freeWaterQuantity: String(res.freeWater),
           }),
         );
       }
@@ -120,21 +145,53 @@ export class BatchTicketsService {
     });
   }
 
-  /** Record actual consumed quantities (draft only) and recompute variance. */
+  /**
+   * Record actual consumed quantities and/or per-aggregate measured moisture
+   * (draft only). Any moisture change re-corrects the whole batch (mix water
+   * depends on every aggregate), and variance is scored against the corrected
+   * target. A row whose moisture changed but whose actual was not supplied is
+   * re-seeded to its new corrected target.
+   */
   updateActuals(tenantId: string, ticketId: string, dto: Record<string, unknown>) {
     return this.db.runInTenant(tenantId, async (m) => {
       const ticket = await m.getRepository(BatchTicket).findOne({ where: { id: ticketId } });
       if (!ticket) throw notFound();
       if (ticket.status !== 'draft') throw badReq('Only a draft ticket can be edited');
-      const rows = Array.isArray(dto.materials) ? (dto.materials as Record<string, unknown>[]) : [];
       const repo = m.getRepository(BatchTicketMaterial);
-      for (const r of rows) {
-        const id = String(r.id ?? '');
-        const mat = await repo.findOne({ where: { id, batchTicketId: ticketId } });
-        if (!mat) continue;
-        const actual = num(r.actualQuantity);
-        const v = this.variance(num(mat.targetQuantity), actual, num(mat.tolerancePercentage));
-        await repo.update(id, {
+      const mats = await repo.find({ where: { batchTicketId: ticketId }, order: { createdAt: 'ASC' } });
+
+      const rows = Array.isArray(dto.materials) ? (dto.materials as Record<string, unknown>[]) : [];
+      const byId = new Map(rows.map((r) => [String(r.id ?? ''), r]));
+      const has = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
+
+      const inputs: MoistureInput[] = mats.map((mat) => {
+        const r = byId.get(mat.id);
+        const moisture = r && has(r.measuredMoisturePct) ? num(r.measuredMoisturePct) : num(mat.measuredMoisturePct);
+        return {
+          materialType: mat.materialType,
+          targetSsd: num(mat.targetQuantity),
+          absorptionPct: num(mat.waterAbsorptionPct),
+          moisturePct: moisture,
+        };
+      });
+      const { results } = applyMoistureCorrection(inputs);
+
+      for (let i = 0; i < mats.length; i++) {
+        const mat = mats[i]!;
+        const inp = inputs[i]!;
+        const res = results[i]!;
+        const r = byId.get(mat.id);
+        const moistureChanged = r ? has(r.measuredMoisturePct) : false;
+        const actual = r && has(r.actualQuantity)
+          ? num(r.actualQuantity)
+          : moistureChanged
+            ? res.correctedTarget
+            : num(mat.actualQuantity);
+        const v = this.variance(res.correctedTarget, actual, num(mat.tolerancePercentage));
+        await repo.update(mat.id, {
+          measuredMoisturePct: inp.moisturePct ? String(inp.moisturePct) : null,
+          correctedTargetQuantity: String(res.correctedTarget),
+          freeWaterQuantity: String(res.freeWater),
           actualQuantity: String(actual),
           varianceQuantity: String(v.varianceQuantity),
           variancePercentage: String(v.variancePercentage),
@@ -174,7 +231,8 @@ export class BatchTicketsService {
       // Recompute variance against tolerance.
       const breaches: Array<{ material: string; variancePercentage: number; tolerance: number }> = [];
       for (const mat of materials) {
-        const v = this.variance(num(mat.targetQuantity), num(mat.actualQuantity), num(mat.tolerancePercentage));
+        const basis = num(mat.correctedTargetQuantity ?? mat.targetQuantity);
+        const v = this.variance(basis, num(mat.actualQuantity), num(mat.tolerancePercentage));
         await matRepo.update(mat.id, {
           varianceQuantity: String(v.varianceQuantity),
           variancePercentage: String(v.variancePercentage),

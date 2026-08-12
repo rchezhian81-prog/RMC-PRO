@@ -49,6 +49,8 @@ export class Invoice extends TenantScopedEntity {
   @Column({ name: 'distance_km', type: 'int', nullable: true }) distanceKm!: number | null;
   @Column({ name: 'transport_mode', type: 'varchar', nullable: true }) transportMode!: string | null;
   @Column({ name: 'transporter_name', type: 'varchar', nullable: true }) transporterName!: string | null;
+  /** Optional link to the transporter master — sources the e-way TransId/TransName. */
+  @Column({ name: 'transporter_id', type: 'uuid', nullable: true }) transporterId!: string | null;
   @Column({ name: 'vehicle_no', type: 'varchar', nullable: true }) vehicleNo!: string | null;
   @Column({ name: 'eway_status', type: 'varchar', default: 'not_generated' }) ewayStatus!: string;
 }

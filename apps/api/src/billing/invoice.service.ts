@@ -9,6 +9,7 @@ import {
   InvoiceChallan,
   InvoiceItem,
   OrderItem,
+  Transporter,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
@@ -19,6 +20,9 @@ import { computeLineTax, round2 } from './tax.util';
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
+
+/** e-way transport modes NIC accepts (mapped to codes in the payload builder). */
+const TRANSPORT_MODES = new Set(['road', 'rail', 'air', 'ship']);
 
 /**
  * Invoicing (DEV-PLAN B12). Generates a GST invoice from DELIVERED, not-yet-
@@ -196,6 +200,75 @@ export class InvoiceService {
       entityLabel: invoiceNo ?? null,
       summary: `Cancelled invoice ${invoiceNo ?? ''} (₹${total ?? 0})${reason ? ` — ${reason}` : ''}`.trim(),
       details: { reason: reason ?? null, totalAmount: total },
+    });
+    return result;
+  }
+
+  /**
+   * Set the e-way transport details on an invoice: link a transporter master
+   * (or clear it), and/or set the vehicle number, transport mode and distance.
+   * These feed the e-way bill — TransId/TransName come from the linked
+   * transporter (see GstExecutionService.loadContext). Only the fields present
+   * in the body are touched; passing null clears one. Blocked once the invoice
+   * is cancelled.
+   */
+  async setTransport(tenantId: string, id: string, userId: string, dto: Record<string, unknown>) {
+    const { result, invoiceNo, changes } = await this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Invoice);
+      const invoice = await repo.findOne({ where: { id } });
+      if (!invoice) throw notFound();
+      if (invoice.invoiceStatus === 'cancelled') throw badReq('Cannot set transport on a cancelled invoice');
+
+      const patch: Partial<Invoice> = {};
+      const parts: string[] = [];
+
+      if ('transporterId' in dto) {
+        const tId = dto.transporterId;
+        if (tId === null || tId === '') {
+          patch.transporterId = null;
+          parts.push('cleared transporter');
+        } else if (typeof tId === 'string') {
+          const t = await m.getRepository(Transporter).findOne({ where: { id: tId } });
+          if (!t) throw badReq('Unknown transporter');
+          patch.transporterId = tId;
+          parts.push(`transporter ${t.transporterName}`);
+        } else {
+          throw badReq('transporterId must be a transporter id or null');
+        }
+      }
+      if (dto.vehicleNo !== undefined) {
+        const v = dto.vehicleNo === null ? null : String(dto.vehicleNo).trim().toUpperCase();
+        patch.vehicleNo = v || null;
+        if (v) parts.push(`vehicle ${v}`);
+      }
+      if (dto.transportMode !== undefined) {
+        const mode = dto.transportMode === null ? null : String(dto.transportMode).trim().toLowerCase();
+        if (mode && !TRANSPORT_MODES.has(mode)) throw badReq('transportMode must be road, rail, air or ship');
+        patch.transportMode = mode || null;
+      }
+      if (dto.distanceKm !== undefined) {
+        if (dto.distanceKm === null) {
+          patch.distanceKm = null;
+        } else {
+          const d = Number(dto.distanceKm);
+          if (!Number.isInteger(d) || d < 0) throw badReq('distanceKm must be a whole number of 0 or more');
+          patch.distanceKm = d;
+        }
+      }
+      if (Object.keys(patch).length === 0) throw badReq('No transport fields to update');
+
+      await repo.update(id, patch);
+      return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, changes: parts.join(', ') };
+    });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.INVOICE_TRANSPORT,
+      entityType: 'invoice',
+      entityId: id,
+      entityLabel: invoiceNo ?? null,
+      summary: `Updated e-way transport for invoice ${invoiceNo ?? ''}${changes ? ` — ${changes}` : ''}`.trim(),
+      details: { ...dto },
     });
     return result;
   }

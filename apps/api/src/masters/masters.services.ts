@@ -10,6 +10,7 @@ import {
   Material,
   Site,
   Supplier,
+  Transporter,
   Vehicle,
 } from '../core/database/entities';
 
@@ -79,5 +80,16 @@ export class DriversService extends TenantCrudService<Driver> {
 export class GradesService extends TenantCrudService<ConcreteGrade> {
   constructor(db: TenantDbService) {
     super(db, ConcreteGrade, { orderBy: 'gradeCode', required: ['gradeCode', 'gradeName'] });
+  }
+}
+
+@Injectable()
+export class TransportersService extends TenantCrudService<Transporter> {
+  constructor(db: TenantDbService) {
+    super(db, Transporter, { orderBy: 'transporterCode', required: ['transporterCode', 'transporterName'] });
+  }
+  // GSTIN, TRANSIN, mobile.
+  protected override validateWrite(dto: Record<string, unknown>): void {
+    assertFields(validateMasterFields(dto));
   }
 }

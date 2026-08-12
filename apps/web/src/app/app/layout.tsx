@@ -70,6 +70,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/entity/suppliers', label: 'Suppliers', icon: <Store size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/vehicles', label: 'Vehicles', icon: <Truck size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/drivers', label: 'Drivers', icon: <IdCard size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/transporters', label: 'Transporters', icon: <Truck size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/concrete-grades', label: 'Grades', icon: <Layers size={IS} />, perm: 'masters.view', module: 'masters' },
     ],
   },

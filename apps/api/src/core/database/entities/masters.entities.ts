@@ -97,6 +97,26 @@ export class Driver extends TenantScopedEntity {
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
 }
 
+/**
+ * Transporter master (Design Doc 6 §7.x) — the managed source for the e-way
+ * bill's `TransId` (GST Transporter ID / TRANSIN, or the transporter's GSTIN)
+ * and `TransName`, replacing free-text transporter details on the invoice.
+ */
+@Entity('transporters')
+@Unique('uq_transporters_code', ['tenantId', 'transporterCode'])
+export class Transporter extends TenantScopedEntity {
+  @Column({ name: 'transporter_code', type: 'varchar' }) transporterCode!: string;
+  @Column({ name: 'transporter_name', type: 'varchar' }) transporterName!: string;
+  /** 15-char GST Transporter ID (TRANSIN) or GSTIN — the e-way `TransId`. */
+  @Column({ name: 'transin', type: 'varchar', length: 15, nullable: true }) transin!: string | null;
+  @Column({ name: 'gstin', type: 'varchar', nullable: true }) gstin!: string | null;
+  @Column({ name: 'contact_person', type: 'varchar', nullable: true }) contactPerson!: string | null;
+  @Column({ name: 'mobile', type: 'varchar', nullable: true }) mobile!: string | null;
+  @Column({ name: 'email', type: 'varchar', nullable: true }) email!: string | null;
+  @Column({ name: 'state', type: 'varchar', nullable: true }) state!: string | null;
+  @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
+}
+
 /** Concrete grade master (Design Doc 6 §7.6). */
 @Entity('concrete_grades')
 @Unique('uq_grades_code', ['tenantId', 'gradeCode'])

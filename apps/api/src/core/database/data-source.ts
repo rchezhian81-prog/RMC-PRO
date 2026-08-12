@@ -27,6 +27,7 @@ import { ApprovalEntityRef1720000022000 } from './migrations/1720000022000-Appro
 import { GstCredentials1720000023000 } from './migrations/1720000023000-GstCredentials';
 import { GstExecutionJobs1720000024000 } from './migrations/1720000024000-GstExecutionJobs';
 import { CustomerPincode1720000025000 } from './migrations/1720000025000-CustomerPincode';
+import { Transporters1720000026000 } from './migrations/1720000026000-Transporters';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -69,6 +70,7 @@ export const AppDataSource = new DataSource({
     GstCredentials1720000023000,
     GstExecutionJobs1720000024000,
     CustomerPincode1720000025000,
+    Transporters1720000026000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

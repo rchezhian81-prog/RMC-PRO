@@ -92,6 +92,20 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'licenseNo', label: 'License No' },
     ],
   },
+  transporters: {
+    path: 'transporters',
+    title: 'Transporters',
+    columns: ['transporterCode', 'transporterName', 'transin', 'gstin', 'state', 'status'],
+    fields: [
+      { key: 'transporterCode', label: 'Code', required: true },
+      { key: 'transporterName', label: 'Name', required: true },
+      { key: 'transin', label: 'GST Transporter ID (TRANSIN)' },
+      { key: 'gstin', label: 'GSTIN' },
+      { key: 'contactPerson', label: 'Contact person' },
+      { key: 'mobile', label: 'Mobile' },
+      { key: 'state', label: 'State' },
+    ],
+  },
   'concrete-grades': {
     path: 'concrete-grades',
     title: 'Concrete Grades',

@@ -39,6 +39,19 @@ export function isValidPincode(value: string): boolean {
 }
 
 /**
+ * GST Transporter ID (TRANSIN) or a transporter's GSTIN, as accepted by the NIC
+ * e-way `TransId` field: 15 characters — 2 leading state-code digits then 13
+ * alphanumerics. A regular GSTIN and an enrolled (non-GST) Transporter ID share
+ * this shape, so both pass; the portal makes the finer distinction.
+ */
+export const TRANSPORTER_ID_REGEX = /^[0-9]{2}[0-9A-Z]{13}$/;
+
+/** True for a well-formed 15-character GST Transporter ID / TRANSIN (or GSTIN). */
+export function isValidTransporterId(value: string): boolean {
+  return TRANSPORTER_ID_REGEX.test(value.trim().toUpperCase());
+}
+
+/**
  * Validate one master record's shared fields. Returns a map of field → message
  * for every problem found (empty object = valid). Field names match the DTO/API
  * keys. Only validates fields that are present and non-empty (except the numeric
@@ -63,6 +76,10 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   const pincode = str('pincode');
   if (pincode && !isValidPincode(pincode)) {
     errors.pincode = 'Enter a valid 6-digit PIN code.';
+  }
+  const transin = str('transin');
+  if (transin && !isValidTransporterId(transin)) {
+    errors.transin = 'Enter a valid 15-character GST Transporter ID / TRANSIN.';
   }
   for (const k of ['creditLimit', 'creditDays', 'capacityM3', 'openingBalance']) {
     if (dto[k] !== undefined && dto[k] !== null && dto[k] !== '' && !isNonNegativeNumber(dto[k])) {

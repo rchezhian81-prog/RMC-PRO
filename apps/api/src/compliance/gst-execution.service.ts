@@ -281,7 +281,7 @@ export class GstExecutionService {
               taxable_amount AS "taxable", cgst_amount AS "cgst", sgst_amount AS "sgst",
               igst_amount AS "igst", cess_amount AS "cess", round_off AS "roundOff", total_amount AS "total",
               distance_km AS "distanceKm", transport_mode AS "transportMode", vehicle_no AS "vehicleNo",
-              transporter_name AS "transporterName"
+              transporter_name AS "transporterName", transporter_id AS "transporterId"
          FROM invoices WHERE id = $1`,
       [invoiceId],
     );
@@ -294,6 +294,10 @@ export class GstExecutionService {
     );
     const [customer] = inv.customerId
       ? await m.query(`SELECT customer_name AS "name", gstin, billing_address AS "addr", city, state, pincode FROM customers WHERE id = $1`, [inv.customerId])
+      : [undefined];
+    // Transporter master (optional) — the managed source for the e-way TransId/TransName.
+    const [transporter] = inv.transporterId
+      ? await m.query(`SELECT transporter_name AS "name", transin, gstin FROM transporters WHERE id = $1`, [inv.transporterId])
       : [undefined];
 
     const sellerGstin: string = company?.gstin ?? '';
@@ -327,7 +331,10 @@ export class GstExecutionService {
       taxable: Number(inv.taxable), cgst: Number(inv.cgst), sgst: Number(inv.sgst),
       igst: Number(inv.igst), cess: Number(inv.cess), roundOff: Number(inv.roundOff), total: Number(inv.total),
       distanceKm: inv.distanceKm, transportMode: inv.transportMode, vehicleNo: inv.vehicleNo,
-      transporterName: inv.transporterName,
+      // TransId/TransName come from the linked transporter master (TRANSIN, else its
+      // GSTIN); fall back to the invoice's free-text transporter name when unlinked.
+      transporterName: transporter?.name ?? inv.transporterName,
+      transporterId: transporter?.transin ?? transporter?.gstin ?? null,
     };
 
     const rows: Array<Record<string, unknown>> = await m.query(

@@ -2,12 +2,17 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
+  Company,
   CreditHoldRequest,
+  Customer,
   Order,
   OrderItem,
   OrderStatusHistory,
 } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
+import { summariseGst, isInterstateSupply } from '../billing/tax.util';
+
+const num = (v: unknown): number => Number(v ?? 0) || 0;
 import { CreditService, type CreditAssessment } from './credit.service';
 import { recordHistory } from './history.util';
 
@@ -44,7 +49,20 @@ export class OrdersService {
     const holds = await m
       .getRepository(CreditHoldRequest)
       .find({ where: { orderId: id }, order: { createdAt: 'DESC' } });
-    return { ...order, items, history, creditHolds: holds };
+
+    const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+    const customer = order.customerId
+      ? await m.getRepository(Customer).findOne({ where: { id: order.customerId } })
+      : null;
+    const taxSummary = summariseGst(
+      items.map((it) => ({
+        quantity: num(it.quantityM3), rate: num(it.ratePerM3),
+        transport: num(it.transportCharge), pump: num(it.pumpCharge), waiting: num(it.waitingCharge),
+        gstRate: num(it.gstRate),
+      })),
+      isInterstateSupply(company?.state, customer?.state),
+    );
+    return { ...order, items, history, creditHolds: holds, taxSummary };
   }
 
   get(tenantId: string, id: string) {

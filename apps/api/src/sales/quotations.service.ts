@@ -10,6 +10,7 @@ import {
   Site,
 } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
+import { summariseGst, isInterstateSupply } from '../billing/tax.util';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
 import { WhatsAppService } from './whatsapp.service';
@@ -28,8 +29,11 @@ const ITEM_FIELDS = [
   'pumpCharge',
   'waitingCharge',
   'gstApplicable',
+  'gstRate',
   'remarks',
 ] as const;
+
+const num = (v: unknown): number => Number(v ?? 0) || 0;
 
 /** Quotations: header, grade-wise items, approval flow, revisions, PDF, share. */
 @Injectable()
@@ -53,7 +57,23 @@ export class QuotationsService {
     const items = await m
       .getRepository(QuotationItem)
       .find({ where: { quotationId: id }, order: { createdAt: 'ASC' } });
-    return { ...quotation, items };
+
+    // Reconciling CGST/SGST/IGST breakup — freight is part of the taxable base,
+    // inter/intra-state from the buyer's state vs the seller company's state.
+    const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+    const customer = quotation.customerId
+      ? await m.getRepository(Customer).findOne({ where: { id: quotation.customerId } })
+      : null;
+    const interstate = isInterstateSupply(company?.state, customer?.state);
+    const taxSummary = summariseGst(
+      items.map((it) => ({
+        quantity: num(it.estimatedQuantity), rate: num(it.ratePerM3),
+        transport: num(it.transportCharge), pump: num(it.pumpCharge), waiting: num(it.waitingCharge),
+        gstRate: num(it.gstRate), gstApplicable: it.gstApplicable,
+      })),
+      interstate,
+    );
+    return { ...quotation, items, taxSummary };
   }
 
   get(tenantId: string, id: string) {

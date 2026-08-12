@@ -51,6 +51,8 @@ export class Quotation extends TenantScopedEntity {
   @Column({ name: 'payment_terms', type: 'varchar', nullable: true }) paymentTerms!: string | null;
   @Column({ name: 'approval_status', type: 'varchar', default: 'draft' }) approvalStatus!: string;
   @Column({ name: 'revision_no', type: 'int', default: 0 }) revisionNo!: number;
+  /** cash | credit — the price book this quotation was raised against. */
+  @Column({ name: 'pricing_type', type: 'varchar', default: 'credit' }) pricingType!: string;
   @Column({ name: 'remarks', type: 'text', nullable: true }) remarks!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
 }
@@ -67,6 +69,7 @@ export class QuotationItem extends TenantScopedEntity {
   @Column({ name: 'pump_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) pumpCharge!: string;
   @Column({ name: 'waiting_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) waitingCharge!: string;
   @Column({ name: 'gst_applicable', type: 'boolean', default: true }) gstApplicable!: boolean;
+  @Column({ name: 'gst_rate', type: 'numeric', precision: 5, scale: 2, default: 18 }) gstRate!: string;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
 }
 
@@ -108,5 +111,6 @@ export class RateContractItem extends TenantScopedEntity {
   @Column({ name: 'pump_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) pumpCharge!: string;
   @Column({ name: 'waiting_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) waitingCharge!: string;
   @Column({ name: 'gst_applicable', type: 'boolean', default: true }) gstApplicable!: boolean;
+  @Column({ name: 'gst_rate', type: 'numeric', precision: 5, scale: 2, default: 18 }) gstRate!: string;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
 }

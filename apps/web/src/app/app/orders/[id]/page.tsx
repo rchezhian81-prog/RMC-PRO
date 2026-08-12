@@ -157,6 +157,27 @@ export default function OrderDetail() {
         </p>
       </Card>
 
+      {(() => {
+        const s = o.taxSummary as Row | undefined;
+        if (!s) return null;
+        const row = (label: string, value: unknown, strong = false) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontWeight: strong ? 700 : 400, color: strong ? 'inherit' : 'var(--mn-muted)' }}>
+            <span>{label}</span><span>{money(value)}</span>
+          </div>
+        );
+        return (
+          <Card style={{ maxWidth: 380, marginLeft: 'auto', width: '100%' }}>
+            {row('Taxable', s.taxable)}
+            {Number(s.cgst) > 0 && row('CGST', s.cgst)}
+            {Number(s.cgst) > 0 && row('SGST', s.sgst)}
+            {Number(s.igst) > 0 && row('IGST', s.igst)}
+            <div style={{ borderTop: '1px solid var(--mn-border)', margin: '8px 0', paddingTop: 8 }}>
+              {row(`Total${s.isInterstate ? ' (inter-state)' : ''}`, s.total, true)}
+            </div>
+          </Card>
+        );
+      })()}
+
       {holds.length > 0 && (
         <Card title="Credit holds" padded={false}>
           <Table>

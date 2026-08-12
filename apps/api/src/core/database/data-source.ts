@@ -32,6 +32,7 @@ import { VehicleRoadTax1720000027000 } from './migrations/1720000027000-VehicleR
 import { MaterialUomDepth1720000028000 } from './migrations/1720000028000-MaterialUomDepth';
 import { BatchMoisture1720000029000 } from './migrations/1720000029000-BatchMoisture';
 import { Qc1720000030000 } from './migrations/1720000030000-Qc';
+import { PricingGstDepth1720000031000 } from './migrations/1720000031000-PricingGstDepth';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -79,6 +80,7 @@ export const AppDataSource = new DataSource({
     MaterialUomDepth1720000028000,
     BatchMoisture1720000029000,
     Qc1720000030000,
+    PricingGstDepth1720000031000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

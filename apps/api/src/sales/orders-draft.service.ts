@@ -109,6 +109,7 @@ export class OrdersDraftService {
             transportCharge: it.transportCharge,
             pumpCharge: it.pumpCharge,
             waitingCharge: it.waitingCharge,
+            gstRate: it.gstApplicable === false ? '0' : (it.gstRate ?? '18'),
             lineStatus: 'draft',
           }),
         );
@@ -186,6 +187,7 @@ export class OrdersDraftService {
             transportCharge: match.transportCharge,
             pumpCharge: match.pumpCharge,
             waitingCharge: match.waitingCharge,
+            gstRate: match.gstApplicable === false ? '0' : (match.gstRate ?? '18'),
             lineStatus: 'draft',
           }),
         );

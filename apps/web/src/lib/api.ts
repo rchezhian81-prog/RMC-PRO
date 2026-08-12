@@ -594,6 +594,15 @@ export const challansApi = {
   deliver: (id: string, b: Record<string, unknown>) => post(`/delivery-challans/${id}/deliver`, b),
   cancel: (id: string, reason: string) => post(`/delivery-challans/${id}/cancel`, { reason }),
   share: (id: string, mobile: string) => post(`/delivery-challans/${id}/share`, { mobile }),
+  // Returned / short-load concrete wastage report (Plan B3).
+  wastageReport: (params: { from?: string; to?: string; plantId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.plantId) qs.set('plantId', params.plantId);
+    const s = qs.toString();
+    return apiFetch<Row>(`/delivery-challans/report/wastage${s ? `?${s}` : ''}`);
+  },
 };
 
 // ---- Inventory & weighbridge (Sprint 8) ----

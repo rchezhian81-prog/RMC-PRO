@@ -44,6 +44,18 @@ export class DeliveryChallanController {
   ) {}
 
   @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+
+  @Get('report/wastage')
+  @RequirePermissions('reports.view')
+  wastage(
+    @CurrentUser() u: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('plantId') plantId?: string,
+  ) {
+    return this.service.wastageReport(tid(u), { from, to, plantId });
+  }
+
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-dispatch/:dispatchId')

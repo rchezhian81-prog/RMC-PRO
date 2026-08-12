@@ -59,6 +59,7 @@ const TESTS = [
   'test/batching-integration.test.mjs',
   'test/fleet-maintenance.test.mjs',
   'test/expense-capture.test.mjs',
+  'test/returned-concrete.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/metrics.test.mjs',

@@ -12,6 +12,7 @@ import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const inr = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function Info({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -79,6 +80,8 @@ export default function ChallanDetail() {
           <Info label="Slump" value={String(c.slump ?? '—')} />
           <Info label="Receiver" value={String(c.receiverName ?? '—')} />
           <Info label="Return m³" value={money(c.returnQuantityM3)} />
+          {Number(c.returnQuantityM3) > 0 && <Info label="Return reason" value={String(c.returnReason ?? '—')} />}
+          {Number(c.returnCost) > 0 && <Info label="Return cost" value={inr(c.returnCost)} />}
         </div>
       </Card>
 
@@ -93,7 +96,13 @@ export default function ChallanDetail() {
                   if (receiver === null) return;
                   const ret = await prompt({ title: 'Mark delivered', label: 'Return quantity (m³)', defaultValue: '0', type: 'number' });
                   if (ret === null) return;
-                  await challansApi.deliver(id, { receiverName: receiver, returnQuantityM3: Number(ret || 0) });
+                  const retQty = Number(ret || 0);
+                  let returnReason: string | null = null;
+                  if (retQty > 0) {
+                    returnReason = await prompt({ title: 'Returned concrete', label: 'Reason (e.g. excess ordered, pump breakdown, site not ready)', defaultValue: '' });
+                    if (returnReason === null) return;
+                  }
+                  await challansApi.deliver(id, { receiverName: receiver, returnQuantityM3: retQty, ...(returnReason ? { returnReason } : {}) });
                 }, 'Marked delivered')
               }
             >

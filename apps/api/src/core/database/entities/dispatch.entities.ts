@@ -29,6 +29,8 @@ export class Dispatch extends TenantScopedEntity {
   @Column({ name: 'pour_start_time', type: 'timestamptz', nullable: true }) pourStartTime!: Date | null;
   @Column({ name: 'pour_end_time', type: 'timestamptz', nullable: true }) pourEndTime!: Date | null;
   @Column({ name: 'return_quantity_m3', type: 'numeric', precision: 12, scale: 3, default: 0 }) returnQuantityM3!: string;
+  /** Why concrete came back / was short-loaded (Plan B3). */
+  @Column({ name: 'return_reason', type: 'varchar', nullable: true }) returnReason!: string | null;
   @Column({ name: 'delay_reason', type: 'varchar', nullable: true }) delayReason!: string | null;
 }
 
@@ -52,6 +54,10 @@ export class DeliveryChallan extends TenantScopedEntity {
   @Column({ name: 'dispatch_time', type: 'timestamptz', nullable: true }) dispatchTime!: Date | null;
   @Column({ name: 'receiver_name', type: 'varchar', nullable: true }) receiverName!: string | null;
   @Column({ name: 'return_quantity_m3', type: 'numeric', precision: 12, scale: 3, default: 0 }) returnQuantityM3!: string;
+  /** Returned / short-load concrete (Plan B3): reason + valuation of the wasted qty. */
+  @Column({ name: 'return_reason', type: 'varchar', nullable: true }) returnReason!: string | null;
+  @Column({ name: 'return_cost_per_m3', type: 'numeric', precision: 14, scale: 2, default: 0 }) returnCostPerM3!: string;
+  @Column({ name: 'return_cost', type: 'numeric', precision: 16, scale: 2, default: 0 }) returnCost!: string;
   @Column({ name: 'invoice_status', type: 'varchar', default: 'not_invoiced' }) invoiceStatus!: string;
   @Column({ name: 'challan_status', type: 'varchar', default: 'draft' }) challanStatus!: string;
 }

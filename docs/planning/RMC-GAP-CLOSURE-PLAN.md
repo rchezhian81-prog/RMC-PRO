@@ -57,7 +57,7 @@ breadth on top of that spine**, not rework of it.
 | A4 | Batching Integration (`batching_integration`) | Batching | Important | A2 | 2 | **done** |
 | D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | **done** |
 | D4 | Expense capture | Procurement | Important | — | 1–2 | **done** |
-| B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | planned |
+| B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | **done** |
 | F1 | Excel bulk import framework | Platform | Important | — | 2 | planned |
 | F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | planned |
 
@@ -259,9 +259,32 @@ pumps. Builds on D1's fleet data.
   a reversal/void flow for a posted voucher, and per-line quantity × rate
   capture (amount-only today).
 
-### B3 · Returned / short-load concrete & wastage
+### B3 · Returned / short-load concrete & wastage ✅
 **Goal:** Reason + costing on the return-qty already captured on dispatch;
 wastage reporting.
+- **Delivered:** the returned quantity was already captured on `dispatches` /
+  `delivery_challans`; this adds the reason it came back and the valuation of the
+  wasted concrete (migration `1720000039000`, column-only, reversible):
+  `dispatches.return_reason` and `delivery_challans.return_reason` +
+  `return_cost_per_m3` + `return_cost`. Marking a challan delivered now captures
+  the returned quantity **and** its reason, and values it automatically at the
+  order line's rate for that grade (operator-overridable) — computed by a pure,
+  unit-tested `returnCost`. A pure `wastageSummary` rolls delivered returns up by
+  reason and by grade, each bucket with its share of the wasted value; surfaced
+  through a wastage report endpoint (`GET /delivery-challans/report/wastage`,
+  optional date/plant filters, `reports.view`). Dispatch's `returning` status
+  also records the reason. Web: the challan "Mark delivered" flow prompts for a
+  return reason when a quantity comes back, the challan detail shows the reason +
+  return cost, and the challans list carries a returned-concrete / wastage report
+  (by reason, with returned m³ and value). No new module or permissions — this
+  extends the existing phase-1 `dispatch` module. **Tests:** 8 helper unit cases
+  (`wastage-util.test.mjs`); a `returned-concrete` integration test builds a
+  challan through the real chain, marks it delivered with a returned quantity +
+  reason, asserts the auto-costing at the order rate, and reconciles the wastage
+  report by reason and grade.
+- **Deferred:** a structured return-reason master (reasons are free-text today),
+  a credit note / billing adjustment for the returned volume, and returning the
+  unused concrete to stock as recovered aggregate.
 
 ### F1 · Excel bulk import framework
 **Goal:** Generic template-download → upload → tracked import job

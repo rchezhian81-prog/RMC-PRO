@@ -586,6 +586,30 @@ export const weighbridgeApi = {
   setStatus: (id: string, status: string) => post(`/weighbridge/${id}/status`, { status }),
 };
 
+// E1 weighbridge hardware bridge: indicator devices + the live "Get weight" read.
+export interface WeighbridgeReading {
+  indicatorId: string;
+  indicatorName: string;
+  connectionType: string;
+  stable: boolean;
+  type: string;
+  unit: string;
+  weight: number;
+  weightKg: number;
+  capturedAt: string;
+  raw: string;
+}
+export const weighbridgeIndicatorApi = {
+  list: () => apiFetch<Row[]>(`/weighbridge-indicators`),
+  create: (b: Record<string, unknown>) => post('/weighbridge-indicators', b),
+  update: (id: string, b: Record<string, unknown>) => post(`/weighbridge-indicators/${id}`, b),
+  read: (id: string, rawFrames?: string[]) =>
+    apiFetch<WeighbridgeReading>(`/weighbridge-indicators/${id}/read`, {
+      method: 'POST',
+      body: JSON.stringify(rawFrames ? { rawFrames } : {}),
+    }),
+};
+
 export const stockAdjustApi = {
   adjust: (b: Record<string, unknown>) => post('/stock-adjustments', b),
 };

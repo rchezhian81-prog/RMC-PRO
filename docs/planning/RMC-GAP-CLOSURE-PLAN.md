@@ -53,7 +53,7 @@ breadth on top of that spine**, not rework of it.
 | B1 | Pour scheduling | Order-to-cash | Important | — | 2 | **done** |
 | C1 | Receivables maturity | Billing | Important | — | 1–2 | **done** |
 | D2 | Purchase / AP-lite (`purchase`) | Procurement | Critical | A1 | 3 | **done** |
-| E1 | Weighbridge hardware bridge | Weighbridge | Important | — | 2 | planned |
+| E1 | Weighbridge hardware bridge | Weighbridge | Important | — | 2 | **done** |
 | A4 | Batching Integration (`batching_integration`) | Batching | Important | A2 | 2 | planned |
 | D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | planned |
 | D4 | Expense capture | Procurement | Important | — | 1–2 | planned |

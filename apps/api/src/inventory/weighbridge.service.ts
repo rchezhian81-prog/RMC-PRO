@@ -43,7 +43,14 @@ export class WeighbridgeService {
       const net = dto.netWeight !== undefined ? num(dto.netWeight) : gross - tare;
       const slipNo = await this.numbering.next(m, tenantId, 'weighbridge', 'WB-');
       const rest = nullifyEmpty(dto);
-      for (const k of ['id', 'tenantId', 'slipNo', 'status', 'netWeight']) delete rest[k];
+      for (const k of ['id', 'tenantId', 'slipNo', 'status', 'netWeight', 'weightSource', 'indicatorId', 'manualOverride'])
+        delete rest[k];
+      // Provenance (Plan E1): a hand-keyed entry is 'manual'; the web "Get weight"
+      // action stamps 'device' and the indicator it read from. manualOverride
+      // records that an operator edited a device-captured weight before saving.
+      const weightSource = dto.weightSource === 'device' ? 'device' : 'manual';
+      const indicatorId = weightSource === 'device' && dto.indicatorId ? String(dto.indicatorId) : null;
+      const manualOverride = weightSource === 'device' && dto.manualOverride === true;
       const repo = m.getRepository(WeighbridgeEntry);
       const entry = await repo.save(
         repo.create({
@@ -51,6 +58,7 @@ export class WeighbridgeService {
           materialLabel: (dto.materialLabel as string) ?? material?.materialName ?? null,
           grossWeight: String(gross), tareWeight: String(tare), netWeight: String(net),
           entryDatetime: new Date(), operatorUserId: userId, status: 'draft',
+          weightSource, indicatorId, manualOverride,
         } as Record<string, unknown>),
       );
       return repo.findOne({ where: { id: entry.id } });

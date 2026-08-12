@@ -8,6 +8,7 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { MaterialInwardService } from './material-inward.service';
 import { WeighbridgeService } from './weighbridge.service';
+import { WeighbridgeIndicatorService } from './weighbridge-indicator.service';
 import { StockAdjustmentService, NegativeStockService } from './stock-adjustment.service';
 import { InventoryReportsService } from './inventory-reports.service';
 import { PdfService } from '../sales/pdf.service';
@@ -62,6 +63,35 @@ export class WeighbridgeController {
     res.setHeader('Content-Disposition', `inline; filename="${data.slipNo}.pdf"`);
     res.setHeader('Content-Length', buffer.length);
     res.end(buffer);
+  }
+}
+
+/**
+ * Weighbridge indicator devices + the live "Get weight" read (Plan E1). Its own
+ * base path (not under /weighbridge/:id) so the device routes cannot be
+ * swallowed by the entry :id param. Gated on the `weighbridge.device` permission.
+ */
+@Controller('weighbridge-indicators')
+@RequireModule('weighbridge')
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+export class WeighbridgeIndicatorController {
+  constructor(private readonly service: WeighbridgeIndicatorService) {}
+
+  @Get() @RequirePermissions('weighbridge.device')
+  list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+
+  @Get(':id') @RequirePermissions('weighbridge.device')
+  get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
+
+  @Post() @RequirePermissions('weighbridge.device')
+  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
+
+  @Post(':id') @RequirePermissions('weighbridge.device')
+  update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.update(tid(u), id, dto); }
+
+  @Post(':id/read') @RequirePermissions('weighbridge.device')
+  read(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.service.read(tid(u), id, { rawFrames: dto?.rawFrames });
   }
 }
 

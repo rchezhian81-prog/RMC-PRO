@@ -61,7 +61,12 @@ export class MaterialInward extends TenantScopedEntity {
   @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
 }
 
-/** Weighbridge transaction (Doc 6 §12.4) — manual entry (no hardware link). */
+/**
+ * Weighbridge transaction (Doc 6 §12.4). Manual entry (net = gross − tare), or
+ * captured from a live indicator read (Plan E1). `weightSource` records whether
+ * the weights came off the scale head (`device`) or were hand-keyed (`manual`);
+ * `manualOverride` is set when an operator edits a device-captured weight.
+ */
 @Entity('weighbridge_entries')
 @Unique('uq_weighbridge_entries_slip', ['tenantId', 'slipNo'])
 export class WeighbridgeEntry extends TenantScopedEntity {
@@ -79,6 +84,33 @@ export class WeighbridgeEntry extends TenantScopedEntity {
   @Column({ name: 'operator_user_id', type: 'uuid', nullable: true }) operatorUserId!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
+  // E1 hardware bridge: provenance of the weights on this entry.
+  @Column({ name: 'weight_source', type: 'varchar', default: 'manual' }) weightSource!: string;
+  @Column({ name: 'indicator_id', type: 'uuid', nullable: true }) indicatorId!: string | null;
+  @Column({ name: 'manual_override', type: 'boolean', default: false }) manualOverride!: boolean;
+}
+
+/**
+ * A weighbridge indicator device (Plan E1) — the digital head wired to the load
+ * cells, reachable over serial/COM or a TCP socket. `connectionType='simulated'`
+ * drives the deterministic test/demo source; `tcp`/`serial` carry the real
+ * connection details used by a plant-side reader. This is configuration only;
+ * a live read never mutates it.
+ */
+@Entity('weighbridge_indicators')
+@Unique('uq_weighbridge_indicators_name', ['tenantId', 'name'])
+export class WeighbridgeIndicator extends TenantScopedEntity {
+  @Column({ name: 'name', type: 'varchar' }) name!: string;
+  @Column({ name: 'plant_id', type: 'uuid', nullable: true }) plantId!: string | null;
+  @Column({ name: 'connection_type', type: 'varchar', default: 'simulated' }) connectionType!: string;
+  @Column({ name: 'host', type: 'varchar', nullable: true }) host!: string | null;
+  @Column({ name: 'port', type: 'int', nullable: true }) port!: number | null;
+  @Column({ name: 'com_port', type: 'varchar', nullable: true }) comPort!: string | null;
+  @Column({ name: 'baud_rate', type: 'int', nullable: true }) baudRate!: number | null;
+  @Column({ name: 'unit', type: 'varchar', default: 'kg' }) unit!: string;
+  // For simulated devices: the nominal weight the source settles on (kg).
+  @Column({ name: 'simulated_weight_kg', type: 'numeric', precision: 16, scale: 3, nullable: true }) simulatedWeightKg!: string | null;
+  @Column({ name: 'is_active', type: 'boolean', default: true }) isActive!: boolean;
 }
 
 /** Negative-stock approval request (Doc 6 §12.5). */

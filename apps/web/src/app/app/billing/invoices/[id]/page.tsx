@@ -3,13 +3,29 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
-import { invoicesApi, openPdf, type Row } from '../../../../../lib/api';
+import { invoicesApi, gstApi, openPdf, type GstStatus, type Row } from '../../../../../lib/api';
 import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
 import { Button } from '../../../../../components/ui/Button';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
+import { getAccess } from '../../../../../lib/session';
+
+/** IRN cancellation reasons (NIC): 1=Duplicate, 2=Data entry, 3=Order cancelled, 4=Other. */
+const IRN_CANCEL_REASONS = [
+  { value: '1', label: '1 — Duplicate' },
+  { value: '2', label: '2 — Data entry mistake' },
+  { value: '3', label: '3 — Order cancelled' },
+  { value: '4', label: '4 — Other' },
+];
+/** e-way cancellation reasons (NIC): 1=Duplicate, 2=Order cancelled, 3=Data entry, 4=Other. */
+const EWAY_CANCEL_REASONS = [
+  { value: '1', label: '1 — Duplicate' },
+  { value: '2', label: '2 — Order cancelled' },
+  { value: '3', label: '3 — Data entry mistake' },
+  { value: '4', label: '4 — Other' },
+];
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -25,8 +41,9 @@ function TotalRow({ label, value, strong, tone }: { label: string; value: ReactN
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { prompt } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const [inv, setInv] = useState<Row | null>(null);
+  const [gst, setGst] = useState<GstStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -35,6 +52,8 @@ export default function InvoiceDetail() {
   }, [id]);
   useEffect(() => {
     load().catch((e) => setError(String(e)));
+    // Best-effort: unavailable (403 for non-agents users) → no live GST actions.
+    gstApi.status().then(setGst).catch(() => setGst(null));
   }, [load]);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
@@ -161,13 +180,105 @@ export default function InvoiceDetail() {
         />
       </Card>
 
-      <Card title="Compliance (read-only)">
-        <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: 0 }}>
-          E-invoice: {String(inv.einvoiceStatus)} · IRN: {String(inv.irn ?? '—')} &nbsp;|&nbsp; E-way bill: {String(inv.ewayStatus)} · No: {String(inv.ewayBillNo ?? '—')}
-          <br />
-          Fields are stored for a future GSTN / e-way API (Phase 3) — not generated here.
-        </p>
-      </Card>
+      {(() => {
+        const einv = String(inv.einvoiceStatus);
+        const eway = String(inv.ewayStatus);
+        const canGst = getAccess().has('agents.manage') && getAccess().has('agents.approve');
+        const issued = status !== 'draft' && status !== 'cancelled';
+        const live = Boolean(gst?.configured) && canGst && issued;
+        const notice = !gst?.configured
+          ? 'GST transmission is not enabled — the fields below are stored but not filed with the portal.'
+          : !canGst
+            ? 'You do not have permission to file GST documents (needs agents.manage + agents.approve).'
+            : !issued
+              ? 'Issue the invoice before filing its e-invoice / e-way bill.'
+              : null;
+
+        return (
+          <Card title="GST compliance">
+            <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: 0 }}>
+              E-invoice: <strong style={{ color: 'var(--mn-text)' }}>{einv}</strong> · IRN: {String(inv.irn ?? '—')}
+              &nbsp;|&nbsp; E-way bill: <strong style={{ color: 'var(--mn-text)' }}>{eway}</strong> · No: {String(inv.ewayBillNo ?? '—')}
+            </p>
+            {live ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                {einv !== 'generated' && einv !== 'cancelled' && (
+                  <Button
+                    onClick={() =>
+                      run(async () => {
+                        if (!(await confirm({ title: 'Generate e-invoice (IRN)', message: 'File this invoice with the IRP now?', confirmLabel: 'Generate IRN' }))) return;
+                        await gstApi.generateIrn(id);
+                        setMsg('IRN generated — the invoice now carries the IRN.');
+                      })
+                    }
+                  >
+                    Generate IRN
+                  </Button>
+                )}
+                {einv === 'generated' && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      run(async () => {
+                        const reason = await prompt({
+                          title: 'Cancel IRN',
+                          message: 'IRN cancellation is allowed within 24 hours of generation. Choose a reason.',
+                          label: 'Reason',
+                          options: IRN_CANCEL_REASONS,
+                          defaultValue: '3',
+                          confirmLabel: 'Cancel IRN',
+                        });
+                        if (reason === null) return;
+                        await gstApi.cancelIrn(id, reason);
+                        setMsg('IRN cancelled.');
+                      })
+                    }
+                  >
+                    Cancel IRN
+                  </Button>
+                )}
+                {eway !== 'generated' && eway !== 'cancelled' && (
+                  <Button
+                    onClick={() =>
+                      run(async () => {
+                        if (!(await confirm({ title: 'Generate e-way bill', message: 'File the e-way bill for this consignment now?', confirmLabel: 'Generate e-way' }))) return;
+                        await gstApi.generateEway(id);
+                        setMsg('E-way bill generated.');
+                      })
+                    }
+                  >
+                    Generate e-way bill
+                  </Button>
+                )}
+                {eway === 'generated' && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      run(async () => {
+                        const reason = await prompt({
+                          title: 'Cancel e-way bill',
+                          message: 'e-way cancellation is allowed within 24 hours of generation. Choose a reason.',
+                          label: 'Reason',
+                          options: EWAY_CANCEL_REASONS,
+                          defaultValue: '2',
+                          confirmLabel: 'Cancel e-way',
+                        });
+                        if (reason === null) return;
+                        await gstApi.cancelEway(id, reason);
+                        setMsg('E-way bill cancelled.');
+                      })
+                    }
+                  >
+                    Cancel e-way bill
+                  </Button>
+                )}
+              </div>
+            ) : (
+              notice && <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '8px 0 0' }}>{notice}</p>
+            )}
+          </Card>
+        );
+      })()}
     </div>
   );
 }

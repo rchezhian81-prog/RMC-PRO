@@ -28,6 +28,8 @@ export interface PromptOpts {
   placeholder?: string;
   type?: 'text' | 'number';
   confirmLabel?: string;
+  /** When set, the prompt renders a <select> of these options instead of a text input. */
+  options?: { value: string; label: string }[];
 }
 
 interface DialogApi {
@@ -58,7 +60,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const prompt = useCallback(
     (opts: PromptOpts) =>
       new Promise<string | null>((resolve) =>
-        setState({ kind: 'prompt', opts, value: opts.defaultValue ?? '', resolve }),
+        setState({ kind: 'prompt', opts, value: opts.defaultValue ?? opts.options?.[0]?.value ?? '', resolve }),
       ),
     [],
   );
@@ -140,15 +142,31 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 {state.opts.label && (
                   <label style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>{state.opts.label}</label>
                 )}
-                <input
-                  autoFocus
-                  type={state.opts.type === 'number' ? 'number' : 'text'}
-                  value={state.value}
-                  placeholder={state.opts.placeholder}
-                  onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}
-                  className="mn-input"
-                  style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--mn-border, #d9d9e3)' }}
-                />
+                {state.opts.options ? (
+                  <select
+                    autoFocus
+                    value={state.value}
+                    onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}
+                    className="mn-input"
+                    style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--mn-border, #d9d9e3)' }}
+                  >
+                    {state.opts.options.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    autoFocus
+                    type={state.opts.type === 'number' ? 'number' : 'text'}
+                    value={state.value}
+                    placeholder={state.opts.placeholder}
+                    onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}
+                    className="mn-input"
+                    style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--mn-border, #d9d9e3)' }}
+                  />
+                )}
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
                   <Button type="button" variant="secondary" onClick={() => settle(null)}>Cancel</Button>
                   <Button type="submit">{state.opts.confirmLabel ?? 'OK'}</Button>

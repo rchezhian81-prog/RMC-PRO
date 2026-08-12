@@ -41,6 +41,7 @@ import { BatchingIntegration1720000036000 } from './migrations/1720000036000-Bat
 import { FleetMaintenance1720000037000 } from './migrations/1720000037000-FleetMaintenance';
 import { Expenses1720000038000 } from './migrations/1720000038000-Expenses';
 import { ReturnedConcrete1720000039000 } from './migrations/1720000039000-ReturnedConcrete';
+import { ImportJobs1720000040000 } from './migrations/1720000040000-ImportJobs';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -97,6 +98,7 @@ export const AppDataSource = new DataSource({
     FleetMaintenance1720000037000,
     Expenses1720000038000,
     ReturnedConcrete1720000039000,
+    ImportJobs1720000040000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

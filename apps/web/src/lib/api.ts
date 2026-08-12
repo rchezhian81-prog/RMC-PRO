@@ -782,6 +782,28 @@ export const purchaseApi = {
   createPayment: (b: Record<string, unknown>) => post('/vendor-payments', b),
 };
 
+// ---- Bulk import framework (Plan F1) ----
+export interface ImportColumn { key: string; label: string; required?: boolean; type?: string; example?: string }
+export interface ImportDef { key: string; label: string; columns: ImportColumn[] }
+
+export const importsApi = {
+  definitions: () => apiFetch<ImportDef[]>('/imports/definitions'),
+  jobs: () => apiFetch<Row[]>('/imports'),
+  job: (id: string) => apiFetch<Row>(`/imports/${id}`),
+  run: (entityType: string, content: string, fileName: string) => post(`/imports/${entityType}`, { content, fileName }),
+};
+
+/** Download a bulk-import CSV template for an entity type (auth header required). */
+export async function downloadImportTemplate(entityType: string): Promise<void> {
+  const token = getSession()?.token;
+  const res = await fetch(`${BASE}/api/v1/imports/${entityType}/template`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error('Failed to download template');
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url; a.download = `${entityType}-import-template.csv`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // ---- Fleet maintenance & fuel log (Plan D3) ----
 export const fleetApi = {
   schedules: (vehicleId?: string) => apiFetch<Row[]>(`/vehicle-service-schedules${vehicleId ? `?vehicleId=${vehicleId}` : ''}`),

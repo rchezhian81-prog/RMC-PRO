@@ -21,3 +21,4 @@ export * from './qc.entities';
 export * from './purchase.entities';
 export * from './fleet.entities';
 export * from './expenses.entities';
+export * from './import.entities';

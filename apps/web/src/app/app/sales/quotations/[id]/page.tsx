@@ -41,7 +41,7 @@ export default function QuotationDetail() {
   const [q, setQ] = useState<Row | null>(null);
   const [grades, setGrades] = useState<Row[]>([]);
   const [revs, setRevs] = useState<Row[]>([]);
-  const [item, setItem] = useState({ gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '' });
+  const [item, setItem] = useState({ gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -80,8 +80,9 @@ export default function QuotationDetail() {
         transportCharge: Number(item.transportCharge || 0),
         pumpCharge: Number(item.pumpCharge || 0),
         waitingCharge: Number(item.waitingCharge || 0),
+        gstRate: Number(item.gstRate || 0),
       });
-      setItem({ gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '' });
+      setItem({ gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' });
     });
   }
 
@@ -153,7 +154,7 @@ export default function QuotationDetail() {
                 <Td numeric>{money(it.transportCharge)}</Td>
                 <Td numeric>{money(it.pumpCharge)}</Td>
                 <Td numeric>{money(it.waitingCharge)}</Td>
-                <Td>{it.gstApplicable ? 'Yes' : 'No'}</Td>
+                <Td numeric>{it.gstApplicable === false ? '—' : `${money(it.gstRate)}%`}</Td>
                 <Td style={{ textAlign: 'right' }}>
                   {!locked && (
                     <Button variant="ghost" size="sm" onClick={() => run(() => quotationsApi.deleteItem(id, String(it.id)))}>Remove</Button>
@@ -191,6 +192,7 @@ export default function QuotationDetail() {
             <Num label="Transport" v={item.transportCharge} on={(v) => setItem({ ...item, transportCharge: v })} />
             <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
             <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
+            <Num label="GST %" v={item.gstRate} on={(v) => setItem({ ...item, gstRate: v })} />
             <div style={{ marginBottom: 14 }}>
               <Button type="submit" variant="secondary">Add item</Button>
             </div>
@@ -200,6 +202,36 @@ export default function QuotationDetail() {
           <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 16 }}>Approved quotation is locked. Create a revision to edit.</p>
         )}
       </Card>
+
+      {(() => {
+        const s = q.taxSummary as Row | undefined;
+        if (!s) return null;
+        return (
+          <Card style={{ maxWidth: 380, marginLeft: 'auto', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
+              <span>Taxable</span><span>₹{money(s.taxable)}</span>
+            </div>
+            {Number(s.cgst) > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
+                  <span>CGST</span><span>₹{money(s.cgst)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
+                  <span>SGST</span><span>₹{money(s.sgst)}</span>
+                </div>
+              </>
+            )}
+            {Number(s.igst) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
+                <span>IGST</span><span>₹{money(s.igst)}</span>
+              </div>
+            )}
+            <div style={{ borderTop: '1px solid var(--mn-border)', margin: '8px 0', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+              <span>Total{s.isInterstate ? ' (inter-state)' : ''}</span><span>₹{money(s.total)}</span>
+            </div>
+          </Card>
+        );
+      })()}
 
       <Card title="Revision history" padded={false}>
         <Table>

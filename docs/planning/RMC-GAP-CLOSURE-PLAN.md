@@ -49,7 +49,7 @@ breadth on top of that spine**, not rework of it.
 | A1 | Material & UOM master depth | Batching | Critical | — | 1–2 | **done** |
 | A2 | Aggregate moisture & w/c correction | Batching | Critical | A1 | 2 | **done** |
 | A3 | QC / Lab module (`qc`) | Batching | Critical | A1 | 2–3 | **done** |
-| B2 | Pricing & GST depth (quote→invoice) | Order-to-cash | Important | — | 2 | planned |
+| B2 | Pricing & GST depth (quote→invoice) | Order-to-cash | Important | — | 2 | **done** |
 | B1 | Pour scheduling | Order-to-cash | Important | — | 2 | planned |
 | C1 | Receivables maturity | Billing | Important | — | 1–2 | planned |
 | D2 | Purchase / AP-lite (`purchase`) | Procurement | Critical | A1 | 3 | planned |

@@ -17,6 +17,7 @@ const ITEM_FIELDS = [
   'pumpCharge',
   'waitingCharge',
   'gstApplicable',
+  'gstRate',
   'remarks',
 ] as const;
 

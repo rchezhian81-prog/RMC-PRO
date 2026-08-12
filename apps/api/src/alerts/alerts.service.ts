@@ -40,7 +40,7 @@ export class AlertsService {
       const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> =>
         m.query(sql, params) as Promise<T[]>;
 
-      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs] = await Promise.all([
+      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc] = await Promise.all([
         // Receivables, bucketed by age of the invoice and by contractual due date.
         q(`SELECT
              COALESCE(sum(outstanding_amount) FILTER (WHERE invoice_date IS NOT NULL AND CURRENT_DATE - invoice_date > 90), 0)::float AS over90_amount,
@@ -108,6 +108,15 @@ export class AlertsService {
           ) d
           WHERE COALESCE(status, '') <> 'inactive' AND expiry <= CURRENT_DATE + 30
           ORDER BY expiry ASC`),
+
+        // QC cube sets due for 28-day testing, and any that failed IS 456 acceptance.
+        q(`SELECT
+             count(*) FILTER (
+               WHERE cast_date + 28 <= CURRENT_DATE AND status IN ('open', 'tested')
+                 AND NOT EXISTS (SELECT 1 FROM qc_cube_results r WHERE r.cube_set_id = s.id AND r.test_age_days >= 28)
+             ) AS cubes_due,
+             count(*) FILTER (WHERE acceptance_status = 'rejected') AS cubes_failed
+           FROM qc_cube_sets s`),
       ]);
 
       const r = receivables[0] ?? {};
@@ -254,6 +263,29 @@ export class AlertsService {
 
       // ---- Fleet compliance ----------------------------------------------
       out.push(...fleetComplianceAlerts(fleetDocs, new Date()));
+
+      // ---- QC / Lab ------------------------------------------------------
+      const qcRow = qc[0] ?? {};
+      if (num(qcRow.cubes_failed) > 0) {
+        out.push({
+          key: 'qc_cubes_failed',
+          severity: 'danger',
+          title: `${plural(num(qcRow.cubes_failed), 'cube set')} failed IS 456 acceptance`,
+          detail: 'Concrete of a rejected set does not meet the specified strength — review the pour and notify the customer.',
+          href: '/app/qc/cubes',
+          count: num(qcRow.cubes_failed),
+        });
+      }
+      if (num(qcRow.cubes_due) > 0) {
+        out.push({
+          key: 'qc_cubes_due',
+          severity: 'warning',
+          title: `${plural(num(qcRow.cubes_due), 'cube set')} due for 28-day testing`,
+          detail: 'These cubes have reached 28 days but have no result recorded. Test and record the strength.',
+          href: '/app/qc/cubes',
+          count: num(qcRow.cubes_due),
+        });
+      }
 
       // ---- Always-on context ---------------------------------------------
       out.push({

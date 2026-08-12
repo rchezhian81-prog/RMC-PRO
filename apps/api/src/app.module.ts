@@ -23,6 +23,7 @@ import { AiModule } from './ai/ai.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuditModule } from './audit/audit.module';
 import { AgentsModule } from './agents/agents.module';
+import { QcModule } from './qc/qc.module';
 
 /**
  * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
@@ -59,6 +60,7 @@ import { AgentsModule } from './agents/agents.module';
     AlertsModule,
     AuditModule,
     AgentsModule,
+    QcModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

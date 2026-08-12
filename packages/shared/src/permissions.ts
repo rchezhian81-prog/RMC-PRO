@@ -65,6 +65,10 @@ export const PERMISSIONS = {
   // Masters — QC
   MIX_DESIGN_APPROVE: 'mix_design.approve',
 
+  // QC / Lab (slump + cube strength register)
+  QC_VIEW: 'qc.view',
+  QC_RECORD: 'qc.record',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -157,6 +161,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.CREDIT_HOLD_APPROVE, P.APPROVALS_ACT,
     P.BATCH_TICKETS_CREATE, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
     P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE,
+    P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
     P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
@@ -196,9 +201,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.MASTERS_VIEW, P.STOCK_ADJUST, P.REPORTS_VIEW,
   ],
 
-  // Owns the recipe: the only role that can approve a mix design.
+  // Owns the recipe and the lab: approves mix designs and records QC tests.
   [ROLE_KEYS.QC_ENGINEER]: [
-    P.MASTERS_VIEW, P.MIX_DESIGN_APPROVE, P.ORDERS_VIEW, P.REPORTS_VIEW,
+    P.MASTERS_VIEW, P.MIX_DESIGN_APPROVE, P.QC_VIEW, P.QC_RECORD, P.ORDERS_VIEW, P.REPORTS_VIEW,
   ],
 
   [ROLE_KEYS.ACCOUNTS_MANAGER]: [

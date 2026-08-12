@@ -34,6 +34,7 @@ export class Invoice extends TenantScopedEntity {
   @Column({ name: 'total_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) totalAmount!: string;
   @Column({ name: 'amount_paid', type: 'numeric', precision: 16, scale: 2, default: 0 }) amountPaid!: string;
   @Column({ name: 'outstanding_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) outstandingAmount!: string;
+  @Column({ name: 'written_off_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) writtenOffAmount!: string;
   @Column({ name: 'payment_status', type: 'varchar', default: 'unpaid' }) paymentStatus!: string;
   @Column({ name: 'invoice_status', type: 'varchar', default: 'draft' }) invoiceStatus!: string;
   // E-invoice-ready (Doc 6 §13.4) — stored only.
@@ -102,6 +103,8 @@ export class Payment extends TenantScopedEntity {
   @Column({ name: 'is_advance', type: 'boolean', default: false }) isAdvance!: boolean;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'posted' }) status!: string;
+  /** Cheque clearing lifecycle: null/cleared for instant modes; pending → realised | bounced. */
+  @Column({ name: 'clearing_status', type: 'varchar', nullable: true }) clearingStatus!: string | null;
 }
 
 /** Maps receipts to invoices (Doc 6 §13.7). */

@@ -205,6 +205,49 @@ export class InvoiceService {
   }
 
   /**
+   * Write off part (or all) of an invoice's outstanding as a bad debt. Reduces
+   * `outstanding_amount` and grows `written_off_amount` by the same figure; the
+   * amount actually paid is left untouched. Once nothing collectible remains the
+   * invoice reads `written_off`, otherwise it keeps its paid-based status. Only
+   * an ISSUED invoice with a positive balance can be written off, and never more
+   * than is still outstanding. Audited.
+   */
+  async writeOff(tenantId: string, id: string, userId: string, amount: number, reason?: string) {
+    if (!(amount > 0)) throw badReq('Write-off amount must be greater than zero');
+    const { result, invoiceNo, written } = await this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Invoice);
+      const invoice = await repo.findOne({ where: { id } });
+      if (!invoice) throw notFound();
+      if (invoice.invoiceStatus !== 'issued') throw badReq('Only an issued invoice can be written off');
+      const outstanding = round2(num(invoice.outstandingAmount));
+      if (outstanding <= 0.001) throw badReq('Invoice has nothing outstanding to write off');
+      const amt = round2(amount);
+      if (amt > outstanding + 0.001) throw badReq(`Write-off ${amt} exceeds outstanding ${outstanding}`);
+
+      const newWrittenOff = round2(num(invoice.writtenOffAmount) + amt);
+      const newOutstanding = round2(outstanding - amt);
+      const paid = num(invoice.amountPaid);
+      // Nothing left to collect → bad debt; else the paid figure still decides.
+      const paymentStatus = newOutstanding <= 0.001 ? 'written_off' : paid > 0.001 ? 'partially_paid' : 'unpaid';
+      await repo.update(id, {
+        writtenOffAmount: String(newWrittenOff), outstandingAmount: String(newOutstanding), paymentStatus,
+      });
+      return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, written: amt };
+    });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.INVOICE_WRITEOFF,
+      entityType: 'invoice',
+      entityId: id,
+      entityLabel: invoiceNo ?? null,
+      summary: `Wrote off ₹${written} on invoice ${invoiceNo ?? ''}${reason ? ` — ${reason}` : ''}`.trim(),
+      details: { amount: written, reason: reason ?? null },
+    });
+    return result;
+  }
+
+  /**
    * Set the e-way transport details on an invoice: link a transporter master
    * (or clear it), and/or set the vehicle number, transport mode and distance.
    * These feed the e-way bill — TransId/TransName come from the linked

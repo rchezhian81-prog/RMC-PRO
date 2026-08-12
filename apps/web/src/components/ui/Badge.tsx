@@ -22,7 +22,9 @@ const TONE: Record<Tone, { fg: string; bg: string }> = {
 export function statusTone(status: string): Tone {
   const s = (status || '').toLowerCase();
   if (
-    ['approved', 'confirmed', 'delivered', 'paid', 'posted', 'active', 'completed', 'done', 'available', 'resolved'].includes(s)
+    ['approved', 'confirmed', 'delivered', 'paid', 'posted', 'active', 'completed', 'done', 'available', 'resolved',
+      // A cheque that has cleared the bank.
+      'realised', 'cleared'].includes(s)
   )
     return 'success';
   if (
@@ -40,6 +42,8 @@ export function statusTone(status: string): Tone {
       'cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed', 'inactive',
       // Subscription blocked: nobody at this company can sign in.
       'suspended',
+      // Bad debt written off, and a bounced / reversed receipt — money lost or clawed back.
+      'written_off', 'bounced', 'reversed',
     ].includes(s)
   )
     return 'danger';

@@ -153,6 +153,8 @@ export const AUDIT_ACTIONS = {
   ORDER_CANCEL: 'order.cancel',
   INVOICE_CANCEL: 'invoice.cancel',
   INVOICE_TRANSPORT: 'invoice.transport_update',
+  INVOICE_WRITEOFF: 'invoice.writeoff',
+  RECEIPT_BOUNCE: 'receipt.bounce',
   QUOTATION_APPROVE: 'quotation.approve',
   QUOTATION_REJECT: 'quotation.reject',
   RATE_CONTRACT_APPROVE: 'rate_contract.approve',

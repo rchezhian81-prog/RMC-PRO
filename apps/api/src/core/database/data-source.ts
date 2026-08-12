@@ -34,6 +34,7 @@ import { BatchMoisture1720000029000 } from './migrations/1720000029000-BatchMois
 import { Qc1720000030000 } from './migrations/1720000030000-Qc';
 import { PricingGstDepth1720000031000 } from './migrations/1720000031000-PricingGstDepth';
 import { PourSchedule1720000032000 } from './migrations/1720000032000-PourSchedule';
+import { ReceivablesMaturity1720000033000 } from './migrations/1720000033000-ReceivablesMaturity';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -83,6 +84,7 @@ export const AppDataSource = new DataSource({
     Qc1720000030000,
     PricingGstDepth1720000031000,
     PourSchedule1720000032000,
+    ReceivablesMaturity1720000033000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

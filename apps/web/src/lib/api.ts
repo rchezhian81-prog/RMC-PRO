@@ -611,6 +611,7 @@ export const invoicesApi = {
   fromChallans: (b: Record<string, unknown>) => post('/invoices/from-challans', b),
   issue: (id: string) => post(`/invoices/${id}/issue`),
   cancel: (id: string, reason: string) => post(`/invoices/${id}/cancel`, { reason }),
+  writeoff: (id: string, amount: number, reason: string) => post(`/invoices/${id}/writeoff`, { amount, reason }),
   share: (id: string, mobile: string) => post(`/invoices/${id}/share`, { mobile }),
 };
 
@@ -668,6 +669,9 @@ export const receiptsApi = {
   list: () => apiFetch<Row[]>('/receipts'),
   get: (id: string) => apiFetch<Row>(`/receipts/${id}`),
   create: (b: Record<string, unknown>) => post('/receipts', b),
+  realise: (id: string) => post(`/receipts/${id}/realise`),
+  bounce: (id: string, reason: string) => post(`/receipts/${id}/bounce`, { reason }),
+  apply: (id: string) => post(`/receipts/${id}/apply`),
   share: (id: string, mobile: string) => post(`/receipts/${id}/share`, { mobile }),
 };
 

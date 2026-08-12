@@ -24,12 +24,16 @@ export function statusTone(status: string): Tone {
   if (
     ['approved', 'confirmed', 'delivered', 'paid', 'posted', 'active', 'completed', 'done', 'available', 'resolved',
       // A cheque that has cleared the bank.
-      'realised', 'cleared'].includes(s)
+      'realised', 'cleared',
+      // Purchase: goods fully received, and a bill whose 3-way match is clean.
+      'received', 'matched'].includes(s)
   )
     return 'success';
   if (
     [
       'partially_paid', 'on_hold', 'hold', 'low_stock', 'pending_approval',
+      // Purchase: partly received, or a bill needing attention on the 3-way match.
+      'partially_received', 'over_tolerance', 'unmatched',
       // Blocking or money-at-risk states — must not read as routine.
       'credit_hold', 'unpaid', 'not_invoiced', 'not_checked', 'expired',
       // Subscription is overdue but the plant is still allowed to work.

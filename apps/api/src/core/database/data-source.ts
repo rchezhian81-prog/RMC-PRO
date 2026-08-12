@@ -35,6 +35,7 @@ import { Qc1720000030000 } from './migrations/1720000030000-Qc';
 import { PricingGstDepth1720000031000 } from './migrations/1720000031000-PricingGstDepth';
 import { PourSchedule1720000032000 } from './migrations/1720000032000-PourSchedule';
 import { ReceivablesMaturity1720000033000 } from './migrations/1720000033000-ReceivablesMaturity';
+import { Purchase1720000034000 } from './migrations/1720000034000-Purchase';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -85,6 +86,7 @@ export const AppDataSource = new DataSource({
     PricingGstDepth1720000031000,
     PourSchedule1720000032000,
     ReceivablesMaturity1720000033000,
+    Purchase1720000034000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

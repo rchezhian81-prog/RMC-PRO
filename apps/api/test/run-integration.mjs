@@ -54,6 +54,7 @@ const TESTS = [
   'test/master-validation.test.mjs',
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
+  'test/purchase-cycle.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/metrics.test.mjs',
@@ -117,6 +118,10 @@ async function main() {
   const tenant = await api('POST', '/platform/tenants', { tenantCode: 'CIPILOT', tenantName: 'CI Pilot', planId: plan.id }, su);
   await api('POST', `/platform/tenants/${tenant.id}/assign-plan`, { planId: plan.id }, su).catch(() => {});
   await api('POST', `/platform/tenants/${tenant.id}/users`, { name: 'CI Owner', email: OWNER_LOGIN, password: OWNER_PW }, su);
+  // `purchase` is a phase-2 module (off in the default plan) — turn it on for the
+  // pilot tenant so the purchase-cycle test can exercise it, exactly as a Super
+  // Admin would from the Modules screen.
+  await api('PUT', `/platform/tenants/${tenant.id}/modules/purchase`, { isEnabled: true }, su);
   console.log(`pilot tenant ${tenant.id} + owner ready`);
 
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], {

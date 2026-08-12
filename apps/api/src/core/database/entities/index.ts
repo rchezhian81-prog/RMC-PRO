@@ -18,3 +18,4 @@ export * from './audit.entities';
 export * from './agent.entities';
 export * from './compliance.entities';
 export * from './qc.entities';
+export * from './purchase.entities';

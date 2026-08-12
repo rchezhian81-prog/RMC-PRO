@@ -70,6 +70,14 @@ import {
   QcSlumpTest,
   QcCubeSet,
   QcCubeResult,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  GoodsReceipt,
+  GoodsReceiptItem,
+  VendorBill,
+  VendorBillItem,
+  VendorPayment,
+  VendorPaymentAllocation,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -145,4 +153,12 @@ export const ENTITIES = [
   QcSlumpTest,
   QcCubeSet,
   QcCubeResult,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  GoodsReceipt,
+  GoodsReceiptItem,
+  VendorBill,
+  VendorBillItem,
+  VendorPayment,
+  VendorPaymentAllocation,
 ];

@@ -69,6 +69,16 @@ export const PERMISSIONS = {
   QC_VIEW: 'qc.view',
   QC_RECORD: 'qc.record',
 
+  // Purchase / AP-lite. Receiving goods (GRN) and approving/paying a vendor bill
+  // are separate keys from raising a PO, so a store can receive without opening
+  // the payables, and accounts can bill/pay without raising orders.
+  PURCHASE_VIEW: 'purchase.view',
+  PURCHASE_ORDERS_CREATE: 'purchase_orders.create',
+  GRN_CREATE: 'grn.create',
+  VENDOR_BILLS_CREATE: 'vendor_bills.create',
+  VENDOR_BILLS_APPROVE: 'vendor_bills.approve',
+  VENDOR_PAYMENTS_CREATE: 'vendor_payments.create',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -163,6 +173,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE,
     P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
+    P.PURCHASE_VIEW, P.PURCHASE_ORDERS_CREATE, P.GRN_CREATE,
     P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 
@@ -196,9 +207,11 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.MASTERS_VIEW, P.ORDERS_VIEW, P.BATCH_TICKETS_CREATE, P.REPORTS_VIEW,
   ],
 
-  // Receives material and keeps the stock straight.
+  // Receives material and keeps the stock straight — including goods receipts
+  // against a purchase order.
   [ROLE_KEYS.STORE_STAFF]: [
     P.MASTERS_VIEW, P.STOCK_ADJUST, P.REPORTS_VIEW,
+    P.PURCHASE_VIEW, P.GRN_CREATE,
   ],
 
   // Owns the recipe and the lab: approves mix designs and records QC tests.
@@ -209,6 +222,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
   [ROLE_KEYS.ACCOUNTS_MANAGER]: [
     P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.ORDERS_VIEW,
     P.INVOICES_CREATE, P.INVOICE_CANCELLATION_APPROVE, P.RECEIPTS_CREATE,
+    P.PURCHASE_VIEW, P.VENDOR_BILLS_CREATE, P.VENDOR_BILLS_APPROVE, P.VENDOR_PAYMENTS_CREATE,
     P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
   ],
 

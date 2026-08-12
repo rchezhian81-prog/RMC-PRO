@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { crud, openPdf, weighbridgeApi, type Row } from '../../../../lib/api';
+import { crud, openPdf, weighbridgeApi, weighbridgeIndicatorApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
@@ -39,22 +39,38 @@ function Num({ label, v, on, req }: { label: string; v: string; on: (v: string) 
   );
 }
 
+const emptyForm = { plantId: '', supplierId: '', materialId: '', vehicleNo: '', supplierChallanNo: '', grossWeight: '', tareWeight: '' };
+// Provenance tracking for the E1 hardware bridge: which weights came off the
+// indicator, and whether the operator hand-edited a device reading afterwards.
+const noCapture = { grossFromDevice: false, tareFromDevice: false, overridden: false };
+
 export default function WeighbridgePage() {
   const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
-  const [form, setForm] = useState({ plantId: '', supplierId: '', materialId: '', vehicleNo: '', supplierChallanNo: '', grossWeight: '', tareWeight: '' });
+  const [indicators, setIndicators] = useState<Row[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [indicatorId, setIndicatorId] = useState('');
+  const [capture, setCapture] = useState(noCapture);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
-    const [w, m, s, p] = await Promise.all([weighbridgeApi.list(), crud('materials').list(), crud('suppliers').list(), crud('plants').list()]);
+    const [w, m, s, p, ind] = await Promise.all([
+      weighbridgeApi.list(),
+      crud('materials').list(),
+      crud('suppliers').list(),
+      crud('plants').list(),
+      weighbridgeIndicatorApi.list().catch(() => [] as Row[]),
+    ]);
     setRows(w);
     setMaterials(m);
     setSuppliers(s);
     setPlants(p);
+    setIndicators(ind);
+    if (!indicatorId && ind[0]) setIndicatorId(String(ind[0].id));
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e)));
@@ -72,7 +88,43 @@ export default function WeighbridgePage() {
     }
   }
 
+  // ---- E1: live "Get weight" read off the selected indicator ----
+  async function getWeight(target: 'gross' | 'tare') {
+    setError(null);
+    setMsg(null);
+    if (!indicatorId) {
+      setError('Select a weighbridge indicator first (or add one below)');
+      return;
+    }
+    try {
+      const reading = await weighbridgeIndicatorApi.read(indicatorId);
+      const kg = String(reading.weightKg);
+      if (target === 'gross') {
+        setForm((f) => ({ ...f, grossWeight: kg }));
+        setCapture((c) => ({ ...c, grossFromDevice: true }));
+      } else {
+        setForm((f) => ({ ...f, tareWeight: kg }));
+        setCapture((c) => ({ ...c, tareFromDevice: true }));
+      }
+      setMsg(`${reading.indicatorName}: ${money(reading.weightKg)} kg${reading.stable ? '' : ' (unstable)'}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Indicator read failed');
+    }
+  }
+
+  // A hand-edit of a device-captured field is a manual override (retained flag).
+  function onWeightChange(target: 'gross' | 'tare', x: string) {
+    if (target === 'gross') {
+      setForm((f) => ({ ...f, grossWeight: x }));
+      setCapture((c) => (c.grossFromDevice ? { ...c, overridden: true } : c));
+    } else {
+      setForm((f) => ({ ...f, tareWeight: x }));
+      setCapture((c) => (c.tareFromDevice ? { ...c, overridden: true } : c));
+    }
+  }
+
   const net = Number(form.grossWeight || 0) - Number(form.tareWeight || 0) || 0;
+  const usedDevice = capture.grossFromDevice || capture.tareFromDevice;
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -85,8 +137,12 @@ export default function WeighbridgePage() {
         supplierChallanNo: form.supplierChallanNo || undefined,
         grossWeight: Number(form.grossWeight || 0),
         tareWeight: Number(form.tareWeight || 0),
+        weightSource: usedDevice ? 'device' : 'manual',
+        indicatorId: usedDevice ? indicatorId : undefined,
+        manualOverride: usedDevice && capture.overridden,
       });
-      setForm({ plantId: '', supplierId: '', materialId: '', vehicleNo: '', supplierChallanNo: '', grossWeight: '', tareWeight: '' });
+      setForm(emptyForm);
+      setCapture(noCapture);
     }, 'Weighbridge entry created');
   }
 
@@ -99,7 +155,9 @@ export default function WeighbridgePage() {
   return (
     <div>
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Weighbridge</h1>
-      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px' }}>Manual weighbridge entry (net = gross − tare). Print the slip and convert to a material inward.</p>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px' }}>
+        Capture the weight off the indicator with <strong>Get weight</strong>, or key it in by hand (net = gross − tare). Print the slip and convert to a material inward.
+      </p>
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
       {msg && (
         <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>
@@ -118,8 +176,19 @@ export default function WeighbridgePage() {
                 <Input value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} />
               </Field>
             </div>
-            <Num label="Gross" v={form.grossWeight} on={(x) => setForm({ ...form, grossWeight: x })} req />
-            <Num label="Tare" v={form.tareWeight} on={(x) => setForm({ ...form, tareWeight: x })} req />
+            <Sel label="Indicator" v={indicatorId} on={setIndicatorId} opts={indicators} ov={(o) => String(o.name)} />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'end' }}>
+              <Num label="Gross" v={form.grossWeight} on={(x) => onWeightChange('gross', x)} req />
+              <div style={{ marginBottom: 14 }}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => getWeight('gross')}>⚖ Get</Button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'end' }}>
+              <Num label="Tare" v={form.tareWeight} on={(x) => onWeightChange('tare', x)} req />
+              <div style={{ marginBottom: 14 }}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => getWeight('tare')}>⚖ Get</Button>
+              </div>
+            </div>
             <div style={{ minWidth: 90 }}>
               <Field label="Net">
                 <div className="mn-input" style={{ background: 'var(--mn-surface-2)', fontWeight: 600 }}>{money(net)}</div>
@@ -129,7 +198,16 @@ export default function WeighbridgePage() {
               <Button type="submit">Create</Button>
             </div>
           </Form>
+          {usedDevice && (
+            <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: '8px 2px 0' }}>
+              Weights captured from the indicator{capture.overridden ? ' (manually adjusted — saved as an override)' : ''}.
+            </p>
+          )}
         </Card>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <IndicatorCard indicators={indicators} plants={plants} onDone={(m) => run(() => Promise.resolve(), m)} onError={setError} />
       </div>
 
       <Card title="Weighbridge entries" padded={false}>
@@ -143,6 +221,7 @@ export default function WeighbridgePage() {
                 <Th numeric>Gross</Th>
                 <Th numeric>Tare</Th>
                 <Th numeric>Net</Th>
+                <Th>Source</Th>
                 <Th>Status</Th>
                 <Th />
               </tr>
@@ -156,6 +235,7 @@ export default function WeighbridgePage() {
                   <Td numeric>{money(r.grossWeight)}</Td>
                   <Td numeric>{money(r.tareWeight)}</Td>
                   <Td numeric>{money(r.netWeight)}</Td>
+                  <Td>{r.weightSource === 'device' ? (r.manualOverride ? 'Device*' : 'Device') : 'Manual'}</Td>
                   <Td><StatusBadge status={String(r.status)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
                     <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
@@ -172,5 +252,103 @@ export default function WeighbridgePage() {
         )}
       </Card>
     </div>
+  );
+}
+
+// ---- Indicator device management (E1) ----
+function IndicatorCard({
+  indicators,
+  plants,
+  onDone,
+  onError,
+}: {
+  indicators: Row[];
+  plants: Row[];
+  onDone: (msg: string) => void;
+  onError: (e: string) => void;
+}) {
+  const [dev, setDev] = useState({ name: '', plantId: '', connectionType: 'simulated', simulatedWeightKg: '25000', host: '', port: '', comPort: '', baudRate: '9600' });
+
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    try {
+      const body: Record<string, unknown> = {
+        name: dev.name,
+        plantId: dev.plantId || undefined,
+        connectionType: dev.connectionType,
+      };
+      if (dev.connectionType === 'simulated') body.simulatedWeightKg = Number(dev.simulatedWeightKg || 0);
+      if (dev.connectionType === 'tcp') { body.host = dev.host; body.port = Number(dev.port || 0); }
+      if (dev.connectionType === 'serial') { body.comPort = dev.comPort; body.baudRate = Number(dev.baudRate || 0); }
+      await weighbridgeIndicatorApi.create(body);
+      setDev({ name: '', plantId: '', connectionType: 'simulated', simulatedWeightKg: '25000', host: '', port: '', comPort: '', baudRate: '9600' });
+      onDone('Indicator device added');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Failed to add indicator');
+    }
+  }
+
+  return (
+    <Card title="Weighbridge indicators">
+      <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: '0 0 12px' }}>
+        The scale head the plant reads from. A <strong>simulated</strong> device returns a stable demo weight; a <strong>TCP</strong> device is read over the network; a <strong>serial/COM</strong> device is read by the plant-side app.
+      </p>
+      <Form onSubmit={add} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 150 }}>
+          <Field label="Name" required>
+            <Input value={dev.name} onChange={(e) => setDev({ ...dev, name: e.target.value })} required />
+          </Field>
+        </div>
+        <Sel label="Plant" v={dev.plantId} on={(x) => setDev({ ...dev, plantId: x })} opts={plants} ov={(o) => String(o.plantName ?? o.plantCode)} />
+        <div style={{ minWidth: 130 }}>
+          <Field label="Connection">
+            <select className="mn-input" value={dev.connectionType} onChange={(e) => setDev({ ...dev, connectionType: e.target.value })}>
+              <option value="simulated">Simulated</option>
+              <option value="tcp">TCP</option>
+              <option value="serial">Serial / COM</option>
+            </select>
+          </Field>
+        </div>
+        {dev.connectionType === 'simulated' && (
+          <div style={{ minWidth: 130 }}>
+            <Field label="Demo weight (kg)">
+              <Input type="number" step="any" value={dev.simulatedWeightKg} onChange={(e) => setDev({ ...dev, simulatedWeightKg: e.target.value })} />
+            </Field>
+          </div>
+        )}
+        {dev.connectionType === 'tcp' && (
+          <>
+            <div style={{ minWidth: 130 }}>
+              <Field label="Host"><Input value={dev.host} onChange={(e) => setDev({ ...dev, host: e.target.value })} /></Field>
+            </div>
+            <div style={{ minWidth: 90 }}>
+              <Field label="Port"><Input type="number" value={dev.port} onChange={(e) => setDev({ ...dev, port: e.target.value })} /></Field>
+            </div>
+          </>
+        )}
+        {dev.connectionType === 'serial' && (
+          <>
+            <div style={{ minWidth: 120 }}>
+              <Field label="COM port"><Input value={dev.comPort} onChange={(e) => setDev({ ...dev, comPort: e.target.value })} /></Field>
+            </div>
+            <div style={{ minWidth: 90 }}>
+              <Field label="Baud"><Input type="number" value={dev.baudRate} onChange={(e) => setDev({ ...dev, baudRate: e.target.value })} /></Field>
+            </div>
+          </>
+        )}
+        <div style={{ marginBottom: 14 }}>
+          <Button type="submit">Add</Button>
+        </div>
+      </Form>
+      {indicators.length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {indicators.map((d) => (
+            <span key={d.id} style={{ fontSize: 12, border: '1px solid var(--mn-border)', borderRadius: 'var(--mn-radius-md)', padding: '4px 10px' }}>
+              <strong>{String(d.name)}</strong> · {String(d.connectionType)}{d.isActive === false ? ' · inactive' : ''}
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

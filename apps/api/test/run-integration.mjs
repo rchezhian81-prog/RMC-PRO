@@ -55,6 +55,7 @@ const TESTS = [
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
   'test/purchase-cycle.test.mjs',
+  'test/weighbridge-hardware.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/metrics.test.mjs',
@@ -122,6 +123,9 @@ async function main() {
   // pilot tenant so the purchase-cycle test can exercise it, exactly as a Super
   // Admin would from the Modules screen.
   await api('PUT', `/platform/tenants/${tenant.id}/modules/purchase`, { isEnabled: true }, su);
+  // `weighbridge` likewise is not in the default plan — enable it for the
+  // weighbridge-hardware (E1) test.
+  await api('PUT', `/platform/tenants/${tenant.id}/modules/weighbridge`, { isEnabled: true }, su);
   console.log(`pilot tenant ${tenant.id} + owner ready`);
 
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], {

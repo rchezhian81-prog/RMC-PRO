@@ -56,6 +56,8 @@ export const PERMISSIONS = {
   STOCK_ADJUST: 'stock.adjust',
   STOCK_ADJUSTMENT_APPROVE: 'stock_adjustment.approve',
   NEGATIVE_STOCK_APPROVE: 'negative_stock.approve',
+  // Weighbridge hardware bridge (E1): manage indicator devices + live reads.
+  WEIGHBRIDGE_DEVICE: 'weighbridge.device',
 
   // Billing
   INVOICES_CREATE: 'invoices.create',
@@ -170,7 +172,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW, P.ORDERS_CREATE, P.ORDERS_CONFIRM,
     P.CREDIT_HOLD_APPROVE, P.APPROVALS_ACT,
     P.BATCH_TICKETS_CREATE, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
-    P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE,
+    P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE, P.WEIGHBRIDGE_DEVICE,
     P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
     P.PURCHASE_VIEW, P.PURCHASE_ORDERS_CREATE, P.GRN_CREATE,
@@ -210,7 +212,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
   // Receives material and keeps the stock straight — including goods receipts
   // against a purchase order.
   [ROLE_KEYS.STORE_STAFF]: [
-    P.MASTERS_VIEW, P.STOCK_ADJUST, P.REPORTS_VIEW,
+    P.MASTERS_VIEW, P.STOCK_ADJUST, P.WEIGHBRIDGE_DEVICE, P.REPORTS_VIEW,
     P.PURCHASE_VIEW, P.GRN_CREATE,
   ],
 

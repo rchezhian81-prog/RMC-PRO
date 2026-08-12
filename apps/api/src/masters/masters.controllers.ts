@@ -13,6 +13,8 @@ import {
   Site,
   Supplier,
   Transporter,
+  Uom,
+  UomConversion,
   Vehicle,
 } from '../core/database/entities';
 import {
@@ -23,6 +25,8 @@ import {
   SitesService,
   SuppliersService,
   TransportersService,
+  UomConversionsService,
+  UomsService,
   VehiclesService,
 } from './masters.services';
 
@@ -102,6 +106,26 @@ export class GradesController extends BaseCrudController<ConcreteGrade> {
 @UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
 export class TransportersController extends BaseCrudController<Transporter> {
   constructor(protected readonly service: TransportersService) {
+    super();
+  }
+}
+
+@Controller('uoms')
+@CrudResource('masters')
+@RequireModule('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
+export class UomsController extends BaseCrudController<Uom> {
+  constructor(protected readonly service: UomsService) {
+    super();
+  }
+}
+
+@Controller('uom-conversions')
+@CrudResource('masters')
+@RequireModule('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
+export class UomConversionsController extends BaseCrudController<UomConversion> {
+  constructor(protected readonly service: UomConversionsService) {
     super();
   }
 }

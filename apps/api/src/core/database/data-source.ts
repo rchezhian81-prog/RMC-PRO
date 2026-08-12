@@ -29,6 +29,7 @@ import { GstExecutionJobs1720000024000 } from './migrations/1720000024000-GstExe
 import { CustomerPincode1720000025000 } from './migrations/1720000025000-CustomerPincode';
 import { Transporters1720000026000 } from './migrations/1720000026000-Transporters';
 import { VehicleRoadTax1720000027000 } from './migrations/1720000027000-VehicleRoadTax';
+import { MaterialUomDepth1720000028000 } from './migrations/1720000028000-MaterialUomDepth';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -73,6 +74,7 @@ export const AppDataSource = new DataSource({
     CustomerPincode1720000025000,
     Transporters1720000026000,
     VehicleRoadTax1720000027000,
+    MaterialUomDepth1720000028000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

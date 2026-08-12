@@ -52,6 +52,35 @@ export class Material extends TenantScopedEntity {
   @Column({ name: 'reorder_level', type: 'int', default: 0 }) reorderLevel!: number;
   @Column({ name: 'standard_rate', type: 'int', default: 0 }) standardRate!: number;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
+  // Batching properties (Plan A1) — feed moisture/water correction (A2).
+  /** cement | fine_aggregate | coarse_aggregate | water | admixture | additive | other */
+  @Column({ name: 'material_type', type: 'varchar', nullable: true }) materialType!: string | null;
+  @Column({ name: 'specific_gravity', type: 'numeric', precision: 6, scale: 3, nullable: true }) specificGravity!: string | null;
+  @Column({ name: 'bulk_density', type: 'numeric', precision: 10, scale: 3, nullable: true }) bulkDensity!: string | null;
+  /** SSD water absorption of an aggregate, as a percentage of dry mass. */
+  @Column({ name: 'water_absorption_pct', type: 'numeric', precision: 6, scale: 3, nullable: true }) waterAbsorptionPct!: string | null;
+  /** Default free-surface moisture, as a percentage of dry mass. */
+  @Column({ name: 'default_moisture_pct', type: 'numeric', precision: 6, scale: 3, nullable: true }) defaultMoisturePct!: string | null;
+}
+
+/** Unit-of-measure master (Plan A1) — replaces free-text UOM strings. */
+@Entity('uoms')
+@Unique('uq_uoms_code', ['tenantId', 'uomCode'])
+export class Uom extends TenantScopedEntity {
+  @Column({ name: 'uom_code', type: 'varchar' }) uomCode!: string;
+  @Column({ name: 'uom_name', type: 'varchar' }) uomName!: string;
+  /** weight | volume | count | length | area — conversions are valid within one category. */
+  @Column({ name: 'uom_category', type: 'varchar', nullable: true }) uomCategory!: string | null;
+  @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
+}
+
+/** Pairwise unit conversion (Plan A1): 1 `from_uom` = `factor` × `to_uom`. */
+@Entity('uom_conversions')
+@Unique('uq_uom_conversions', ['tenantId', 'fromUom', 'toUom'])
+export class UomConversion extends TenantScopedEntity {
+  @Column({ name: 'from_uom', type: 'varchar' }) fromUom!: string;
+  @Column({ name: 'to_uom', type: 'varchar' }) toUom!: string;
+  @Column({ name: 'factor', type: 'numeric', precision: 18, scale: 6 }) factor!: string;
 }
 
 /** Supplier master (Design Doc 6 §7.5). */

@@ -9,6 +9,8 @@ import {
   SitesController,
   SuppliersController,
   TransportersController,
+  UomConversionsController,
+  UomsController,
   VehiclesController,
 } from './masters.controllers';
 import {
@@ -19,6 +21,8 @@ import {
   SitesService,
   SuppliersService,
   TransportersService,
+  UomConversionsService,
+  UomsService,
   VehiclesService,
 } from './masters.services';
 
@@ -32,6 +36,8 @@ import {
     DriversController,
     GradesController,
     TransportersController,
+    UomsController,
+    UomConversionsController,
   ],
   providers: [
     CustomersService,
@@ -42,6 +48,8 @@ import {
     DriversService,
     GradesService,
     TransportersService,
+    UomsService,
+    UomConversionsService,
     TenantGuard,
     CrudPermissionsGuard,
   ],

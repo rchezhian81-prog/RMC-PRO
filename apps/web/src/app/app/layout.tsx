@@ -8,6 +8,7 @@ import {
   Store, Truck, IdCard, Layers, UserPlus, FileText, FileSignature, FilePlus, ClipboardList,
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
+  Ruler, ArrowLeftRight,
   Sparkles, UserCog, ScrollText,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
@@ -67,6 +68,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/entity/customers', label: 'Customers', icon: <Building2 size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/sites', label: 'Sites / Projects', icon: <MapPin size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/materials', label: 'Materials', icon: <Package size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/uoms', label: 'Units (UOM)', icon: <Ruler size={IS} />, perm: 'masters.view', module: 'masters' },
+      { href: '/app/entity/uom-conversions', label: 'Unit Conversions', icon: <ArrowLeftRight size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/suppliers', label: 'Suppliers', icon: <Store size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/vehicles', label: 'Vehicles', icon: <Truck size={IS} />, perm: 'masters.view', module: 'masters' },
       { href: '/app/entity/drivers', label: 'Drivers', icon: <IdCard size={IS} />, perm: 'masters.view', module: 'masters' },

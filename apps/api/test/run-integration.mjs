@@ -58,6 +58,7 @@ const TESTS = [
   'test/weighbridge-hardware.test.mjs',
   'test/batching-integration.test.mjs',
   'test/fleet-maintenance.test.mjs',
+  'test/expense-capture.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/metrics.test.mjs',
@@ -132,6 +133,8 @@ async function main() {
   await api('PUT', `/platform/tenants/${tenant.id}/modules/batching_integration`, { isEnabled: true }, su);
   // `fleet` (phase-2) — enable it for the D3 fleet-maintenance test.
   await api('PUT', `/platform/tenants/${tenant.id}/modules/fleet`, { isEnabled: true }, su);
+  // `expenses` (phase-2) — enable it for the D4 expense-capture test.
+  await api('PUT', `/platform/tenants/${tenant.id}/modules/expenses`, { isEnabled: true }, su);
   console.log(`pilot tenant ${tenant.id} + owner ready`);
 
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], {

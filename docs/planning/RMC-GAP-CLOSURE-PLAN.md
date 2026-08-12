@@ -56,7 +56,7 @@ breadth on top of that spine**, not rework of it.
 | E1 | Weighbridge hardware bridge | Weighbridge | Important | — | 2 | **done** |
 | A4 | Batching Integration (`batching_integration`) | Batching | Important | A2 | 2 | **done** |
 | D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | **done** |
-| D4 | Expense capture | Procurement | Important | — | 1–2 | planned |
+| D4 | Expense capture | Procurement | Important | — | 1–2 | **done** |
 | B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | planned |
 | F1 | Excel bulk import framework | Platform | Important | — | 2 | planned |
 | F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | planned |
@@ -229,9 +229,35 @@ pumps. Builds on D1's fleet data.
   / per-tyre register, and out-of-order fuel-entry back-fill (mileage is
   forward-only from the previous full tank).
 
-### D4 · Expense capture
+### D4 · Expense capture ✅
 **Goal:** Driver bata, fuel, plant/site expenses with cost allocation
 (expense + expense-group masters, entry, allocation).
+- **Delivered:** four tenant-scoped FORCE-RLS tables (migration `1720000038000`):
+  `expense_groups` → `expense_heads` (the category masters) and
+  `expense_vouchers` → `expense_voucher_lines`, each line charged to a cost
+  object (plant / vehicle / site / general) whose label is resolved
+  authoritatively from the master on save. Pure, unit-tested helpers
+  (`expenses.util.ts`): `voucherTotal`, `allocationSummary` (roll posted lines
+  up by cost object with each bucket's share) and `categorySummary` (the same
+  keyed by any label, used for spend-by-head). Voucher create validates lines
+  (head + positive amount + allocation type), computes the total, and opens in
+  `draft`; **post** commits the spend and is audited (`expense_voucher.post`);
+  cancel is draft-only (a posted voucher is committed). A cost-allocation
+  report endpoint (`/expense-vouchers/report/allocation`, optional date/plant
+  filters) reconciles posted spend `byCostObject` and `byHead`. New permissions
+  `expenses.view` / `expenses.manage` / `expenses.post` (posting held separate
+  as the higher-trust key) granted to accounts (all three) and plant-manager
+  (view + manage); `expenses` (a phase-2 module) enabled per-tenant via the
+  Super Admin toggle, as QC / Purchase / Fleet are. Web: an Expenses nav group
+  with an Expense Vouchers screen (multi-line entry with per-line cost
+  allocation + post/cancel + an inline allocation report) and an Expense Heads
+  masters screen (groups + heads). **Tests:** 9 helper unit cases
+  (`expenses-util.test.mjs`); an `expense-capture` integration test drives
+  group → heads → a voucher allocated across plant/vehicle/general → post →
+  allocation-report reconciliation → draft cancel end to end.
+- **Deferred:** posting expense vouchers into a general ledger / Tally export,
+  a reversal/void flow for a posted voucher, and per-line quantity × rate
+  capture (amount-only today).
 
 ### B3 · Returned / short-load concrete & wastage
 **Goal:** Reason + costing on the return-qty already captured on dispatch;

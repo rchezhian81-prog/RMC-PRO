@@ -52,7 +52,7 @@ breadth on top of that spine**, not rework of it.
 | B2 | Pricing & GST depth (quote→invoice) | Order-to-cash | Important | — | 2 | **done** |
 | B1 | Pour scheduling | Order-to-cash | Important | — | 2 | **done** |
 | C1 | Receivables maturity | Billing | Important | — | 1–2 | **done** |
-| D2 | Purchase / AP-lite (`purchase`) | Procurement | Critical | A1 | 3 | planned |
+| D2 | Purchase / AP-lite (`purchase`) | Procurement | Critical | A1 | 3 | **done** |
 | E1 | Weighbridge hardware bridge | Weighbridge | Important | — | 2 | planned |
 | A4 | Batching Integration (`batching_integration`) | Batching | Important | A2 | 2 | planned |
 | D3 | Fleet maintenance & fuel log | Fleet | Important | D1 | 2 | planned |
@@ -153,13 +153,35 @@ RMC batching correctness gap (currently 0 lines).
   (reasons are free-text today); folding issued invoices + receipts into the live
   credit-exposure calculation.
 
-### D2 · Purchase / AP-lite (`purchase`)
+### D2 · Purchase / AP-lite (`purchase`) ✅
 **Goal:** Own procurement of cement/aggregate/admixture/diesel.
 - **Data model:** `purchase_orders` + items, `purchase_receipts` (link/extend the
   existing single-line `MaterialInward` into multi-line GRN), `vendor_bills`
   (3-way match: PO ↔ GRN ↔ bill, tolerance), `vendor_payments`. Enable the
   `purchase` module; reuse `suppliers` master. **DoD:** PO→GRN→bill→payment
   integration test; GRN posts to stock via the existing ledger.
+- **Delivered:** eight tenant-scoped FORCE-RLS tables (`purchase_orders` +
+  items, `goods_receipts` + items, `vendor_bills` + items, `vendor_payments` +
+  allocations; migration `1720000034000`). Purchase order (create/issue/cancel,
+  GST per line); multi-line goods receipt whose **post** increases stock through
+  the shared `StockService.applyDeltaWithin` ledger (same path as material
+  inward) and rolls received quantity onto the PO lines, advancing PO status via
+  a pure `poReceiptStatus`; vendor bill created from a posted GRN with a pure,
+  unit-tested **3-way match** (`matchLine`/`summariseMatch`: billed qty ≤
+  accepted, billed rate ≈ PO rate within tolerance → `matched` /
+  `over_tolerance` / `unmatched`), approve (audited) → payable committed; vendor
+  payment allocated across approved bills (audited), advancing each bill's
+  payment status. New permissions `purchase.view` / `purchase_orders.create` /
+  `grn.create` / `vendor_bills.create` / `vendor_bills.approve` /
+  `vendor_payments.create` granted to store/accounts/plant-manager roles;
+  `purchase` (a phase-2 module) enabled per-tenant via the Super Admin toggle,
+  as QC is. Web: Purchase Orders and Vendor Bills screens (raise PO → receive →
+  bill → approve → pay) + nav group. **Tests:** 14 helper unit cases
+  (`purchase-util.test.mjs`); a `purchase-cycle` integration test drives
+  supplier → PO → GRN (asserts stock rose) → matched bill → approve → payment
+  (bill settled). Reused the existing `suppliers` master.
+- **Deferred:** partial/multi-GRN billing UI niceties, purchase returns / debit
+  notes, and a supplier-outstanding (AP aging) report.
 
 ### E1 · Weighbridge hardware bridge
 **Goal:** Live scale reads for inbound aggregate, with manual override.

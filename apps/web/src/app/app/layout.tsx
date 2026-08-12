@@ -9,7 +9,7 @@ import {
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Ruler, ArrowLeftRight,
-  Sparkles, UserCog, ScrollText,
+  Sparkles, UserCog, ScrollText, ShoppingCart,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
@@ -127,6 +127,13 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/inventory/adjustments', label: 'Stock Adjustments', icon: <SlidersHorizontal size={IS} />, module: 'inventory' },
       { href: '/app/inventory/negative-stock', label: 'Negative Stock', icon: <TrendingDown size={IS} />, module: 'inventory' },
       { href: '/app/inventory/reports', label: 'Inventory Reports', icon: <BarChart3 size={IS} />, module: 'inventory' },
+    ],
+  },
+  {
+    title: 'Purchase',
+    items: [
+      { href: '/app/purchase/orders', label: 'Purchase Orders', icon: <ShoppingCart size={IS} />, perm: 'purchase.view', module: 'purchase' },
+      { href: '/app/purchase/bills', label: 'Vendor Bills', icon: <FileText size={IS} />, perm: 'purchase.view', module: 'purchase' },
     ],
   },
   {

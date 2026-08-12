@@ -704,6 +704,26 @@ export const qcApi = {
     post(`/qc/cube-sets/${id}/results`, { results }),
 };
 
+// ---- Purchase / AP-lite (Plan D2) ----
+export const purchaseApi = {
+  orders: (status?: string) => apiFetch<Row[]>(`/purchase-orders${status ? `?status=${status}` : ''}`),
+  order: (id: string) => apiFetch<Row>(`/purchase-orders/${id}`),
+  createOrder: (b: Record<string, unknown>) => post('/purchase-orders', b),
+  issueOrder: (id: string) => post(`/purchase-orders/${id}/issue`),
+  cancelOrder: (id: string) => post(`/purchase-orders/${id}/cancel`),
+  grns: (status?: string) => apiFetch<Row[]>(`/goods-receipts${status ? `?status=${status}` : ''}`),
+  grn: (id: string) => apiFetch<Row>(`/goods-receipts/${id}`),
+  createGrn: (b: Record<string, unknown>) => post('/goods-receipts', b),
+  postGrn: (id: string) => post(`/goods-receipts/${id}/post`),
+  bills: (status?: string) => apiFetch<Row[]>(`/vendor-bills${status ? `?status=${status}` : ''}`),
+  bill: (id: string) => apiFetch<Row>(`/vendor-bills/${id}`),
+  createBill: (b: Record<string, unknown>) => post('/vendor-bills', b),
+  approveBill: (id: string) => post(`/vendor-bills/${id}/approve`),
+  cancelBill: (id: string) => post(`/vendor-bills/${id}/cancel`),
+  payments: () => apiFetch<Row[]>('/vendor-payments'),
+  createPayment: (b: Record<string, unknown>) => post('/vendor-payments', b),
+};
+
 // ---- Dashboard, reports center, sync (Sprint 10) ----
 export const dashboardApi = {
   summary: () => apiFetch<Row>('/dashboard/summary'),

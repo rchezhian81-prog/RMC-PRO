@@ -10,6 +10,7 @@ import {
   Driver,
   Invoice,
   InvoiceChallan,
+  OrderItem,
   Site,
   Vehicle,
 } from '../core/database/entities';
@@ -17,6 +18,7 @@ import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import type { ChallanPdfData } from '../sales/pdf.service';
 import { recordDeliveryHistory } from './delivery-history.util';
+import { returnCost, wastageSummary, type WastageRow } from './wastage.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Challan not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -109,10 +111,69 @@ export class DeliveryChallanService {
     return this.transition(tenantId, id, ['draft'], 'issued', userId);
   }
 
+  /**
+   * Mark a challan delivered, capturing any returned / short-load concrete: the
+   * returned quantity, why it came back, and its valuation. The cost per m³
+   * defaults to the order line's selling rate for this grade when not supplied,
+   * so the wasted concrete is costed automatically (Plan B3).
+   */
   markDelivered(tenantId: string, id: string, dto: Record<string, unknown>, userId: string) {
-    return this.transition(tenantId, id, ['issued'], 'delivered', userId, {
-      receiverName: (dto.receiverName as string) ?? null,
-      returnQuantityM3: dto.returnQuantityM3 !== undefined ? String(dto.returnQuantityM3) : '0',
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(DeliveryChallan);
+      const challan = await repo.findOne({ where: { id } });
+      if (!challan) throw notFound();
+      if (challan.challanStatus !== 'issued') {
+        throw badReq(`Cannot move challan from ${challan.challanStatus} to delivered`);
+      }
+
+      const returnQty = dto.returnQuantityM3 !== undefined ? Number(dto.returnQuantityM3) || 0 : 0;
+      let costPerM3 = dto.returnCostPerM3 !== undefined ? Number(dto.returnCostPerM3) || 0 : 0;
+      // Default the valuation to the order line's rate for this grade.
+      if (returnQty > 0 && !costPerM3 && challan.orderId) {
+        const orderItem = await m.getRepository(OrderItem).findOne({
+          where: challan.gradeId ? { orderId: challan.orderId, gradeId: challan.gradeId } : { orderId: challan.orderId },
+        });
+        costPerM3 = Number(orderItem?.ratePerM3 ?? 0) || 0;
+      }
+      const returnReason = returnQty > 0 ? ((dto.returnReason as string) ?? null) : null;
+      const cost = returnQty > 0 ? returnCost(returnQty, costPerM3) : 0;
+
+      await repo.update(id, {
+        challanStatus: 'delivered',
+        receiverName: (dto.receiverName as string) ?? null,
+        returnQuantityM3: String(returnQty),
+        returnReason,
+        returnCostPerM3: String(returnQty > 0 ? costPerM3 : 0),
+        returnCost: String(cost),
+      });
+      await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, 'delivered', userId, (dto.note as string) ?? null);
+      return this.loadFull(m, id);
+    });
+  }
+
+  /**
+   * Wastage report (Plan B3) — returned / short-load concrete across DELIVERED
+   * challans, rolled up by reason and by grade, optionally filtered by date range
+   * and plant. Only challans with a positive returned quantity are counted.
+   */
+  wastageReport(tenantId: string, filters: { from?: string; to?: string; plantId?: string } = {}) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params: unknown[] = [];
+      const where: string[] = [`challan_status = 'delivered'`, `return_quantity_m3 > 0`];
+      if (filters.from) { params.push(filters.from); where.push(`dispatch_time >= $${params.length}`); }
+      if (filters.to) { params.push(filters.to); where.push(`dispatch_time <= $${params.length}`); }
+      if (filters.plantId) { params.push(filters.plantId); where.push(`plant_id = $${params.length}`); }
+
+      const rows: WastageRow[] = await m.query(
+        `SELECT return_quantity_m3 AS "returnQuantityM3",
+                return_cost AS "returnCost",
+                return_reason AS "returnReason",
+                grade_label AS "gradeLabel"
+           FROM delivery_challans
+          WHERE ${where.join(' AND ')}`,
+        params,
+      );
+      return wastageSummary(rows);
     });
   }
 

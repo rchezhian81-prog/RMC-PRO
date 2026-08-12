@@ -107,6 +107,7 @@ export class DispatchService {
       if (stampField) patch[stampField] = new Date();
       if (status === 'delayed' && dto.delayReason) patch.delayReason = dto.delayReason;
       if (status === 'returning' && dto.returnQuantityM3 !== undefined) patch.returnQuantityM3 = String(dto.returnQuantityM3);
+      if (status === 'returning' && dto.returnReason) patch.returnReason = dto.returnReason;
       await repo.update(id, patch);
       await recordDeliveryHistory(m, tenantId, { dispatchId: id }, dispatch.dispatchStatus, status, userId, (dto.note as string) ?? null);
       return this.loadFull(m, id);

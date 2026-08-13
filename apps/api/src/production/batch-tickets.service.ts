@@ -5,6 +5,7 @@ import {
   BatchQueueEntry,
   BatchTicket,
   BatchTicketMaterial,
+  ConcreteGrade,
   Material,
   MixDesign,
   MixDesignMaterial,
@@ -55,17 +56,32 @@ export class BatchTicketsService {
   }
 
   /** Latest approved, active mix design for a grade (approved-mix validation). */
-  private resolveApprovedMix(m: EntityManager, gradeId: string | null, explicitId?: string | null) {
+  private async resolveApprovedMix(
+    m: EntityManager,
+    gradeId: string | null,
+    explicitId?: string | null,
+    gradeLabel?: string | null,
+  ) {
     const repo = m.getRepository(MixDesign);
     if (explicitId) {
       return repo.findOne({ where: { id: explicitId } });
     }
-    if (!gradeId) return Promise.resolve(null);
+    // Resilience: a queue entry may carry a grade label but a null gradeId (e.g.
+    // an older plan line). Resolve the grade by its code/name so batching still
+    // finds the approved mix instead of dead-ending.
+    let gid = gradeId;
+    if (!gid && gradeLabel) {
+      const grade = await m
+        .getRepository(ConcreteGrade)
+        .findOne({ where: [{ gradeCode: gradeLabel }, { gradeName: gradeLabel }] });
+      gid = grade?.id ?? null;
+    }
+    if (!gid) return null;
     // A grade can carry several approved active mix designs (distinct mix codes).
     // Resolve deterministically — highest version, then most recently created —
     // so the current standard recipe wins instead of an arbitrary row.
     return repo.findOne({
-      where: { gradeId, approvalStatus: 'approved', isActiveVersion: true },
+      where: { gradeId: gid, approvalStatus: 'approved', isActiveVersion: true },
       order: { versionNo: 'DESC', createdAt: 'DESC' },
     });
   }
@@ -83,7 +99,7 @@ export class BatchTicketsService {
       const batchQty = dto.batchQuantityM3 !== undefined ? num(dto.batchQuantityM3) : remaining;
       if (batchQty <= 0) throw badReq('Batch quantity must be greater than zero');
 
-      const mix = await this.resolveApprovedMix(m, queue.gradeId, dto.mixDesignId as string);
+      const mix = await this.resolveApprovedMix(m, queue.gradeId, dto.mixDesignId as string, queue.gradeLabel);
       if (!mix) throw badReq('No approved mix design available for this grade');
       if (mix.approvalStatus !== 'approved') throw badReq('Selected mix design is not approved');
 

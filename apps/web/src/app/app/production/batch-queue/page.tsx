@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { batchQueueApi, batchTicketsApi, ordersApi, type Row } from '../../../../lib/api';
+import { batchQueueApi, batchTicketsApi, mixDesignsApi, ordersApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
@@ -19,14 +19,17 @@ export default function BatchQueuePage() {
   const { prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [orders, setOrders] = useState<Row[]>([]);
+  const [mixes, setMixes] = useState<Row[]>([]);
+  const [mixByRow, setMixByRow] = useState<Record<string, string>>({});
   const [orderId, setOrderId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
-    const [q, o] = await Promise.all([batchQueueApi.list(), ordersApi.list('confirmed')]);
+    const [q, o, mx] = await Promise.all([batchQueueApi.list(), ordersApi.list('confirmed'), mixDesignsApi.list()]);
     setRows(q);
     setOrders(o);
+    setMixes(mx);
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e)));
@@ -57,8 +60,12 @@ export default function BatchQueuePage() {
     const remaining = Number(entry.plannedQuantityM3) - Number(entry.producedQuantityM3);
     const qtyStr = await prompt({ title: 'Start batch', label: `Batch quantity (m³), remaining ${remaining}`, defaultValue: String(remaining), type: 'number', confirmLabel: 'Start' });
     if (qtyStr === null) return;
+    // Optional explicit mix design — falls back to the grade's approved mix when
+    // left on "Auto". Lets an operator proceed even if the queue line's grade
+    // can't auto-resolve a mix.
+    const mixDesignId = mixByRow[String(entry.id)] || undefined;
     await run(async () => {
-      const ticket = await batchTicketsApi.createFromQueue(String(entry.id), { batchQuantityM3: Number(qtyStr) });
+      const ticket = await batchTicketsApi.createFromQueue(String(entry.id), { batchQuantityM3: Number(qtyStr), mixDesignId });
       router.push(`/app/production/batch-tickets/${ticket.id}`);
     });
   }
@@ -121,7 +128,23 @@ export default function BatchQueuePage() {
                     <Td><StatusBadge status={st} /></Td>
                     <Td style={{ textAlign: 'right' }}>
                       {(st === 'waiting' || st === 'batching') && (
-                        <Button size="sm" onClick={() => startBatch(r)}>Start batch</Button>
+                        <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                          <select
+                            className="mn-input"
+                            style={{ maxWidth: 190 }}
+                            value={mixByRow[String(r.id)] ?? ''}
+                            onChange={(e) => setMixByRow({ ...mixByRow, [String(r.id)]: e.target.value })}
+                            title="Mix design — defaults to the grade's approved mix"
+                          >
+                            <option value="">Auto by grade</option>
+                            {mixes
+                              .filter((mx) => mx.approvalStatus === 'approved')
+                              .map((mx) => (
+                                <option key={mx.id} value={String(mx.id)}>{String(mx.mixCode ?? mx.id)}</option>
+                              ))}
+                          </select>
+                          <Button size="sm" onClick={() => startBatch(r)}>Start batch</Button>
+                        </div>
                       )}
                     </Td>
                   </tr>

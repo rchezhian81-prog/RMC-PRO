@@ -16,6 +16,7 @@ import { summarisePourSchedule } from './pour-schedule.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 import { CreditService, type CreditAssessment } from './credit.service';
+import { creditExposureValue } from './credit-value.util';
 import { recordHistory } from './history.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Order not found' });
@@ -127,7 +128,11 @@ export class OrdersService {
     return this.db.runInTenant(tenantId, async (m) => {
       const order = await m.getRepository(Order).findOne({ where: { id } });
       if (!order) throw notFound();
-      return this.credit.assess(m, order.customerId, Number(order.estimatedOrderValue), order.id);
+      return this.credit.assess(
+        m, order.customerId,
+        creditExposureValue(order.estimatedOrderValueInclGst, order.estimatedOrderValue),
+        order.id,
+      );
     });
   }
 
@@ -143,7 +148,11 @@ export class OrdersService {
       const items = await m.getRepository(OrderItem).find({ where: { orderId: id } });
       if (!items.length) throw badReq('Cannot confirm an order with no lines');
 
-      const a = await this.credit.assess(m, order.customerId, Number(order.estimatedOrderValue), order.id);
+      const a = await this.credit.assess(
+        m, order.customerId,
+        creditExposureValue(order.estimatedOrderValueInclGst, order.estimatedOrderValue),
+        order.id,
+      );
 
       if (a.withinLimit) {
         await repo.update(id, {

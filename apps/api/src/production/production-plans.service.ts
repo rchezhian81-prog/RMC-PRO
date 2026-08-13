@@ -65,17 +65,33 @@ export class ProductionPlansService {
       if (!order) throw badReq('Order not found');
       if (order.orderStatus !== 'confirmed') throw badReq('Only a confirmed order can be planned');
 
-      let gradeId = (dto.gradeId as string) ?? null;
-      let gradeLabel = (dto.gradeLabel as string) ?? null;
+      // A production-plan line is grade-specific, so it must resolve to an order
+      // LINE — that's where the grade + mix design come from. Callers may name the
+      // line (orderItemId) or the grade directly; when they name neither, resolve
+      // from the order's lines. NEVER create a grade-less plan line (it silently
+      // dead-ends batching with "no approved mix design"): one line → use it,
+      // several → make the caller pick.
+      let gradeId: string | null = (dto.gradeId as string) ?? null;
+      let gradeLabel: string | null = (dto.gradeLabel as string) ?? null;
       let plannedQty = Number(dto.plannedQuantityM3 ?? 0);
-      const orderItemId = (dto.orderItemId as string) ?? null;
+      let orderItemId = (dto.orderItemId as string) ?? null;
       if (orderItemId) {
         const oi = await m.getRepository(OrderItem).findOne({ where: { id: orderItemId, orderId } });
-        if (oi) {
-          gradeId = gradeId ?? oi.gradeId;
-          gradeLabel = gradeLabel ?? oi.gradeLabel;
-          if (!plannedQty) plannedQty = Number(oi.quantityM3);
+        if (!oi) throw badReq('Order line (orderItemId) not found for this order');
+        gradeId = gradeId ?? oi.gradeId;
+        gradeLabel = gradeLabel ?? oi.gradeLabel;
+        if (!plannedQty) plannedQty = Number(oi.quantityM3);
+      } else if (!gradeId) {
+        const lines = await m.getRepository(OrderItem).find({ where: { orderId } });
+        const first = lines[0];
+        if (!first) throw badReq('Order has no lines to plan');
+        if (lines.length > 1) {
+          throw badReq('This order has multiple lines — specify which line (orderItemId) to plan');
         }
+        orderItemId = first.id;
+        gradeId = first.gradeId;
+        gradeLabel = first.gradeLabel;
+        if (!plannedQty) plannedQty = Number(first.quantityM3);
       }
       const repo = m.getRepository(ProductionPlanItem);
       await repo.save(

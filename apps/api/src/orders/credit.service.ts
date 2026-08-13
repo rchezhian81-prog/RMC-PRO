@@ -42,10 +42,12 @@ export class CreditService {
       outstandingBefore = Number(customer?.openingBalance ?? 0);
 
       // Sum value of this customer's already-committed (confirmed) orders.
+      // GST-inclusive exposure so outstanding reconciles with the invoice; fall
+      // back to the ex-GST value for legacy rows created before that column.
       const rows: Array<{ total: string | null }> = await m
         .getRepository(Order)
         .createQueryBuilder('o')
-        .select('COALESCE(SUM(o.estimated_order_value), 0)', 'total')
+        .select('COALESCE(SUM(COALESCE(o.estimated_order_value_incl_gst, o.estimated_order_value)), 0)', 'total')
         .where('o.customer_id = :customerId', { customerId })
         .andWhere('o.order_status = :status', { status: 'confirmed' })
         .andWhere(excludeOrderId ? 'o.id != :excludeOrderId' : '1=1', { excludeOrderId })

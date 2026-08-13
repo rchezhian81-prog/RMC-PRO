@@ -4,9 +4,10 @@
 **Baseline commit:** `8e7fbabb631af4c82d621b0443c086d14f605e70`
 **Readiness verdict referenced:** GO for controlled pilot (`docs/development/PHASE1-DEPLOYMENT-READINESS.md`)
 **Scope:** Deploy the Phase-1 order-to-cash platform to a single VPS for a controlled
-pilot with a small number of real tenants. **No new features**; deferred integrations
-(QC, GPS live tracking, live GSTN/e-invoice/e-way, direct Tally API, live payment
-collection, customer portal) remain out of scope.
+pilot with a small number of real tenants. **No new deployment features**; deferred
+*live* integrations (live GSTN/e-invoice/e-way, direct Tally API, live payment
+collection, customer portal) remain out of scope. (QC and GPS live tracking, once
+deferred, are now built and CI-gated — they ship in this deployment.)
 
 > **Approval gate:** This is the deployment *plan* only. Execution (provisioning,
 > Docker/Nginx build, TLS, seed, tenant onboarding) begins **only after explicit
@@ -20,11 +21,11 @@ collection, customer portal) remain out of scope.
 |---|---|
 | Web portal | Next.js 15 (`apps/web`), listens `:3000`. Reads **`NEXT_PUBLIC_API_URL`** — **baked at build time**. |
 | API | NestJS 11 (`apps/api`), listens `:4000`. Global prefix `/api/v1`; health at **`/health`** (unprefixed). CORS currently open (`enableCors()`) — **must be restricted** (§4/§12). |
-| Database | PostgreSQL 16. Two roles: owner **`rmc`** (superuser — migrations/seed only) and app **`rmc_app`** (non-superuser, RLS-subject — API runtime). `rmc_app` is created by the Init migration from `APP_DB_USER`/`APP_DB_PASSWORD`. |
+| Database | PostgreSQL 16. Two roles: owner **`rmc_owner`** (superuser — migrations/seed only) and app **`rmc_app`** (non-superuser, RLS-subject — API runtime). `rmc_app` is created by the Init migration from `APP_DB_USER`/`APP_DB_PASSWORD`. |
 | Cache/queue | Redis 7. |
 | Object storage | S3-compatible (MinIO for pilot). |
 | Plant app | Electron desktop app (`apps/plant-app`), offline sync over the API. **Distributed to plant PCs**, not server-hosted. |
-| Migrations | 11, `1720000000000-Init` … `1720000010000-Indexes`. Run via `pnpm --filter @rmc/api migration:run` as the **owner** role. |
+| Migrations | 43, `1720000000000-Init` … `1720000042000-GpsTracking`. Run via `pnpm --filter @rmc/api migration:run` as the **owner** role. |
 | CI gate | `pnpm test:e2e` (34/34) — Tenant Isolation, RBAC, UAT, Security. |
 | Toolchain | Node ≥ 20 (plant-app sync engine uses Node 22 `--experimental-sqlite`), pnpm 10.33, Turborepo. |
 
@@ -59,7 +60,7 @@ Principles:
 - Only Nginx binds public ports (80/443). **Postgres/Redis/MinIO are NOT published to
   the host** in production — internal Docker network only (the dev compose publishes
   5432/6379/9000 for convenience; the prod compose will not).
-- API runs as `rmc_app`; a **separate one-shot migration step** connects as `rmc`.
+- API runs as `rmc_app`; a **separate one-shot migration step** connects as `rmc_owner`.
 - Web is a **build-time artifact** keyed to `NEXT_PUBLIC_API_URL=https://api.<domain>`;
   a domain change requires a web rebuild.
 - Browser calls the API cross-origin (`app.<domain>` → `api.<domain>`), so **CORS must
@@ -165,8 +166,8 @@ secret manager / a vault, not in shell history.
 2. Run migrations as **owner** role: `pnpm --filter @rmc/api migration:run`
    (idempotent; applies only new migrations — the Init migration also **creates the
    `rmc_app` role** from `APP_DB_USER`/`APP_DB_PASSWORD`).
-3. Verify: `SELECT name FROM migrations ORDER BY timestamp;` → 11 rows through
-   `Indexes1720000010000`; confirm `idx_users_tenant` and `idx_number_series_lookup`
+3. Verify: `SELECT name FROM migrations ORDER BY timestamp;` → 43 rows through
+   `GpsTracking1720000042000`; confirm `idx_users_tenant` and `idx_number_series_lookup`
    exist; confirm `rmc_app` is `rolsuper=false, rolbypassrls=false`.
 4. Never run `synchronize`; schema changes only via new timestamped migrations.
 
@@ -274,7 +275,7 @@ Infra:
 - [ ] `https://api.<domain>/health` → 200 `{status:"ok"}`.
 - [ ] `https://app.<domain>` loads over valid HTTPS; HTTP redirects to HTTPS.
 - [ ] Postgres/Redis/MinIO **not reachable** from the public internet.
-- [ ] Migrations = 11 rows; hardening indexes present; `rmc_app` non-superuser.
+- [ ] Migrations = 43 rows; hardening indexes present; `rmc_app` non-superuser.
 
 Application (against a scratch/pilot tenant):
 - [ ] Super-admin login; create tenant + plan; module enforcement works.
@@ -345,9 +346,9 @@ sustained 5xx.
       and sync-when-online; what to do on a sync conflict.
 - [ ] Dashboards & reports: where to find operational and financial views; Tally
       **export** (file-based in Phase 1 — no direct Tally API).
-- [ ] Scope expectations: what Phase 1 does **not** do yet (QC, GPS live tracking, live
-      e-invoice/e-way, live payment collection, customer portal) so pilot feedback is
-      framed correctly.
+- [ ] Scope expectations: what Phase 1 does **not** do yet (live e-invoice/e-way, live
+      payment collection, customer portal) so pilot feedback is framed correctly. (QC
+      and GPS live tracking are now included.)
 - [ ] Support path: how pilot users report issues and expected response during the
       pilot.
 - [ ] Quick-reference guide + a recorded walkthrough for each persona.
@@ -365,7 +366,7 @@ sustained 5xx.
 - [ ] Dockerfiles + prod compose + Nginx config authored and reviewed.
 - [ ] CORS restricted to the web origin (code change merged).
 - [ ] TLS valid for both hosts; HTTP→HTTPS redirect working.
-- [ ] Migrations applied (11); indexes present; `rmc_app` non-superuser verified.
+- [ ] Migrations applied (43); indexes present; `rmc_app` non-superuser verified.
 - [ ] Production bootstrap run (catalogs + super-admin only; **no demo tenants**).
 - [ ] Backups configured; **pre-go-live backup taken**; one restore drill passed.
 - [ ] Smoke tests (§10) all green.

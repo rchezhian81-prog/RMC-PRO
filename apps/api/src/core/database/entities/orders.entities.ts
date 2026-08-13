@@ -24,6 +24,10 @@ export class Order extends TenantScopedEntity {
   @Column({ name: 'order_date', type: 'date', nullable: true }) orderDate!: string | null;
   @Column({ name: 'required_datetime', type: 'timestamptz', nullable: true }) requiredDatetime!: Date | null;
   @Column({ name: 'estimated_order_value', type: 'numeric', precision: 16, scale: 2, default: 0 }) estimatedOrderValue!: string;
+  // GST-inclusive order value — the amount the customer actually owes, used for
+  // credit exposure so it reconciles with the quotation/invoice total. Nullable:
+  // rows created before this column fall back to estimated_order_value.
+  @Column({ name: 'estimated_order_value_incl_gst', type: 'numeric', precision: 16, scale: 2, nullable: true }) estimatedOrderValueInclGst!: string | null;
   @Column({ name: 'pricing_source', type: 'varchar', nullable: true }) pricingSource!: string | null;
   @Column({ name: 'pricing_type', type: 'varchar', default: 'credit' }) pricingType!: string;
   @Column({ name: 'credit_status', type: 'varchar', default: 'not_checked' }) creditStatus!: string;

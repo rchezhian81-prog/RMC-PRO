@@ -44,6 +44,7 @@ import { ReturnedConcrete1720000039000 } from './migrations/1720000039000-Return
 import { ImportJobs1720000040000 } from './migrations/1720000040000-ImportJobs';
 import { DocumentCorrections1720000041000 } from './migrations/1720000041000-DocumentCorrections';
 import { GpsTracking1720000042000 } from './migrations/1720000042000-GpsTracking';
+import { OrderValueInclGst1720000043000 } from './migrations/1720000043000-OrderValueInclGst';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -103,6 +104,7 @@ export const AppDataSource = new DataSource({
     ImportJobs1720000040000,
     DocumentCorrections1720000041000,
     GpsTracking1720000042000,
+    OrderValueInclGst1720000043000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
+  Company,
+  Customer,
   Order,
   OrderItem,
   Quotation,
@@ -11,6 +13,7 @@ import {
 } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from './numbering.service';
+import { summariseGst, isInterstateSupply, type QuoteLine } from '../billing/tax.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -54,6 +57,20 @@ export class OrdersDraftService {
     return quantity * rate + transport + pump + waiting;
   }
 
+  /**
+   * GST-inclusive order value for credit exposure — the same tax logic quotations
+   * use (freight is part of the taxable base), so order value, outstanding and
+   * credit-hold all reconcile with the eventual invoice. Inter/intra-state is
+   * the buyer's state vs the seller company's state.
+   */
+  private async gstInclusiveTotal(m: EntityManager, customerId: string | null, lines: QuoteLine[]): Promise<number> {
+    const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+    const customer = customerId
+      ? await m.getRepository(Customer).findOne({ where: { id: customerId } })
+      : null;
+    return summariseGst(lines, isInterstateSupply(company?.state, customer?.state)).total;
+  }
+
   /** Convert an APPROVED quotation into a draft order (handoff only). */
   fromQuotation(tenantId: string, quotationId: string, rawDto: Record<string, unknown>) {
     const dto = nullifyEmpty(rawDto);
@@ -89,6 +106,7 @@ export class OrdersDraftService {
 
       const itemRepo = m.getRepository(OrderItem);
       let total = 0;
+      const gstLines: QuoteLine[] = [];
       for (const it of items) {
         const qty = num(it.estimatedQuantity);
         total += this.lineValue(
@@ -98,6 +116,11 @@ export class OrdersDraftService {
           num(it.pumpCharge),
           num(it.waitingCharge),
         );
+        gstLines.push({
+          quantity: qty, rate: num(it.ratePerM3),
+          transport: num(it.transportCharge), pump: num(it.pumpCharge), waiting: num(it.waitingCharge),
+          gstRate: it.gstRate != null ? num(it.gstRate) : 18, gstApplicable: it.gstApplicable,
+        });
         await itemRepo.save(
           itemRepo.create({
             tenantId,
@@ -114,7 +137,11 @@ export class OrdersDraftService {
           }),
         );
       }
-      await orderRepo.update(order.id, { estimatedOrderValue: total.toFixed(2) });
+      const inclGst = await this.gstInclusiveTotal(m, quotation.customerId, gstLines);
+      await orderRepo.update(order.id, {
+        estimatedOrderValue: total.toFixed(2),
+        estimatedOrderValueInclGst: inclGst.toFixed(2),
+      });
       return this.loadFull(m, order.id);
     });
   }
@@ -162,6 +189,7 @@ export class OrdersDraftService {
 
       const itemRepo = m.getRepository(OrderItem);
       let total = 0;
+      const gstLines: QuoteLine[] = [];
       for (const line of lines) {
         const match =
           contractItems.find((c) => line.gradeId && c.gradeId === line.gradeId) ??
@@ -176,6 +204,11 @@ export class OrdersDraftService {
           num(match.pumpCharge),
           num(match.waitingCharge),
         );
+        gstLines.push({
+          quantity: qty, rate: num(match.ratePerM3),
+          transport: num(match.transportCharge), pump: num(match.pumpCharge), waiting: num(match.waitingCharge),
+          gstRate: match.gstRate != null ? num(match.gstRate) : 18, gstApplicable: match.gstApplicable,
+        });
         await itemRepo.save(
           itemRepo.create({
             tenantId,

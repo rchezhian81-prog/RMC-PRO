@@ -18,8 +18,10 @@ builds clean.
 
 The platform is ready for a **controlled pilot** with real tenants, on the explicit
 understanding that a set of intentionally-deferred integrations (live GSTN/e-invoice,
-e-way bill, GPS live tracking, QC module, direct Tally API, live payment collection,
-customer portal) are **out of Phase-1 scope** and are stubbed or export-based by design.
+e-way bill, direct Tally API, live payment collection, customer portal) are **out of
+Phase-1 scope** and are stubbed or export-based by design. (QC / cube-testing and GPS
+live vehicle tracking, originally deferred, were subsequently delivered in the
+post-Sprint-11 gap-closure work — see §9.)
 
 ---
 
@@ -52,7 +54,7 @@ Isolation is enforced in the **database**, not just the application layer:
   plans, plan-modules, migrations, etc.) that carry no tenant data.
 - The API runtime connects as **`rmc_app`**, a role that is **`rolsuper = false`** and
   **`rolbypassrls = false`** — it *cannot* bypass RLS. Migrations/seed use the owner
-  role `rmc` (superuser) only, offline from request handling.
+  role `rmc_owner` (superuser) only, offline from request handling.
 - Every request runs inside `TenantDbService.runInTenant()`, which sets the tenant
   session variable inside a transaction before any query.
 
@@ -152,10 +154,14 @@ with production-representative volumes is a pre-scale-up item (§9), not a pilot
 None of the below block a **controlled pilot**; they are the honest ledger of what is
 deferred or still to do before a wide production rollout.
 
+**Delivered since Sprint 11 (post-readiness gap-closure — built, migrated, CI-gated):**
+- QC / cube-testing module (`qc`)
+- GPS live vehicle tracking (`gps`) — location pings roll onto the dispatch's latest
+  fix and feed a live board; dispatch statuses remain manual/event-based.
+
 **Intentionally deferred (out of Phase-1 scope — by product decision):**
-- QC / cube-testing module
-- GPS live vehicle tracking (dispatch statuses are manual/event-based in Phase 1)
-- Live GSTN e-invoice / IRN and e-way bill APIs (invoices are generated locally)
+- Live GSTN e-invoice / IRN and e-way bill APIs (invoices are generated locally; the
+  payload/provider scaffolding exists but defaults to the offline provider)
 - Direct Tally API (Tally is served as an export file today)
 - Live payment-gateway collection (receipts are recorded manually)
 - Customer self-service portal

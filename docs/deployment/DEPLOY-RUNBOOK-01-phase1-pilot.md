@@ -23,7 +23,17 @@ registered domain is confirmed and execution is approved.
 ## 0. Prerequisites (operator, on your infra — NOT done here)
 - VPS (Ubuntu LTS) with Docker Engine + Compose plugin; firewall allows 22/80/443 only.
 - DNS: apex `A` → VPS IP; `www`, `app`, `api`, `admin` `CNAME` → apex (see plan §3).
-- The repo checked out on the VPS (or images built in CI and pulled).
+- The repo checked out on the VPS (or images built in CI and pulled). **Run every
+  command below from the repo root** (the working directory that contains
+  `docker/` and `scripts/`) — a stale or partial checkout is why a step like
+  `scripts/ops/verify-app.sh` reports "No such file or directory"; `git pull` first.
+
+> **Compose v2 required.** Every command uses `docker compose` (v2, a Docker plugin).
+> If you see `unknown docker command: "compose"`, your host has only the legacy
+> standalone v1 binary — either install the plugin
+> (`sudo apt-get install docker-compose-plugin`, then `docker compose version`) or
+> substitute the hyphenated `docker-compose` in each command. The plugin is preferred;
+> v1 is end-of-life.
 
 ## 1. Prepare env and domain
 ```bash
@@ -93,9 +103,9 @@ Then migrate:
 docker compose --env-file .env.production -f docker/docker-compose.prod.yml \
   run --rm migrate
 ```
-Verify: 11 migrations present; `idx_users_tenant` + `idx_number_series_lookup` exist;
-`rmc_app` is `rolsuper=false, rolbypassrls=false`; **no demo tenants**; the configured
-super admin exists.
+Verify: 43 migrations present (through `GpsTracking1720000042000`); `idx_users_tenant`
++ `idx_number_series_lookup` exist; `rmc_app` is `rolsuper=false, rolbypassrls=false`;
+**no demo tenants**; the configured super admin exists.
 
 ## 5. Bring up app + proxy
 ```bash

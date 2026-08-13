@@ -345,3 +345,45 @@ The company owner bypasses permission checks by design, so every probe allows
 for that login; the script says so rather than pretending it proved anything.
 
 Exit `0` when access matches the user's permissions exactly, `1` otherwise.
+
+---
+
+# Ops — TLS certificate renewal (containerized nginx)
+
+The pilot cert (`mixnovas.com` + `www`/`app`/`api`/`admin`) is issued with
+certbot's **standalone** authenticator, which binds port 80 itself to answer the
+ACME challenge. In production that port belongs to the **nginx container**, so an
+unaided `certbot renew` fails with *"port 80 in use"* and the cert lapses. The
+host `certbot.timer` runs twice daily, but without help it would fail every time
+a renewal is actually due.
+
+`install-cert-renew-hooks.sh` fixes this by installing two renewal hooks:
+
+- **pre-hook** — `docker compose … stop nginx` (frees port 80 for standalone)
+- **post-hook** — `docker compose … start nginx` (loads the freshly-issued cert)
+
+certbot runs these hooks **only when a certificate is actually due** for renewal
+(within ~30 days of expiry), so nginx is untouched on the routine twice-daily
+checks — a few seconds of downtime roughly every 60 days, not every run.
+
+### Install
+
+```bash
+sudo ./scripts/ops/install-cert-renew-hooks.sh            # install (no downtime)
+sudo ./scripts/ops/install-cert-renew-hooks.sh --verify   # install + dry-run test
+```
+
+Writes `/etc/letsencrypt/renewal-hooks/{pre,post}/10-rmc-*-nginx.sh`. Idempotent —
+re-running overwrites the same two files and migrates any hand-installed
+predecessors so nginx is never stopped/started twice per renewal. It does **not**
+touch the certbot timer or the renewal config.
+
+**Safety:** the script refuses to install unless a cert using the `standalone`
+authenticator exists. If you ever switch the cert to a **webroot/nginx**
+authenticator, these hooks would be wrong (webroot needs nginx *up* to serve the
+challenge) — remove them: `rm -f /etc/letsencrypt/renewal-hooks/{pre,post}/10-rmc-*-nginx.sh`.
+
+`--verify` runs `certbot renew --dry-run` against Let's Encrypt **staging**
+(no rate-limit impact, real cert untouched); it briefly stops+starts nginx
+(~10-15s HTTPS blip) to prove the whole path. A green dry-run — *"Congratulations,
+all simulated renewals succeeded"* — means renewals are now hands-off.

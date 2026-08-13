@@ -29,6 +29,7 @@ import { FleetModule } from './fleet/fleet.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { ImportModule } from './imports/import.module';
 import { CorrectionModule } from './corrections/correction.module';
+import { GpsModule } from './gps/gps.module';
 
 /**
  * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
@@ -71,6 +72,7 @@ import { CorrectionModule } from './corrections/correction.module';
     ExpensesModule,
     ImportModule,
     CorrectionModule,
+    GpsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

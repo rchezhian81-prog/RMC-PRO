@@ -9,7 +9,7 @@ import {
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Ruler, ArrowLeftRight,
-  Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine,
+  Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine, Navigation,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
@@ -118,6 +118,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Dispatch',
     items: [
       { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, module: 'dispatch' },
+      { href: '/app/dispatch/tracking', label: 'Live Tracking', icon: <Navigation size={IS} />, perm: 'gps.view', module: 'gps' },
       { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, module: 'dispatch' },
     ],
   },

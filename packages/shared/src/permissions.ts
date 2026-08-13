@@ -104,6 +104,11 @@ export const PERMISSIONS = {
   // Document corrections (F2). Recording an amendment to a posted document.
   DOCUMENT_CORRECTIONS_MANAGE: 'document_corrections.manage',
 
+  // GPS tracking. Recording a vehicle's location fix is a separate key from
+  // viewing the live board — the device/driver posts, everyone can watch.
+  GPS_VIEW: 'gps.view',
+  GPS_RECORD: 'gps.record',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -195,6 +200,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW, P.ORDERS_CREATE, P.ORDERS_CONFIRM,
     P.CREDIT_HOLD_APPROVE, P.APPROVALS_ACT,
     P.BATCH_TICKETS_CREATE, P.BATCHING_INGEST, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
+    P.GPS_VIEW, P.GPS_RECORD,
     P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE, P.WEIGHBRIDGE_DEVICE,
     P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
@@ -229,6 +235,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.MASTERS_VIEW, P.ORDERS_VIEW,
     P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
     P.FLEET_VIEW, P.FLEET_FUEL_RECORD,
+    P.GPS_VIEW, P.GPS_RECORD,
     P.REPORTS_VIEW, P.WHATSAPP_SEND,
   ],
 
@@ -262,6 +269,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
   [ROLE_KEYS.FLEET_MANAGER]: [
     P.MASTERS_VIEW, P.MASTERS_EDIT, P.DISPATCH_UPDATE_STATUS,
     P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
+    P.GPS_VIEW,
     P.REPORTS_VIEW,
   ],
 

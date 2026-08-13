@@ -32,6 +32,11 @@ export class Dispatch extends TenantScopedEntity {
   /** Why concrete came back / was short-loaded (Plan B3). */
   @Column({ name: 'return_reason', type: 'varchar', nullable: true }) returnReason!: string | null;
   @Column({ name: 'delay_reason', type: 'varchar', nullable: true }) delayReason!: string | null;
+  /** Latest GPS fix, denormalised from `dispatch_location_pings` for the board. */
+  @Column({ name: 'last_latitude', type: 'numeric', precision: 10, scale: 6, nullable: true }) lastLatitude!: string | null;
+  @Column({ name: 'last_longitude', type: 'numeric', precision: 10, scale: 6, nullable: true }) lastLongitude!: string | null;
+  @Column({ name: 'last_location_at', type: 'timestamptz', nullable: true }) lastLocationAt!: Date | null;
+  @Column({ name: 'last_speed_kmph', type: 'numeric', precision: 6, scale: 2, nullable: true }) lastSpeedKmph!: string | null;
 }
 
 /** Delivery challan / e-ticket (Doc 6 §11.2). */

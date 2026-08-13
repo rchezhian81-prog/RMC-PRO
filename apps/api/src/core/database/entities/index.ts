@@ -23,3 +23,4 @@ export * from './fleet.entities';
 export * from './expenses.entities';
 export * from './import.entities';
 export * from './correction.entities';
+export * from './gps.entities';

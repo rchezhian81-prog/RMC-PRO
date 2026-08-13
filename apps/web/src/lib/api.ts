@@ -934,6 +934,13 @@ export const numberingApi = {
   reserve: (b: Record<string, unknown>) => post('/sync/number-reservations', b),
 };
 
+// ---- GPS tracking (the `gps` module) ----
+export const gpsApi = {
+  live: () => apiFetch<Row[]>('/gps/live'),
+  track: (dispatchId: string) => apiFetch<Row>(`/gps/dispatches/${dispatchId}/track`),
+  ping: (dispatchId: string, b: Record<string, unknown>) => post(`/gps/dispatches/${dispatchId}/ping`, b),
+};
+
 // ---- Document corrections / amendment trail (Plan F2) ----
 export const correctionsApi = {
   list: (documentType?: string, documentId?: string) => {

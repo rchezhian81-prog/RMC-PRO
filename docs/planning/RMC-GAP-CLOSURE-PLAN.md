@@ -362,6 +362,27 @@ entity (old→new value, reason, corrected-by) for edits to posted documents.
 **Roadmap complete.** All twelve gap-closure epics (D1, A1–A4, B1–B3, C1, D2–D4,
 E1, F1–F2) are delivered and merged.
 
+### Post-roadmap · GPS tracking (`gps` module) ✅
+Beyond the gap-closure plan, the catalog's `gps` module was activated on the
+existing dispatch/vehicle data. `dispatch_location_pings` (migration
+`1720000042000`, FORCE-RLS) records a truck's position over time, and the latest
+fix is denormalised onto `dispatches` (`last_latitude` / `last_longitude` /
+`last_location_at` / `last_speed_kmph`) for a cheap board read. Pure, unit-tested
+helpers (`gps.util.ts`): `isValidLatLng`, `haversineKm`, `trackSummary` (path +
+straight-line distance) and `etaMinutes`. Endpoints (`@RequireModule('gps')`):
+`POST /gps/dispatches/:id/ping` (record a fix, refused once the trip is
+cancelled/rejected), `GET /gps/live` (in-transit board with last position + age),
+`GET /gps/dispatches/:id/track` (ordered fixes + path summary). New permissions
+`gps.view` / `gps.record` granted to dispatch-manager + plant-manager (record) and
+fleet-manager (view). Web: a Dispatch → Live Tracking screen (auto-refreshing
+board, per-load track, external map links, manual ping). **Tests:** 10 helper
+unit cases (`gps-util.test.mjs`) + a `gps-tracking` integration test
+(ping → dispatch latest → live board → track path → validation + closed-trip
+rejection).
+
+Still unbuilt from the catalog: `driver_app` (phase 2) and `customer_portal`
+(phase 4).
+
 ---
 
 ## Definition of Done (every epic)

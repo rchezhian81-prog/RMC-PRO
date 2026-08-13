@@ -62,6 +62,7 @@ const TESTS = [
   'test/returned-concrete.test.mjs',
   'test/bulk-import.test.mjs',
   'test/numbering-corrections.test.mjs',
+  'test/gps-tracking.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/metrics.test.mjs',
@@ -141,6 +142,8 @@ async function main() {
   // `offline_sync` gates the reserved-number pool — enable it for the F2
   // numbering-corrections test (the reserve endpoint lives on the sync module).
   await api('PUT', `/platform/tenants/${tenant.id}/modules/offline_sync`, { isEnabled: true }, su);
+  // `gps` (phase-2) — enable it for the GPS live-tracking test.
+  await api('PUT', `/platform/tenants/${tenant.id}/modules/gps`, { isEnabled: true }, su);
   console.log(`pilot tenant ${tenant.id} + owner ready`);
 
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], {

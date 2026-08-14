@@ -1,0 +1,7 @@
+
+# Playwright visual-regression runtime artifacts (baselines under visual/__screenshots__ ARE committed)
+/visual/.auth/
+/visual/.output/
+/visual/.report/
+/test-results/
+/playwright-report/

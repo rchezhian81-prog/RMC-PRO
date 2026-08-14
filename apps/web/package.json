@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"(no tests yet)\" && exit 0"
+    "test": "echo \"(no unit tests in web; visual regression via test:visual)\" && exit 0",
+    "test:visual": "node visual/serve-stack.mjs",
+    "test:visual:update": "node visual/serve-stack.mjs --update-snapshots"
   },
   "dependencies": {
     "@rmc/shared": "workspace:*",
@@ -17,6 +19,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",

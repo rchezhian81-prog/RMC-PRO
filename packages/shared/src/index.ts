@@ -6,3 +6,4 @@ export * from './modules-catalog';
 export * from './tenant-status';
 export * from './password';
 export * from './validation';
+export * from './ui-flag';

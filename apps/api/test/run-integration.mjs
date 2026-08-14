@@ -58,6 +58,7 @@ const TESTS = [
   'test/weighbridge-hardware.test.mjs',
   'test/batching-integration.test.mjs',
   'test/pilot-gaps.test.mjs',
+  'test/platform-audit.test.mjs',
   'test/fleet-maintenance.test.mjs',
   'test/expense-capture.test.mjs',
   'test/returned-concrete.test.mjs',

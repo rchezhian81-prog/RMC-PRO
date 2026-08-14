@@ -26,8 +26,8 @@ export class PlatformController {
   }
 
   @Post('tenants')
-  createTenant(@Body() dto: CreateTenantDto) {
-    return this.svc.createTenant(dto);
+  createTenant(@CurrentUser() u: AuthUser, @Body() dto: CreateTenantDto) {
+    return this.svc.createTenant(dto, u.userId);
   }
 
   @Get('tenants/:id')
@@ -62,8 +62,8 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/users')
-  createTenantUser(@Param('id') id: string, @Body() dto: CreateTenantUserDto) {
-    return this.svc.createTenantUser(id, dto);
+  createTenantUser(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: CreateTenantUserDto) {
+    return this.svc.createTenantUser(id, dto, u.userId);
   }
 
   @Put('tenants/:id/modules/:moduleKey')

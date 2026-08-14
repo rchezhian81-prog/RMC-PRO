@@ -173,8 +173,10 @@ export const AUDIT_ACTIONS = {
   USER_REACTIVATE: 'user.reactivate',
   USER_PASSWORD_RESET: 'user.password_reset',
   USER_ROLE_CHANGE: 'user.role_change',
+  TENANT_CREATE: 'tenant.create',
   TENANT_STATUS_CHANGE: 'tenant.status_change',
   TENANT_MODULE_CHANGE: 'tenant.module_change',
   TENANT_PLAN_ASSIGN: 'tenant.plan_assign',
   TENANT_DATA_EXPORT: 'tenant.data_export',
+  TENANT_USER_CREATE: 'tenant_user.create',
 } as const;

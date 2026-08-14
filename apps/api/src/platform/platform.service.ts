@@ -67,7 +67,7 @@ export class PlatformService {
     }));
   }
 
-  async createTenant(dto: CreateTenantDto) {
+  async createTenant(dto: CreateTenantDto, actorUserId?: string) {
     const repo = this.ds.getRepository(Tenant);
     if (await repo.findOne({ where: { tenantCode: dto.tenantCode } })) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Tenant code exists' });
@@ -91,6 +91,20 @@ export class PlatformService {
       // A company-profile row so the Company screen can save and invoices have a
       // plant state for GST — seeded with the tenant name, ready to complete.
       await provisionTenantCompany(m, tenant.id, tenant.tenantName);
+    });
+    // Bringing a whole company into existence is a platform decision worth a
+    // permanent record — written into the new tenant's own trail (append-only),
+    // so its owners can see who provisioned them and when. Metadata only: no
+    // secret is involved, and the audit service redacts anything sensitive.
+    await this.audit.record({
+      tenantId: tenant.id,
+      actorUserId: actorUserId ?? null,
+      action: AUDIT_ACTIONS.TENANT_CREATE,
+      entityType: 'tenant',
+      entityId: tenant.id,
+      entityLabel: tenant.tenantName,
+      summary: `Created company ${tenant.tenantName} (${tenant.tenantCode})`,
+      details: { tenantCode: tenant.tenantCode, planId: dto.planId ?? null },
     });
     return this.getTenant(tenant.id);
   }
@@ -136,7 +150,7 @@ export class PlatformService {
    * that, the tenant manages its own users from inside the portal. Tenant-scoped
    * rows are written through `runInTenant` so PostgreSQL RLS accepts them.
    */
-  async createTenantUser(tenantId: string, dto: CreateTenantUserDto) {
+  async createTenantUser(tenantId: string, dto: CreateTenantUserDto, actorUserId?: string) {
     await this.getTenant(tenantId);
     const email = dto.email.trim().toLowerCase();
     // Email is globally unique (login is by email), so this clash check is
@@ -155,7 +169,7 @@ export class PlatformService {
     await this.planLimits.assertCanAddUser(tenantId);
     const passwordHash = bcrypt.hashSync(dto.password, 10);
 
-    return this.db.runInTenant(tenantId, async (m) => {
+    const created = await this.db.runInTenant(tenantId, async (m) => {
       // Covers tenants created before roles were provisioned at creation. It
       // only fills gaps, so for a tenant created today this finds nothing to do.
       // Crucially it grants the tenant permission set, not the whole catalogue:
@@ -185,6 +199,22 @@ export class PlatformService {
       await m.save(m.create(UserRole, { tenantId, userId: user.id, roleId: ownerRole.id }));
       return { id: user.id, name: user.name, email: user.email, userType: user.userType };
     });
+    // A platform-minted login into a tenant is exactly the action that most
+    // needs a trail — it is the nearest thing to support impersonation. Recorded
+    // into the tenant's own append-only log, with the password deliberately
+    // absent (only the login identity + role are kept; the audit service also
+    // redacts any sensitive field defensively).
+    await this.audit.record({
+      tenantId,
+      actorUserId: actorUserId ?? null,
+      action: AUDIT_ACTIONS.TENANT_USER_CREATE,
+      entityType: 'user',
+      entityId: created.id,
+      entityLabel: created.email,
+      summary: `Created login ${created.email} with the Company Owner role`,
+      details: { email: created.email, name: created.name, role: ROLE_KEYS.COMPANY_OWNER },
+    });
+    return created;
   }
 
   async getTenant(id: string) {

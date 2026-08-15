@@ -19,6 +19,13 @@ WORKDIR /app
 FROM base AS build
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# UI V2 rollout flag (PRESENTATION ONLY), baked into the bundle at build time like
+# every NEXT_PUBLIC_* value. Defaults to empty -> resolveUiV2() reads OFF, so the
+# canonical production image is byte-for-byte the current UI. Only a build that
+# explicitly passes --build-arg NEXT_PUBLIC_UI_V2=1 (the -uiv2 preview image)
+# ships the Deep Violet Matte skin. A runtime env var can NOT flip this.
+ARG NEXT_PUBLIC_UI_V2
+ENV NEXT_PUBLIC_UI_V2=$NEXT_PUBLIC_UI_V2
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/

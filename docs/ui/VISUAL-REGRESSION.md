@@ -41,8 +41,14 @@ an unstable animation frame.
 | Orders | `/app/orders` | table + status filter |
 | Production — Batch Queue | `/app/production/batch-queue` | operational screen |
 | Billing — Invoices | `/app/billing/invoices` | financial table |
-| Audit Trail | `/app/audit` | permission-gated read view |
+| Roles & Permissions | `/app/roles` | RBAC / permission surface |
 | Devices & Sync | `/app/devices` | offline / sync indicators |
+
+> The **Audit Trail** screen is intentionally excluded from pixel baselines: it
+> renders per-run event timestamps (non-deterministic), which make a screenshot
+> baseline flaky. Its behavior is covered by the API integration/e2e tests. In
+> general, data-dependent screens with live timestamps are functional-tested, not
+> pixel-baselined.
 
 Coverage spans the owner's protected surfaces: routes, navigation shell, tables,
 forms/dialogs (via MasterCrud), an operational screen, a financial screen,

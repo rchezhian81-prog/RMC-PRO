@@ -113,8 +113,11 @@ async function main() {
   // 4) build the web pointed at THIS API origin (so CSP connect-src + the client
   // BASE both target http://localhost:4000), flag OFF, then serve the standalone
   // build the way the production image does.
+  // UI_V2_BUILD selects the skin baked into the build: '' (OFF, current UI) or
+  // '1' (ON, Deep Violet Matte). Paired with VISUAL_MODE so ON writes '-v2' shots.
+  const UI_V2 = process.env.UI_V2_BUILD ?? '';
   step('build web', 'node_modules/.bin/next', ['build'], WEB_DIR, {
-    NEXT_PUBLIC_API_URL: `http://localhost:${E.API_PORT}`, NEXT_PUBLIC_UI_V2: '',
+    NEXT_PUBLIC_API_URL: `http://localhost:${E.API_PORT}`, NEXT_PUBLIC_UI_V2: UI_V2,
   });
   // next.config uses output:'standalone' (the production image runs it that way),
   // so `next start` won't serve it — run the standalone server, first copying the
@@ -125,7 +128,7 @@ async function main() {
   step('standalone: public', 'bash', ['-c', `d="${path.join(WEB_DIR, 'public')}"; [ -d "$d" ] && cp -rT "$d" "${path.join(SA, 'public')}" || true`], ROOT);
   webProc = spawn('node', [path.join(SA, 'server.js')], {
     env: { ...process.env, NODE_ENV: 'production', PORT: WEB_PORT, HOSTNAME: '127.0.0.1',
-      NEXT_PUBLIC_API_URL: `http://localhost:${E.API_PORT}`, NEXT_PUBLIC_UI_V2: '' },
+      NEXT_PUBLIC_API_URL: `http://localhost:${E.API_PORT}`, NEXT_PUBLIC_UI_V2: UI_V2 },
     stdio: 'inherit',
   });
   await waitHealthy(`http://localhost:${WEB_PORT}/api/health`, 'WEB');
@@ -139,6 +142,7 @@ async function main() {
       ...process.env,
       WEB_BASE_URL: `http://localhost:${WEB_PORT}`,
       VISUAL_LOGIN: OWNER_LOGIN, VISUAL_PASSWORD: OWNER_PW,
+      VISUAL_MODE: process.env.VISUAL_MODE ?? 'off',
       PW_CHROME_PATH: process.env.PW_CHROME_PATH ?? '',
     },
   });

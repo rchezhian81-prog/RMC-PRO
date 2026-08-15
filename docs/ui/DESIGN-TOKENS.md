@@ -59,12 +59,29 @@ Focus: `--mn-focus` is the primary violet (a stronger, AA-visible ring than the
 prior lavender), consumed by the existing `:focus-visible` rule. Reduced motion:
 the v2 motion durations collapse to `0.01ms` under `prefers-reduced-motion`.
 
-## Per-module migration order (later PRs, not this one)
+## Per-module migration order
 
-Reach-first, one PR each, all flag-gated + parity-matrixed:
-`ui/*` primitives (`Button`/`Card`/`Table`/`Badge`/`Field`/`States`) → `MasterCrud`
-→ app shell + sidebar (+ glass command bar) → Owner Command Centre (dashboard) →
-one operational module at a time → responsive/a11y hardening.
+Reach-first, one PR each, all flag-gated + visual-regression-checked:
+
+1. **`ui/*` primitives** (`Button`/`Card`/`Table`/`Badge`/`Field`/`States`) — **done (PR-UI2)**
+2. `MasterCrud`
+3. app shell + sidebar (+ glass command bar)
+4. Owner Command Centre (dashboard)
+5. one operational module at a time
+6. responsive / a11y hardening
+
+### PR-UI2 — primitive treatments (landed)
+
+The Deep Violet Matte finish for the shared `mn-*` kit ships as CSS scoped to
+`:root[data-ui='v2']` in `globals.css` — **no component markup changed**. Colours,
+surfaces and radius already re-tint via the PR-UI1 token swap; PR-UI2 adds only what
+tokens can't express on their own: token-timed **motion** + a tactile press on
+buttons, a selective **violet glow** on the primary action, a soft matte lift on
+secondary, a tone-matched **hairline** on badges, a violet **focus halo** layered
+under the AA outline on inputs, and a **shimmer** skeleton. The refinements are
+restrained and largely interactive (hover/press/focus/loading), so the static
+full-page visual baselines stay within tolerance; flag-OFF is byte-identical
+(OFF visual suite 32/32).
 
 ## Rollback
 

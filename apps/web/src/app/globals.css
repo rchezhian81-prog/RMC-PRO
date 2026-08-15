@@ -517,3 +517,71 @@ main:focus-visible {
     z-index: 35;
   }
 }
+
+/* ============================================================================
+   UI V2 — primitive treatments (PR-UI2)  (flag-gated: <html data-ui="v2">)
+   The Deep Violet Matte structural finish for the shared mn-* kit, built on the
+   PR-UI1 tokens. Every rule here is scoped to :root[data-ui='v2'], so the base
+   rules above are untouched and the flag-OFF UI is byte-for-byte unchanged.
+   No component markup changes — these restyle the same classes the primitives
+   (Button/Card/Table/Badge/Field/States) already render. Colours/surfaces/radius
+   already re-tint via the PR-UI1 token swap; this adds only what tokens cannot
+   express on their own: motion, selective glow, hairlines, focus halo, shimmer.
+   ============================================================================ */
+
+/* Buttons — token-timed motion + a tactile press. Selective violet glow marks
+   the primary action; a soft matte lift gives secondary depth. */
+:root[data-ui='v2'] .mn-btn {
+  transition: background var(--mn-dur-micro) var(--mn-ease),
+    border-color var(--mn-dur-micro) var(--mn-ease), color var(--mn-dur-micro) var(--mn-ease),
+    box-shadow var(--mn-dur-micro) var(--mn-ease), transform var(--mn-dur-micro) var(--mn-ease);
+}
+:root[data-ui='v2'] .mn-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+:root[data-ui='v2'] .mn-btn-primary {
+  box-shadow: var(--mn-glow-primary);
+}
+:root[data-ui='v2'] .mn-btn-secondary {
+  box-shadow: var(--mn-shadow-1);
+}
+
+/* Inputs/selects — a violet focus halo layered UNDER the existing AA outline.
+   The outline stays the accessible indicator; the halo is decorative only, so a
+   browser without color-mix simply shows the outline (no a11y regression). */
+:root[data-ui='v2'] .mn-input:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-primary) 18%, transparent);
+}
+
+/* Badge — a tone-matched hairline lifts the pill off its tint. box-sizing is
+   border-box globally, so the outer size is unchanged. */
+:root[data-ui='v2'] .mn-badge {
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+
+/* Skeleton — a matte left-to-right shimmer instead of the flat opacity pulse. */
+@keyframes mn-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+:root[data-ui='v2'] .mn-skel {
+  background: linear-gradient(
+    90deg,
+    var(--mn-surface-2) 0%,
+    var(--mn-border) 50%,
+    var(--mn-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: mn-shimmer 1.3s ease-in-out infinite;
+}
+/* Honour reduced-motion: this v2 rule out-specifies the base .mn-skel { animation:none }
+   reduced-motion rule, so it must restate the stop itself. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ui='v2'] .mn-skel {
+    animation: none;
+  }
+}

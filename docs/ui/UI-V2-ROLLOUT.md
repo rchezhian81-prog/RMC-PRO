@@ -40,22 +40,47 @@ missing value can never flip tenants onto an unfinished skin.
 
 ## How UI V2 is activated later (without affecting existing tenants)
 
-UI V2 stays OFF in production until separately approved. To turn it on for an
-**environment** (the supported PR-UI0 mechanism):
+UI V2 stays OFF in production until separately approved. Because the flag is a
+build-time `NEXT_PUBLIC_*` constant, **a runtime env var can never flip it** — the
+value is inlined into the bundle at `pnpm build`, so it can only change by building
+a new image. `apps/web/Dockerfile` declares `ARG/ENV NEXT_PUBLIC_UI_V2` for exactly
+this purpose.
 
-1. Build the web image with the flag set as a build-arg **and** provide the same
-   value to the running web service, so the inlined client value and the server
-   runtime value agree:
-   - In `.github/workflows/build-images.yml`, pass `NEXT_PUBLIC_UI_V2=1` as a
-     `build-arg` for the `web` image (alongside `NEXT_PUBLIC_API_URL`).
-   - Set `NEXT_PUBLIC_UI_V2=1` in the web service environment (`.env.production`)
-     so the server component reads the same value.
-2. Rebuild + redeploy the web image. Existing tenants are unaffected until the
-   image carrying the flag is deployed.
+### Build a flag-ON image (`ui_v2` workflow input)
 
-This is an **all-or-nothing, per-environment** switch — appropriate for a staged
-rollout (e.g. flip it on in a staging environment first). It changes only the
-`data-ui` attribute; every server-side business decision is unchanged.
+`.github/workflows/build-images.yml` exposes a `ui_v2` boolean on **Run workflow**.
+When ON it passes `--build-arg NEXT_PUBLIC_UI_V2=1` to the web build and **suffixes
+every tag with `-uiv2`** (e.g. `rmc-web:<sha>-uiv2`), so a flag-ON image can never
+overwrite the canonical flag-OFF `sha`/`branch`/`latest` tags; the API image (flag
+is web-only) is skipped. Default is OFF, so ordinary production builds are unchanged.
+
+### Preview it safely (isolated side container — recommended)
+
+Run the `-uiv2` image as a **separate** container on an alternate port, pointed at
+the same API, and reach it over an SSH tunnel. The live `web` service (flag-OFF)
+is never touched, so no tenant sees the unfinished skin:
+
+```bash
+docker pull ghcr.io/<repo_lc>/rmc-web:<sha>-uiv2
+docker run -d --name rmc-web-uiv2 -p 127.0.0.1:3001:3000 \
+  -e NEXT_PUBLIC_UI_V2=1 ghcr.io/<repo_lc>/rmc-web:<sha>-uiv2
+# from your laptop:  ssh -L 3001:127.0.0.1:3001 <server>  → http://localhost:3001
+docker rm -f rmc-web-uiv2   # tear down when done
+```
+
+Authenticated XHR from `localhost:3001` may hit the API's CORS allowlist (the API
+only allows the live web origin); the login screen and shell render the V2 skin
+regardless, and the preview origin can be added to the allowlist briefly if a
+click-through of authenticated screens is needed.
+
+### Promote to an environment (all-or-nothing)
+
+To actually turn V2 on for an environment (not just preview): build the `-uiv2`
+image as above, then point that environment's web service at it **and** set
+`NEXT_PUBLIC_UI_V2=1` in its `.env.production` (server-runtime value agreeing with
+the inlined client value). This is a per-environment switch — flip it in staging
+first. It changes only the `data-ui` attribute; every server-side business
+decision is unchanged.
 
 ### Per-tenant rollout (future, not built here)
 

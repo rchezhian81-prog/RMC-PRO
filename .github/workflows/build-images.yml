@@ -12,6 +12,11 @@ on:
         description: 'Public API origin baked into the web bundle (build-time)'
         required: false
         default: 'https://api.mixnovas.com'
+      ui_v2:
+        description: 'PREVIEW: bake UI V2 flag ON into the web image. Tags get a -uiv2 suffix so the canonical flag-OFF images (sha/branch/latest) are never overwritten, and the API image is skipped. Leave OFF for production builds.'
+        type: boolean
+        required: false
+        default: false
   push:
     tags: ['v*'] # release tags cut an image set
 
@@ -59,6 +64,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.REPO_LC }}/rmc-${{ matrix.image }}
+          # ui_v2 preview builds suffix EVERY tag with -uiv2, so a flag-ON image
+          # can never overwrite the canonical flag-OFF sha/branch/latest tags.
+          flavor: ${{ inputs.ui_v2 && 'suffix=-uiv2' || '' }}
           tags: |
             type=sha,prefix=,format=short
             type=ref,event=branch
@@ -66,6 +74,9 @@ jobs:
             type=raw,value=latest
 
       - name: Build & push
+        # On a ui_v2 preview run the API image is irrelevant (the flag is
+        # web-only), so skip it — only the -uiv2 web image is produced.
+        if: ${{ !(inputs.ui_v2 && matrix.image == 'api') }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -74,20 +85,30 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # NEXT_PUBLIC_API_URL is consumed only by the web Dockerfile.
-          build-args: ${{ matrix.image == 'web' && format('NEXT_PUBLIC_API_URL={0}', env.NEXT_PUBLIC_API_URL) || '' }}
+          # NEXT_PUBLIC_UI_V2 is passed only on a web preview run; empty otherwise
+          # (blank build-arg lines are ignored), so production builds are unchanged.
+          build-args: |
+            ${{ matrix.image == 'web' && format('NEXT_PUBLIC_API_URL={0}', env.NEXT_PUBLIC_API_URL) || '' }}
+            ${{ (matrix.image == 'web' && inputs.ui_v2) && 'NEXT_PUBLIC_UI_V2=1' || '' }}
           provenance: false
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
       - name: Deploy hint (job summary)
+        if: ${{ !(inputs.ui_v2 && matrix.image == 'api') }}
         run: |
           SHA_SHORT="$(git rev-parse --short HEAD)"
+          SUFFIX="${{ inputs.ui_v2 && '-uiv2' || '' }}"
           {
             echo "### rmc-${{ matrix.image }} pushed to GHCR"
             echo ""
             echo "Immutable ref (deploy this, not \`latest\`):"
             echo '```'
-            echo "${REGISTRY}/${REPO_LC}/rmc-${{ matrix.image }}:${SHA_SHORT}"
+            echo "${REGISTRY}/${REPO_LC}/rmc-${{ matrix.image }}:${SHA_SHORT}${SUFFIX}"
             echo '```'
-            echo "On VM3: set \`IMAGE_TAG=${SHA_SHORT}\` + \`IMAGE_REPO_${{ matrix.image }}\` in .env.production, then \`docker compose ... pull && up -d\`."
+            if [ -n "$SUFFIX" ]; then
+              echo "PREVIEW image (UI V2 flag ON). Run it as an ISOLATED side container — do NOT point the live web service at it."
+            else
+              echo "On VM3: set \`IMAGE_TAG=${SHA_SHORT}\` + \`IMAGE_REPO_${{ matrix.image }}\` in .env.production, then \`docker compose ... pull && up -d\`."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

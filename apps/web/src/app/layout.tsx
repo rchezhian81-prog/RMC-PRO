@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import localFont from 'next/font/local';
+import { isUiV2 } from '@/lib/ui-flag';
 
 /* Vendored (self-hosted) at build time via next/font/local — NO build-time or
    runtime external calls. The four variable woff2 subsets under ./fonts/ are the
@@ -45,10 +46,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   // Light default (long-hour ops readability); dark is opt-in via a toggle (Phase B).
+  //
+  // UI V2 rollout flag (PRESENTATION ONLY): when NEXT_PUBLIC_UI_V2 is on, stamp
+  // data-ui="v2" on <html> so the Deep Violet Matte skin (added in a later PR
+  // under :root[data-ui='v2']) applies. Resolved server-side from a build-time
+  // constant, so it is identical on the client — no hydration mismatch, no flash.
+  // When OFF the attribute is omitted entirely and the current UI is unchanged.
+  const uiV2 = isUiV2();
   return (
     <html
       lang="en"
       data-theme="light"
+      {...(uiV2 ? { 'data-ui': 'v2' } : {})}
       className={`${inter.variable} ${spaceGrotesk.variable} ${notoSans.variable} ${notoSansTamil.variable}`}
     >
       <body>{children}</body>

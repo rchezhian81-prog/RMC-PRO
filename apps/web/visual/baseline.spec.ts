@@ -27,18 +27,24 @@ async function stabilize(page: Page) {
   await page.waitForTimeout(400);
 }
 
+// VISUAL_MODE selects the snapshot set: 'off' compares against the flag-OFF
+// baselines (proving the default UI did NOT move); 'v2' is the flag-ON Deep
+// Violet Matte set (its own '-v2' baselines).
+const MODE = process.env.VISUAL_MODE === 'v2' ? 'v2' : 'off';
+const SUFX = MODE === 'v2' ? '-v2' : '';
+
 async function capture(page: Page, name: string, path: string) {
   // Light (default)
   await page.addInitScript(() => window.localStorage.setItem('mn-theme', 'light'));
   await page.goto(path, { waitUntil: 'networkidle' });
   await stabilize(page);
-  await expect(page).toHaveScreenshot(`${name}-light.png`, { fullPage: true });
+  await expect(page).toHaveScreenshot(`${name}-light${SUFX}.png`, { fullPage: true });
 
   // Dark (toggle persisted in localStorage, reload so the shell re-reads it)
   await page.evaluate(() => window.localStorage.setItem('mn-theme', 'dark'));
   await page.reload({ waitUntil: 'networkidle' });
   await stabilize(page);
-  await expect(page).toHaveScreenshot(`${name}-dark.png`, { fullPage: true });
+  await expect(page).toHaveScreenshot(`${name}-dark${SUFX}.png`, { fullPage: true });
 }
 
 // Authenticated app surfaces (owner session via storageState).
@@ -48,7 +54,11 @@ const SCREENS: Array<{ name: string; path: string }> = [
   { name: 'orders', path: '/app/orders' },
   { name: 'production-batch-queue', path: '/app/production/batch-queue' },
   { name: 'billing-invoices', path: '/app/billing/invoices' },
-  { name: 'audit-trail', path: '/app/audit' },
+  // Roles (permissions surface) — deterministic. NOTE: the Audit Trail screen is
+  // deliberately NOT baselined: it renders per-run event timestamps, which are
+  // non-deterministic and make a pixel baseline flaky. Its behavior is covered by
+  // the API integration/e2e tests instead.
+  { name: 'roles', path: '/app/roles' },
   { name: 'devices-sync', path: '/app/devices' },
 ];
 

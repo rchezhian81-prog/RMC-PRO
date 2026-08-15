@@ -37,6 +37,16 @@ const notoSansTamil = localFont({
   weight: '100 900',
   display: 'swap',
 });
+/* Display face for UI V2 ("Deep Violet Matte"). preload:false so it is fetched
+   only when a rule actually uses it — i.e. only under [data-ui="v2"] — so the
+   default (flag-OFF) UI downloads nothing extra and stays byte-identical. */
+const outfit = localFont({
+  src: './fonts/Outfit-latin.woff2',
+  variable: '--font-outfit',
+  weight: '100 900',
+  display: 'swap',
+  preload: false,
+});
 
 export const metadata: Metadata = {
   title: 'Mix Nova RMC Software',
@@ -58,7 +68,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       lang="en"
       data-theme="light"
       {...(uiV2 ? { 'data-ui': 'v2' } : {})}
-      className={`${inter.variable} ${spaceGrotesk.variable} ${notoSans.variable} ${notoSansTamil.variable}`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${notoSans.variable} ${notoSansTamil.variable} ${outfit.variable}`}
     >
       <body>{children}</body>
     </html>

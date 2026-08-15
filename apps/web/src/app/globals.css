@@ -100,6 +100,114 @@
   --mn-info-tint: #241833;
 }
 
+/* ============================================================================
+   UI V2 — "Deep Violet Matte Intelligence"  (flag-gated: <html data-ui="v2">)
+   PR-UI1 foundation. Re-tunes the SAME --mn-* tokens (plus a few new ones) ONLY
+   when data-ui="v2" is present, so the current default UI is completely
+   unchanged. Deep violet matte surfaces, restrained spatial depth, soft
+   multi-layer shadows, precise borders, selective violet glow. Glass tokens are
+   defined here but applied to command surfaces in a later PR.
+   ============================================================================ */
+:root[data-ui='v2'] {
+  /* surfaces — soft cool-grey ground, solid matte cards */
+  --mn-bg: #f6f7fb;
+  --mn-surface: #ffffff;
+  --mn-surface-2: #f4f3fa;
+  --mn-border: rgba(20, 20, 45, 0.08);
+  --mn-border-strong: rgba(20, 20, 45, 0.14);
+  --mn-text: #1c1c2e;
+  --mn-muted: #56566a; /* AA on white */
+  --mn-subtle: #8a8a99;
+  --mn-primary: #6c2bd9;
+  --mn-primary-hover: #5a1fb8;
+  --mn-on-primary: #ffffff;
+  --mn-focus: #6c2bd9;
+
+  --mn-success: #0f6f34; /* AA on success-tint */
+  --mn-success-tint: #e7f6ed;
+  --mn-warning: #8a4409; /* AA on warning-tint */
+  --mn-warning-tint: #fbefd6;
+  --mn-danger: #b91c1c;
+  --mn-danger-tint: #fbe4e4;
+  --mn-info: #6c2bd9;
+  --mn-info-tint: #f1eafb;
+
+  /* matte elevation — soft, multi-layer, low-reflection */
+  --mn-shadow-1: 0 1px 2px rgba(20, 20, 45, 0.05);
+  --mn-shadow-2: 0 4px 16px rgba(20, 20, 45, 0.06);
+  --mn-shadow-card: 0 1px 2px rgba(20, 20, 45, 0.05), 0 4px 16px rgba(20, 20, 45, 0.06);
+  --mn-shadow-pop: 0 8px 30px rgba(20, 20, 45, 0.12);
+  --mn-glow-primary: 0 6px 20px rgba(108, 43, 217, 0.18); /* selected/primary only */
+
+  /* glass — command surfaces ONLY (applied in a later PR, never on tables/forms) */
+  --mn-glass: rgba(255, 255, 255, 0.9);
+  --mn-glass-border: rgba(20, 20, 45, 0.08);
+
+  /* spacing scale (new; components migrate onto it incrementally) */
+  --mn-space-1: 4px;
+  --mn-space-2: 8px;
+  --mn-space-3: 12px;
+  --mn-space-4: 16px;
+  --mn-space-5: 20px;
+  --mn-space-6: 24px;
+  --mn-space-7: 32px;
+  --mn-space-8: 40px;
+
+  /* motion — restrained; collapsed under reduced-motion (below) */
+  --mn-dur-micro: 160ms;
+  --mn-dur-std: 240ms;
+  --mn-dur-drawer: 300ms;
+  --mn-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* display face → Outfit (vendored, self-hosted); body stays Inter + Noto */
+  --mn-font-display: var(--font-outfit), 'Outfit', var(--font-space-grotesk), 'Space Grotesk',
+    system-ui, sans-serif;
+}
+
+/* Deep violet-black dark — matte, not flat black */
+:root[data-ui='v2'][data-theme='dark'] {
+  --mn-bg: #17172a;
+  --mn-surface: #21213a;
+  --mn-surface-2: #272743;
+  --mn-border: rgba(138, 79, 255, 0.18); /* ambient violet edge */
+  --mn-border-strong: rgba(138, 79, 255, 0.3);
+  --mn-text: #e8e6f2;
+  --mn-muted: #a8a6c0; /* AA on dark surface */
+  --mn-subtle: #8b89a8;
+  --mn-primary: #8a4fff;
+  --mn-primary-hover: #9e6bff;
+  --mn-on-primary: #ffffff;
+  --mn-focus: #8a4fff;
+
+  --mn-success: #34d399;
+  --mn-success-tint: #10371f;
+  --mn-warning: #fbbf24;
+  --mn-warning-tint: #3a2a08;
+  --mn-danger: #f87171;
+  --mn-danger-tint: #3a1414;
+  --mn-info: #b78cff;
+  --mn-info-tint: #241833;
+
+  --mn-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --mn-shadow-2: 0 4px 20px rgba(0, 0, 0, 0.34);
+  --mn-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.34);
+  --mn-shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --mn-glow-primary: 0 6px 22px rgba(138, 79, 255, 0.28);
+
+  --mn-glass: rgba(33, 33, 58, 0.72);
+  --mn-glass-border: rgba(138, 79, 255, 0.22);
+}
+
+/* Reduced motion — collapse the v2 motion tokens so components that later read
+   them inherit the preference automatically. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ui='v2'] {
+    --mn-dur-micro: 0.01ms;
+    --mn-dur-std: 0.01ms;
+    --mn-dur-drawer: 0.01ms;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

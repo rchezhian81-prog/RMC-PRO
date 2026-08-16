@@ -8,7 +8,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 export default function MixDesignsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -19,6 +19,7 @@ export default function MixDesignsPage() {
   const [mat, setMat] = useState({ materialId: '', targetQuantity: '', tolerancePercentage: '2' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [m, g, mt] = await Promise.all([mixDesignsApi.list(), crud('concrete-grades').list(), crud('materials').list()]);
@@ -27,7 +28,9 @@ export default function MixDesignsPage() {
     setMaterials(mt);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
@@ -137,7 +140,9 @@ export default function MixDesignsPage() {
       </Card>
 
       <Card title="Mix designs" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

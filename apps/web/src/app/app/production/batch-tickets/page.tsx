@@ -7,16 +7,21 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function BatchTicketsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    batchTicketsApi.list().then(setRows).catch((e) => setError(String(e)));
+    batchTicketsApi
+      .list()
+      .then(setRows)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   return (
@@ -27,7 +32,9 @@ export default function BatchTicketsPage() {
       </p>
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
       <Card title="Batch tickets" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

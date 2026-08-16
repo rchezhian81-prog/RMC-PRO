@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { productionReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -14,6 +14,7 @@ export default function ProductionReportsPage() {
   const [variance, setVariance] = useState<Row[]>([]);
   const [consumption, setConsumption] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -26,7 +27,9 @@ export default function ProductionReportsPage() {
       setTotals(s.totals as Row);
       setVariance(v);
       setConsumption(c);
-    })().catch((e) => setError(String(e)));
+    })()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   return (
@@ -35,7 +38,9 @@ export default function ProductionReportsPage() {
       {error && <ErrorState message={error} />}
 
       <Card title={`Production summary${totals ? ` — ${fmt(totals.batches)} batches · ${fmt(totals.producedM3)} m³` : ''}`} padded={false}>
-        {byGrade.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : byGrade.length ? (
           <Table>
             <thead>
               <tr>
@@ -62,7 +67,9 @@ export default function ProductionReportsPage() {
       </Card>
 
       <Card title="Material consumption" padded={false}>
-        {consumption.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={2} />
+        ) : consumption.length ? (
           <Table>
             <thead>
               <tr>
@@ -85,7 +92,9 @@ export default function ProductionReportsPage() {
       </Card>
 
       <Card title="Variance report (tolerance breaches)">
-        {variance.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : variance.length ? (
           variance.map((v, i) => (
             <div key={i} style={{ marginBottom: i < variance.length - 1 ? 16 : 0 }}>
               <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 8 }}>

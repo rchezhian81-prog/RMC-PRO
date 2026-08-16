@@ -992,3 +992,35 @@ main:focus-visible {
     flex: 1 1 auto;
   }
 }
+
+/* ---- Global offline / connectivity notice ---- */
+.mn-offline-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--mn-warning);
+  background: var(--mn-warning-tint);
+  color: var(--mn-warning);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--mn-shadow-pop);
+  /* Nothing to click — let taps pass through so it never blocks the UI. */
+  pointer-events: none;
+  animation: mn-pop-in var(--mn-dur-std, 200ms) var(--mn-ease, ease) forwards;
+}
+.mn-offline-banner svg {
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-offline-banner {
+    animation-duration: 0.01ms;
+  }
+}

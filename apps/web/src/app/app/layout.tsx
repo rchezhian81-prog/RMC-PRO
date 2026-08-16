@@ -17,6 +17,7 @@ import { Logo } from '../../components/ui/Logo';
 import { ConfirmProvider } from '../../components/ui/ConfirmDialog';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
+import { OfflineBanner } from '../../components/OfflineBanner';
 
 const IS = 18;
 
@@ -344,6 +345,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      <OfflineBanner />
     </div>
     </ConfirmProvider>
   );

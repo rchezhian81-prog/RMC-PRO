@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import {
   Plus, Download, Filter, Trash2, Check, X, Truck, Package, IndianRupee, ClipboardList,
   Lock, Ticket, PackageCheck, ReceiptText, Clock, Wallet, TrendingDown, AlertTriangle,
-  MonitorSmartphone, ChevronRight,
+  MonitorSmartphone, ChevronRight, WifiOff,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { StatCard } from '../../components/ui/StatCard';
@@ -214,6 +214,18 @@ export function UiKitGallery() {
             <div style={{ fontSize: 12.5, color: 'var(--mn-muted)', marginBottom: 8 }}>List loading — TableSkeleton (U3, gates the empty-flash)</div>
             <TableSkeleton cols={5} rows={4} />
           </Surface>
+        </Section>
+
+        <Section
+          title="Connectivity notice (U4)"
+          note="Global offline banner — appears pinned to the bottom of the shell only while the browser reports no connection. Presentation only; it warns, it does not queue or block. Shown static here for the baseline."
+        >
+          <div style={{ display: 'flex' }}>
+            <div className="mn-offline-banner" style={{ position: 'static', transform: 'none', maxWidth: 'none' }}>
+              <WifiOff size={16} aria-hidden />
+              <span>You&rsquo;re offline — changes may not save until the connection returns.</span>
+            </div>
+          </div>
         </Section>
 
         <Section title="Drawer & dialog" note="Interactive triggers (Esc + backdrop close, focus managed) and a static preview of each surface for the baseline.">

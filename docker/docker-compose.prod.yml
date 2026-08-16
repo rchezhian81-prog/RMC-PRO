@@ -141,11 +141,7 @@ services:
     networks: [rmc_internal]
 
   web:
-    # IMAGE_TAG_WEB lets the web image run a DIFFERENT tag than api/IMAGE_TAG —
-    # used to flip the UI V2 skin on/off independently (e.g. IMAGE_TAG_WEB=<sha>-uiv2)
-    # without rebuilding or touching the api image. Unset -> falls back to IMAGE_TAG,
-    # so normal deploys are unchanged. Roll back the skin by clearing IMAGE_TAG_WEB.
-    image: ${IMAGE_REPO_WEB:-rmc-web}:${IMAGE_TAG_WEB:-${IMAGE_TAG:-latest}}
+    image: ${IMAGE_REPO_WEB:-rmc-web}:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: apps/web/Dockerfile

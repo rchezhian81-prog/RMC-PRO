@@ -7,7 +7,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -18,6 +18,7 @@ export default function StockAdjustmentsPage() {
   const [form, setForm] = useState({ plantId: '', materialId: '', quantity: '', direction: 'increase', reason: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [b, m, p] = await Promise.all([stockApi.balances(), crud('materials').list(), crud('plants').list()]);
@@ -26,7 +27,7 @@ export default function StockAdjustmentsPage() {
     setPlants(p);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
   }, []);
 
   async function adjust(e: FormEvent) {
@@ -117,7 +118,9 @@ export default function StockAdjustmentsPage() {
       </div>
 
       <Card title="Current balances" padded={false}>
-        {balances.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : balances.length ? (
           <Table>
             <thead>
               <tr>

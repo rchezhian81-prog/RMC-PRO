@@ -1,0 +1,102 @@
+name: Visual regression
+
+# Manual only. This is a heavy job (boots Postgres + API + a real web build and
+# screenshots every route across 4 viewports × 2 themes), so it is opt-in via the
+# Actions “Run workflow” button and never runs on push/PR. It does not alter or
+# gate the existing CI (ci.yml) or the release image build (build-images.yml).
+#
+#   • First time (or after intended UI changes): run with update_snapshots = true,
+#     download the "visual-snapshots" artifact, and commit the PNGs under
+#     apps/web/visual/__screenshots__/ — those become the reference set.
+#   • Thereafter: run with update_snapshots = false to DIFF the live UI against the
+#     committed baselines; the "visual-report" artifact holds the HTML diff report.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Skin to render'
+        type: choice
+        default: v2
+        options: [v2, off]
+      update_snapshots:
+        description: 'Write/refresh baselines instead of diffing'
+        type: boolean
+        default: false
+
+jobs:
+  visual:
+    name: visual regression (${{ github.event.inputs.mode }})
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rmc_owner
+          POSTGRES_PASSWORD: ownerpw
+          POSTGRES_DB: rmc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rmc_owner -d rmc"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: rmc
+      POSTGRES_USER: rmc_owner
+      POSTGRES_PASSWORD: ownerpw
+      APP_DB_USER: rmc_app
+      APP_DB_PASSWORD: apppw
+      JWT_ACCESS_SECRET: ci-access-secret-0123456789abcdefghij
+      JWT_REFRESH_SECRET: ci-refresh-secret-0123456789abcdefghij
+      # v2 → build the Deep Violet Matte skin and diff its -v2 baselines;
+      # off → the flag-OFF default UI.
+      VISUAL_MODE: ${{ github.event.inputs.mode }}
+      UI_V2_BUILD: ${{ github.event.inputs.mode == 'v2' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # CI runners have no pre-installed Chromium; fetch the one Playwright pins.
+      - name: Install Playwright Chromium
+        run: pnpm --filter @rmc/web exec playwright install --with-deps chromium
+
+      # serve-stack runs the built API (migrate/seed/boot) — build it and shared.
+      - name: Build shared + api
+        run: pnpm --filter @rmc/shared build && pnpm --filter @rmc/api build
+
+      # One shot: migrate + seed a fresh tenant, boot the API, build + serve the
+      # real web, then run the Playwright baseline. serve-stack forwards extra
+      # args straight to `playwright test`.
+      - name: Visual stack + Playwright
+        run: node apps/web/visual/serve-stack.mjs ${{ github.event.inputs.update_snapshots == 'true' && '--update-snapshots' || '' }}
+
+      - name: Upload HTML diff report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-report
+          path: apps/web/visual/.report
+          retention-days: 14
+
+      # Only meaningful when generating: the fresh PNGs to review + commit.
+      - name: Upload generated snapshots
+        if: ${{ always() && github.event.inputs.update_snapshots == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-snapshots
+          path: apps/web/visual/__screenshots__
+          retention-days: 14

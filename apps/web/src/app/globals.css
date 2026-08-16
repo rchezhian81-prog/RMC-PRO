@@ -464,6 +464,11 @@ main:focus-visible {
   background: var(--mn-surface);
   border-bottom: 1px solid var(--mn-border);
 }
+/* Content column padding lives here (not inline) so the breakpoints below can
+   reclaim width on phones. */
+.mn-main {
+  padding: 28px;
+}
 .mn-iconbtn {
   display: inline-flex;
   align-items: center;
@@ -966,6 +971,20 @@ main:focus-visible {
 
 /* ---- responsive: tablet + mobile ---- */
 @media (max-width: 768px) {
+  .mn-main {
+    padding: 18px;
+  }
+  /* Tighten the top bar and drop the non-essential email echo (identity still
+     shows on My Account). The bar is a single non-wrapping flex row, so an
+     over-wide email readout would otherwise push the row into a horizontal
+     scroll on phones. */
+  .mn-topbar {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .mn-topbar-email {
+    display: none;
+  }
   .mn-cmdbar {
     padding: 11px 13px;
   }
@@ -979,6 +998,9 @@ main:focus-visible {
   }
 }
 @media (max-width: 480px) {
+  .mn-main {
+    padding: 14px 13px;
+  }
   .mn-drawer {
     width: 100%;
     border-left: 0;

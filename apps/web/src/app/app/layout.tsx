@@ -318,7 +318,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <div style={{ flex: 1 }} />
           <ThemeToggle />
-          <span style={{ fontSize: 13, color: 'var(--mn-muted)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="mn-topbar-email" style={{ fontSize: 13, color: 'var(--mn-muted)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {email}
           </span>
           <Button
@@ -341,7 +341,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             Logout
           </Button>
         </header>
-        <main id="main" tabIndex={-1} style={{ padding: 28, maxWidth: 1120, width: '100%' }}>
+        <main id="main" className="mn-main" tabIndex={-1} style={{ maxWidth: 1120, width: '100%' }}>
           {children}
         </main>
       </div>

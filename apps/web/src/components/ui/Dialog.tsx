@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useFocusTrap } from '../../lib/use-focus-trap';
 
 /**
  * Generic modal surface — the reusable command dialog the app's confirm/prompt
  * and future forms build on. Escape closes; backdrop click closes; focus moves
- * into the panel and restores on close. Pop-in collapses under reduced-motion.
+ * into the panel, is trapped while open, and restores on close. Pop-in collapses
+ * under reduced-motion.
  */
 export function Dialog({
   open,
@@ -24,6 +26,7 @@ export function Dialog({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;

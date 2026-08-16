@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useFocusTrap } from '../../lib/use-focus-trap';
 
 /**
  * Right-side command drawer. Escape closes; a backdrop click closes; focus moves
- * into the panel on open and is restored to the trigger on close. Slide-in
- * collapses under prefers-reduced-motion. Full-width on phones.
+ * into the panel on open, is trapped while open, and is restored to the trigger
+ * on close. Slide-in collapses under prefers-reduced-motion. Full-width on phones.
  */
 export function Drawer({
   open,
@@ -25,6 +26,7 @@ export function Drawer({
 }) {
   const panelRef = useRef<HTMLElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;

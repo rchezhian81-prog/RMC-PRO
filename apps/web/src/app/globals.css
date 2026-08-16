@@ -585,3 +585,410 @@ main:focus-visible {
     animation: none;
   }
 }
+
+/* ============================================================================
+   UI V2 — U1 command-surface foundation
+   ----------------------------------------------------------------------------
+   Shared premium command surfaces (command/filter/toolbar/search/summary/drawer/
+   dialog/alert) used by later module PRs. Design: crisp matte, controlled depth,
+   refined violet — glass-adjacent surfaces are NEAR-OPAQUE (no heavy transparency,
+   no gradients, no glow beyond the existing primary). Base tokens/classes are
+   defined on plain :root so the components also render with the flag OFF; the
+   premium finish is scoped to :root[data-ui='v2']. NO existing screen references
+   these new names, so the flag-OFF visual baselines stay byte-for-byte identical.
+   ============================================================================ */
+
+/* ---- surface / elevation tokens (base defaults; literal so no dependency) ---- */
+:root {
+  --mn-surface-command: var(--mn-surface, #fff);
+  --mn-border-command: var(--mn-border, rgba(20, 20, 45, 0.08));
+  --mn-elev-command: 0 1px 2px rgba(20, 20, 45, 0.05), 0 6px 16px -10px rgba(20, 20, 45, 0.16);
+  --mn-hover: var(--mn-surface-2, #f4f3fa);
+  --mn-selected: var(--mn-purple-50, #f2ecff);
+  --mn-selected-border: var(--mn-primary, #6c2bd9);
+  --mn-scrim: rgba(16, 17, 33, 0.4);
+}
+/* v2: matte command surface — a hair of cool tint, a hairline, a soft low lift. */
+:root[data-ui='v2'] {
+  --mn-surface-command: #fbfaff;
+  --mn-border-command: var(--mn-border-strong);
+  --mn-elev-command: var(--mn-shadow-1);
+  --mn-hover: #f2f1fa;
+  --mn-selected: color-mix(in srgb, var(--mn-primary) 8%, var(--mn-surface));
+  --mn-selected-border: color-mix(in srgb, var(--mn-primary) 42%, var(--mn-border-strong));
+  --mn-scrim: rgba(20, 20, 45, 0.38);
+}
+:root[data-ui='v2'][data-theme='dark'] {
+  --mn-surface-command: #1d1d33;
+  --mn-hover: #23233f;
+  --mn-selected: color-mix(in srgb, var(--mn-primary) 20%, var(--mn-surface));
+  --mn-selected-border: color-mix(in srgb, var(--mn-primary) 55%, var(--mn-border-strong));
+  --mn-scrim: rgba(0, 0, 0, 0.55);
+}
+
+/* ---- Surface primitive ---- */
+.mn-surface {
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+}
+.mn-surface-raised {
+  box-shadow: var(--mn-elev-command);
+}
+.mn-surface-command {
+  background: var(--mn-surface-command);
+  border-color: var(--mn-border-command);
+  box-shadow: var(--mn-elev-command);
+}
+
+/* ---- Command bar: page-level title + actions ---- */
+.mn-cmdbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--mn-surface-command);
+  border: 1px solid var(--mn-border-command);
+  border-radius: var(--mn-radius-lg);
+  box-shadow: var(--mn-elev-command);
+}
+.mn-cmdbar-sticky {
+  position: sticky;
+  top: 12px;
+  z-index: 15;
+}
+.mn-cmdbar-title {
+  margin: 0;
+  font-family: var(--mn-font-display);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.mn-cmdbar-sub {
+  font-size: 13px;
+  color: var(--mn-muted);
+  margin-top: 2px;
+}
+.mn-cmdbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+/* v2: glass-adjacent — a subtle saturate on the sticky bar, still near-opaque. */
+:root[data-ui='v2'] .mn-cmdbar-sticky {
+  background: color-mix(in srgb, var(--mn-surface-command) 92%, transparent);
+  backdrop-filter: saturate(1.15);
+}
+
+/* ---- Toolbar: table/selection actions ---- */
+.mn-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md);
+}
+.mn-toolbar-count {
+  font-size: 13px;
+  color: var(--mn-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mn-toolbar-spacer {
+  margin-left: auto;
+}
+.mn-toolbar-selected {
+  border-color: var(--mn-selected-border);
+  background: var(--mn-selected);
+}
+
+/* ---- Filter bar ---- */
+.mn-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md);
+}
+.mn-filterbar .mn-input {
+  width: auto;
+  min-width: 150px;
+}
+
+/* ---- Search surface ---- */
+.mn-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  min-width: 200px;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border-strong);
+  border-radius: var(--mn-radius-md);
+  color: var(--mn-muted);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mn-search:focus-within {
+  border-color: var(--mn-primary);
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 1px;
+}
+:root[data-ui='v2'] .mn-search:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mn-primary) 18%, transparent);
+}
+.mn-search input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 9px 0;
+  font-size: 14px;
+  font-family: var(--mn-font-body);
+  color: var(--mn-text);
+  width: 100%;
+}
+.mn-search-clear {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: var(--mn-subtle);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+}
+.mn-search-clear:hover {
+  color: var(--mn-primary);
+}
+
+/* ---- Summary strip (KPI row) ---- */
+.mn-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 12px;
+}
+
+/* ---- Drawer ---- */
+.mn-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--mn-scrim);
+  opacity: 0;
+  animation: mn-fade-in var(--mn-dur-std, 200ms) var(--mn-ease, ease) forwards;
+}
+.mn-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 61;
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--mn-surface);
+  border-left: 1px solid var(--mn-border);
+  box-shadow: var(--mn-shadow-pop, -12px 0 40px -18px rgba(20, 20, 45, 0.4));
+  transform: translateX(100%);
+  animation: mn-slide-in-right var(--mn-dur-drawer, 300ms) var(--mn-ease, ease) forwards;
+}
+.mn-drawer-head,
+.mn-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--mn-border);
+}
+.mn-drawer-title,
+.mn-modal-title {
+  margin: 0;
+  font-family: var(--mn-font-display);
+  font-weight: 600;
+  font-size: 16px;
+}
+.mn-drawer-body {
+  padding: 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+.mn-drawer-foot,
+.mn-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--mn-border);
+}
+
+/* ---- Dialog / modal ---- */
+.mn-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--mn-scrim);
+  opacity: 0;
+  animation: mn-fade-in var(--mn-dur-std, 200ms) var(--mn-ease, ease) forwards;
+}
+.mn-modal {
+  width: min(480px, 100%);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  box-shadow: var(--mn-shadow-pop, 0 20px 60px rgba(0, 0, 0, 0.3));
+  animation: mn-pop-in var(--mn-dur-std, 200ms) var(--mn-ease, ease) forwards;
+}
+.mn-modal-body {
+  padding: 18px;
+  overflow-y: auto;
+}
+
+/* ---- Alert / approval surface ---- */
+.mn-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: var(--mn-radius-md);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-surface);
+}
+.mn-alert-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.mn-alert-body {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+}
+.mn-alert-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.mn-alert-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.mn-alert-success {
+  border-color: var(--mn-success);
+  background: var(--mn-success-tint);
+  color: var(--mn-success);
+}
+.mn-alert-warning {
+  border-color: var(--mn-warning);
+  background: var(--mn-warning-tint);
+  color: var(--mn-warning);
+}
+.mn-alert-danger {
+  border-color: var(--mn-danger);
+  background: var(--mn-danger-tint);
+  color: var(--mn-danger);
+}
+.mn-alert-info {
+  border-color: var(--mn-info);
+  background: var(--mn-info-tint);
+  color: var(--mn-info);
+}
+
+/* ---- shared interactive row (hover/selected/disabled) ---- */
+.mn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--mn-radius-md);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.mn-row:hover {
+  background: var(--mn-hover);
+}
+.mn-row-selected {
+  background: var(--mn-selected);
+  box-shadow: inset 2px 0 0 var(--mn-selected-border);
+}
+.mn-row[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ---- animations (collapsed under reduced-motion) ---- */
+@keyframes mn-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes mn-slide-in-right {
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes mn-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-drawer-scrim,
+  .mn-drawer,
+  .mn-modal-scrim,
+  .mn-modal {
+    animation-duration: 0.01ms;
+  }
+  :root[data-ui='v2'] .mn-cmdbar-sticky {
+    backdrop-filter: none;
+  }
+}
+
+/* ---- responsive: tablet + mobile ---- */
+@media (max-width: 768px) {
+  .mn-cmdbar {
+    padding: 11px 13px;
+  }
+  .mn-cmdbar-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .mn-search {
+    min-width: 0;
+    width: 100%;
+  }
+}
+@media (max-width: 480px) {
+  .mn-drawer {
+    width: 100%;
+    border-left: 0;
+  }
+  .mn-filterbar .mn-input,
+  .mn-filterbar .mn-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .mn-cmdbar-actions .mn-btn {
+    flex: 1 1 auto;
+  }
+}

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Loader2, Inbox, AlertTriangle } from 'lucide-react';
+import { Loader2, Inbox, AlertTriangle, Lock } from 'lucide-react';
 
 /** Inline loading spinner + label. */
 export function Loading({ label = 'Loading…' }: { label?: string }) {
@@ -77,6 +77,39 @@ export function ErrorState({ message, action }: { message: string; action?: Reac
       <AlertTriangle size={18} aria-hidden />
       <span style={{ flex: 1 }}>{message}</span>
       {action}
+    </div>
+  );
+}
+
+/** Permission-denied state — for a surface the signed-in user may not access. */
+export function PermissionDenied({
+  message = 'You don’t have permission to view this.',
+}: {
+  message?: string;
+}) {
+  return (
+    <div
+      role="status"
+      style={{ display: 'grid', placeItems: 'center', gap: 8, padding: '40px 20px', textAlign: 'center' }}
+    >
+      <span
+        style={{
+          display: 'inline-grid',
+          placeItems: 'center',
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: 'var(--mn-surface-2)',
+          color: 'var(--mn-muted)',
+        }}
+        aria-hidden
+      >
+        <Lock size={22} />
+      </span>
+      <div style={{ fontFamily: 'var(--mn-font-display)', fontWeight: 600, fontSize: 16, color: 'var(--mn-text)' }}>
+        Restricted
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--mn-muted)', maxWidth: 360 }}>{message}</div>
     </div>
   );
 }

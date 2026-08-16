@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Plus, Download, Filter, Trash2, Check, X, Truck, Package, IndianRupee, ClipboardList } from 'lucide-react';
+import {
+  Plus, Download, Filter, Trash2, Check, X, Truck, Package, IndianRupee, ClipboardList,
+  Lock, Ticket, PackageCheck, ReceiptText, Clock, Wallet, TrendingDown, AlertTriangle,
+  MonitorSmartphone, ChevronRight,
+} from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { StatCard } from '../../components/ui/StatCard';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
@@ -40,6 +44,45 @@ export function UiKitGallery() {
         <p style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--mn-subtle)', fontWeight: 600, margin: '0 0 18px' }}>
           UI V2 · U1 command-surface kit
         </p>
+
+        <Section
+          title="U2 — Dashboard command centre (harness preview)"
+          note="The real /app/dashboard route, re-laid on the U1 kit — command bar + KPI strip + command-surface funnel. Figures here are placeholders; live alerts/insights render on the route."
+        >
+          <div style={{ display: 'grid', gap: 16 }}>
+            <CommandBar title="Dashboard" subtitle="Live operations overview — Mix Nova RMC Software" />
+            <AlertSurface tone="warning" title="2 credit holds pending approval" actions={<Button variant="ghost" size="sm">Review</Button>}>
+              Orders ORD-2041, ORD-2044 exceed their customer credit limit.
+            </AlertSurface>
+            <SummaryStrip>
+              <StatCard label="Confirmed orders" value="128" icon={<ClipboardList size={16} />} tone="success" />
+              <StatCard label="Credit holds" value="2" icon={<Lock size={16} />} tone="warning" />
+              <StatCard label="Batch tickets" value="46" icon={<Ticket size={16} />} tone="info" />
+              <StatCard label="Dispatches active" value="7" icon={<Truck size={16} />} tone="info" />
+              <StatCard label="Uninvoiced" value="12" icon={<PackageCheck size={16} />} tone="info" />
+              <StatCard label="Invoices issued" value="94" icon={<ReceiptText size={16} />} />
+              <StatCard label="Outstanding" value="₹18,40,000.00" icon={<Clock size={16} />} tone="warning" />
+              <StatCard label="Receipts total" value="₹52,10,000.00" icon={<Wallet size={16} />} tone="success" />
+              <StatCard label="Low stock" value="3" icon={<TrendingDown size={16} />} tone="warning" />
+              <StatCard label="Negative stock" value="0" icon={<AlertTriangle size={16} />} />
+              <StatCard label="Devices" value="9" icon={<MonitorSmartphone size={16} />} />
+            </SummaryStrip>
+            <Surface variant="command" padded>
+              <h2 style={{ margin: '0 0 12px', fontFamily: 'var(--mn-font-display)', fontSize: 15, letterSpacing: '-0.01em' }}>Order-to-cash funnel</h2>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {[['Leads', 64], ['Quotations', 38], ['Confirmed', 128], ['Batch tickets', 46], ['Dispatches', 7], ['Delivered', 35], ['Invoiced', 94]].map(([label, val], i, a) => (
+                  <div key={label as string} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div className="mn-surface" style={{ boxShadow: 'var(--mn-elev-command)', borderRadius: 'var(--mn-radius-md)', padding: '10px 16px', textAlign: 'center', minWidth: 96 }}>
+                      <div style={{ fontFamily: 'var(--mn-font-display)', fontSize: 20, fontWeight: 700 }}>{val as number}</div>
+                      <div style={{ fontSize: 11, color: 'var(--mn-muted)', marginTop: 2 }}>{label as string}</div>
+                    </div>
+                    {i < a.length - 1 && <ChevronRight size={16} color="var(--mn-subtle)" />}
+                  </div>
+                ))}
+              </div>
+            </Surface>
+          </div>
+        </Section>
 
         <Section title="Command bar" note="Page title + subtitle, right-aligned actions. Sticky variant is glass-adjacent (near-opaque).">
           <CommandBar

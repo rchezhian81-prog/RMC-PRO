@@ -1,8 +1,12 @@
 # UI V2 ("Deep Violet Matte Intelligence") — rollout flag & rollback
 
-PR-UI0 adds the **presentation-only** flag that later UI PRs build behind. It ships
-**OFF**, so nothing about the current production UI changes until UI V2 is
-separately built with the flag on and approved.
+> **Status: V2 is LIVE in production.** Rolled out via the staged runbook
+> (`docs/deployment/UI-V2-ROLLOUT-RUNBOOK.md`), then made the default web build in
+> Stage 5. The `NEXT_PUBLIC_UI_V2` flag is retained as the **presentation-only
+> lever** — now defaulting **ON** — and as the emergency flag-OFF path.
+
+This doc describes the presentation-only flag the UI PRs build behind, how it
+resolves, and how to turn it OFF in an emergency.
 
 ## What the flag is
 
@@ -38,13 +42,16 @@ missing value can never flip tenants onto an unfinished skin.
   (First Load JS shared = 102 kB, unchanged); `@playwright/test` is a
   devDependency and is never shipped.
 
-## How UI V2 is activated later (without affecting existing tenants)
+## How UI V2 ships (now the default)
 
-UI V2 stays OFF in production until separately approved. Because the flag is a
-build-time `NEXT_PUBLIC_*` constant, **a runtime env var can never flip it** — the
-value is inlined into the bundle at `pnpm build`, so it can only change by building
-a new image. `apps/web/Dockerfile` declares `ARG/ENV NEXT_PUBLIC_UI_V2` for exactly
-this purpose.
+**As of Stage 5, `apps/web/Dockerfile` defaults `NEXT_PUBLIC_UI_V2=1`, so the normal
+production image ships V2.** The flag is a build-time `NEXT_PUBLIC_*` constant
+inlined at `pnpm build`; a runtime env var can never flip it. The web service tracks
+the standard `IMAGE_TAG` — the temporary `IMAGE_TAG_WEB` override used during the
+canary rollout has been removed.
+
+The preview mechanics below remain available for future UI work (isolated flag-OFF
+or experimental images); they are no longer needed for normal releases.
 
 ### Build a flag-ON image (`ui_v2` workflow input)
 
@@ -52,7 +59,9 @@ this purpose.
 When ON it passes `--build-arg NEXT_PUBLIC_UI_V2=1` to the web build and **suffixes
 every tag with `-uiv2`** (e.g. `rmc-web:<sha>-uiv2`), so a flag-ON image can never
 overwrite the canonical flag-OFF `sha`/`branch`/`latest` tags; the API image (flag
-is web-only) is skipped. Default is OFF, so ordinary production builds are unchanged.
+is web-only) is skipped. Since Stage 5 the Dockerfile defaults this ON, so this
+input is now **redundant for normal releases** — it remains only for suffixed
+experimental builds.
 
 ### Preview it safely (isolated side container — recommended)
 
@@ -95,18 +104,17 @@ is wanted later, the existing entitlement channel is the natural home:
 
 This is documented as the future path only; PR-UI0 does not build it.
 
-## Rollback procedure (instant)
+## Rollback procedure (emergency flag-OFF)
 
-Because the default is OFF and the new skin is purely additive CSS behind
-`data-ui="v2"`:
+V2 is the default — purely additive CSS behind `data-ui="v2"`. To revert to the
+flag-OFF UI:
 
-- **If UI V2 is not yet enabled** (PR-UI0 state): there is nothing to roll back —
-  the flag is OFF and the UI is unchanged. Reverting the PR-UI0 merge is a clean
-  no-op on rendering.
-- **If UI V2 was enabled in an environment and needs reverting:** set
-  `NEXT_PUBLIC_UI_V2` back to empty/`0` (unset the build-arg and the service env),
-  rebuild + redeploy the web image. The `data-ui="v2"` attribute disappears and
-  the current UI returns immediately. No data, API, schema, RBAC, or workflow
-  change is involved — it is a presentation revert only.
-- **Code-level rollback:** reverting the PR restores the prior `layout.tsx` and
-  removes the flag entirely; no migration or backend change is affected.
+- **Fastest — redeploy the last flag-OFF image:** set `IMAGE_TAG` to the last
+  release built **before** Stage 5 (e.g. `df7cca1`, flag-OFF) and `pull && up -d`.
+  The `data-ui="v2"` attribute disappears immediately. No data/API/schema/RBAC/
+  workflow change — presentation only. This is the tested rollback target, kept
+  available in GHCR.
+- **Build a flag-OFF image:** `docker build --build-arg NEXT_PUBLIC_UI_V2=0 …`
+  produces a flag-OFF web image at the current commit; deploy it via `IMAGE_TAG`.
+- **Code-level:** reverting the UI PRs restores the prior `layout.tsx`; no migration
+  or backend change is affected.

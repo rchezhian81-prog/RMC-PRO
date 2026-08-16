@@ -9,7 +9,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -25,6 +25,7 @@ export default function InvoicesPage() {
   const [dueDate, setDueDate] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [msg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [inv, c] = await Promise.all([invoicesApi.list(), crud('customers').list()]);
@@ -32,7 +33,9 @@ export default function InvoicesPage() {
     setCustomers(c);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function loadBillable(cid: string) {
@@ -155,7 +158,9 @@ export default function InvoicesPage() {
       </div>
 
       <Card title="Invoices" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

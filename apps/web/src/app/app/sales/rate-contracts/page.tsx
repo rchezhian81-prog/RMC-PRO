@@ -9,13 +9,14 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 export default function RateContractsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [customers, setCustomers] = useState<Row[]>([]);
   const [form, setForm] = useState({ customerId: '', validFrom: '', validTo: '', paymentTerms: '', transportTerms: '' });
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [rc, c] = await Promise.all([rateContractsApi.list(), crud('customers').list()]);
@@ -23,7 +24,9 @@ export default function RateContractsPage() {
     setCustomers(c);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function create(e: FormEvent) {
@@ -81,7 +84,9 @@ export default function RateContractsPage() {
       </div>
 
       <Card title="Rate contracts" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

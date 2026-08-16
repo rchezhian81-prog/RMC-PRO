@@ -6,7 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -14,9 +14,14 @@ export default function OrderDraftsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    orderDraftsApi.list().then(setRows).catch((e) => setError(String(e)));
+    orderDraftsApi
+      .list()
+      .then(setRows)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function open(id: string) {
@@ -38,7 +43,9 @@ export default function OrderDraftsPage() {
       {error && <ErrorState message={error} />}
 
       <Card title="Order drafts" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

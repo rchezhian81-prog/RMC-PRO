@@ -20,6 +20,24 @@ export function Skeleton({ width = '100%', height = 16, radius }: { width?: numb
   return <div className="mn-skel" style={{ width, height, borderRadius: radius }} />;
 }
 
+/**
+ * Table skeleton — shimmer rows shown while a list's first page loads, so the
+ * screen never flashes its empty state before the data arrives.
+ */
+export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading" style={{ display: 'grid', gap: 12, padding: 16 }}>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 }}>
+          {Array.from({ length: cols }).map((__, c) => (
+            <Skeleton key={c} height={14} width={c === 0 ? '55%' : '80%'} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Empty state — icon + message + optional action. */
 export function EmptyState({
   title = 'Nothing here yet',

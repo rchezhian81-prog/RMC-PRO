@@ -9,7 +9,7 @@ import {
 import { Button } from '../../components/ui/Button';
 import { StatCard } from '../../components/ui/StatCard';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
-import { Loading, Skeleton, EmptyState, ErrorState, PermissionDenied } from '../../components/ui/States';
+import { Loading, Skeleton, EmptyState, ErrorState, PermissionDenied, TableSkeleton } from '../../components/ui/States';
 import { Surface } from '../../components/ui/Surface';
 import { CommandBar } from '../../components/ui/CommandBar';
 import { SummaryStrip } from '../../components/ui/SummaryStrip';
@@ -210,6 +210,10 @@ export function UiKitGallery() {
             <Surface padded><ErrorState message="Couldn’t load challans. Check your connection." action={<Button variant="secondary" size="sm">Retry</Button>} /></Surface>
             <Surface padded><PermissionDenied /></Surface>
           </div>
+          <Surface padded>
+            <div style={{ fontSize: 12.5, color: 'var(--mn-muted)', marginBottom: 8 }}>List loading — TableSkeleton (U3, gates the empty-flash)</div>
+            <TableSkeleton cols={5} rows={4} />
+          </Surface>
         </Section>
 
         <Section title="Drawer & dialog" note="Interactive triggers (Esc + backdrop close, focus managed) and a static preview of each surface for the baseline.">

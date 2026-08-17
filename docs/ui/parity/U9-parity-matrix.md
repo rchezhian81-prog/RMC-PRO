@@ -146,5 +146,40 @@ or separate-persona) rather than a pixel baseline — recorded honestly rather t
 claimed. Final pass/fail tallies + any dark-mode fixes are appended after the U8
 review of the generated dark baselines.
 
-_(Dark-mode per-screen findings and the final honest completion % are recorded in
-the U8 note and the final checkpoint.)_
+## 5. Final tally + evidence (post-U8)
+
+| Evidence dimension | Coverage | Source |
+|---|---|---|
+| Functional / route / permission parity | **61/61** | Structural proof §1 (flag is a single `data-ui` stamp; never gates data/route/perm) + nav gating in the shell |
+| Light + responsive (1440/1280/768/390) | **55/61** | V2 baselines (U7); 6 excluded routes by rationale (§3) |
+| Dark mode | **55/61** | U7 dark baselines + U8 sweep (55/55 genuinely dark; all pairs WCAG AA) |
+| Accessibility | all routes (shared) | U6 (label↔input, focus-trap, ARIA live) — probe 9/9 |
+| Loading / empty / error / offline / permission-denied | component-level | U3 skeletons, EmptyState/ErrorState, U4 offline, U1 PermissionDenied — shared primitives, not per-route-per-state captures |
+
+**The 6 routes without a pixel baseline** (parity still holds by §1, but not
+screenshot-evidenced): `/app/assistant`, `/app/sales/import-po` (AI-gated),
+`/app/audit`, `/app/dispatch/tracking` (non-deterministic), the `[id]/[name]`
+detail routes (need a seeded record id), and `/admin/*` (super-admin persona).
+
+### Honest completion
+
+- **U1–U8: 100%** — implemented, verified, committed.
+- **U9: ~90%** — parity *proven* for all 61 (structural); *pixel-evidenced*
+  (light+dark+responsive) for 55/61; a11y + transient states evidenced at
+  component level, not exhaustively per-route-per-state.
+- **Overall UI/UX workstream: ~95% complete on the branch, 0% in production**
+  (branch unmerged by design).
+
+### Unresolved gaps (honest)
+
+1. 6 routes lack pixel baselines (AI-gated / non-deterministic / dynamic-detail /
+   super-admin) — parity covered by structural proof, not screenshots.
+2. Transient-state evidence is component-level, not a per-route capture of every
+   error/empty/loading/offline/permission-denied combination.
+3. Flag-OFF dark baselines remain stale (they shared the fixed harness bug; not
+   regenerated because the flag-OFF skin is retired — V2 is production).
+4. The visual suite gates nothing yet (manual `workflow_dispatch`); the committed
+   baselines were generated locally, not via a CI run. Promoting to a PR gate is
+   a one-line trigger change reserved for the owner.
+5. `[id]` detail-route dark/responsive correctness is inferred from shared layout
+   components + structural proof, spot-checked in U8, not independently baselined.

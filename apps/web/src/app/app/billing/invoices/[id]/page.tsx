@@ -68,7 +68,7 @@ export default function InvoiceDetail() {
     }
   }
 
-  if (!inv) return <Loading label="Loading invoice…" />;
+  if (!inv) return error ? <ErrorState message={error} /> : <Loading label="Loading invoice…" />;
   const items = (inv.items as Row[]) ?? [];
   const status = String(inv.invoiceStatus);
 

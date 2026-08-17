@@ -65,7 +65,7 @@ export default function OrderDetail() {
     }, 'Pour slot added');
   }
 
-  if (!o) return <Loading label="Loading order…" />;
+  if (!o) return error ? <ErrorState message={error} /> : <Loading label="Loading order…" />;
   const items = (o.items as Row[]) ?? [];
   const history = (o.history as Row[]) ?? [];
   const holds = (o.creditHolds as Row[]) ?? [];

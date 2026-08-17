@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Field } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 interface ImportError { row: number; message: string }
 
@@ -20,6 +20,7 @@ export default function ImportsPage() {
   const [content, setContent] = useState('');
   const [result, setResult] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -32,7 +33,9 @@ export default function ImportsPage() {
     if (first && !d.some((x) => x.key === entityType)) setEntityType(first.key);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload()
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   const activeDef = defs.find((d) => d.key === entityType);
@@ -116,7 +119,9 @@ export default function ImportsPage() {
       )}
 
       <Card title="Recent imports" padded={false}>
-        {jobs.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : jobs.length ? (
           <Table>
             <thead><tr><Th>When</Th><Th>Master</Th><Th>File</Th><Th numeric>Rows</Th><Th numeric>OK</Th><Th numeric>Failed</Th><Th>Status</Th></tr></thead>
             <tbody>

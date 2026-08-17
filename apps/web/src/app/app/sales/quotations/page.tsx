@@ -9,7 +9,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 /** Common payment terms for an Indian RMC plant — a picklist beats free text. */
 const PAYMENT_TERMS = [
@@ -29,6 +29,7 @@ export default function QuotationsPage() {
   const [sites, setSites] = useState<Row[]>([]);
   const [form, setForm] = useState({ customerId: '', siteId: '', quotationDate: '', validUntil: '', paymentTerms: '' });
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [q, c, s] = await Promise.all([quotationsApi.list(), crud('customers').list(), crud('sites').list()]);
@@ -37,7 +38,9 @@ export default function QuotationsPage() {
     setSites(s);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function create(e: FormEvent) {
@@ -111,7 +114,9 @@ export default function QuotationsPage() {
       </div>
 
       <Card title="Quotations" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

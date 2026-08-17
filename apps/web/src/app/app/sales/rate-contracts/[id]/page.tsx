@@ -91,7 +91,7 @@ export default function RateContractDetail() {
     });
   }
 
-  if (!rc) return <Loading label="Loading rate contract…" />;
+  if (!rc) return error ? <ErrorState message={error} /> : <Loading label="Loading rate contract…" />;
   const items = (rc.items as Row[]) ?? [];
   const status = String(rc.approvalStatus);
   const locked = status === 'approved';

@@ -6,7 +6,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
@@ -18,12 +18,13 @@ export default function NegativeStockPage() {
   const [filter, setFilter] = useState('pending');
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
     setRows(await negativeStockApi.list(filter || undefined));
   }, [filter]);
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
   }, [reload]);
 
   async function decide(id: string, approve: boolean) {
@@ -65,7 +66,9 @@ export default function NegativeStockPage() {
         }
         padded={false}
       >
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

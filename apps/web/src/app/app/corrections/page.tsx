@@ -7,7 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
 import { Field, Input } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 const DOC_TYPES = ['invoice', 'delivery_challan', 'vendor_bill', 'expense_voucher', 'order', 'quotation'];
 
@@ -15,6 +15,7 @@ export default function CorrectionsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [filterType, setFilterType] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +33,9 @@ export default function CorrectionsPage() {
     setRows(await correctionsApi.list(filterType || undefined));
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload()
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoaded(true));
     // filter drives reload
   }, [filterType]);
 
@@ -92,7 +95,9 @@ export default function CorrectionsPage() {
           </select>
         }
       >
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead><tr><Th>When</Th><Th>Document</Th><Th>Field</Th><Th>Old → New</Th><Th>Reason</Th></tr></thead>
             <tbody>

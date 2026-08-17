@@ -50,7 +50,7 @@ export default function CubeSetDetail() {
     }
   }
 
-  if (!s) return <Loading label="Loading cube set…" />;
+  if (!s) return error ? <ErrorState message={error} /> : <Loading label="Loading cube set…" />;
   const results = (s.results as Row[]) ?? [];
   const accepted = s.acceptanceStatus === 'accepted';
   const rejected = s.acceptanceStatus === 'rejected';

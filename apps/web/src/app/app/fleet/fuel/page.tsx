@@ -7,7 +7,7 @@ import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const dec = (v: unknown) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('en-IN'));
@@ -20,6 +20,7 @@ export default function FleetFuelPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   // Fuel entry form
   const [fVehicle, setFVehicle] = useState('');
@@ -40,7 +41,7 @@ export default function FleetFuelPage() {
     else setSummary(null);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
   }, [filterVehicle]);
 
   async function create() {
@@ -118,7 +119,9 @@ export default function FleetFuelPage() {
               <span><strong>₹{money(sm.totalAmount)}</strong> spent</span>
             </div>
           )}
-          {rows.length ? (
+          {!loaded ? (
+            <TableSkeleton cols={6} />
+          ) : rows.length ? (
             <Table>
               <thead>
                 <tr><Th>Date</Th><Th>Vehicle</Th><Th numeric>Odometer</Th><Th numeric>Litres</Th><Th numeric>Amount</Th><Th numeric>Distance</Th><Th numeric>km/l</Th></tr>

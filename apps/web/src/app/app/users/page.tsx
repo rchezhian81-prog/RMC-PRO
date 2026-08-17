@@ -11,7 +11,7 @@ import { Badge, StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
 import { Field, Input, Select } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 const EMPTY = { name: '', email: '', password: '', mobile: '', roleId: '' };
 
@@ -23,6 +23,7 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function reload() {
@@ -36,7 +37,9 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function create(e: FormEvent) {
@@ -218,7 +221,9 @@ export default function UsersPage() {
       </div>
 
       <Card title="Users" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

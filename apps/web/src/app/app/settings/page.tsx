@@ -7,7 +7,7 @@ import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 export default function SettingsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [newKey, setNewKey] = useState('');
   const [newVal, setNewVal] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const list = await settings.list();
@@ -22,7 +23,9 @@ export default function SettingsPage() {
     setEdit(Object.fromEntries(list.map((r) => [String(r.settingKey), String(r.settingValue ?? '')])));
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function save(key: string) {
@@ -53,7 +56,9 @@ export default function SettingsPage() {
       {error && <ErrorState message={error} />}
 
       <Card title="Settings" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

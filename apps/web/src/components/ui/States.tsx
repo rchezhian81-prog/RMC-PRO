@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Loader2, Inbox, AlertTriangle } from 'lucide-react';
+import { Loader2, Inbox, AlertTriangle, Lock } from 'lucide-react';
 
 /** Inline loading spinner + label. */
 export function Loading({ label = 'Loading…' }: { label?: string }) {
@@ -18,6 +18,24 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
 /** Skeleton placeholder block. */
 export function Skeleton({ width = '100%', height = 16, radius }: { width?: number | string; height?: number; radius?: number }) {
   return <div className="mn-skel" style={{ width, height, borderRadius: radius }} />;
+}
+
+/**
+ * Table skeleton — shimmer rows shown while a list's first page loads, so the
+ * screen never flashes its empty state before the data arrives.
+ */
+export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading" style={{ display: 'grid', gap: 12, padding: 16 }}>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 }}>
+          {Array.from({ length: cols }).map((__, c) => (
+            <Skeleton key={c} height={14} width={c === 0 ? '55%' : '80%'} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Empty state — icon + message + optional action. */
@@ -77,6 +95,39 @@ export function ErrorState({ message, action }: { message: string; action?: Reac
       <AlertTriangle size={18} aria-hidden />
       <span style={{ flex: 1 }}>{message}</span>
       {action}
+    </div>
+  );
+}
+
+/** Permission-denied state — for a surface the signed-in user may not access. */
+export function PermissionDenied({
+  message = 'You don’t have permission to view this.',
+}: {
+  message?: string;
+}) {
+  return (
+    <div
+      role="status"
+      style={{ display: 'grid', placeItems: 'center', gap: 8, padding: '40px 20px', textAlign: 'center' }}
+    >
+      <span
+        style={{
+          display: 'inline-grid',
+          placeItems: 'center',
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: 'var(--mn-surface-2)',
+          color: 'var(--mn-muted)',
+        }}
+        aria-hidden
+      >
+        <Lock size={22} />
+      </span>
+      <div style={{ fontFamily: 'var(--mn-font-display)', fontWeight: 600, fontSize: 16, color: 'var(--mn-text)' }}>
+        Restricted
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--mn-muted)', maxWidth: 360 }}>{message}</div>
     </div>
   );
 }

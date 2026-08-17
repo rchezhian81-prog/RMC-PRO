@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Button } from '../../../../components/ui/Button';
 import { ExportButton } from '../../../../components/ExportButton';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -18,6 +18,7 @@ export default function BillingReportsPage() {
   const [receipts, setReceipts] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -25,7 +26,9 @@ export default function BillingReportsPage() {
       setGst(g);
       setSales(s);
       setReceipts(r);
-    })().catch((e) => setError(String(e)));
+    })()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   return (
@@ -66,7 +69,9 @@ export default function BillingReportsPage() {
           />
         }
       >
-        {sales?.rows?.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : sales?.rows?.length ? (
           <Table>
             <thead>
               <tr>
@@ -109,7 +114,9 @@ export default function BillingReportsPage() {
           />
         }
       >
-        {receipts.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : receipts.length ? (
           <Table>
             <thead>
               <tr>

@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -22,6 +22,7 @@ export default function VendorBillsPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const canCreate = getAccess().has('vendor_bills.create');
   const canApprove = getAccess().has('vendor_bills.approve');
   const canPay = getAccess().has('vendor_payments.create');
@@ -31,7 +32,7 @@ export default function VendorBillsPage() {
     setRows(b); setGrns(g);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
   }, []);
 
   async function act(fn: () => Promise<unknown>, okMsg: string) {
@@ -105,7 +106,9 @@ export default function VendorBillsPage() {
       )}
 
       <Card title="Vendor bills" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

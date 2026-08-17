@@ -1,6 +1,22 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  useId,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+  type SelectHTMLAttributes,
+} from 'react';
 
-/** Labelled form field with optional help/error text. */
+/**
+ * Labelled form field with optional help/error text.
+ *
+ * The label is programmatically tied to its control: when `children` is a single
+ * element without its own `id`, we generate one and point `htmlFor` at it (and
+ * wire `aria-describedby` to the help/error text). Callers can still pass an
+ * explicit `htmlFor` + matching `id` to opt out. This is presentation/semantics
+ * only — no control's value or behaviour changes.
+ */
 export function Field({
   label,
   help,
@@ -16,20 +32,37 @@ export function Field({
   htmlFor?: string;
   children: ReactNode;
 }) {
+  const autoId = useId();
+  const descId = useId();
+
+  let control = children;
+  let forId = htmlFor;
+
+  // Auto-associate only for a single element the caller didn't pre-wire.
+  if (!forId && isValidElement(children)) {
+    const child = children as ReactElement<{ id?: string; 'aria-describedby'?: string }>;
+    const existingId = child.props.id;
+    forId = existingId ?? autoId;
+    const patch: { id?: string; 'aria-describedby'?: string } = {};
+    if (!existingId) patch.id = forId;
+    if ((error || help) && !child.props['aria-describedby']) patch['aria-describedby'] = descId;
+    if (Object.keys(patch).length) control = cloneElement(child, patch);
+  }
+
   return (
     <div style={{ marginBottom: 14 }}>
       <label
-        htmlFor={htmlFor}
+        htmlFor={forId}
         style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--mn-muted)', marginBottom: 6 }}
       >
         {label}
         {required && <span style={{ color: 'var(--mn-danger)' }}> *</span>}
       </label>
-      {children}
+      {control}
       {error ? (
-        <div style={{ fontSize: 12, color: 'var(--mn-danger)', marginTop: 5 }}>{error}</div>
+        <div id={descId} style={{ fontSize: 12, color: 'var(--mn-danger)', marginTop: 5 }}>{error}</div>
       ) : help ? (
-        <div style={{ fontSize: 12, color: 'var(--mn-subtle)', marginTop: 5 }}>{help}</div>
+        <div id={descId} style={{ fontSize: 12, color: 'var(--mn-subtle)', marginTop: 5 }}>{help}</div>
       ) : null}
     </div>
   );

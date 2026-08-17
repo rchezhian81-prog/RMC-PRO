@@ -6,7 +6,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 const dt = (v: unknown) => (v ? String(v).slice(0, 19).replace('T', ' ') : '—');
 
@@ -15,6 +15,7 @@ export default function DevicesSyncPage() {
   const [reservations, setReservations] = useState<Row[]>([]);
   const [conflicts, setConflicts] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -24,7 +25,9 @@ export default function DevicesSyncPage() {
     setConflicts(c);
   }, []);
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, [reload]);
 
   async function resolve(id: string, resolution: string) {
@@ -53,7 +56,9 @@ export default function DevicesSyncPage() {
       )}
 
       <Card title="Devices" padded={false}>
-        {devices.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : devices.length ? (
           <Table>
             <thead>
               <tr>
@@ -82,7 +87,9 @@ export default function DevicesSyncPage() {
       </Card>
 
       <Card title="Number reservations" padded={false}>
-        {reservations.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : reservations.length ? (
           <Table>
             <thead>
               <tr>
@@ -113,7 +120,9 @@ export default function DevicesSyncPage() {
       </Card>
 
       <Card title="Sync conflicts" padded={false}>
-        {conflicts.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : conflicts.length ? (
           <Table>
             <thead>
               <tr>

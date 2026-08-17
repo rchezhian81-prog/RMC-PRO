@@ -6,11 +6,13 @@ import {
   AlertTriangle, MonitorSmartphone, ChevronRight,
 } from 'lucide-react';
 import { dashboardApi, type Row } from '../../../lib/api';
-import { Card } from '../../../components/ui/Card';
 import { StatCard } from '../../../components/ui/StatCard';
 import { AlertsCard } from '../../../components/AlertsCard';
 import { InsightsCard } from '../../../components/InsightsCard';
 import { Loading, ErrorState } from '../../../components/ui/States';
+import { CommandBar } from '../../../components/ui/CommandBar';
+import { SummaryStrip } from '../../../components/ui/SummaryStrip';
+import { Surface } from '../../../components/ui/Surface';
 import type { Tone } from '../../../components/ui/Badge';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -66,41 +68,37 @@ export default function DashboardPage() {
       ]
     : [];
 
+  // Owner Command Centre (U2): the same data, controls and links as before, re-laid
+  // on the U1 command surfaces — command bar header, KPI summary strip, and a
+  // command-surface funnel. No control added or removed; every tile keeps its href.
   return (
-    <div>
-      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Dashboard</h1>
-      <p style={{ margin: '0 0 22px', color: 'var(--mn-muted)', fontSize: 14 }}>
-        Live operations overview — Mix Nova RMC Software
-      </p>
+    <div style={{ display: 'grid', gap: 18 }}>
+      <CommandBar title="Dashboard" subtitle="Live operations overview — Mix Nova RMC Software" />
 
       {/* Rule-based alerts always show. AI insights sit below as an optional
           extra and hide themselves entirely when AI isn't available. */}
-      <div style={{ marginBottom: 22, display: 'grid', gap: 14 }}>
+      <div style={{ display: 'grid', gap: 14 }}>
         <AlertsCard />
         <InsightsCard />
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-          gap: 14,
-          marginBottom: 22,
-        }}
-      >
+      <SummaryStrip>
         {tiles.map((t) => (
           <StatCard key={t.label} label={t.label} value={t.value} icon={t.icon} tone={t.tone} href={t.href} />
         ))}
-      </div>
+      </SummaryStrip>
 
-      <Card title="Order-to-cash funnel">
+      <Surface variant="command" padded>
+        <h2 style={{ margin: '0 0 12px', fontFamily: 'var(--mn-font-display)', fontSize: 15, letterSpacing: '-0.01em' }}>
+          Order-to-cash funnel
+        </h2>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {funnelSteps.map(([label, val], i) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div
+                className="mn-surface"
                 style={{
-                  background: 'var(--mn-surface-2)',
-                  border: '1px solid var(--mn-border)',
+                  boxShadow: 'var(--mn-elev-command)',
                   borderRadius: 'var(--mn-radius-md)',
                   padding: '10px 16px',
                   textAlign: 'center',
@@ -114,7 +112,7 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
-      </Card>
+      </Surface>
     </div>
   );
 }

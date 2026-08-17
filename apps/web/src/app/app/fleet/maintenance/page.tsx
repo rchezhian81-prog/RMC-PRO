@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -22,6 +22,7 @@ export default function FleetMaintenancePage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   // Schedule form
   const [sVehicle, setSVehicle] = useState('');
@@ -50,7 +51,7 @@ export default function FleetMaintenancePage() {
     setSchedules(sc); setJobs(jb); setVehicles(vh);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
   }, []);
 
   async function createSchedule() {
@@ -137,7 +138,9 @@ export default function FleetMaintenancePage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="Service schedules" padded={false}>
-          {schedules.length ? (
+          {!loaded ? (
+            <TableSkeleton cols={5} />
+          ) : schedules.length ? (
             <Table>
               <thead>
                 <tr><Th>Vehicle</Th><Th>Service</Th><Th numeric>Every</Th><Th numeric>Next due</Th><Th>Status</Th></tr>
@@ -205,7 +208,9 @@ export default function FleetMaintenancePage() {
       )}
 
       <Card title="Maintenance jobs" padded={false}>
-        {jobs.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : jobs.length ? (
           <Table>
             <thead>
               <tr><Th>Job No</Th><Th>Vehicle</Th><Th>Type</Th><Th>Reported</Th><Th numeric>Cost</Th><Th>Status</Th><Th /></tr>

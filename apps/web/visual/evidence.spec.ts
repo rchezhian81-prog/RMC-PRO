@@ -1,0 +1,115 @@
+import { test, type Page } from '@playwright/test';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { SCREENS } from './screens';
+
+/**
+ * Evidence-closure captures that sit outside the gated pixel baselines:
+ *
+ *  1. Functional fingerprint per route (both skins) → visual/.manifest/<mode>/…
+ *     A skin-independent inventory of headings, actions, inputs and table
+ *     columns. Diffing the flag-OFF vs V2 manifests proves functional parity
+ *     (same routes / information / actions / permissions) — visual differences
+ *     are expected, functional ones are not. Written once (desktop-1440 only).
+ *
+ *  2. Super-admin /admin/* screenshots (separate persona) → visual/evidence/.
+ *     Non-gating page.screenshot files, skipped if no super-admin session.
+ *
+ *  3. /app/audit + /app/dispatch/tracking one-off renders → visual/evidence/.
+ *     Non-deterministic (timestamps / live GPS), so evidence-only, never a
+ *     pixel baseline.
+ *
+ * Nothing here asserts a screenshot, so it can't fail the regression gate.
+ */
+
+const BASE = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
+const MODE = process.env.VISUAL_MODE === 'v2' ? 'v2' : 'off';
+const EVID = 'visual/evidence';
+const MANIFEST = `visual/.manifest/${MODE}`;
+
+const STAB = `*,*::before,*::after{transition:none!important;animation:none!important}*{caret-color:transparent!important}`;
+
+async function stabilize(page: Page) {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addStyleTag({ content: STAB });
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(400);
+}
+
+async function setTheme(page: Page, t: 'light' | 'dark') {
+  await page.evaluate((x) => document.documentElement.setAttribute('data-theme', x), t);
+}
+
+// A skin-independent functional fingerprint of the current page.
+async function fingerprint(page: Page) {
+  return page.evaluate(() => {
+    const txt = (el: Element | null) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const main = document.querySelector('#main') ?? document.body;
+    const q = (sel: string) => Array.from(main.querySelectorAll(sel));
+    return {
+      title: txt(document.querySelector('h1')),
+      headings: q('h1,h2,h3').map(txt).filter(Boolean),
+      buttons: q('button').map(txt).filter(Boolean).sort(),
+      links: q('a').map((a) => `${txt(a)}→${a.getAttribute('href') ?? ''}`).filter(Boolean).sort(),
+      inputs: q('input,select,textarea')
+        .map((i) => i.getAttribute('name') || i.getAttribute('id') || (i as HTMLInputElement).type || i.tagName)
+        .filter(Boolean)
+        .sort(),
+      tableCols: q('thead th').map(txt),
+      // nav is identical across routes; capture once via the sidebar links count
+      navItems: Array.from(document.querySelectorAll('.mn-nav')).map(txt).filter(Boolean),
+    };
+  });
+}
+
+// (1) Functional fingerprint of every route — desktop only (viewport-independent).
+test('evidence: functional fingerprint (all routes)', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'fingerprint once per mode');
+  test.setTimeout(360_000);
+  mkdirSync(MANIFEST, { recursive: true });
+  for (const s of SCREENS) {
+    await page.goto(`${BASE}${s.path}`, { waitUntil: 'networkidle' });
+    await stabilize(page);
+    writeFileSync(`${MANIFEST}/${s.name}.json`, JSON.stringify(await fingerprint(page), null, 2));
+  }
+});
+
+// (2) Super-admin persona — /admin/* evidence (non-gating; skipped if no session).
+test('evidence: super-admin routes', async ({ browser }, testInfo) => {
+  const ADMIN = 'visual/.auth/admin.json';
+  test.skip(!existsSync(ADMIN), 'no super-admin session seeded');
+  mkdirSync(EVID, { recursive: true });
+  const ctx = await browser.newContext({
+    storageState: ADMIN,
+    viewport: testInfo.project.use.viewport,
+    reducedMotion: 'reduce',
+  });
+  const page = await ctx.newPage();
+  for (const [name, path] of [
+    ['admin-tenants', '/admin/tenants'],
+    ['admin-plans', '/admin/plans'],
+  ] as const) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await stabilize(page);
+      await page.screenshot({ path: `${EVID}/${name}-${theme}-${MODE}-${testInfo.project.name}.png`, fullPage: true });
+    }
+  }
+  await ctx.close();
+});
+
+// (3) Non-deterministic routes — evidence-only render proof.
+test('evidence: non-deterministic routes (audit, tracking)', async ({ page }, testInfo) => {
+  mkdirSync(EVID, { recursive: true });
+  for (const [name, path] of [
+    ['audit', '/app/audit'],
+    ['dispatch-tracking', '/app/dispatch/tracking'],
+  ] as const) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await stabilize(page);
+      await page.screenshot({ path: `${EVID}/${name}-${theme}-${MODE}-${testInfo.project.name}.png`, fullPage: true });
+    }
+  }
+});

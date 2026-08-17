@@ -142,6 +142,8 @@ async function main() {
       ...process.env,
       WEB_BASE_URL: `http://localhost:${WEB_PORT}`,
       VISUAL_LOGIN: OWNER_LOGIN, VISUAL_PASSWORD: OWNER_PW,
+      // super-admin persona for /admin/* evidence captures (evidence.spec)
+      VISUAL_SU_LOGIN: E.SUPERADMIN_EMAIL, VISUAL_SU_PASSWORD: E.SUPERADMIN_PASSWORD,
       VISUAL_MODE: process.env.VISUAL_MODE ?? 'off',
       PW_CHROME_PATH: process.env.PW_CHROME_PATH ?? '',
     },

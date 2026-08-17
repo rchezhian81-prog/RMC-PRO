@@ -5,3 +5,5 @@
 /visual/.report/
 /test-results/
 /playwright-report/
+/visual/.manifest/
+/visual/.fixtures.json

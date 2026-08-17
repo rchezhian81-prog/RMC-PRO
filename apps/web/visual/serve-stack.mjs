@@ -109,6 +109,11 @@ async function main() {
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], API_DIR, {
     API_URL: `http://localhost:${E.API_PORT}`, LOGIN: OWNER_LOGIN, RMC_PASSWORD: OWNER_PW,
   });
+  // Synthetic order-to-cash fixtures so the [id] detail routes render (writes
+  // visual/.fixtures.json). Test tenant + throwaway DB only.
+  step('seed fixtures', 'node', ['visual/seed-fixtures.mjs'], WEB_DIR, {
+    API_URL: `http://localhost:${E.API_PORT}`, LOGIN: OWNER_LOGIN, RMC_PASSWORD: OWNER_PW,
+  });
 
   // 4) build the web pointed at THIS API origin (so CSP connect-src + the client
   // BASE both target http://localhost:4000), flag OFF, then serve the standalone
@@ -142,6 +147,8 @@ async function main() {
       ...process.env,
       WEB_BASE_URL: `http://localhost:${WEB_PORT}`,
       VISUAL_LOGIN: OWNER_LOGIN, VISUAL_PASSWORD: OWNER_PW,
+      // super-admin persona for /admin/* evidence captures (evidence.spec)
+      VISUAL_SU_LOGIN: E.SUPERADMIN_EMAIL, VISUAL_SU_PASSWORD: E.SUPERADMIN_PASSWORD,
       VISUAL_MODE: process.env.VISUAL_MODE ?? 'off',
       PW_CHROME_PATH: process.env.PW_CHROME_PATH ?? '',
     },

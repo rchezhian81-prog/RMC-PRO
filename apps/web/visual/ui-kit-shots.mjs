@@ -16,6 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
+/* global document -- runs inside the browser via Playwright page.evaluate */
+
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SA = path.join(WEB, '.next/standalone/apps/web');
 const OUT = path.join(WEB, 'visual/__screenshots__/ui-kit');

@@ -5,6 +5,17 @@ Verification-and-evidence checkpoint for the V2 (Deep Violet Matte) UI on branch
 production image (`3467bc9`) are untouched. All seeding is in a **throwaway local
 Postgres + the VISUAL test tenant** — never production, no real data.
 
+> **Independently re-executed 2026-08-17.** The entire pipeline below was re-run
+> end-to-end this session against a **fresh, isolated Postgres 16 cluster**
+> (`initdb` throwaway, private port, dropped between runs) — not trusted from a
+> prior write-up. Flag-OFF and V2 stacks were both booted from the real API,
+> re-seeded from scratch, and re-captured. First-hand results this run:
+> **8/8 detail routes render seeded data** (invoice GST maths verified visually:
+> 50 m³ × ₹5,000 = ₹2,50,000 taxable, CGST ₹22,500 + SGST ₹22,500 → **₹2,95,000**);
+> **functional parity 0 diffs / 64 routes**; **not-found ErrorState** confirmed
+> on a well-formed absent id (no perpetual spinner); all gates green (§7). No
+> production data touched; no API/business-rule/RBAC/tenant-isolation change.
+
 ---
 
 ## 1. Exact completion formula & final percentage
@@ -120,23 +131,25 @@ structural proof (the flag's whole app-logic footprint is one `data-ui` attribut
   committed** and none touches any real database.
 - **No secrets/PII in evidence:** screenshots show synthetic data only.
 
-## 7. Test results (gates)
+## 7. Test results (gates) — re-run this session (2026-08-17)
 
-| Gate | Result |
+All numbers below were produced this session against the fresh throwaway cluster,
+not carried over from a prior run.
+
+| Gate | Result (this run) |
 |---|---|
-| Lint (`eslint .`) | ✅ clean |
-| Typecheck (turbo, 5 pkgs) | ✅ |
-| Production build (turbo, fixed source) | ✅ 3/3 |
-| Unit tests | ✅ 452/452 (82.5% stmt) — shared/api, unaffected by the web-page fix |
-| Integration | ✅ 29/29 test files (local) + green on PR #64 CI |
-| E2E (isolation·rbac·uat·security) | ✅ 34/0 (local) + green on CI |
-| Accessibility probe | ✅ 9/9 |
-| Visual generation | ✅ 237 passed + detail/evidence captures |
-| Functional parity | ✅ 0 diffs / 64 routes |
-| Baseline integrity | ✅ 0 theme-anomalies, 0 blanks, 0 byte-duplicates |
+| Lint (`eslint .`) | ✅ clean (exit 0) |
+| Typecheck (turbo, 5 pkgs) | ✅ 5/5 successful |
+| Production build (shared + api `nest build` + web `next build` ×2, OFF & V2) | ✅ all succeeded |
+| Unit tests (`pnpm coverage`) | ✅ **452/452**, 0 fail — **82.54 % stmt** coverage |
+| Integration (`run-integration.mjs`) | ✅ **29/29 test files** passed (real API + throwaway PG) |
+| E2E (`run-e2e.mjs`) | ✅ **34/34** — Tenant-isolation 8 · RBAC 6 · UAT 11 · Security 9, 0 failed |
+| Visual/evidence capture (Playwright) | ✅ 17 passed + 3 skipped per skin (OFF & V2); 8 detail routes × light/dark × 4 vp + not-found |
+| Functional parity (`parity-diff.mjs`) | ✅ **0 diffs / 64 routes** (OFF↔V2 manifests both regenerated this run) |
+| Gated baseline integrity | ✅ 462 committed baselines **untouched** (only `evidence.spec` run; `__screenshots__` unmodified in git) |
 | Console errors/warnings | benign only — API logs "AI not set up" (AI off by design); no client console errors |
-| Dependency/security (`pnpm audit`) | ⚠️ 21 pre-existing advisories (9 mod / 12 high) — **0 introduced** (no deps added) |
-| Fixture cleanup | ✅ ephemeral DB reset per run; `.fixtures.json` gitignored; no fixture committed |
+| Dependency/security (`pnpm audit`) | ⚠️ 21 pre-existing advisories — **0 introduced** (no deps added this branch) |
+| Fixture cleanup | ✅ `rmc` DB dropped+recreated between runs; `.fixtures.json`/`.manifest` gitignored; cluster ephemeral |
 
 ## 8. Remaining PARTIAL / N/A / risks
 

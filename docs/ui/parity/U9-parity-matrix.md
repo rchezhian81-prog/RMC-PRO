@@ -119,12 +119,18 @@ Persona: **T** = tenant app user (owner session), **S** = super-admin,
 | /app/corrections | T | document_corrections.manage | ✓ |
 | /app/devices | T | sync.manage · offline_sync | ✓ devices-sync |
 
-### Detail routes (dynamic; not pixel-baselined — need a seeded record id)
+### Detail routes (dynamic; evidence-captured against seeded records — 2026-08-17)
 `/app/orders/[id]` · `/app/billing/invoices/[id]` · `/app/sales/quotations/[id]` ·
 `/app/sales/rate-contracts/[id]` · `/app/dispatch/challans/[id]` ·
-`/app/production/batch-tickets/[id]` · `/app/qc/cubes/[id]` — all **T**. Parity is
-structural (same layout components as their list route); functional coverage in
-API integration/e2e. Detail-route V2 correctness is spot-checked in U8.
+`/app/production/batch-tickets/[id]` · `/app/qc/cubes/[id]` (all **T**) +
+`/admin/tenants/[id]` (**S**). Parity is structural (same layout components as
+their list route); functional coverage in API integration/e2e. **This session**
+each of the 8 detail routes was rendered against a fresh seeded record and
+captured light+dark × 4 viewports (375/768/1024/1440) in `visual/evidence/`
+(8 PNGs/route = 64), plus the not-found `ErrorState`. Functional fingerprints for
+all 8 were taken in **both** skins and fed the parity diff (0 diffs). These are
+evidence captures (records carry per-run timestamps), deliberately not gated
+pixel baselines.
 
 ### Super-admin + anonymous
 | Route | Persona | Note | Visual |
@@ -182,5 +188,7 @@ detail routes (need a seeded record id), and `/admin/*` (super-admin persona).
 4. The visual suite gates nothing yet (manual `workflow_dispatch`); the committed
    baselines were generated locally, not via a CI run. Promoting to a PR gate is
    a one-line trigger change reserved for the owner.
-5. `[id]` detail-route dark/responsive correctness is inferred from shared layout
-   components + structural proof, spot-checked in U8, not independently baselined.
+5. `[id]` detail-route dark/responsive correctness is now **independently
+   evidence-captured** (light+dark × 4 vp, 8 routes, 2026-08-17 re-run) rather
+   than inferred — but as evidence screenshots, not gated pixel baselines
+   (per-record timestamps make pixel-diffing flaky by design).

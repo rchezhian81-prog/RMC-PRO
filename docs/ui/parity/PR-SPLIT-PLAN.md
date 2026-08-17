@@ -12,8 +12,8 @@ Base for the stack is `main` (which already carries the dormant `visual.yml` fro
 |---|---|---|---|---|---|
 | **PR-A** | UI V2 implementation (presentation) | `main` | `apps/web/src/**` except `visual/**` — primitives (Surface, CommandBar, Toolbar, FilterBar, SearchInput, SummaryStrip, AlertSurface, Drawer, Dialog, OfflineBanner), hooks (`use-online`, `use-focus-trap`), `globals.css` V2 tokens, U2–U8 page restyles, U3 loading gates, U6 a11y, the `/ui-kit` harness, **and the 7-line detail-page not-found fix**. No tests, no images. | ~61 | revert PR-A → back to `main` |
 | **PR-B** | Visual/test infrastructure | PR-A | `apps/web/playwright.config.ts`, `apps/web/visual/*.ts` + `*.mjs` (screens, baseline.spec, evidence.spec, global-setup, serve-stack, ui-kit-shots, seed-fixtures, parity-diff), `apps/web/.gitignore`. (`.github/workflows/visual.yml` already on `main`.) No images. | ~10 | revert PR-B → app unaffected |
-| **PR-C** | Generated baselines & evidence | PR-B | `apps/web/visual/__screenshots__/**` + `apps/web/visual/evidence/**` (PNGs only). | ~589 | revert PR-C → only baselines lost |
-| **PR-D** | UI parity/closure documentation | `main` | `docs/ui/**` (parity notes, EVIDENCE-CLOSURE, U9 matrix, this plan). Independent. | ~14 | revert PR-D |
+| **PR-C** | Generated baselines & evidence | PR-B | `apps/web/visual/__screenshots__/**` (462 gated baselines) + `apps/web/visual/evidence/**` (129 evidence captures after the 2026-08-17 re-run). | ~591 | revert PR-C → only baselines lost |
+| **PR-D** | UI parity/closure documentation | `main` | `docs/ui/**` (parity notes, EVIDENCE-CLOSURE, U9 matrix, this plan). Independent. | ~15 | revert PR-D |
 
 ## Order & dependency
 

@@ -161,13 +161,15 @@ screenshot-evidenced): `/app/assistant`, `/app/sales/import-po` (AI-gated),
 `/app/audit`, `/app/dispatch/tracking` (non-deterministic), the `[id]/[name]`
 detail routes (need a seeded record id), and `/admin/*` (super-admin persona).
 
-### Honest completion — SUPERSEDED
+### Honest completion — SUPERSEDED by EVIDENCE-CLOSURE.md
 
-> The earlier "~90% / ~95%" figures here were inconsistent and are **retracted**.
-> The single authoritative score now lives in **`EVIDENCE-CLOSURE.md`**, computed
-> by one precise formula:
-> **Completion = (VERIFIED 50 + N/A-EXCEPTION 3) / 61 = 86.9%**, with **8 PARTIAL**
-> `[id]` detail routes as the documented gap. 0% is in production (branch unmerged).
+> Authoritative score lives in **`EVIDENCE-CLOSURE.md`** (one precise formula).
+> After seeding the 8 detail routes (Option A):
+> **A. Applicable-route verification = 58/58 = 100%** ·
+> **B. Total disposition = 58 VERIFIED + 3 justified N/A (redirects) = 61** ·
+> **PARTIAL = 0** · flag-OFF↔V2 functional parity = **0 diffs / 64 routes**.
+> 0% is in production (branch unmerged). Earlier 86.9% / 90% / 95% figures are
+> retracted.
 
 ### Unresolved gaps (honest)
 

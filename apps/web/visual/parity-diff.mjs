@@ -20,8 +20,15 @@ if (!existsSync(V2) || !existsSync(OFF)) {
 // `:r5:`). They are not part of a route's function, so normalize them to a
 // constant before comparing — otherwise a 1-off counter shift (e.g. one extra
 // useId in the shell) reads as a false "difference".
+// React useId ids (`_r_2_`, `:r5:`) and record UUIDs embedded in hrefs are
+// non-functional and vary per render/seed run — normalize both. A list that
+// links to a detail record has the same link text and path in both skins; only
+// the seeded record's UUID differs, which is not a functional difference.
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const stripIds = (v) =>
-  typeof v === 'string' ? v.replace(/^_r_[0-9a-z]+_$/i, '#id').replace(/^:r[0-9a-z]+:$/i, '#id') : v;
+  typeof v === 'string'
+    ? v.replace(/^_r_[0-9a-z]+_$/i, '#id').replace(/^:r[0-9a-z]+:$/i, '#id').replace(UUID, '#uuid')
+    : v;
 const norm = (o) => JSON.stringify(Array.isArray(o) ? o.map(stripIds) : o);
 const names = readdirSync(V2).filter((f) => f.endsWith('.json'));
 let diffs = 0;

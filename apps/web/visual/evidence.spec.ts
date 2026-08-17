@@ -1,5 +1,5 @@
-import { test, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { test, expect, type Page } from '@playwright/test';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { SCREENS } from './screens';
 
 /**
@@ -95,6 +95,67 @@ test('evidence: super-admin routes', async ({ browser }, testInfo) => {
       await page.screenshot({ path: `${EVID}/${name}-${theme}-${MODE}-${testInfo.project.name}.png`, fullPage: true });
     }
   }
+  await ctx.close();
+});
+
+// (4) Detail [id] routes — rendered against seeded synthetic fixtures.
+// Gated pixel baselines (V2 only, so the OFF pass doesn't diff a v2 image);
+// functional fingerprints in BOTH skins (desktop) for the parity diff. The URL
+// id varies per seed but the rendered content (numbers/amounts) is deterministic.
+const FIXTURES = 'visual/.fixtures.json';
+
+async function captureDetail(page: Page, name: string, url: string, projectName: string, mode: string) {
+  await page.goto(url, { waitUntil: 'networkidle' });
+  if (projectName === 'desktop-1440') {
+    await stabilize(page);
+    mkdirSync(MANIFEST, { recursive: true });
+    writeFileSync(`${MANIFEST}/${name}.json`, JSON.stringify(await fingerprint(page), null, 2));
+  }
+  if (mode === 'v2') {
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await stabilize(page);
+      await expect(page).toHaveScreenshot(`${name}-${theme}-v2.png`, { fullPage: true });
+    }
+  }
+}
+
+test('evidence: detail [id] routes (owner)', async ({ page }, testInfo) => {
+  test.skip(!existsSync(FIXTURES), 'no seeded fixtures');
+  test.setTimeout(180_000);
+  const fx = JSON.parse(readFileSync(FIXTURES, 'utf8')) as Record<string, string>;
+  const routes: Array<[string, string]> = [
+    ['detail-quotation', `/app/sales/quotations/${fx.quotationId}`],
+    ['detail-rate-contract', `/app/sales/rate-contracts/${fx.rateContractId}`],
+    ['detail-order', `/app/orders/${fx.orderId}`],
+    ['detail-batch-ticket', `/app/production/batch-tickets/${fx.batchTicketId}`],
+    ['detail-challan', `/app/dispatch/challans/${fx.challanId}`],
+    ['detail-invoice', `/app/billing/invoices/${fx.invoiceId}`],
+    ['detail-cube-set', `/app/qc/cubes/${fx.cubeSetId}`],
+  ];
+  for (const [name, path] of routes) {
+    const id = path.split('/').pop();
+    if (!id || id === 'undefined' || id === 'null') continue; // fixture missing → skip, don't fail
+    await captureDetail(page, name, `${BASE}${path}`, testInfo.project.name, MODE);
+  }
+  // Not-found / error state (evidence-only, v2 desktop): a well-formed but absent id.
+  if (MODE === 'v2' && testInfo.project.name === 'desktop-1440') {
+    await page.goto(`${BASE}/app/sales/quotations/00000000-0000-0000-0000-000000000000`, { waitUntil: 'networkidle' });
+    await setTheme(page, 'light');
+    await stabilize(page);
+    mkdirSync(EVID, { recursive: true });
+    await page.screenshot({ path: `${EVID}/detail-not-found-light-v2-desktop-1440.png`, fullPage: true });
+  }
+});
+
+test('evidence: detail [id] route (super-admin tenant)', async ({ browser }, testInfo) => {
+  const ADMIN = 'visual/.auth/admin.json';
+  test.skip(!existsSync(ADMIN) || !existsSync(FIXTURES), 'no super-admin session or fixtures');
+  const fx = JSON.parse(readFileSync(FIXTURES, 'utf8')) as Record<string, string>;
+  if (!fx.tenantId) { test.skip(true, 'no tenantId fixture'); return; }
+  const ctx = await browser.newContext({ storageState: ADMIN, viewport: testInfo.project.use.viewport, reducedMotion: 'reduce' });
+  const page = await ctx.newPage();
+  await captureDetail(page, 'detail-admin-tenant', `${BASE}/admin/tenants/${fx.tenantId}`, testInfo.project.name, MODE);
   await ctx.close();
 });
 

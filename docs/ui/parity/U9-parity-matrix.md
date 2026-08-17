@@ -161,14 +161,13 @@ screenshot-evidenced): `/app/assistant`, `/app/sales/import-po` (AI-gated),
 `/app/audit`, `/app/dispatch/tracking` (non-deterministic), the `[id]/[name]`
 detail routes (need a seeded record id), and `/admin/*` (super-admin persona).
 
-### Honest completion
+### Honest completion — SUPERSEDED
 
-- **U1–U8: 100%** — implemented, verified, committed.
-- **U9: ~90%** — parity *proven* for all 61 (structural); *pixel-evidenced*
-  (light+dark+responsive) for 55/61; a11y + transient states evidenced at
-  component level, not exhaustively per-route-per-state.
-- **Overall UI/UX workstream: ~95% complete on the branch, 0% in production**
-  (branch unmerged by design).
+> The earlier "~90% / ~95%" figures here were inconsistent and are **retracted**.
+> The single authoritative score now lives in **`EVIDENCE-CLOSURE.md`**, computed
+> by one precise formula:
+> **Completion = (VERIFIED 50 + N/A-EXCEPTION 3) / 61 = 86.9%**, with **8 PARTIAL**
+> `[id]` detail routes as the documented gap. 0% is in production (branch unmerged).
 
 ### Unresolved gaps (honest)
 

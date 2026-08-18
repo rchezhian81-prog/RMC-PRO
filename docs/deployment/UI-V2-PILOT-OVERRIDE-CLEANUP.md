@@ -69,7 +69,7 @@ curl -sL https://app.mixnovas.com/ | grep -c 'data-ui="v2"'      # expect 1
 
 ## Permanent fix (removes the need for all of the above)
 
-Merge `IMAGE_TAG_WEB` into `main` (small infra PR), update `/opt/rmc`
+`IMAGE_TAG_WEB` is now in `main` (infra PR). Update `/opt/rmc`
 (`OPT-RMC-UPDATE.md` Procedure A), switch to the native mechanism
 (Procedure B), and this override file is retired for good.
 

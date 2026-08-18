@@ -7,7 +7,7 @@ import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
 import { Field, Input } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
 export default function RolesPage() {
@@ -20,6 +20,7 @@ export default function RolesPage() {
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
@@ -28,7 +29,9 @@ export default function RolesPage() {
     setCatalog(c);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function selectRole(role: Row) {
@@ -127,7 +130,9 @@ export default function RolesPage() {
       </Card>
 
       <Card title="Roles" padded={false}>
-        {roles.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : roles.length ? (
           <Table>
             <thead>
               <tr>

@@ -86,7 +86,7 @@ export default function QuotationDetail() {
     });
   }
 
-  if (!q) return <Loading label="Loading quotation…" />;
+  if (!q) return error ? <ErrorState message={error} /> : <Loading label="Loading quotation…" />;
   const items = (q.items as Row[]) ?? [];
   const status = String(q.approvalStatus);
   const locked = status === 'approved';

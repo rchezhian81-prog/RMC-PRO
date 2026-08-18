@@ -7,7 +7,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -22,6 +22,7 @@ export default function ReceiptsPage() {
   const [form, setForm] = useState({ amount: '', paymentMode: 'neft', receiptDate: '', bankReference: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [r, c] = await Promise.all([receiptsApi.list(), crud('customers').list()]);
@@ -29,7 +30,9 @@ export default function ReceiptsPage() {
     setCustomers(c);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function pickCustomer(cid: string) {
@@ -170,7 +173,9 @@ export default function ReceiptsPage() {
       </div>
 
       <Card title="Receipts" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

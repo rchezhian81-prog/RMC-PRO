@@ -49,10 +49,13 @@ export default defineConfig({
   // One project per approved viewport (owner-specified sizes). All on Chromium
   // (the pre-installed engine); viewport width drives the responsive layout, so
   // the device chrome is stripped for deterministic, engine-consistent shots.
+  // Owner-specified verification widths: 375 mobile · 768 tablet · 1024 compact
+  // desktop / tablet-landscape (the shell's sidebar-collapse breakpoint) · 1440
+  // desktop. Touch is emulated at the two hand-held widths for touch-target checks.
   projects: [
     { name: 'desktop-1440', use: { browserName: 'chromium', viewport: { width: 1440, height: 900 } } },
-    { name: 'laptop-1280', use: { browserName: 'chromium', viewport: { width: 1280, height: 800 } } },
+    { name: 'laptop-1024', use: { browserName: 'chromium', viewport: { width: 1024, height: 768 } } },
     { name: 'tablet-768', use: { browserName: 'chromium', viewport: { width: 768, height: 1024 }, hasTouch: true } },
-    { name: 'mobile-390', use: { browserName: 'chromium', viewport: { width: 390, height: 844 }, hasTouch: true } },
+    { name: 'mobile-375', use: { browserName: 'chromium', viewport: { width: 375, height: 812 }, hasTouch: true } },
   ],
 });

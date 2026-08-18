@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from './Button';
+import { useFocusTrap } from '../../lib/use-focus-trap';
 
 /**
  * App-consistent confirmation + input dialogs, replacing window.confirm/prompt.
@@ -52,18 +53,34 @@ type State =
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>(null);
+  const open = state !== null;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const prevFocus = useRef<HTMLElement | null>(null);
+  const promptId = useId();
+  useFocusTrap(panelRef, open);
 
-  const confirm = useCallback(
-    (opts: ConfirmOpts) => new Promise<boolean>((resolve) => setState({ kind: 'confirm', opts, resolve })),
-    [],
-  );
-  const prompt = useCallback(
-    (opts: PromptOpts) =>
-      new Promise<string | null>((resolve) =>
-        setState({ kind: 'prompt', opts, value: opts.defaultValue ?? opts.options?.[0]?.value ?? '', resolve }),
-      ),
-    [],
-  );
+  // Move focus into the dialog on open and return it to the trigger on close, so
+  // keyboard users are never dropped back at the top of the page. If a control
+  // inside already grabbed focus (the prompt input's autoFocus), leave it there.
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
+    return () => prevFocus.current?.focus?.();
+  }, [open]);
+
+  // Remember the trigger at call time — before the dialog's autoFocus moves
+  // focus — so we can hand it back cleanly on close.
+  const confirm = useCallback((opts: ConfirmOpts) => {
+    prevFocus.current = document.activeElement as HTMLElement | null;
+    return new Promise<boolean>((resolve) => setState({ kind: 'confirm', opts, resolve }));
+  }, []);
+  const prompt = useCallback((opts: PromptOpts) => {
+    prevFocus.current = document.activeElement as HTMLElement | null;
+    return new Promise<string | null>((resolve) =>
+      setState({ kind: 'prompt', opts, value: opts.defaultValue ?? opts.options?.[0]?.value ?? '', resolve }),
+    );
+  }, []);
 
   const settle = useCallback((result: boolean | string | null) => {
     setState((s) => {
@@ -100,9 +117,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           }}
         >
           <div
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-label={state.opts.title ?? (state.kind === 'confirm' ? 'Confirm' : 'Enter a value')}
+            tabIndex={-1}
             style={{
               background: 'var(--mn-surface, #fff)', color: 'var(--mn-text, #1e1e2e)',
               borderRadius: 12, padding: 20, width: 'min(440px, 100%)',
@@ -140,10 +159,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   <p style={{ margin: '0 0 10px', color: 'var(--mn-muted)' }}>{state.opts.message}</p>
                 )}
                 {state.opts.label && (
-                  <label style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>{state.opts.label}</label>
+                  <label htmlFor={promptId} style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>{state.opts.label}</label>
                 )}
                 {state.opts.options ? (
                   <select
+                    id={promptId}
                     autoFocus
                     value={state.value}
                     onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}
@@ -158,6 +178,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   </select>
                 ) : (
                   <input
+                    id={promptId}
                     autoFocus
                     type={state.opts.type === 'number' ? 'number' : 'text'}
                     value={state.value}

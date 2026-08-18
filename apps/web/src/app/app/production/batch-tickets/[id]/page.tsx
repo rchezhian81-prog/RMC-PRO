@@ -146,7 +146,7 @@ export default function BatchTicketDetail() {
     }
   }
 
-  if (!t) return <Loading label="Loading batch ticket…" />;
+  if (!t) return error ? <ErrorState message={error} /> : <Loading label="Loading batch ticket…" />;
   const mats = (t.materials as Row[]) ?? [];
   const status = String(t.status);
   const draft = status === 'draft';

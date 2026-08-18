@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const PAYMENT_MODES = ['cash', 'bank', 'upi', 'cheque'];
@@ -29,6 +29,7 @@ export default function ExpenseVouchersPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const [payee, setPayee] = useState('');
   const [mode, setMode] = useState('cash');
@@ -49,7 +50,7 @@ export default function ExpenseVouchersPage() {
     setRows(v); setHeads(h); setPlants(p); setVehicles(ve); setSites(s);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
   }, []);
 
   function setLine(i: number, patch: Partial<LineDraft>) {
@@ -162,7 +163,9 @@ export default function ExpenseVouchersPage() {
 
       <div style={{ marginBottom: 18 }}>
         <Card title="Expense vouchers" padded={false}>
-          {rows.length ? (
+          {!loaded ? (
+            <TableSkeleton cols={6} />
+          ) : rows.length ? (
             <Table>
               <thead><tr><Th>Voucher No</Th><Th>Date</Th><Th>Payee</Th><Th numeric>Total</Th><Th>Status</Th><Th /></tr></thead>
               <tbody>

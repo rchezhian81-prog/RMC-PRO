@@ -8,7 +8,7 @@ import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ExportButton } from '../../../../components/ExportButton';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -20,6 +20,7 @@ export default function StockPage() {
   const [form, setForm] = useState({ plantId: '', materialId: '', quantity: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [b, l, m, p] = await Promise.all([
@@ -34,7 +35,9 @@ export default function StockPage() {
     setPlants(p);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function setOpening(e: FormEvent) {
@@ -111,7 +114,9 @@ export default function StockPage() {
           />
         }
       >
-        {balances.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={3} />
+        ) : balances.length ? (
           <Table>
             <thead>
               <tr>
@@ -148,7 +153,9 @@ export default function StockPage() {
           />
         }
       >
-        {ledger.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : ledger.length ? (
           <Table>
             <thead>
               <tr>

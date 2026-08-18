@@ -50,7 +50,7 @@ export default function ChallanDetail() {
     }
   }
 
-  if (!c) return <Loading label="Loading challan…" />;
+  if (!c) return error ? <ErrorState message={error} /> : <Loading label="Loading challan…" />;
   const history = (c.history as Row[]) ?? [];
   const status = String(c.challanStatus);
 

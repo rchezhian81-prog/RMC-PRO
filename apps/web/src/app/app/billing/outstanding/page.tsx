@@ -7,7 +7,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { ExportButton } from '../../../../components/ExportButton';
 import { TemplateButton } from '../../../../components/TemplateButton';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -15,6 +15,7 @@ export default function OutstandingPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [totals, setTotals] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     billingReportsApi
@@ -23,7 +24,8 @@ export default function OutstandingPage() {
         setRows(d.rows as Row[]);
         setTotals(d.totals as Row);
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   return (
@@ -53,7 +55,9 @@ export default function OutstandingPage() {
           />
         }
       >
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { inventoryReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -14,6 +14,7 @@ export default function InventoryReportsPage() {
   const [valuation, setValuation] = useState<{ rows: Row[]; total: number } | null>(null);
   const [movement, setMovement] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -27,7 +28,7 @@ export default function InventoryReportsPage() {
       setNegative(n);
       setValuation(v);
       setMovement(mv);
-    })().catch((e) => setError(String(e)));
+    })().catch((e) => setError(String(e))).finally(() => setLoaded(true));
   }, []);
 
   return (
@@ -36,7 +37,9 @@ export default function InventoryReportsPage() {
       {error && <ErrorState message={error} />}
 
       <Card title="Negative stock" padded={false}>
-        {negative.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={3} />
+        ) : negative.length ? (
           <Table>
             <thead>
               <tr>
@@ -61,7 +64,9 @@ export default function InventoryReportsPage() {
       </Card>
 
       <Card title="Low stock (at / below reorder level)" padded={false}>
-        {low.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={3} />
+        ) : low.length ? (
           <Table>
             <thead>
               <tr>
@@ -88,7 +93,9 @@ export default function InventoryReportsPage() {
       </Card>
 
       <Card title={`Stock valuation${valuation ? ` — total ₹${money(valuation.total)}` : ''}`} padded={false}>
-        {valuation?.rows?.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : valuation?.rows?.length ? (
           <Table>
             <thead>
               <tr>
@@ -115,7 +122,9 @@ export default function InventoryReportsPage() {
       </Card>
 
       <Card title="Movement (total in / out)" padded={false}>
-        {movement.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : movement.length ? (
           <Table>
             <thead>
               <tr>

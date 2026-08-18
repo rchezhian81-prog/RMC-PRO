@@ -7,7 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 const PAGE = 100;
 
@@ -27,6 +27,7 @@ export default function AuditPage() {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [more, setMore] = useState(false);
 
   const load = useCallback(async (q: string, from: number) => {
@@ -44,7 +45,7 @@ export default function AuditPage() {
   }, []);
 
   useEffect(() => {
-    load(applied, offset);
+    load(applied, offset).finally(() => setLoaded(true));
   }, [applied, offset, load]);
 
   function runSearch(e: React.FormEvent) {
@@ -76,7 +77,9 @@ export default function AuditPage() {
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
 
       <Card title="Events" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <>
             <Table>
               <thead>

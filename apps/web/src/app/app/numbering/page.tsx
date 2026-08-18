@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../components/ui/Table';
 import { Button } from '../../../components/ui/Button';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Field, Input } from '../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 const DOC_TYPES = ['quotation', 'order', 'delivery_challan', 'invoice', 'receipt', 'dispatch'];
 
@@ -20,6 +20,7 @@ export default function NumberingPage() {
   const [plantId, setPlantId] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const canManage = getAccess().has('sync.manage');
@@ -29,7 +30,9 @@ export default function NumberingPage() {
     setRows(r); setPlants(p);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload()
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function reserve() {
@@ -82,7 +85,9 @@ export default function NumberingPage() {
       )}
 
       <Card title="Reserved number blocks" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead><tr><Th>When</Th><Th>Document</Th><Th>Plant</Th><Th numeric>From</Th><Th numeric>To</Th><Th numeric>Used</Th><Th>Status</Th></tr></thead>
             <tbody>

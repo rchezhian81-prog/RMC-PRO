@@ -12,7 +12,7 @@ import { Table, Th, Td } from './ui/Table';
 import { Button } from './ui/Button';
 import { Form } from './ui/Form';
 import { Field, Input } from './ui/Field';
-import { ErrorState, EmptyState } from './ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from './ui/States';
 import { useConfirm } from './ui/ConfirmDialog';
 
 type Access = { isOwner: boolean; permissions: string[]; has: (k: string) => boolean };
@@ -35,6 +35,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
   const [busy, setBusy] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [access, setAccess] = useState<Access>(NO_ACCESS);
+  const [loaded, setLoaded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isNumberSeries = config.path === 'number-series';
@@ -50,7 +51,10 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     setForm({});
     setEditingId(null);
     setError(null);
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    setLoaded(false);
+    reload()
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoaded(true));
   }, [config.path]);
 
   function startEdit(r: Row) {
@@ -293,7 +297,9 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
           </div>
         }
       >
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={config.columns.length + (showActions ? 1 : 0)} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

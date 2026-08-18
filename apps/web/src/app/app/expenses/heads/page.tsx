@@ -8,7 +8,7 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const COST_TYPES = ['general', 'plant', 'vehicle', 'site'];
 
@@ -18,6 +18,7 @@ export default function ExpenseHeadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const [gCode, setGCode] = useState('');
   const [gName, setGName] = useState('');
@@ -34,7 +35,7 @@ export default function ExpenseHeadsPage() {
     setGroups(g); setHeads(h);
   }
   useEffect(() => {
-    reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
   }, []);
 
   async function createGroup() {
@@ -75,7 +76,9 @@ export default function ExpenseHeadsPage() {
               <Button onClick={createGroup} loading={busy}>Add group</Button>
             </div>
           )}
-          {groups.length ? (
+          {!loaded ? (
+            <TableSkeleton cols={3} />
+          ) : groups.length ? (
             <Table>
               <thead><tr><Th>Code</Th><Th>Group</Th><Th>Status</Th></tr></thead>
               <tbody>
@@ -117,7 +120,9 @@ export default function ExpenseHeadsPage() {
             <Button onClick={createHead} loading={busy}>Add head</Button>
           </div>
         )}
-        {heads.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : heads.length ? (
           <Table>
             <thead><tr><Th>Code</Th><Th>Head</Th><Th>Group</Th><Th>Default cost</Th><Th>Status</Th></tr></thead>
             <tbody>

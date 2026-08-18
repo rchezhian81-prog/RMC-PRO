@@ -8,7 +8,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const STAGES = ['new', 'qualified', 'quoted', 'won', 'lost'];
 
@@ -30,12 +30,15 @@ export default function LeadsPage() {
   const [form, setForm] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '' });
   const [fu, setFu] = useState({ notes: '', outcome: '', nextFollowupDate: '', leadStage: '' });
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     setRows(await leadsApi.list());
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload()
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoaded(true));
   }, []);
 
   async function open(id: string) {
@@ -90,7 +93,9 @@ export default function LeadsPage() {
       </Card>
 
       <Card title="Leads" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

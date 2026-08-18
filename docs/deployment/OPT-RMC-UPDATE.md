@@ -12,16 +12,16 @@ owner's explicit go. Read-only until the steps that clearly restart a container.
 - The automated **PostgreSQL backups** run from a **separate** checkout at
   **`/root/RMC-PRO`** (cron in `/etc/cron.d/`). This procedure updates
   `/opt/rmc`; `/root/RMC-PRO` can be updated the same way later if desired.
-- ⚠️ **`IMAGE_TAG_WEB` is NOT in `main` yet.** The web-only image override
-  (`image: ${IMAGE_REPO_WEB}:${IMAGE_TAG_WEB:-${IMAGE_TAG}}`) lives only on the
-  **closed/superseded branch `claude/ui-v2-completion-audit` (PR #64)**; the
-  merged UI-V2 split PRs (A/B/C/D) carried app source, tests, images and docs but
-  **not** the infra/compose files. Verified: `main` compose has **0** matches for
-  `IMAGE_TAG_WEB`, the #64 branch has 4.
-- **Consequence:** updating `/opt/rmc` to `main` does **not** give the box the
-  `IMAGE_TAG_WEB` feature. Until it is merged into `main`, the V2 pilot must run
-  via the local override file (`docker/web-uiv2.override.yml`) — see
-  `UI-V2-PILOT-OVERRIDE-CLEANUP.md`.
+- ✅ **`IMAGE_TAG_WEB` is now in `main`** (ported from the closed
+  `claude/ui-v2-completion-audit` (PR #64) branch via the infra PR). The web
+  service line is now
+  `image: ${IMAGE_REPO_WEB}:${IMAGE_TAG_WEB:-${IMAGE_TAG:-latest}}`.
+- ⚠️ **But the production box hasn't been updated to it yet.** The running
+  `/opt/rmc` checkout predates this change, so on the box today editing
+  `IMAGE_TAG_WEB` still has no effect. Run **Procedure A** to update `/opt/rmc`
+  to a `main` commit that includes it, then **Procedure B** to switch. Until the
+  box is updated, the V2 pilot runs via the local override file
+  (`docker/web-uiv2.override.yml`) — see `UI-V2-PILOT-OVERRIDE-CLEANUP.md`.
 
 ## Procedure A — update the `/opt/rmc` checkout to a target commit
 
@@ -49,11 +49,11 @@ Nothing restarts. `.env.production` is gitignored, so it is untouched.
 
 ## Procedure B — enable the NATIVE `IMAGE_TAG_WEB` pilot mechanism
 
-> **Prerequisite (not yet done): `IMAGE_TAG_WEB` must first be merged into `main`.**
-> That is a small, separate infra PR touching only `docker/docker-compose.prod.yml`
-> and `.env.production.example` (portable from the #64 branch). Do **not** run
-> Procedure B until `grep IMAGE_TAG_WEB /opt/rmc/docker/docker-compose.prod.yml`
-> returns matches. Until then, keep the pilot on the override file.
+> **Prerequisite:** `IMAGE_TAG_WEB` is now in `main` (infra PR). The remaining
+> step is to update `/opt/rmc` to a `main` commit that includes it (Procedure A).
+> Do **not** run Procedure B until
+> `grep IMAGE_TAG_WEB /opt/rmc/docker/docker-compose.prod.yml` returns matches;
+> until the box is updated, keep the pilot on the override file.
 
 Once `IMAGE_TAG_WEB` is in `main` and `/opt/rmc` has been updated (Procedure A):
 

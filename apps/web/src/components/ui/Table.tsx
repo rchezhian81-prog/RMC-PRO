@@ -4,7 +4,9 @@ import type { CSSProperties, ReactNode, ThHTMLAttributes, TdHTMLAttributes } fro
 export function Table({ children }: { children: ReactNode }) {
   return (
     <div style={{ overflowX: 'auto', width: '100%' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>{children}</table>
+      <table className="mn-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        {children}
+      </table>
     </div>
   );
 }

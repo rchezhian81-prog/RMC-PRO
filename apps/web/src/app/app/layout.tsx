@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
+import { isUiV2 } from '../../lib/ui-flag';
 import { Logo } from '../../components/ui/Logo';
 import { ConfirmProvider } from '../../components/ui/ConfirmDialog';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
@@ -263,7 +264,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
       <aside className={`mn-sidebar ${open ? 'mn-open' : ''}`}>
         <div style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Logo size="sm" />
+          {/* On V2 the sidebar is a deep-violet rail, so the logo uses its on-dark tone. */}
+          <Logo size="sm" onDark={isUiV2()} />
           <button className="mn-iconbtn mn-hamburger" onClick={() => setOpen(false)} aria-label="Close menu">
             <X size={18} />
           </button>

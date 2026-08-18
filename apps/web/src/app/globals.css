@@ -1046,3 +1046,225 @@ main:focus-visible {
     animation-duration: 0.01ms;
   }
 }
+
+/* ============================================================================
+   UI V2 — "Deep Violet Matte" PREMIUM uplift  (PR-UI-PREMIUM)
+   ----------------------------------------------------------------------------
+   Flag-gated: EVERY rule below is scoped to :root[data-ui='v2'] (or a token it
+   redefines only under that scope), so the flag-OFF UI is byte-for-byte
+   unchanged. Presentation only — the sole markup touch is a `mn-table` class on
+   the shared Table primitive + the sidebar logo tone; no logic/route/data/API
+   change. This raises V2 from a near-invisible token re-tune to a distinct
+   premium system: a deep-violet command rail, layered matte depth, crisp
+   surface hierarchy, and refined tables / forms / buttons.
+   ============================================================================ */
+
+/* ---- 1. Token uplift — deeper ground, softer radius, layered matte depth ---- */
+:root[data-ui='v2'] {
+  --mn-bg: #eceef6;            /* cooler, a touch deeper so white cards read as lifted */
+  --mn-surface: #ffffff;
+  --mn-surface-2: #f3f3fb;
+  --mn-border: rgba(28, 22, 60, 0.09);
+  --mn-border-strong: rgba(28, 22, 60, 0.15);
+
+  --mn-radius-sm: 8px;
+  --mn-radius-md: 11px;
+  --mn-radius-lg: 16px;
+
+  --mn-shadow-1: 0 1px 2px rgba(24, 18, 55, 0.06);
+  --mn-shadow-2: 0 6px 20px -8px rgba(24, 18, 55, 0.14);
+  --mn-shadow-card: 0 1px 3px rgba(24, 18, 55, 0.06), 0 12px 30px -16px rgba(24, 18, 55, 0.18);
+  --mn-shadow-pop: 0 20px 50px -18px rgba(24, 18, 55, 0.34);
+  --mn-glow-primary: 0 8px 22px -8px rgba(108, 43, 217, 0.5);
+
+  /* deep-violet command rail (sidebar) */
+  --mn-rail: linear-gradient(187deg, #2d1268 0%, #4a1fa6 54%, #391a8e 100%);
+  --mn-rail-fg: #f1ecff;
+  --mn-rail-muted: rgba(224, 213, 255, 0.66);
+  --mn-rail-title: rgba(200, 184, 255, 0.72);
+  --mn-rail-active: rgba(255, 255, 255, 0.16);
+  --mn-rail-hover: rgba(255, 255, 255, 0.08);
+  --mn-rail-border: rgba(255, 255, 255, 0.1);
+}
+:root[data-ui='v2'][data-theme='dark'] {
+  --mn-bg: #100f1c;
+  --mn-surface: #1b1a2e;
+  --mn-surface-2: #232138;
+  --mn-border: rgba(138, 79, 255, 0.16);
+  --mn-border-strong: rgba(138, 79, 255, 0.26);
+  --mn-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 14px 34px -16px rgba(0, 0, 0, 0.62);
+  --mn-shadow-pop: 0 22px 54px -18px rgba(0, 0, 0, 0.72);
+  --mn-rail: linear-gradient(187deg, #191230 0%, #241848 55%, #1b1236 100%);
+  --mn-rail-fg: #ece7fb;
+  --mn-rail-muted: rgba(197, 185, 238, 0.6);
+  --mn-rail-title: rgba(178, 160, 235, 0.66);
+  --mn-rail-active: rgba(138, 79, 255, 0.24);
+  --mn-rail-hover: rgba(138, 79, 255, 0.13);
+  --mn-rail-border: rgba(138, 79, 255, 0.2);
+}
+
+/* ---- 2. App ground + content rhythm ---- */
+:root[data-ui='v2'] .mn-shell {
+  background: var(--mn-bg);
+}
+:root[data-ui='v2'] .mn-main {
+  padding: 32px 34px;
+}
+:root[data-ui='v2'] .mn-main h1 {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+/* ---- 3. Sidebar → deep-violet command rail ----
+   The nav/group markup reads --mn-* tokens (via classes and inline
+   var(--mn-*)). Redefining those tokens *within* the sidebar re-colours the
+   whole rail cleanly, with no structural selectors. */
+:root[data-ui='v2'] .mn-sidebar {
+  background: var(--mn-rail);
+  border-right: 1px solid var(--mn-rail-border);
+  color: var(--mn-rail-fg);
+  /* re-point the tokens the rail's children resolve at render time */
+  --mn-text: #ffffff;
+  --mn-muted: var(--mn-rail-muted);
+  --mn-subtle: var(--mn-rail-title);
+  --mn-purple-50: var(--mn-rail-hover);
+  --mn-primary: var(--mn-rail-active);
+}
+:root[data-ui='v2'] .mn-sidebar .mn-nav {
+  border-radius: 11px;
+  padding: 9px 12px;
+  font-weight: 500;
+}
+:root[data-ui='v2'] .mn-sidebar .mn-nav svg {
+  opacity: 0.9;
+}
+:root[data-ui='v2'] .mn-sidebar .mn-nav:hover svg {
+  opacity: 1;
+}
+:root[data-ui='v2'] .mn-nav-active,
+:root[data-ui='v2'] .mn-nav-active:hover {
+  position: relative;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 8px 18px -10px rgba(0, 0, 0, 0.55);
+}
+:root[data-ui='v2'] .mn-nav-active::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 17px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #d3b6ff, #8a4fff);
+}
+:root[data-ui='v2'] .mn-sidebar .mn-iconbtn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+/* ---- 4. Topbar → crisp matte, subtle blur, hairline + soft under-shadow ---- */
+:root[data-ui='v2'] .mn-topbar {
+  padding: 14px 26px;
+  background: color-mix(in srgb, var(--mn-surface) 84%, transparent);
+  backdrop-filter: saturate(1.2) blur(8px);
+  border-bottom: 1px solid var(--mn-border);
+  box-shadow: 0 8px 24px -22px rgba(24, 18, 55, 0.55);
+}
+:root[data-ui='v2'] .mn-topbar .mn-iconbtn:hover {
+  background: var(--mn-surface-2);
+}
+
+/* ---- 5. Cards / panels → premium radius, hairline, layered lift ---- */
+:root[data-ui='v2'] .mn-card,
+:root[data-ui='v2'] .mn-surface {
+  border-radius: var(--mn-radius-lg);
+  border: 1px solid var(--mn-border);
+  box-shadow: var(--mn-shadow-card);
+  transition: box-shadow var(--mn-dur-std) var(--mn-ease), transform var(--mn-dur-std) var(--mn-ease);
+}
+/* interactive cards (KPI tiles wrapped in a link) get a tactile hover lift */
+:root[data-ui='v2'] a .mn-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mn-shadow-pop);
+}
+
+/* ---- 6. Tables → tinted sticky-feeling header, comfortable rows, hover ----
+   The Table primitive inline-styles th/td, so V2 overrides use !important to
+   win over those inline values (flag-OFF keeps the inline styles untouched). */
+:root[data-ui='v2'] table.mn-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+:root[data-ui='v2'] table.mn-table thead th {
+  background: var(--mn-surface-2) !important;
+  color: var(--mn-subtle) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.05em !important;
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--mn-border-strong) !important;
+}
+:root[data-ui='v2'] table.mn-table tbody td {
+  padding: 13px 16px !important;
+  border-bottom: 1px solid var(--mn-border) !important;
+}
+:root[data-ui='v2'] table.mn-table tbody tr {
+  transition: background var(--mn-dur-micro) var(--mn-ease);
+}
+:root[data-ui='v2'] table.mn-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--mn-primary) 5%, transparent) !important;
+}
+:root[data-ui='v2'] table.mn-table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+/* ---- 7. Buttons → gradient primary + glow, crisp secondary, refined ghost ---- */
+:root[data-ui='v2'] .mn-btn {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+:root[data-ui='v2'] .mn-btn-primary {
+  background: linear-gradient(135deg, #7c3aed 0%, #6c2bd9 100%);
+  box-shadow: var(--mn-glow-primary);
+}
+:root[data-ui='v2'] .mn-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6d28d9 0%, #5a1fb8 100%);
+  box-shadow: 0 10px 26px -8px rgba(108, 43, 217, 0.6);
+}
+:root[data-ui='v2'] .mn-btn-secondary {
+  box-shadow: var(--mn-shadow-1);
+}
+
+/* ---- 8. Inputs / search → taller, refined, violet focus halo (halo already set) ---- */
+:root[data-ui='v2'] .mn-input {
+  min-height: 42px;
+  border-radius: var(--mn-radius-md);
+}
+:root[data-ui='v2'] .mn-search {
+  border-radius: var(--mn-radius-md);
+}
+
+/* ---- 9. Command / filter / toolbar surfaces → premium matte + radius ---- */
+:root[data-ui='v2'] .mn-cmdbar,
+:root[data-ui='v2'] .mn-filterbar,
+:root[data-ui='v2'] .mn-toolbar {
+  border-radius: var(--mn-radius-lg);
+  box-shadow: var(--mn-shadow-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ui='v2'] .mn-card,
+  :root[data-ui='v2'] a .mn-card:hover {
+    transition: none;
+    transform: none;
+  }
+}
+@media (max-width: 768px) {
+  :root[data-ui='v2'] .mn-main {
+    padding: 18px 15px;
+  }
+  :root[data-ui='v2'] .mn-topbar {
+    padding: 11px 15px;
+  }
+}

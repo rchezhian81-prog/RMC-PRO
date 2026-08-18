@@ -5,6 +5,17 @@ Plain-language, copy‑paste steps to show the UI V2 skin on the live site as a
 rollback. Grounded in the live state verified on **2026‑08‑18** (repo→live
 alignment audit).
 
+> ⚠️ **CORRECTION (2026‑08‑18): `IMAGE_TAG_WEB` is NOT in `main` yet.** The
+> `IMAGE_TAG_WEB` web-only override that Phase 4 / rollback below rely on lives
+> only on the closed/superseded branch `claude/ui-v2-completion-audit` (PR #64);
+> it was **never merged** to `main` (the split PRs carried app/tests/images/docs,
+> not infra/compose). On the current production box, **editing `IMAGE_TAG_WEB`
+> has no effect** — the pilot must be flipped via a local compose **override
+> file** instead. Use `docs/deployment/UI-V2-PILOT-OVERRIDE-CLEANUP.md` (Case 3)
+> to flip/roll back today, and `docs/deployment/OPT-RMC-UPDATE.md` to make the
+> `IMAGE_TAG_WEB` mechanism real. The Phase 4/rollback blocks below become valid
+> only **after** `IMAGE_TAG_WEB` is merged to `main` and `/opt/rmc` is updated.
+
 > **Companion docs.** For the deeper staged-rollout/canary reference see
 > `docs/deployment/UI-V2-ROLLOUT-RUNBOOK.md`; for the flag design & guarantees
 > see `docs/ui/UI-V2-ROLLOUT.md`. **This file is the operator's quick pilot

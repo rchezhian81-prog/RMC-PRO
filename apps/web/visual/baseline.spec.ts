@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { SCREENS } from './screens';
 
 /**
  * Visual-regression BASELINE of the current production UI (flag OFF).
@@ -34,34 +35,26 @@ const MODE = process.env.VISUAL_MODE === 'v2' ? 'v2' : 'off';
 const SUFX = MODE === 'v2' ? '-v2' : '';
 
 async function capture(page: Page, name: string, path: string) {
-  // Light (default)
-  await page.addInitScript(() => window.localStorage.setItem('mn-theme', 'light'));
   await page.goto(path, { waitUntil: 'networkidle' });
+
+  // Light (default). Set data-theme explicitly — the attribute the CSS keys off —
+  // so a shot never depends on the ThemeToggle mount effect or a persisted choice.
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
   await stabilize(page);
   await expect(page).toHaveScreenshot(`${name}-light${SUFX}.png`, { fullPage: true });
 
-  // Dark (toggle persisted in localStorage, reload so the shell re-reads it)
-  await page.evaluate(() => window.localStorage.setItem('mn-theme', 'dark'));
-  await page.reload({ waitUntil: 'networkidle' });
+  // Dark — flip the same attribute in place. The previous approach set
+  // localStorage + reload(), but an addInitScript re-forced 'light' on every
+  // reload, so every "dark" shot silently rendered light. Toggling data-theme
+  // directly (no reload) is deterministic and matches the ui-kit harness.
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
   await stabilize(page);
   await expect(page).toHaveScreenshot(`${name}-dark${SUFX}.png`, { fullPage: true });
 }
 
-// Authenticated app surfaces (owner session via storageState).
-const SCREENS: Array<{ name: string; path: string }> = [
-  { name: 'dashboard', path: '/app/dashboard' },
-  { name: 'masters-customers', path: '/app/entity/customers' },
-  { name: 'orders', path: '/app/orders' },
-  { name: 'production-batch-queue', path: '/app/production/batch-queue' },
-  { name: 'billing-invoices', path: '/app/billing/invoices' },
-  // Roles (permissions surface) — deterministic. NOTE: the Audit Trail screen is
-  // deliberately NOT baselined: it renders per-run event timestamps, which are
-  // non-deterministic and make a pixel baseline flaky. Its behavior is covered by
-  // the API integration/e2e tests instead.
-  { name: 'roles', path: '/app/roles' },
-  { name: 'devices-sync', path: '/app/devices' },
-];
-
+// Authenticated tenant-owner routes (shared list in ./screens.ts), rendered
+// against the seeded VISUAL tenant. Non-deterministic / persona / detail routes
+// are handled in evidence.spec.ts, not here.
 for (const s of SCREENS) {
   test(`baseline: ${s.name}`, async ({ page }) => {
     await capture(page, s.name, s.path);

@@ -206,28 +206,22 @@ export default function QuotationDetail() {
       {(() => {
         const s = q.taxSummary as Row | undefined;
         if (!s) return null;
+        // Label yields (ellipsis) when the row is tight so the ₹ value is never
+        // clipped on narrow phones; space-between keeps them apart on wide cards.
+        const row = (label: string, value: unknown, strong = false) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, padding: '3px 0', fontWeight: strong ? 700 : 400, color: strong ? 'inherit' : 'var(--mn-muted)' }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>₹{money(value)}</span>
+          </div>
+        );
         return (
           <Card style={{ maxWidth: 380, marginLeft: 'auto', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
-              <span>Taxable</span><span>₹{money(s.taxable)}</span>
-            </div>
-            {Number(s.cgst) > 0 && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
-                  <span>CGST</span><span>₹{money(s.cgst)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
-                  <span>SGST</span><span>₹{money(s.sgst)}</span>
-                </div>
-              </>
-            )}
-            {Number(s.igst) > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--mn-muted)' }}>
-                <span>IGST</span><span>₹{money(s.igst)}</span>
-              </div>
-            )}
-            <div style={{ borderTop: '1px solid var(--mn-border)', margin: '8px 0', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-              <span>Total{s.isInterstate ? ' (inter-state)' : ''}</span><span>₹{money(s.total)}</span>
+            {row('Taxable', s.taxable)}
+            {Number(s.cgst) > 0 && row('CGST', s.cgst)}
+            {Number(s.cgst) > 0 && row('SGST', s.sgst)}
+            {Number(s.igst) > 0 && row('IGST', s.igst)}
+            <div style={{ borderTop: '1px solid var(--mn-border)', margin: '8px 0', paddingTop: 8 }}>
+              {row(`Total${s.isInterstate ? ' (inter-state)' : ''}`, s.total, true)}
             </div>
           </Card>
         );

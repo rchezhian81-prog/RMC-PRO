@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api, BLOCKED_REASON_KEY } from '../../lib/api';
 import { saveSession } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
+import { isUiV2 } from '../../lib/ui-flag';
 
 /** Functional login (Design Doc 5 §3) wired to the live API — Mix Nova branded. */
 export default function LoginPage() {
@@ -60,6 +61,96 @@ export default function LoginPage() {
     margin: '6px 0 16px',
   };
   const label: CSSProperties = { fontSize: 13, fontWeight: 500, color: 'var(--mn-muted)' };
+
+  // V2: premium split-screen — violet brand hero + clean sign-in panel. Gated by
+  // the flag so the flag-OFF login stays byte-for-byte unchanged (below).
+  if (isUiV2()) {
+    const v2Label: CSSProperties = {
+      display: 'block',
+      fontSize: 13,
+      fontWeight: 600,
+      color: 'var(--mn-muted)',
+      marginBottom: 6,
+    };
+    return (
+      <main className="mn-app mn-login-v2">
+        <aside className="mn-login-hero">
+          <Logo size="lg" onDark />
+          <h2 className="mn-login-hero-title">Smart Mix. Stronger Future.</h2>
+          <p className="mn-login-hero-sub">
+            The operating system for your ready-mix concrete plant — sales, production, dispatch and
+            billing, all in one place.
+          </p>
+        </aside>
+        <div className="mn-login-panel">
+          <div className="mn-login-card">
+            <h1
+              style={{
+                margin: '0 0 6px',
+                fontFamily: 'var(--mn-font-display)',
+                fontSize: 26,
+                letterSpacing: '-0.02em',
+                color: 'var(--mn-text)',
+              }}
+            >
+              Welcome back
+            </h1>
+            <p style={{ margin: '0 0 24px', color: 'var(--mn-muted)', fontSize: 14 }}>
+              Sign in to your Mix Nova workspace.
+            </p>
+            <form onSubmit={onSubmit}>
+              <label htmlFor="mn-login-v2" style={v2Label}>
+                Email / Mobile / User ID
+              </label>
+              <input
+                id="mn-login-v2"
+                className="mn-input"
+                style={{ marginBottom: 16 }}
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                autoComplete="username"
+                aria-label="login-identifier"
+                required
+              />
+              <label htmlFor="mn-password-v2" style={v2Label}>
+                Password
+              </label>
+              <input
+                id="mn-password-v2"
+                className="mn-input"
+                style={{ marginBottom: 16 }}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                aria-label="password"
+                required
+              />
+              {error && (
+                <p
+                  role="alert"
+                  style={{
+                    color: 'var(--mn-danger)',
+                    background: 'var(--mn-danger-tint)',
+                    border: '1px solid var(--mn-danger)',
+                    borderRadius: 'var(--mn-radius-sm)',
+                    padding: '8px 10px',
+                    fontSize: 13,
+                    margin: '0 0 14px',
+                  }}
+                >
+                  {error}
+                </p>
+              )}
+              <button className="mn-btn mn-btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={busy}>
+                {busy ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main

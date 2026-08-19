@@ -4,6 +4,11 @@ A single, end-to-end run of the core RMC flow on the pilot tenant, to prove the
 live system works before wider use. **Operating checklist only** — no code, no
 deploy; run it as the owner in the app.
 
+> **▶ Interactive version** — run this step-by-step in your browser with progress,
+> evidence tracking, and print: **[Pilot run sheet](https://claude.ai/code/artifact/405a0ad0-e3a3-4921-8b4b-6008ff20e223)**.
+> Companion: **[Visual approval sheet](https://claude.ai/code/artifact/65dc6e10-4259-42fe-a9a1-da7d476130e0)** — complete the UI sign-off first.
+> *(Artifacts are private to the owner's Claude account until shared from the sheet's share menu.)*
+
 ## Scope
 
 - Run as the **owner login on the pilot tenant**.

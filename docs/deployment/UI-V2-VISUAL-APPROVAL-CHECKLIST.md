@@ -3,6 +3,11 @@
 Sign-off checklist for the premium UI now live on the pilot. **Presentation review
 only** — this documents *what to look at*, not a code or deploy step.
 
+> **▶ Interactive version** — tick this off in your browser with live progress,
+> sign-off, and print: **[Visual approval sheet](https://claude.ai/code/artifact/65dc6e10-4259-42fe-a9a1-da7d476130e0)**.
+> Companion: **[Pilot run sheet](https://claude.ai/code/artifact/405a0ad0-e3a3-4921-8b4b-6008ff20e223)** — run after this sign-off passes.
+> *(Artifacts are private to the owner's Claude account until shared from the sheet's share menu.)*
+
 ## How to run it
 
 - Open **https://app.mixnovas.com** in an **incognito window** (or hard-refresh,

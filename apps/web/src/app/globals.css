@@ -1268,3 +1268,156 @@ main:focus-visible {
     padding: 11px 15px;
   }
 }
+
+/* ============================================================================
+   UI V2 — "V3 refinement" (world-class polish pass)
+   ----------------------------------------------------------------------------
+   Appended last so these values win over the earlier premium block. Still
+   entirely scoped to :root[data-ui='v2'] — flag-OFF stays byte-for-byte
+   unchanged. Direction: sophisticated deep-indigo command rail, expensive
+   layered card depth, crisper hierarchy, tighter type, refined accents.
+   ============================================================================ */
+:root[data-ui='v2'] {
+  --mn-bg: #e8e9f1;
+  --mn-surface: #ffffff;
+  --mn-surface-2: #f2f2fa;
+  --mn-border: rgba(30, 24, 64, 0.07);
+  --mn-border-strong: rgba(30, 24, 64, 0.13);
+  --mn-muted: #55566b;
+  --mn-subtle: #8a8aa0;
+
+  --mn-radius-sm: 9px;
+  --mn-radius-md: 12px;
+  --mn-radius-lg: 18px;
+
+  --mn-shadow-1: 0 1px 2px rgba(22, 17, 52, 0.05);
+  --mn-shadow-2: 0 10px 30px -12px rgba(22, 17, 52, 0.14);
+  --mn-shadow-card: 0 1px 2px rgba(22, 17, 52, 0.04), 0 12px 28px -16px rgba(22, 17, 52, 0.13),
+    0 3px 8px -4px rgba(22, 17, 52, 0.05);
+  --mn-shadow-pop: 0 26px 64px -22px rgba(22, 17, 52, 0.34);
+  --mn-glow-primary: 0 10px 26px -10px rgba(124, 58, 237, 0.5);
+
+  /* deep, sophisticated indigo-violet rail — less saturation reads as premium */
+  --mn-rail: linear-gradient(176deg, #1c1638 0%, #241b46 46%, #17122d 100%);
+  --mn-rail-fg: #efe9ff;
+  --mn-rail-muted: rgba(199, 189, 233, 0.62);
+  --mn-rail-title: rgba(158, 142, 206, 0.6);
+  --mn-rail-active: rgba(139, 92, 246, 0.2);
+  --mn-rail-hover: rgba(255, 255, 255, 0.055);
+  --mn-rail-border: rgba(148, 120, 235, 0.14);
+  --mn-purple-50: #f1ecfe;
+}
+:root[data-ui='v2'][data-theme='dark'] {
+  --mn-bg: #0c0b15;
+  --mn-surface: #171628;
+  --mn-surface-2: #1e1c33;
+  --mn-border: rgba(139, 92, 246, 0.15);
+  --mn-border-strong: rgba(139, 92, 246, 0.24);
+  --mn-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 36px -18px rgba(0, 0, 0, 0.64);
+  --mn-shadow-pop: 0 26px 64px -20px rgba(0, 0, 0, 0.74);
+  --mn-rail: linear-gradient(176deg, #14112a 0%, #1b1638 55%, #100d22 100%);
+  --mn-rail-border: rgba(139, 92, 246, 0.18);
+}
+
+/* ground + rhythm */
+:root[data-ui='v2'] .mn-shell {
+  background: var(--mn-bg);
+}
+:root[data-ui='v2'] .mn-main {
+  padding: 34px 36px;
+}
+:root[data-ui='v2'] .mn-main h1 {
+  font-size: 27px;
+  letter-spacing: -0.025em;
+}
+
+/* command rail — refined tokens + crisper glowing active state */
+:root[data-ui='v2'] .mn-sidebar {
+  background: var(--mn-rail);
+  border-right: 1px solid var(--mn-rail-border);
+  --mn-text: #ffffff;
+  --mn-muted: var(--mn-rail-muted);
+  --mn-subtle: var(--mn-rail-title);
+  --mn-purple-50: var(--mn-rail-hover);
+  --mn-primary: var(--mn-rail-active);
+}
+:root[data-ui='v2'] .mn-sidebar .mn-nav {
+  border-radius: 12px;
+  padding: 9px 12px;
+  letter-spacing: -0.005em;
+}
+:root[data-ui='v2'] .mn-nav-active,
+:root[data-ui='v2'] .mn-nav-active:hover {
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.24), 0 8px 20px -10px rgba(124, 58, 237, 0.55);
+}
+:root[data-ui='v2'] .mn-nav-active::before {
+  width: 3px;
+  height: 20px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #c4b5fd, #8b5cf6);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.55);
+}
+
+/* topbar — cleaner glass, softer seam */
+:root[data-ui='v2'] .mn-topbar {
+  padding: 15px 28px;
+  background: color-mix(in srgb, var(--mn-surface) 78%, transparent);
+  backdrop-filter: saturate(1.35) blur(10px);
+  border-bottom: 1px solid var(--mn-border);
+  box-shadow: 0 10px 30px -26px rgba(22, 17, 52, 0.6);
+}
+
+/* cards — expensive: soft layered depth, hairline, whisper gradient, hover lift */
+:root[data-ui='v2'] .mn-card,
+:root[data-ui='v2'] .mn-surface {
+  border-radius: var(--mn-radius-lg);
+  border: 1px solid var(--mn-border);
+  background: linear-gradient(180deg, #ffffff 0%, #fdfcff 100%);
+  box-shadow: var(--mn-shadow-card);
+}
+:root[data-ui='v2'][data-theme='dark'] .mn-card,
+:root[data-ui='v2'][data-theme='dark'] .mn-surface {
+  background: linear-gradient(180deg, var(--mn-surface) 0%, #191830 100%);
+}
+:root[data-ui='v2'] a .mn-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--mn-shadow-pop);
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+/* primary button — refined violet gradient + glow */
+:root[data-ui='v2'] .mn-btn-primary {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  box-shadow: var(--mn-glow-primary);
+}
+:root[data-ui='v2'] .mn-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  box-shadow: 0 12px 30px -10px rgba(124, 58, 237, 0.6);
+}
+
+/* tables — crisper, airier header + rows */
+:root[data-ui='v2'] table.mn-table thead th {
+  background: var(--mn-surface-2) !important;
+  color: var(--mn-subtle) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.06em !important;
+  padding: 13px 16px !important;
+}
+:root[data-ui='v2'] table.mn-table tbody td {
+  padding: 14px 16px !important;
+}
+
+/* KPI summary — fewer, wider tiles: more breathing room + fits big numerals */
+:root[data-ui='v2'] .mn-summary {
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  :root[data-ui='v2'] .mn-main {
+    padding: 18px 15px;
+  }
+  :root[data-ui='v2'] .mn-topbar {
+    padding: 12px 15px;
+  }
+}

@@ -1407,6 +1407,12 @@ main:focus-visible {
   padding: 14px 16px !important;
 }
 
+/* KPI summary — fewer, wider tiles: more breathing room + fits big numerals */
+:root[data-ui='v2'] .mn-summary {
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 14px;
+}
+
 @media (max-width: 768px) {
   :root[data-ui='v2'] .mn-main {
     padding: 18px 15px;

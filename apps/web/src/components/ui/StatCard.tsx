@@ -79,7 +79,7 @@ export function StatCard({
         style={{
           fontFamily: 'var(--mn-font-display)',
           fontWeight: 700,
-          fontSize: v2 ? 34 : 26,
+          fontSize: v2 ? 30 : 26,
           letterSpacing: v2 ? '-0.03em' : undefined,
           lineHeight: 1.05,
           color: gradient ? '#fff' : ACCENT[tone],

@@ -8,6 +8,13 @@ only** — this documents *what to look at*, not a code or deploy step.
 > Companion: **[Pilot run sheet](https://claude.ai/code/artifact/405a0ad0-e3a3-4921-8b4b-6008ff20e223)** — run after this sign-off passes.
 > *(Artifacts are private to the owner's Claude account until shared from the sheet's share menu.)*
 
+**Using this sheet (team):**
+
+- Ticks save in **your own browser** — everyone runs an independent copy; there is no shared or merged progress.
+- Record the **Reviewer** name + **date** at the sign-off block (saved with your ticks); the block turns green when all 49 checks pass.
+- **Print / PDF** keeps a dated, signed copy for the pilot record; **Reset** clears everything for a fresh pass.
+- Works light or dark, desktop or phone — nothing to install. Same link for everyone once shared.
+
 ## How to run it
 
 - Open **https://app.mixnovas.com** in an **incognito window** (or hard-refresh,

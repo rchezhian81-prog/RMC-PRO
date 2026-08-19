@@ -9,6 +9,13 @@ deploy; run it as the owner in the app.
 > Companion: **[Visual approval sheet](https://claude.ai/code/artifact/65dc6e10-4259-42fe-a9a1-da7d476130e0)** — complete the UI sign-off first.
 > *(Artifacts are private to the owner's Claude account until shared from the sheet's share menu.)*
 
+**Using this sheet (team):**
+
+- Ticks save in **your own browser** — everyone runs an independent copy; there is no shared or merged progress.
+- Tap **Done** on a step only after its four checks pass (number series · status · amounts · RBAC); the step turns green.
+- Record the **Run by** name + **date** at the sign-off block (saved with your ticks); it completes when all 11 steps are green.
+- **Print / PDF** keeps a dated copy of the completed run for the pilot record; **Reset** clears the whole run to start over.
+
 ## Scope
 
 - Run as the **owner login on the pilot tenant**.

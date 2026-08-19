@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { isUiV2 } from '../../lib/ui-flag';
 
 /** Mix Nova surface card with an optional header (title + actions). */
 export function Card({
@@ -14,6 +15,7 @@ export function Card({
   padded?: boolean;
   style?: CSSProperties;
 }) {
+  const v2 = isUiV2();
   return (
     <section className="mn-card" style={style}>
       {(title || actions) && (
@@ -23,19 +25,29 @@ export function Card({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 12,
-            padding: '14px 18px',
+            padding: v2 ? '16px 20px' : '14px 18px',
             borderBottom: '1px solid var(--mn-border)',
           }}
         >
           {typeof title === 'string' ? (
-            <h3 style={{ margin: 0, fontSize: 15, fontFamily: 'var(--mn-font-display)' }}>{title}</h3>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: v2 ? 16 : 15,
+                fontWeight: v2 ? 600 : undefined,
+                letterSpacing: v2 ? '-0.01em' : undefined,
+                fontFamily: 'var(--mn-font-display)',
+              }}
+            >
+              {title}
+            </h3>
           ) : (
             title
           )}
           {actions ? <div style={{ display: 'flex', gap: 8 }}>{actions}</div> : null}
         </div>
       )}
-      <div style={{ padding: padded ? 18 : 0 }}>{children}</div>
+      <div style={{ padding: padded ? (v2 ? 20 : 18) : 0 }}>{children}</div>
     </section>
   );
 }

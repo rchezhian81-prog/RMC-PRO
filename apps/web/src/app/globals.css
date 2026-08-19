@@ -1077,8 +1077,9 @@ main:focus-visible {
   --mn-shadow-pop: 0 20px 50px -18px rgba(24, 18, 55, 0.34);
   --mn-glow-primary: 0 8px 22px -8px rgba(108, 43, 217, 0.5);
 
-  /* deep-violet command rail (sidebar) */
-  --mn-rail: linear-gradient(187deg, #2d1268 0%, #4a1fa6 54%, #391a8e 100%);
+  /* deep-violet command rail (sidebar) — brighter, silkier violet: a gentle
+     luminous ramp (still low-luminance, so white nav text stays >6:1). */
+  --mn-rail: linear-gradient(184deg, #4a24ac 0%, #5c31cf 52%, #48259f 100%);
   --mn-rail-fg: #f1ecff;
   --mn-rail-muted: rgba(224, 213, 255, 0.66);
   --mn-rail-title: rgba(200, 184, 255, 0.72);

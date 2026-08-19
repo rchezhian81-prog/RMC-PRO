@@ -10,6 +10,7 @@ import {
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Ruler, ArrowLeftRight,
   Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine, Navigation,
+  ChevronDown,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
@@ -199,6 +200,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [aiEnabled, setAiEnabled] = useState(false);
   // Bumped when the stored access changes, so the menu re-renders against it.
   const [accessVersion, setAccessVersion] = useState(0);
+  // Collapsed/expanded state per nav module group (accordion).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const s = getSession();
@@ -256,6 +259,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     ),
   })).filter((g) => g.items.length > 0);
 
+  // Collapsible module groups — only the section you're in is open by default,
+  // so the (long) nav stays compact; an explicit toggle overrides that default.
+  let activeGroupTitle = groups[0]?.title;
+  for (const g of groups) {
+    if (g.items.some((it) => pathname === it.href || pathname.startsWith(it.href + '/'))) {
+      activeGroupTitle = g.title;
+      break;
+    }
+  }
+  const groupOpen = (title: string) => openGroups[title] ?? title === activeGroupTitle;
+  const toggleGroup = (title: string) =>
+    setOpenGroups((s) => ({ ...s, [title]: !(s[title] ?? title === activeGroupTitle) }));
+
   return (
     <ConfirmProvider>
     <div className="mn-shell">
@@ -271,42 +287,44 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
         <div style={{ overflowY: 'auto', padding: '4px 12px 16px', flex: 1 }}>
-          {groups.map((g) => (
-            <div key={g.title} style={{ marginBottom: 14 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--mn-subtle)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  fontWeight: 600,
-                  margin: '4px 8px 6px',
-                }}
-              >
-                {g.title}
+          {groups.map((g) => {
+            const gopen = groupOpen(g.title);
+            return (
+              <div key={g.title} style={{ marginBottom: 6 }}>
+                <button
+                  type="button"
+                  className="mn-navgroup"
+                  aria-expanded={gopen}
+                  onClick={() => toggleGroup(g.title)}
+                >
+                  <span>{g.title}</span>
+                  <ChevronDown size={14} className="mn-navgroup-chev" aria-hidden />
+                </button>
+                {gopen && (
+                  <nav aria-label={g.title} style={{ display: 'grid', gap: 2 }}>
+                    {g.items.map((n) => {
+                      const active = pathname === n.href || pathname.startsWith(n.href + '/');
+                      return (
+                        <Link
+                          key={n.href}
+                          href={n.href}
+                          // Sidebar hovers were firing speculative RSC prefetches that
+                          // intermittently 503'd under load. Real navigations never used
+                          // them; disable prefetch on these low-value links.
+                          prefetch={false}
+                          aria-current={active ? 'page' : undefined}
+                          className={`mn-nav ${active ? 'mn-nav-active' : ''}`}
+                        >
+                          {n.icon}
+                          {n.label}
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                )}
               </div>
-              <nav aria-label={g.title} style={{ display: 'grid', gap: 2 }}>
-                {g.items.map((n) => {
-                  const active = pathname === n.href || pathname.startsWith(n.href + '/');
-                  return (
-                    <Link
-                      key={n.href}
-                      href={n.href}
-                      // Sidebar hovers were firing speculative RSC prefetches that
-                      // intermittently 503'd under load. Real navigations never used
-                      // them; disable prefetch on these low-value links.
-                      prefetch={false}
-                      aria-current={active ? 'page' : undefined}
-                      className={`mn-nav ${active ? 'mn-nav-active' : ''}`}
-                    >
-                      {n.icon}
-                      {n.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </aside>
 

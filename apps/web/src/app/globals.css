@@ -439,6 +439,44 @@ main:focus-visible {
   flex: 0 0 auto;
 }
 
+/* Collapsible module-group header (accordion) */
+.mn-navgroup {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-subtle);
+  padding: 6px 8px;
+  margin: 2px 0 3px;
+  border-radius: 9px;
+  transition: background 0.12s, color 0.12s;
+}
+.mn-navgroup:hover {
+  background: var(--mn-purple-50);
+  color: var(--mn-text);
+}
+.mn-navgroup:focus-visible {
+  outline: 2px solid var(--mn-focus);
+  outline-offset: 1px;
+}
+.mn-navgroup-chev {
+  flex: 0 0 auto;
+  opacity: 0.6;
+  transition: transform 0.18s ease;
+}
+.mn-navgroup[aria-expanded='true'] .mn-navgroup-chev {
+  transform: rotate(180deg);
+}
+
 /* ---- Responsive app shell ---- */
 .mn-shell {
   display: grid;
@@ -1077,15 +1115,16 @@ main:focus-visible {
   --mn-shadow-pop: 0 20px 50px -18px rgba(24, 18, 55, 0.34);
   --mn-glow-primary: 0 8px 22px -8px rgba(108, 43, 217, 0.5);
 
-  /* deep-violet command rail (sidebar) — brighter, silkier violet: a gentle
-     luminous ramp (still low-luminance, so white nav text stays >6:1). */
-  --mn-rail: linear-gradient(184deg, #4a24ac 0%, #5c31cf 52%, #48259f 100%);
-  --mn-rail-fg: #f1ecff;
-  --mn-rail-muted: rgba(224, 213, 255, 0.66);
-  --mn-rail-title: rgba(200, 184, 255, 0.72);
-  --mn-rail-active: rgba(255, 255, 255, 0.16);
-  --mn-rail-hover: rgba(255, 255, 255, 0.08);
-  --mn-rail-border: rgba(255, 255, 255, 0.1);
+  /* deep-violet command rail (sidebar) — bright, silky violet: a gentle
+     luminous ramp (still low-luminance, so white nav text stays >5.5:1);
+     label tokens lifted so group headers read on the brighter ground. */
+  --mn-rail: linear-gradient(180deg, #5730bd 0%, #6b42db 50%, #512cae 100%);
+  --mn-rail-fg: #f4efff;
+  --mn-rail-muted: rgba(228, 220, 255, 0.76);
+  --mn-rail-title: rgba(223, 214, 255, 0.88);
+  --mn-rail-active: rgba(255, 255, 255, 0.18);
+  --mn-rail-hover: rgba(255, 255, 255, 0.11);
+  --mn-rail-border: rgba(255, 255, 255, 0.13);
 }
 :root[data-ui='v2'][data-theme='dark'] {
   --mn-bg: #100f1c;
@@ -1141,6 +1180,14 @@ main:focus-visible {
 }
 :root[data-ui='v2'] .mn-sidebar .mn-nav:hover svg {
   opacity: 1;
+}
+/* group headers read on the rail (rail-title), brighten to near-white on hover */
+:root[data-ui='v2'] .mn-sidebar .mn-navgroup {
+  color: var(--mn-rail-title);
+}
+:root[data-ui='v2'] .mn-sidebar .mn-navgroup:hover {
+  color: var(--mn-rail-fg);
+  background: var(--mn-rail-hover);
 }
 :root[data-ui='v2'] .mn-nav-active,
 :root[data-ui='v2'] .mn-nav-active:hover {

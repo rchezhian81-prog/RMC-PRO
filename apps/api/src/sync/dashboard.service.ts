@@ -63,4 +63,62 @@ export class DashboardService {
       };
     });
   }
+
+  /**
+   * Daily activity trend-lines for the dashboard — one dense, gap-filled point
+   * per day across the requested window (default 30 days, clamped 7–90).
+   *
+   * Every series returns EXACTLY `days` points, zero-filled server-side via a
+   * `generate_series` date spine LEFT JOINed to the source table, so the client
+   * draws a continuous line with no gaps (and honestly flat at zero on an empty
+   * pilot rather than a jagged fabricated shape). Read-only; each source table's
+   * domain date is COALESCEd with created_at so no dated row is silently dropped.
+   *
+   * `table`, `dateExpr`, `where` and `value` come only from the static catalog
+   * below — never from the request. The sole request-derived value is the window
+   * size, bound as an int parameter. `metrics` merely selects which catalogued
+   * series to run, so nothing user-supplied is ever interpolated into SQL.
+   */
+  private static readonly TRENDS: {
+    key: string; label: string; unit: 'count' | 'inr'; table: string; dateExpr: string; where?: string; value: string;
+  }[] = [
+    { key: 'invoiced', label: 'Invoiced', unit: 'count', table: 'invoices', dateExpr: `COALESCE(t.invoice_date, t.created_at::date)`, where: `t.invoice_status = 'issued'`, value: `count(t.id)` },
+    { key: 'collected', label: 'Collected', unit: 'inr', table: 'payments', dateExpr: `COALESCE(t.receipt_date, t.created_at::date)`, value: `COALESCE(sum(t.amount), 0)` },
+    { key: 'produced', label: 'Batch tickets', unit: 'count', table: 'batch_tickets', dateExpr: `COALESCE(t.batch_start_time, t.created_at)::date`, where: `t.status = 'confirmed'`, value: `count(t.id)` },
+    { key: 'dispatched', label: 'Dispatches', unit: 'count', table: 'dispatches', dateExpr: `COALESCE(t.dispatch_time, t.created_at)::date`, value: `count(t.id)` },
+    { key: 'ordered', label: 'Confirmed orders', unit: 'count', table: 'orders', dateExpr: `COALESCE(t.order_date, t.created_at::date)`, where: `t.order_status = 'confirmed'`, value: `count(t.id)` },
+    { key: 'delivered', label: 'Delivered', unit: 'count', table: 'delivery_challans', dateExpr: `t.created_at::date`, where: `t.challan_status = 'delivered'`, value: `count(t.id)` },
+  ];
+  private static readonly TRENDS_DEFAULT = ['invoiced', 'collected', 'produced', 'dispatched'];
+
+  trends(tenantId: string, days = 30, metrics?: string[]) {
+    const win = Math.min(90, Math.max(7, Math.floor(Number(days) || 30)));
+    const wanted = new Set((metrics && metrics.length ? metrics : DashboardService.TRENDS_DEFAULT).map((k) => k.trim()));
+    // Preserve catalogue order; ignore any unknown keys so a bad param can't error.
+    const defs = DashboardService.TRENDS.filter((d) => wanted.has(d.key));
+    return this.db.runInTenant(tenantId, async (m) => {
+      const [win_row] = await m.query(
+        `SELECT to_char(current_date - ($1::int - 1), 'YYYY-MM-DD') AS from_d, to_char(current_date, 'YYYY-MM-DD') AS to_d`,
+        [win],
+      );
+      // Sequential, NOT Promise.all: runInTenant scopes one transaction-local
+      // connection, so concurrent queries on the shared manager are unsafe (and
+      // deprecated in pg). Each query is a few ms over a ≤90-row spine.
+      const series = [];
+      for (const d of defs) {
+        const sql = `
+          WITH spine AS (
+            SELECT generate_series((current_date - ($1::int - 1)), current_date, interval '1 day')::date AS d
+          )
+          SELECT to_char(spine.d, 'YYYY-MM-DD') AS d, ${d.value} AS v
+          FROM spine
+          LEFT JOIN ${d.table} t ON ${d.dateExpr} = spine.d${d.where ? `\n           AND ${d.where}` : ''}
+          GROUP BY spine.d
+          ORDER BY spine.d`;
+        const rows: { d: string; v: string }[] = await m.query(sql, [win]);
+        series.push({ key: d.key, label: d.label, unit: d.unit, points: rows.map((r) => ({ d: r.d, v: Number(r.v) })) });
+      }
+      return { from: win_row?.from_d ?? null, to: win_row?.to_d ?? null, days: win, series };
+    });
+  }
 }

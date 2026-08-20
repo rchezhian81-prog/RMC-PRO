@@ -54,6 +54,16 @@ export class DashboardController {
 
   @Get('summary') summary(@CurrentUser() u: AuthUser) { return this.service.summary(tid(u)); }
   @Get('operations-funnel') funnel(@CurrentUser() u: AuthUser) { return this.service.operationsFunnel(tid(u)); }
+
+  // Daily activity trend-lines (read-only). `days` clamps to 7–90 in the
+  // service; `metrics` is an optional csv subset of the catalogued series.
+  @Get('trends') trends(
+    @CurrentUser() u: AuthUser,
+    @Query('days') days?: string,
+    @Query('metrics') metrics?: string,
+  ) {
+    return this.service.trends(tid(u), days ? Number(days) : 30, metrics ? metrics.split(',') : undefined);
+  }
 }
 
 @Controller('reports')

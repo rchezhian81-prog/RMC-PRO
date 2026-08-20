@@ -5,7 +5,7 @@ import {
   ClipboardList, Lock, Ticket, Truck, PackageCheck, ReceiptText, Clock, Wallet, TrendingDown,
   AlertTriangle, MonitorSmartphone, ChevronRight,
 } from 'lucide-react';
-import { dashboardApi, billingReportsApi, type Row } from '../../../lib/api';
+import { dashboardApi, billingReportsApi, type Row, type TrendsResult, type TrendSeries } from '../../../lib/api';
 import { StatCard } from '../../../components/ui/StatCard';
 import { Card } from '../../../components/ui/Card';
 import { AlertsCard } from '../../../components/AlertsCard';
@@ -34,22 +34,26 @@ export default function DashboardPage() {
   const [s, setS] = useState<Row | null>(null);
   const [funnel, setFunnel] = useState<Row | null>(null);
   const [aging, setAging] = useState<Row | null>(null);
+  const [trends, setTrends] = useState<TrendsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Flag-OFF makes exactly the two calls it always has. V2 adds the existing
-    // outstanding-aging report for the donut — read-only, and resilient so a
-    // hiccup there never blocks the core dashboard from rendering.
+    // outstanding-aging report (donut) and the trends read (sparklines) — both
+    // read-only and resilient, so a hiccup in either never blocks the core
+    // dashboard from rendering.
     const v2 = isUiV2();
     Promise.all([
       dashboardApi.summary(),
       dashboardApi.funnel(),
       v2 ? billingReportsApi.outstanding().catch(() => null) : Promise.resolve(null),
+      v2 ? dashboardApi.trends(30).catch(() => null) : Promise.resolve(null),
     ])
-      .then(([sum, f, out]) => {
+      .then(([sum, f, out, tr]) => {
         setS(sum as Row);
         setFunnel(f as Row);
         setAging(out as Row | null);
+        setTrends(tr as TrendsResult | null);
       })
       .catch((e) => setError(String(e)));
   }, []);
@@ -242,6 +246,16 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {trends && trends.series.length > 0 && (
+        <Card title={`Activity — last ${trends.days} days`}>
+          <div className="mn-spark-grid">
+            {trends.series.map((sr) => (
+              <Sparkline key={sr.key} series={sr} />
+            ))}
+          </div>
+        </Card>
+      )}
+
       <div className="mn-ops-head">
         <h2>Operations</h2>
         <span>— tap any tile to open it</span>
@@ -313,5 +327,42 @@ function CollectionsGauge({ rate }: { rate: number }) {
       <path d={arc(start, start + sweep)} fill="none" stroke="var(--mn-donut-track)" strokeWidth="12" strokeLinecap="round" />
       <path d={arc(start, start + sweep * Math.max(0, Math.min(1, rate)))} fill="none" stroke="url(#mn-gauge-g)" strokeWidth="12" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** One small-multiple sparkline: window total + a normalized line/area over the
+ *  dense daily points. Single series → single hue (no categorical palette). The
+ *  line is `non-scaling-stroke` so the stretched viewBox keeps it a crisp 2px. */
+function Sparkline({ series }: { series: TrendSeries }) {
+  const pts = series.points;
+  const vals = pts.map((p) => p.v);
+  const len = pts.length;
+  const max = Math.max(1, ...vals);
+  const min = Math.min(0, ...vals);
+  const W = 220, H = 44, pad = 3;
+  const x = (i: number) => (len <= 1 ? pad : (i / (len - 1)) * (W - pad * 2) + pad);
+  const y = (v: number) => H - pad - (max === min ? 0 : (v - min) / (max - min)) * (H - pad * 2);
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
+  const area = len ? `${line} L${x(len - 1).toFixed(1)} ${H - pad} L${x(0).toFixed(1)} ${H - pad} Z` : '';
+  const total = vals.reduce((a, b) => a + b, 0);
+  const totalLabel = series.unit === 'inr' ? compact(total) : n(total);
+  const gid = `mn-spark-${series.key}`;
+  return (
+    <div className="mn-spark" title={`${series.label}: ${totalLabel} over ${len} days`}>
+      <div className="mn-spark-top">
+        <span className="mn-spark-lbl">{series.label}</span>
+        <span className="mn-spark-val">{totalLabel}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mn-spark-svg" aria-hidden="true">
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="var(--mn-gauge-a)" stopOpacity="0.28" />
+            <stop offset="1" stopColor="var(--mn-gauge-a)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {area && <path d={area} fill={`url(#${gid})`} />}
+        <path d={line} fill="none" stroke="var(--mn-gauge-a)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </div>
   );
 }

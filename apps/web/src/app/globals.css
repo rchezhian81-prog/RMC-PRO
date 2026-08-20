@@ -1792,3 +1792,186 @@ main:focus-visible {
   :root[data-ui='v2'] .mn-stat,
   :root[data-ui='v2'] .mn-shell { transition: none; }
 }
+
+/* =====================================================================
+   DASHBOARD CHARTS (V2 only) — funnel bars, aging donut, collections
+   gauge, and the compact operations grid. PRESENTATION ONLY; all values
+   come from data the dashboard already fetches. Scoped to :root[data-ui='v2']
+   so flag-OFF is untouched. dataviz-validated aging palette (see below).
+   ===================================================================== */
+
+/* ---- Chart-only tokens (light app theme, then dark) ---- */
+:root[data-ui='v2'] {
+  /* Aging severity — 3 buckets, validated all-pairs on the #ffffff card:
+     CVD/normal-vision/contrast pass; colour never carries meaning alone
+     (every segment is directly labelled in the legend + 6px gaps). */
+  --mn-age-current: #63c493;
+  --mn-age-ageing: #b07d12;
+  --mn-age-overdue: #9c1d33;
+  --mn-donut-track: #eceaf6;
+  --mn-gauge-a: #8a4fff;
+  --mn-gauge-b: #6c2bd9;
+}
+:root[data-ui='v2'][data-theme='dark'] {
+  /* Re-stepped for the dark #171628 card (its own validation pass). */
+  --mn-age-current: #3fac7e;
+  --mn-age-ageing: #a9781f;
+  --mn-age-overdue: #c53a54;
+  --mn-donut-track: #262238;
+  --mn-gauge-a: #9a80ff;
+  --mn-gauge-b: #7548e0;
+}
+
+/* the three severity hues drive both the SVG stroke (currentColor) and the
+   legend swatch (background: currentColor) from one token each */
+:root[data-ui='v2'] .mn-age-current { color: var(--mn-age-current); }
+:root[data-ui='v2'] .mn-age-ageing { color: var(--mn-age-ageing); }
+:root[data-ui='v2'] .mn-age-overdue { color: var(--mn-age-overdue); }
+
+/* ---- charts row ---- */
+:root[data-ui='v2'] .mn-charts {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.3fr 1fr 0.9fr;
+  align-items: stretch;
+}
+:root[data-ui='v2'] .mn-charts > .mn-card { display: flex; flex-direction: column; }
+:root[data-ui='v2'] .mn-charts > .mn-card > .mn-card-body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+@media (max-width: 1080px) {
+  :root[data-ui='v2'] .mn-charts { grid-template-columns: 1fr 1fr; }
+  :root[data-ui='v2'] .mn-charts > .mn-card:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  :root[data-ui='v2'] .mn-charts { grid-template-columns: 1fr; }
+  :root[data-ui='v2'] .mn-charts > .mn-card:first-child { grid-column: auto; }
+}
+
+:root[data-ui='v2'] .mn-chart-empty {
+  color: var(--mn-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 26px 8px;
+}
+
+/* ---- funnel (horizontal bars) ---- */
+:root[data-ui='v2'] .mn-funnel { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+:root[data-ui='v2'] .mn-frow {
+  display: grid;
+  grid-template-columns: 84px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  row-gap: 2px;
+}
+:root[data-ui='v2'] .mn-fl { font-size: 12.5px; color: var(--mn-muted); }
+:root[data-ui='v2'] .mn-ftrack {
+  height: 22px;
+  background: var(--mn-surface-2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+:root[data-ui='v2'] .mn-fbar {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--mn-gauge-a), var(--mn-gauge-b));
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+:root[data-ui='v2'] .mn-fv {
+  font-family: var(--mn-font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mn-text);
+  min-width: 22px;
+  text-align: right;
+}
+:root[data-ui='v2'] .mn-fconv {
+  grid-column: 2;
+  font-size: 10.5px;
+  color: var(--mn-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- aging donut ---- */
+:root[data-ui='v2'] .mn-donut-wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+:root[data-ui='v2'] .mn-donut { position: relative; width: 132px; height: 132px; flex: none; }
+:root[data-ui='v2'] .mn-donut-c { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+:root[data-ui='v2'] .mn-donut-t { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mn-subtle); }
+:root[data-ui='v2'] .mn-donut-v {
+  font-family: var(--mn-font-display);
+  font-weight: 700;
+  font-size: 16px;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-text);
+}
+:root[data-ui='v2'] .mn-legend { display: flex; flex-direction: column; gap: 9px; flex: 1; min-width: 150px; }
+:root[data-ui='v2'] .mn-lg { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+:root[data-ui='v2'] .mn-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; background: currentColor; }
+:root[data-ui='v2'] .mn-lg-nm { color: var(--mn-muted); }
+:root[data-ui='v2'] .mn-lg-amt { margin-left: auto; font-family: var(--mn-font-display); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mn-text); }
+:root[data-ui='v2'] .mn-lg-pc { width: 40px; text-align: right; color: var(--mn-subtle); font-variant-numeric: tabular-nums; }
+
+/* ---- collections gauge ---- */
+:root[data-ui='v2'] .mn-gauge { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 100%; }
+:root[data-ui='v2'] .mn-gauge-big {
+  font-family: var(--mn-font-display);
+  font-weight: 700;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-text);
+}
+:root[data-ui='v2'] .mn-gauge-cap { font-size: 11.5px; color: var(--mn-muted); text-align: center; }
+
+/* ---- operations grid (the demoted rest) ---- */
+:root[data-ui='v2'] .mn-ops-head { display: flex; align-items: baseline; gap: 10px; margin: 6px 2px -2px; }
+:root[data-ui='v2'] .mn-ops-head h2 { margin: 0; font-family: var(--mn-font-display); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; color: var(--mn-text); }
+:root[data-ui='v2'] .mn-ops-head span { font-size: 12.5px; color: var(--mn-subtle); }
+:root[data-ui='v2'] .mn-ops {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+:root[data-ui='v2'] .mn-op {
+  display: block;
+  text-decoration: none;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md);
+  padding: 13px 14px;
+  box-shadow: var(--mn-shadow-1);
+  transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.16s, border-color 0.16s;
+}
+:root[data-ui='v2'] .mn-op:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mn-shadow-2);
+  border-color: var(--mn-border-strong);
+}
+:root[data-ui='v2'] .mn-op-l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-muted);
+}
+:root[data-ui='v2'] .mn-op-l svg { color: var(--mn-primary); flex: none; }
+:root[data-ui='v2'] .mn-op-v {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--mn-font-display);
+  font-weight: 700;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-text);
+}
+:root[data-ui='v2'] .mn-op-flag .mn-op-v { color: var(--mn-warning); }
+:root[data-ui='v2'] .mn-op-crit .mn-op-v { color: var(--mn-danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ui='v2'] .mn-fbar,
+  :root[data-ui='v2'] .mn-op { transition: none; }
+}

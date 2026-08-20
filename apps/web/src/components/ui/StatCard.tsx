@@ -79,7 +79,11 @@ export function StatCard({
         style={{
           fontFamily: 'var(--mn-font-display)',
           fontWeight: 700,
-          fontSize: v2 ? 30 : 26,
+          // Scale the numeral down on narrow phones so long ₹ figures (lakh/crore
+          // with commas) never clip; caps at 30px on tablet/desktop. Inline clamp
+          // (not a CSS class) because this size is set inline and would otherwise
+          // win over any media query.
+          fontSize: v2 ? 'clamp(22px, 6.4vw, 30px)' : 26,
           letterSpacing: v2 ? '-0.03em' : undefined,
           lineHeight: 1.05,
           color: gradient ? '#fff' : ACCENT[tone],

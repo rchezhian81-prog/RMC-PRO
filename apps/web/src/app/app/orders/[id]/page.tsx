@@ -176,9 +176,12 @@ export default function OrderDetail() {
       {(() => {
         const s = o.taxSummary as Row | undefined;
         if (!s) return null;
+        // Label yields (ellipsis) when the row is tight so the ₹ value is never
+        // clipped on narrow phones; space-between keeps them apart on wide cards.
         const row = (label: string, value: unknown, strong = false) => (
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontWeight: strong ? 700 : 400, color: strong ? 'inherit' : 'var(--mn-muted)' }}>
-            <span>{label}</span><span>{money(value)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, padding: '3px 0', fontWeight: strong ? 700 : 400, color: strong ? 'inherit' : 'var(--mn-muted)' }}>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>{money(value)}</span>
           </div>
         );
         return (

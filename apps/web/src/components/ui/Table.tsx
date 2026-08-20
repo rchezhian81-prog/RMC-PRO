@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode, ThHTMLAttributes, TdHTMLAttributes } fro
 /** Responsive table wrapper — scrolls horizontally on narrow screens. */
 export function Table({ children }: { children: ReactNode }) {
   return (
-    <div style={{ overflowX: 'auto', width: '100%' }}>
+    <div className="mn-tablescroll" style={{ overflowX: 'auto', width: '100%' }}>
       <table className="mn-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
         {children}
       </table>

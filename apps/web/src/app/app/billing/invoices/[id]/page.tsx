@@ -31,9 +31,12 @@ const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFr
 
 function TotalRow({ label, value, strong, tone }: { label: string; value: ReactNode; strong?: boolean; tone?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 30, fontWeight: strong ? 700 : 400, color: tone ?? 'inherit', padding: '3px 0' }}>
-      <span style={{ color: tone ?? 'var(--mn-muted)' }}>{label}</span>
-      <span>{value}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, fontWeight: strong ? 700 : 400, color: tone ?? 'inherit', padding: '3px 0' }}>
+      {/* Label yields (ellipsis) when the row is tight so the ₹ value is never
+          clipped on narrow phones; on wide cards space-between keeps them apart
+          exactly as before. */}
+      <span style={{ color: tone ?? 'var(--mn-muted)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   );
 }

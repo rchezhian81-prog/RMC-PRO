@@ -29,24 +29,46 @@ export function StatCard({
   gradient?: boolean;
 }) {
   const v2 = isUiV2();
+
+  // ---- V2 (Aurora premium): class-driven so CSS owns tone, hover, keyline. ----
+  if (v2) {
+    const inner = (
+      <div className={`mn-card mn-stat${gradient ? ' mn-stat--grad' : ''}`} data-tone={tone}>
+        <div className="mn-stat-top">
+          <span className="mn-stat-label">{label}</span>
+          {icon && <span className="mn-stat-chip">{icon}</span>}
+        </div>
+        <div className="mn-stat-value">{value}</div>
+      </div>
+    );
+    return href ? (
+      <Link href={href} className="mn-stat-link" style={{ textDecoration: 'none' }}>
+        {inner}
+      </Link>
+    ) : (
+      inner
+    );
+  }
+
+  // ---- Legacy (flag-off) — unchanged inline version. ----
   const inner = (
     <div
       className="mn-card"
       style={{
-        padding: v2 ? 20 : 16,
+        padding: 16,
         minWidth: 168,
         height: '100%',
         display: 'grid',
-        gap: v2 ? 14 : 10,
+        gap: 10,
         ...(gradient ? { background: 'var(--mn-gradient)', border: 'none', color: '#fff' } : {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span
           style={{
-            fontSize: v2 ? 11.5 : 11,
+            fontSize: 11,
             fontWeight: 600,
-            letterSpacing: v2 ? '0.05em' : '0.03em',
+            letterSpacing: '0.03em',
             textTransform: 'uppercase',
             color: gradient ? 'rgba(255,255,255,0.85)' : 'var(--mn-muted)',
           }}
@@ -58,17 +80,12 @@ export function StatCard({
             style={{
               display: 'inline-grid',
               placeItems: 'center',
-              width: v2 ? 38 : 30,
-              height: v2 ? 38 : 30,
-              borderRadius: v2 ? 12 : 8,
+              width: 30,
+              height: 30,
+              borderRadius: 8,
               flex: '0 0 auto',
-              background: gradient
-                ? 'rgba(255,255,255,0.18)'
-                : v2
-                  ? 'linear-gradient(135deg, #f4eeff 0%, #e9ddff 100%)'
-                  : 'var(--mn-purple-50)',
+              background: gradient ? 'rgba(255,255,255,0.18)' : 'var(--mn-purple-50)',
               color: gradient ? '#fff' : 'var(--mn-primary)',
-              boxShadow: v2 && !gradient ? 'inset 0 0 0 1px rgba(124,58,237,0.10)' : undefined,
             }}
           >
             {icon}
@@ -79,12 +96,7 @@ export function StatCard({
         style={{
           fontFamily: 'var(--mn-font-display)',
           fontWeight: 700,
-          // Scale the numeral down on narrow phones so long ₹ figures (lakh/crore
-          // with commas) never clip; caps at 30px on tablet/desktop. Inline clamp
-          // (not a CSS class) because this size is set inline and would otherwise
-          // win over any media query.
-          fontSize: v2 ? 'clamp(22px, 6.4vw, 30px)' : 26,
-          letterSpacing: v2 ? '-0.03em' : undefined,
+          fontSize: 26,
           lineHeight: 1.05,
           color: gradient ? '#fff' : ACCENT[tone],
         }}

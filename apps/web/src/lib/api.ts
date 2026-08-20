@@ -848,9 +848,25 @@ export const expensesApi = {
 };
 
 // ---- Dashboard, reports center, sync (Sprint 10) ----
+/** One daily activity trend-line: a dense, gap-filled series of points. */
+export interface TrendSeries {
+  key: string;
+  label: string;
+  unit: 'count' | 'inr';
+  points: { d: string; v: number }[];
+}
+export interface TrendsResult {
+  from: string | null;
+  to: string | null;
+  days: number;
+  series: TrendSeries[];
+}
+
 export const dashboardApi = {
   summary: () => apiFetch<Row>('/dashboard/summary'),
   funnel: () => apiFetch<Row>('/dashboard/operations-funnel'),
+  /** Daily activity trend-lines (default 30-day window). Read-only. */
+  trends: (days = 30) => apiFetch<TrendsResult>(`/dashboard/trends?days=${days}`),
 };
 
 export const reportsCatalogApi = {

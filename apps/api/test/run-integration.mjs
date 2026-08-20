@@ -67,6 +67,7 @@ const TESTS = [
   'test/gps-tracking.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
+  'test/dashboard-trends.test.mjs',
   'test/metrics.test.mjs',
   'test/sync-pagination.test.mjs',
   'test/rls-users.test.mjs',

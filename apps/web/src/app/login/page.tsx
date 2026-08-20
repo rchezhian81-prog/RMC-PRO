@@ -99,11 +99,11 @@ export default function LoginPage() {
               Sign in to your Mix Nova workspace.
             </p>
             <form onSubmit={onSubmit}>
-              <label htmlFor="mn-login-v2" style={v2Label}>
+              <label htmlFor="mn-login" style={v2Label}>
                 Email / Mobile / User ID
               </label>
               <input
-                id="mn-login-v2"
+                id="mn-login"
                 className="mn-input"
                 style={{ marginBottom: 16 }}
                 value={login}
@@ -112,11 +112,11 @@ export default function LoginPage() {
                 aria-label="login-identifier"
                 required
               />
-              <label htmlFor="mn-password-v2" style={v2Label}>
+              <label htmlFor="mn-password" style={v2Label}>
                 Password
               </label>
               <input
-                id="mn-password-v2"
+                id="mn-password"
                 className="mn-input"
                 style={{ marginBottom: 16 }}
                 type="password"

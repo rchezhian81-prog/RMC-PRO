@@ -439,6 +439,18 @@ main:focus-visible {
   flex: 0 0 auto;
 }
 
+/* Wide tables scroll inside their own box; a soft edge shadow appears only
+   while the table actually overflows (covers = local, shadows = scroll), so
+   the off-screen columns on phones read as "swipe for more", not clipped. */
+.mn-tablescroll {
+  background:
+    linear-gradient(to right, var(--mn-surface), rgba(124, 92, 255, 0)) left center / 24px 100% no-repeat,
+    linear-gradient(to left, var(--mn-surface), rgba(124, 92, 255, 0)) right center / 24px 100% no-repeat,
+    radial-gradient(farthest-side at 0 50%, rgba(28, 16, 66, 0.34), rgba(28, 16, 66, 0)) left center / 22px 100% no-repeat,
+    radial-gradient(farthest-side at 100% 50%, rgba(28, 16, 66, 0.34), rgba(28, 16, 66, 0)) right center / 22px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
 /* Collapsible module-group header (accordion) */
 .mn-navgroup {
   width: 100%;
@@ -1118,13 +1130,13 @@ main:focus-visible {
   /* deep-violet command rail (sidebar) — bright, silky violet: a gentle
      luminous ramp (still low-luminance, so white nav text stays >5.5:1);
      label tokens lifted so group headers read on the brighter ground. */
-  --mn-rail: linear-gradient(180deg, #5730bd 0%, #6b42db 50%, #512cae 100%);
+  --mn-rail: linear-gradient(180deg, #6338c8 0%, #7548e0 50%, #5c32bd 100%);
   --mn-rail-fg: #f4efff;
-  --mn-rail-muted: rgba(228, 220, 255, 0.76);
-  --mn-rail-title: rgba(223, 214, 255, 0.88);
-  --mn-rail-active: rgba(255, 255, 255, 0.18);
-  --mn-rail-hover: rgba(255, 255, 255, 0.11);
-  --mn-rail-border: rgba(255, 255, 255, 0.13);
+  --mn-rail-muted: rgba(228, 220, 255, 0.78);
+  --mn-rail-title: rgba(222, 212, 255, 0.88);
+  --mn-rail-active: rgba(255, 255, 255, 0.2);
+  --mn-rail-hover: rgba(255, 255, 255, 0.12);
+  --mn-rail-border: rgba(255, 255, 255, 0.15);
 }
 :root[data-ui='v2'][data-theme='dark'] {
   --mn-bg: #100f1c;
@@ -1345,14 +1357,15 @@ main:focus-visible {
   --mn-shadow-pop: 0 26px 64px -22px rgba(22, 17, 52, 0.34);
   --mn-glow-primary: 0 10px 26px -10px rgba(124, 58, 237, 0.5);
 
-  /* deep, sophisticated indigo-violet rail — less saturation reads as premium */
-  --mn-rail: linear-gradient(176deg, #1c1638 0%, #241b46 46%, #17122d 100%);
-  --mn-rail-fg: #efe9ff;
-  --mn-rail-muted: rgba(199, 189, 233, 0.62);
-  --mn-rail-title: rgba(158, 142, 206, 0.6);
-  --mn-rail-active: rgba(139, 92, 246, 0.2);
-  --mn-rail-hover: rgba(255, 255, 255, 0.055);
-  --mn-rail-border: rgba(148, 120, 235, 0.14);
+  /* bright, silky violet command rail — luminous but low-luminance enough that
+     white nav text stays >5:1; brightened per pilot sign-off. */
+  --mn-rail: linear-gradient(180deg, #6338c8 0%, #7548e0 50%, #5c32bd 100%);
+  --mn-rail-fg: #f4efff;
+  --mn-rail-muted: rgba(228, 220, 255, 0.78);
+  --mn-rail-title: rgba(222, 212, 255, 0.88);
+  --mn-rail-active: rgba(255, 255, 255, 0.2);
+  --mn-rail-hover: rgba(255, 255, 255, 0.12);
+  --mn-rail-border: rgba(255, 255, 255, 0.15);
   --mn-purple-50: #f1ecfe;
 }
 :root[data-ui='v2'][data-theme='dark'] {

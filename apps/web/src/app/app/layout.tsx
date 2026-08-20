@@ -10,7 +10,7 @@ import {
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
   Ruler, ArrowLeftRight,
   Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine, Navigation,
-  ChevronDown,
+  ChevronDown, PanelLeft,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
 import { clearSession, getAccess, getSession, updateAccess } from '../../lib/session';
@@ -202,6 +202,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [accessVersion, setAccessVersion] = useState(0);
   // Collapsed/expanded state per nav module group (accordion).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // Whole-rail collapse to an icon strip (desktop); persisted per browser.
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setRailCollapsed(localStorage.getItem('mn-rail-collapsed') === '1');
+    } catch {
+      /* storage blocked — default expanded */
+    }
+  }, []);
+  const toggleRail = () =>
+    setRailCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem('mn-rail-collapsed', next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   useEffect(() => {
     const s = getSession();
@@ -274,17 +293,22 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <ConfirmProvider>
-    <div className="mn-shell">
+    <div className={`mn-shell${railCollapsed ? ' mn-rail-collapsed' : ''}`}>
       <a href="#main" className="mn-skip">Skip to content</a>
       <div className={`mn-scrim ${open ? 'mn-open' : ''}`} onClick={() => setOpen(false)} aria-hidden />
 
       <aside className={`mn-sidebar ${open ? 'mn-open' : ''}`}>
-        <div style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="mn-rail-head" style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           {/* On V2 the sidebar is a deep-violet rail, so the logo uses its on-dark tone. */}
-          <Logo size="sm" onDark={isUiV2()} />
-          <button className="mn-iconbtn mn-hamburger" onClick={() => setOpen(false)} aria-label="Close menu">
-            <X size={18} />
-          </button>
+          <span className="mn-rail-brand"><Logo size="sm" onDark={isUiV2()} /></span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="mn-iconbtn mn-rail-toggle" onClick={toggleRail} aria-label={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              <PanelLeft size={17} />
+            </button>
+            <button className="mn-iconbtn mn-hamburger" onClick={() => setOpen(false)} aria-label="Close menu">
+              <X size={18} />
+            </button>
+          </div>
         </div>
         <div style={{ overflowY: 'auto', padding: '4px 12px 16px', flex: 1 }}>
           {groups.map((g) => {
@@ -300,7 +324,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                   <span>{g.title}</span>
                   <ChevronDown size={14} className="mn-navgroup-chev" aria-hidden />
                 </button>
-                {gopen && (
+                {(gopen || railCollapsed) && (
                   <nav aria-label={g.title} style={{ display: 'grid', gap: 2 }}>
                     {g.items.map((n) => {
                       const active = pathname === n.href || pathname.startsWith(n.href + '/');
@@ -313,10 +337,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                           // them; disable prefetch on these low-value links.
                           prefetch={false}
                           aria-current={active ? 'page' : undefined}
+                          title={n.label}
                           className={`mn-nav ${active ? 'mn-nav-active' : ''}`}
                         >
                           {n.icon}
-                          {n.label}
+                          <span className="mn-nav-label">{n.label}</span>
                         </Link>
                       );
                     })}

@@ -35,28 +35,43 @@ export default function DashboardPage() {
   const [funnel, setFunnel] = useState<Row | null>(null);
   const [aging, setAging] = useState<Row | null>(null);
   const [trends, setTrends] = useState<TrendsResult | null>(null);
+  const [trendsDays, setTrendsDays] = useState(30);
+  const [trendsBusy, setTrendsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Flag-OFF makes exactly the two calls it always has. V2 adds the existing
-    // outstanding-aging report (donut) and the trends read (sparklines) — both
-    // read-only and resilient, so a hiccup in either never blocks the core
-    // dashboard from rendering.
+    // outstanding-aging report (donut) — read-only and resilient, so a hiccup
+    // never blocks the core dashboard. Trends is fetched separately (below) so
+    // the range toggle can re-fetch it without re-loading the rest.
     const v2 = isUiV2();
     Promise.all([
       dashboardApi.summary(),
       dashboardApi.funnel(),
       v2 ? billingReportsApi.outstanding().catch(() => null) : Promise.resolve(null),
-      v2 ? dashboardApi.trends(30).catch(() => null) : Promise.resolve(null),
     ])
-      .then(([sum, f, out, tr]) => {
+      .then(([sum, f, out]) => {
         setS(sum as Row);
         setFunnel(f as Row);
         setAging(out as Row | null);
-        setTrends(tr as TrendsResult | null);
       })
       .catch((e) => setError(String(e)));
   }, []);
+
+  // Activity trend-lines — re-fetched whenever the range toggle changes (V2 only,
+  // resilient). Old data stays on screen while the new range loads, so there's no
+  // flicker; the cancelled guard drops a stale response if the user toggles again.
+  useEffect(() => {
+    if (!isUiV2()) return;
+    let cancelled = false;
+    setTrendsBusy(true);
+    dashboardApi
+      .trends(trendsDays)
+      .then((t) => { if (!cancelled) setTrends(t); })
+      .catch(() => { if (!cancelled) setTrends(null); })
+      .finally(() => { if (!cancelled) setTrendsBusy(false); });
+    return () => { cancelled = true; };
+  }, [trendsDays]);
 
   if (error) return <ErrorState message={error} />;
   if (!s) return <Loading label="Loading dashboard…" />;
@@ -247,8 +262,25 @@ export default function DashboardPage() {
       </div>
 
       {trends && trends.series.length > 0 && (
-        <Card title={`Activity — last ${trends.days} days`}>
-          <div className="mn-spark-grid">
+        <Card
+          title="Activity"
+          actions={
+            <div className="mn-seg" role="group" aria-label="Trend range">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  aria-pressed={trendsDays === d}
+                  disabled={trendsBusy}
+                  onClick={() => setTrendsDays(d)}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <div className={`mn-spark-grid${trendsBusy ? ' mn-spark-grid--busy' : ''}`}>
             {trends.series.map((sr) => (
               <Sparkline key={sr.key} series={sr} />
             ))}

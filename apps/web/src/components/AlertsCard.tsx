@@ -7,6 +7,7 @@ import { alertsApi, type Alert } from '../lib/api';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { ErrorState } from './ui/States';
+import { isUiV2 } from '../lib/ui-flag';
 
 const STYLE: Record<Alert['severity'], { color: string; tint: string; icon: typeof Info; label: string }> = {
   danger: { color: 'var(--mn-danger)', tint: 'var(--mn-danger-tint)', icon: AlertOctagon, label: 'Action needed' },
@@ -42,8 +43,23 @@ export function AlertsCard() {
 
   const urgent = (alerts ?? []).filter((a) => a.severity !== 'info').length;
 
+  // V2 severity rail: a left accent keyline whose colour reflects the most-severe
+  // alert, so the whole card signals the day's state at a glance. Neutral while
+  // loading/unknown; green when all-clear. Flag-OFF passes no style (unchanged).
+  const railColor = !alerts
+    ? 'var(--mn-border-strong)'
+    : alerts.some((a) => a.severity === 'danger')
+      ? 'var(--mn-danger)'
+      : alerts.some((a) => a.severity === 'warning')
+        ? 'var(--mn-warning)'
+        : alerts.length
+          ? 'var(--mn-info)'
+          : 'var(--mn-success)';
+  const railStyle = isUiV2() ? { borderLeft: `3px solid ${railColor}` } : undefined;
+
   return (
     <Card
+      style={railStyle}
       title={
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <BellRing size={16} color="var(--mn-primary)" /> Needs attention

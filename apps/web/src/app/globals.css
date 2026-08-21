@@ -1690,6 +1690,10 @@ main:focus-visible {
   min-height: 112px;
   display: flex;
   flex-direction: column;
+  /* severity rail: left keyline coloured by the tile's tone (neutral = brand
+     violet, success = green, warning = amber, danger = red) — one status
+     language across every tile, matching the Needs-attention card. */
+  border-left: 3px solid var(--tone);
   transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.16s, border-color 0.16s;
   --tone: var(--mn-primary);
   --tone-val: var(--mn-text);
@@ -1748,16 +1752,8 @@ main:focus-visible {
 :root[data-ui='v2'] .mn-stat[data-tone='danger'] { --tone: var(--mn-danger); --tone-val: var(--mn-danger); --tone-wash: color-mix(in srgb, var(--mn-danger) 22%, transparent); }
 :root[data-ui='v2'] .mn-stat[data-tone='info'],
 :root[data-ui='v2'] .mn-stat[data-tone='processing'] { --tone: var(--mn-info); }
-:root[data-ui='v2'] .mn-stat[data-tone='warning']::before,
-:root[data-ui='v2'] .mn-stat[data-tone='danger']::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--tone), transparent 92%);
-}
+/* (the former warning/danger bottom bar is retired — the left rail above is the
+   universal tone accent now) */
 :root[data-ui='v2'] .mn-stat--grad {
   background: var(--mn-gradient);
   border-color: transparent;
@@ -1938,11 +1934,16 @@ main:focus-visible {
   text-decoration: none;
   background: var(--mn-surface);
   border: 1px solid var(--mn-border);
+  /* severity rail — same status language as the KPI tiles: brand violet by
+     default, amber when flagged, red when critical */
+  border-left: 3px solid var(--mn-primary);
   border-radius: var(--mn-radius-md);
   padding: 13px 14px;
   box-shadow: var(--mn-shadow-1);
   transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.16s, border-color 0.16s;
 }
+:root[data-ui='v2'] .mn-op-flag { border-left-color: var(--mn-warning); }
+:root[data-ui='v2'] .mn-op-crit { border-left-color: var(--mn-danger); }
 :root[data-ui='v2'] .mn-op:hover {
   transform: translateY(-2px);
   box-shadow: var(--mn-shadow-2);

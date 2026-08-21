@@ -77,6 +77,42 @@ rm -f docker/web-uiv2.override.yml
 bash scripts/ops/verify-app.sh
 ```
 
+## Procedure C — bump the API image (`IMAGE_TAG`) — migrate FIRST
+
+Recreating the API on a new tag also re-runs the one-shot `migrate` service (it
+shares the API image). The `api` service is `depends_on: migrate
+(service_completed_successfully)`, so a **full** `up -d` orders them correctly.
+The trap is a **partial** recreate that names `api` before `migrate` has
+finished (e.g. `up -d api web`): the API starts against a not-yet-completed
+migrate, exits, and `restart: unless-stopped` crash-loops it.
+
+**Rule: on any API tag bump, run `migrate` to completion FIRST, then `api`.**
+
+```bash
+cd /opt/rmc
+
+# 1) set the API tag (also consumed by the migrate service)
+sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=<sha>|' .env.production   # e.g. 94c7af2
+
+# 2) pull the API image
+docker compose -f docker/docker-compose.prod.yml --env-file .env.production pull api
+
+# 3) migrate FIRST — let it run to completion (exits 0 when done)
+docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d migrate
+docker compose -f docker/docker-compose.prod.yml --env-file .env.production logs -f migrate
+#   wait for it to exit cleanly, then Ctrl-C
+
+# 4) THEN recreate the API
+docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d api
+docker compose -f docker/docker-compose.prod.yml --env-file .env.production ps api
+#   want: Up (healthy) — NOT Restarting
+```
+
+Do **not** run `up -d api web` (or `up -d api`) before `migrate` has finished on
+the new tag. If the API does crash-loop, capture `logs --tail=40 api` **before**
+rolling back (`IMAGE_TAG=<last-good>`, then `up -d api`) so the trace survives —
+recreating the container discards its logs.
+
 ## Rollback of the update itself
 
 The compose/scripts are just files — `git checkout <old-short-hash>` (from step 0)

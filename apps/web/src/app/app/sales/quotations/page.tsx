@@ -58,6 +58,10 @@ export default function QuotationsPage() {
     }
   }
 
+  // Customer names for the list — customers are already loaded for the form's
+  // dropdown, so the list reuses them (the quotation rows carry only customerId).
+  const custName = new Map(customers.map((c) => [String(c.id), String(c.customerName ?? '')]));
+
   return (
     <div>
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Quotations</h1>
@@ -115,12 +119,13 @@ export default function QuotationsPage() {
 
       <Card title="Quotations" padded={false}>
         {!loaded ? (
-          <TableSkeleton cols={6} />
+          <TableSkeleton cols={7} />
         ) : rows.length ? (
           <Table>
             <thead>
               <tr>
                 <Th>Quotation No</Th>
+                <Th>Customer</Th>
                 <Th>Date</Th>
                 <Th>Valid until</Th>
                 <Th numeric>Rev</Th>
@@ -132,6 +137,7 @@ export default function QuotationsPage() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.quotationNo ?? '')}</Td>
+                  <Td>{custName.get(String(r.customerId)) || '—'}</Td>
                   <Td>{String(r.quotationDate ?? '—')}</Td>
                   <Td>{String(r.validUntil ?? '—')}</Td>
                   <Td numeric>{String(r.revisionNo ?? 0)}</Td>

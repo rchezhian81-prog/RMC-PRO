@@ -7,7 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -19,13 +19,16 @@ export default function CreditHoldsPage() {
   const [filter, setFilter] = useState('pending');
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoaded(false);
     setRows(await creditHoldsApi.list(filter || undefined));
+    setLoaded(true);
   }, [filter]);
 
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload().catch((e) => { setError(String(e)); setLoaded(true); });
   }, [reload]);
 
   async function decide(id: string, approve: boolean) {
@@ -70,7 +73,9 @@ export default function CreditHoldsPage() {
         }
         padded={false}
       >
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

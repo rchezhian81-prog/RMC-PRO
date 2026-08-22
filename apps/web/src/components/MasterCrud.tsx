@@ -18,6 +18,14 @@ import { useConfirm } from './ui/ConfirmDialog';
 type Access = { isOwner: boolean; permissions: string[]; has: (k: string) => boolean };
 const NO_ACCESS: Access = { isOwner: false, permissions: [], has: () => false };
 
+/** A fresh create-form: booleans seeded to their default so an untouched
+ * checkbox matches what the server would store (e.g. a series starts Active). */
+const blankForm = (config: EntityConfig): Record<string, string> => {
+  const f: Record<string, string> = {};
+  for (const fld of config.fields) if (fld.type === 'boolean') f[fld.key] = String(fld.default ?? false);
+  return f;
+};
+
 /**
  * Config-driven master screen: list + create + edit + deactivate, with actions
  * gated by the user's permissions (the company owner sees everything). Number
@@ -45,13 +53,16 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
   const can = (action: 'create' | 'edit' | 'delete') =>
     isNumberSeries ? access.has('number_series.manage') : access.has(`masters.${action}`);
   const fieldKeys = config.fields.map((f) => f.key);
+  // Columns backed by a boolean field render as Yes/No instead of raw true/false.
+  const boolCols = new Set(config.fields.filter((f) => f.type === 'boolean').map((f) => f.key));
+  const cell = (c: string, r: Row) => (boolCols.has(c) ? (r[c] ? 'Yes' : 'No') : String(r[c] ?? ''));
 
   async function reload() {
     setRows(await client.list());
   }
   useEffect(() => {
     setAccess(getAccess());
-    setForm({});
+    setForm(blankForm(config));
     setEditingId(null);
     setError(null);
     setLoaded(false);
@@ -107,7 +118,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
 
   function cancelEdit() {
     setEditingId(null);
-    setForm({});
+    setForm(blankForm(config));
     setError(null);
     setFieldErrors({});
   }
@@ -119,6 +130,9 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     const body: Record<string, unknown> = {};
     for (const f of config.fields) {
       const v = form[f.key];
+      // A boolean always carries a definite state (seeded on new, read on edit),
+      // so it is always sent — never skipped by the empty-value rule below.
+      if (f.type === 'boolean') { body[f.key] = v === 'true'; continue; }
       if (v !== undefined && v !== '') body[f.key] = f.type === 'number' ? Number(v) : v;
     }
     // Client-side validation using the SAME rules the server enforces, so the
@@ -197,7 +211,9 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
         const body: Record<string, unknown> = {};
         for (const f of config.fields) {
           const v = rec[f.key];
-          if (v !== undefined && v !== '') body[f.key] = f.type === 'number' ? Number(v) : v;
+          if (v === undefined || v === '') continue;
+          body[f.key] =
+            f.type === 'number' ? Number(v) : f.type === 'boolean' ? String(v).toLowerCase() === 'true' : v;
         }
         try {
           await client.create(body);
@@ -241,7 +257,17 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                 return (
                 <div key={f.key} style={{ minWidth: 150 }}>
                   <Field label={f.label} required={f.required}>
-                    {opts ? (
+                    {f.type === 'boolean' ? (
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={form[f.key] === 'true'}
+                          onChange={(e) => setForm((p) => ({ ...p, [f.key]: String(e.target.checked) }))}
+                          style={{ width: 16, height: 16, accentColor: 'var(--mn-primary)' }}
+                        />
+                        <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>{form[f.key] === 'true' ? 'Yes' : 'No'}</span>
+                      </label>
+                    ) : opts ? (
                       <select
                         value={form[f.key] ?? ''}
                         onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
@@ -354,7 +380,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
               {rows.map((r) => (
                 <tr key={r.id}>
                   {config.columns.map((c) => (
-                    <Td key={c}>{String(r[c] ?? '')}</Td>
+                    <Td key={c}>{cell(c, r)}</Td>
                   ))}
                   {showActions && (
                     <Td>

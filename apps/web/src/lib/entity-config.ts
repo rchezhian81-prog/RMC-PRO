@@ -3,8 +3,11 @@ import { MATERIAL_TYPES, UOM_CATEGORIES } from '@rmc/shared';
 export interface FieldDef {
   key: string;
   label: string;
-  type?: 'text' | 'number' | 'date';
+  type?: 'text' | 'number' | 'date' | 'boolean';
   required?: boolean;
+  /** Seed for a boolean field on a NEW record, so the checkbox matches the
+   * server-side column default (e.g. a series is Active by default). */
+  default?: boolean;
   /** When set, the field renders as a dropdown of these options. */
   options?: { value: string; label: string }[];
   /**
@@ -28,6 +31,18 @@ const MATERIAL_TYPE_LABELS: Record<string, string> = {
 };
 const MATERIAL_TYPE_OPTIONS = MATERIAL_TYPES.map((t) => ({ value: t, label: MATERIAL_TYPE_LABELS[t] ?? t }));
 const UOM_CATEGORY_OPTIONS = UOM_CATEGORIES.map((c) => ({ value: c, label: titleCase(c) }));
+
+// The document types that actually own a number series (every value the server
+// allocates a series for, from the numbering call-sites). A dropdown of these
+// stops a typo creating an orphan series no document ever uses. value = the key
+// the backend stores; label = a readable form of the same key.
+const DOCUMENT_TYPES = [
+  'quotation', 'rate_contract', 'order', 'production_plan', 'batch_ticket',
+  'dispatch', 'delivery_challan', 'invoice', 'receipt', 'weighbridge',
+  'material_inward', 'goods_receipt', 'purchase_order', 'purchase_bill',
+  'purchase_payment', 'expense_voucher', 'maintenance_job', 'qc_cube_set', 'lead',
+] as const;
+const DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPES.map((d) => ({ value: d, label: titleCase(d.replace(/_/g, ' ')) }));
 
 export interface EntityConfig {
   path: string; // API path AND URL slug
@@ -69,6 +84,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'state', label: 'State' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
+      { key: 'pumpRequired', label: 'Pump required', type: 'boolean', default: false },
     ],
   },
   materials: {
@@ -193,7 +209,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     title: 'Number Series',
     columns: ['documentType', 'prefix', 'currentNumber', 'financialYear', 'isActive'],
     fields: [
-      { key: 'documentType', label: 'Document type', required: true },
+      { key: 'documentType', label: 'Document type', required: true, options: DOCUMENT_TYPE_OPTIONS },
       { key: 'plantId', label: 'Plant', ref: { path: 'plants', value: 'id', label: 'plantName' } },
       { key: 'prefix', label: 'Prefix' },
       { key: 'suffix', label: 'Suffix' },
@@ -208,6 +224,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
           { value: 'never', label: 'Never (continuous)' },
         ],
       },
+      { key: 'isActive', label: 'Active', type: 'boolean', default: true },
     ],
   },
 };

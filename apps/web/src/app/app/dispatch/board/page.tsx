@@ -9,7 +9,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field } from '../../../../components/ui/Field';
-import { ErrorState, EmptyState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const NEXT: Record<string, { status: string; label: string }[]> = {
@@ -34,6 +34,7 @@ export default function DispatchBoardPage() {
   const [form, setForm] = useState({ batchTicketId: '', vehicleId: '', driverId: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     const [d, b, v, dr, ch] = await Promise.all([
@@ -50,7 +51,7 @@ export default function DispatchBoardPage() {
     setChallans(ch);
   }
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
   }, []);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
@@ -139,7 +140,9 @@ export default function DispatchBoardPage() {
       </div>
 
       <Card title="Dispatches" padded={false}>
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

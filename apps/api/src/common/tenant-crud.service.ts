@@ -17,6 +17,13 @@ export interface CrudOpts {
    * override it, e.g. { field: 'isActive', value: false }.
    */
   softDelete?: { field: string; value: unknown };
+  /**
+   * Hard-delete (row removed) instead of soft-delete. For config rows that no
+   * transaction references and that have no status column to flip — e.g. a UOM
+   * conversion, where a soft-delete would write a non-existent `status` column
+   * and 500, and a wrong conversion otherwise could never be removed.
+   */
+  hardDelete?: boolean;
 }
 
 /**
@@ -99,6 +106,11 @@ export class TenantCrudService<T extends ObjectLiteral> {
       const repo = m.getRepository(this.entity);
       const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
       if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
+      if (this.opts.hardDelete) {
+        // No status column to flip — remove the row and return what was deleted.
+        await repo.delete(id);
+        return row;
+      }
       await repo.update(id, { [field]: value } as any);
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });

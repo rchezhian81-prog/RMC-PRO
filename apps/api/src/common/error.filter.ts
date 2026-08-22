@@ -40,12 +40,16 @@ export class ErrorFilter implements ExceptionFilter {
     const res = http.getResponse<Response>();
     const req = http.getRequest<Request & { requestId?: string; user?: AuthUser }>();
     const requestId = req?.requestId;
-    const status =
-      exception instanceof HttpException
+    // A Postgres unique-violation arrives as a raw driver error; treat it as a
+    // 409 (duplicate) rather than letting it fall through to a generic 500.
+    const dup = uniqueViolation(exception);
+    const status = dup
+      ? HttpStatus.CONFLICT
+      : exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const { code, message, fields } = this.describe(exception, status);
+    const { code, message, fields } = dup ?? this.describe(exception, status);
 
     // Hand the code to the request logger (RequestContextMiddleware reads it off
     // res.locals when the response finishes), so the one log line for this
@@ -115,6 +119,20 @@ export class ErrorFilter implements ExceptionFilter {
       obj.fields && typeof obj.fields === 'object' ? (obj.fields as Record<string, string>) : undefined;
     return { code: typeof obj.code === 'string' ? obj.code : fallbackCode, message, fields };
   }
+}
+
+/**
+ * A Postgres unique-violation (SQLSTATE 23505) reaches the filter as a raw
+ * TypeORM `QueryFailedError`, so without this it becomes a generic 500 ("try
+ * again") — misleading for the most common master mistake, entering a code that
+ * already exists. Map it to a 409 the web client shows verbatim. The pg code is
+ * on the wrapped driver error (`.driverError.code`) or the error itself.
+ */
+function uniqueViolation(exception: unknown): { code: string; message: string; fields?: Record<string, string> } | null {
+  const e = exception as { code?: unknown; driverError?: { code?: unknown } };
+  const pgCode = e?.driverError?.code ?? e?.code;
+  if (pgCode !== '23505') return null;
+  return { code: ERROR_CODES.DUPLICATE_RECORD, message: 'A record with the same code already exists.' };
 }
 
 /** The code that best describes a refusal that did not name one itself. */

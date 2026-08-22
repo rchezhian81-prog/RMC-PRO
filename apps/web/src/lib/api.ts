@@ -247,6 +247,18 @@ export interface PlanRow {
   maxUsers: number;
   moduleCount: number;
 }
+/** A single plan with its enabled module keys — for the edit form. */
+export interface PlanDetail {
+  id: string;
+  code: string;
+  name: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  maxPlants: number;
+  maxUsers: number;
+  isActive: boolean;
+  modules: string[];
+}
 export interface TenantModuleRow {
   moduleKey: string;
   name: string;
@@ -325,6 +337,11 @@ export const api = {
       body: JSON.stringify({ isEnabled }),
     }),
   plans: () => apiFetch<PlanRow[]>('/platform/plans'),
+  getPlan: (id: string) => apiFetch<PlanDetail>(`/platform/plans/${id}`),
+  updatePlan: (
+    id: string,
+    b: { planName?: string; monthlyPrice?: number; yearlyPrice?: number; maxPlants?: number; maxUsers?: number; isActive?: boolean },
+  ) => apiFetch<{ id: string }>(`/platform/plans/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   createPlan: (b: {
     planCode: string;
     planName: string;

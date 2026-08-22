@@ -29,6 +29,9 @@ ok('accepts mobile "9943602633"', isValidMobile('9943602633'));
 }
 ok('valid customer has no field errors', Object.keys(validateMasterFields({ gstin: '33ABCDE1234F1Z5', creditLimit: 5000, creditDays: 30, mobile: '9943602633' })).length === 0);
 ok('vehicle negative capacity flagged', !!validateMasterFields({ capacityM3: -3 }).capacityM3);
+ok('uom-conversion factor 0 flagged (÷0 makes an unusable row)', !!validateMasterFields({ factor: 0 }).factor);
+ok('uom-conversion factor negative flagged', !!validateMasterFields({ factor: -2 }).factor);
+ok('uom-conversion factor positive accepted', !validateMasterFields({ factor: 2.5 }).factor);
 
 const LOGIN = process.env.LOGIN, PASSWORD = process.env.RMC_PASSWORD;
 const API_BASE = process.env.API_BASE || 'http://localhost:4000/api/v1';
@@ -64,6 +67,23 @@ const code = 'QA-OK-' + Date.now();
 const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z5', creditLimit: 5000, creditDays: 30, mobile: '9943602633', pincode: '600002' }, tok);
 ok('valid customer created (2xx)', good.status >= 200 && good.status < 300 && good.body?.success === true);
 ok('the buyer pincode is persisted + returned', good.body?.data?.pincode === '600002');
+
+// Duplicate code → a clear 409 duplicate, not a generic 500 (Postgres 23505 map).
+const dup = await j('POST', '/customers', { customerCode: code, customerName: 'Dup Co' }, tok);
+ok('duplicate customer code is a 409 conflict, not a 500', dup.status === 409);
+ok('duplicate error.code = DUPLICATE_RECORD', dup.body?.error?.code === 'DUPLICATE_RECORD');
+
+// uom-conversions: factor 0 is rejected per-field...
+const uomBad = await j('POST', '/uom-conversions', { fromUom: 'QAB', toUom: 'QAK', factor: 0 }, tok);
+ok('uom-conversion factor 0 rejected with 400', uomBad.status === 400);
+ok('uom-conversion error.fields.factor present', !!uomBad.body?.error?.fields?.factor);
+
+// ...a valid conversion is created, and deactivating it hard-deletes cleanly
+// (no 500 from writing a status column the entity does not have).
+const uom = await j('POST', '/uom-conversions', { fromUom: 'QA' + Date.now(), toUom: 'QAK', factor: 50 }, tok);
+ok('valid uom-conversion created (2xx)', uom.status >= 200 && uom.status < 300);
+const del = await j('DELETE', `/uom-conversions/${uom.body?.data?.id}`, null, tok);
+ok('uom-conversion deactivate succeeds (no 500)', del.status >= 200 && del.status < 300);
 
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

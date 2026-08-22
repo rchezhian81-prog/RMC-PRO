@@ -110,7 +110,7 @@ export class UomsService extends TenantCrudService<Uom> {
 @Injectable()
 export class UomConversionsService extends TenantCrudService<UomConversion> {
   constructor(db: TenantDbService) {
-    super(db, UomConversion, { orderBy: 'fromUom', required: ['fromUom', 'toUom', 'factor'] });
+    super(db, UomConversion, { orderBy: 'fromUom', required: ['fromUom', 'toUom', 'factor'], hardDelete: true });
   }
   // factor must be a positive number.
   protected override validateWrite(dto: Record<string, unknown>): void {

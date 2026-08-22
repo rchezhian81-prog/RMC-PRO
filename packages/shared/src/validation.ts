@@ -91,11 +91,15 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
     'bulkDensity',
     'waterAbsorptionPct',
     'defaultMoisturePct',
-    'factor',
   ]) {
     if (dto[k] !== undefined && dto[k] !== null && dto[k] !== '' && !isNonNegativeNumber(dto[k])) {
       errors[k] = 'Enter a number of 0 or more.';
     }
+  }
+  // A conversion factor must be strictly positive: 0 (and its 1/0 inverse) makes
+  // a silently unusable row, so it is rejected rather than merely "≥ 0".
+  if (dto.factor !== undefined && dto.factor !== null && dto.factor !== '' && !(Number(dto.factor) > 0)) {
+    errors.factor = 'Enter a conversion factor greater than 0.';
   }
   // Percentages that cannot exceed 100 (aggregate absorption / free moisture).
   for (const k of ['waterAbsorptionPct', 'defaultMoisturePct']) {

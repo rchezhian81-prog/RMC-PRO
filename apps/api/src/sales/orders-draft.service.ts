@@ -225,7 +225,14 @@ export class OrdersDraftService {
           }),
         );
       }
-      await orderRepo.update(order.id, { estimatedOrderValue: total.toFixed(2) });
+      // Set the GST-inclusive value too (mirrors fromQuotation) — it is the
+      // amount the credit check counts, so omitting it here would undercount a
+      // rate-contract order's exposure by the whole GST component.
+      const inclGst = await this.gstInclusiveTotal(m, contract.customerId, gstLines);
+      await orderRepo.update(order.id, {
+        estimatedOrderValue: total.toFixed(2),
+        estimatedOrderValueInclGst: inclGst.toFixed(2),
+      });
       return this.loadFull(m, order.id);
     });
   }

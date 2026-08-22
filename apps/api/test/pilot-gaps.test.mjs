@@ -13,6 +13,10 @@
  *  GST-inclusive value and the credit check's requested amount is GST-inclusive
  *  (the ex-GST display value is preserved).
  *
+ *  BUG 3 — the rate-contract order path never set the GST-inclusive value (only
+ *  the quotation path did), so a rate-contract order's credit exposure was
+ *  undercounted by the whole GST component. Same proof, via from-rate-contract.
+ *
  * Env (provided by run-integration.mjs): API_BASE, LOGIN, RMC_PASSWORD.
  */
 const API_BASE = process.env.API_BASE || 'http://localhost:4000/api/v1';
@@ -62,6 +66,14 @@ async function approveQuotation(items) {
   let q = await api('POST', '/quotations', { customerId: customer.id, siteId: site?.id, quotationDate: TODAY, items });
   await api('POST', `/quotations/${q.id}/submit`);
   return api('POST', `/quotations/${q.id}/approve`);
+}
+async function approveRateContract(items) {
+  const rc = await api('POST', '/rate-contracts', {
+    customerId: customer.id, siteId: site?.id, validFrom: TODAY, validTo: TODAY, items,
+  });
+  await api('POST', `/rate-contracts/${rc.id}/submit`);
+  await api('POST', `/rate-contracts/${rc.id}/approve`);
+  return rc;
 }
 async function confirmOrder(orderId) {
   const order = await api('POST', `/orders/${orderId}/confirm`);
@@ -121,6 +133,19 @@ ok('order stores the GST-inclusive value (50000 + 18%)', near(o3full.estimatedOr
 const assess = await api('GET', `/orders/${o3.id}/credit-check`);
 ok('credit requested amount is GST-inclusive', near(assess.requestedAmount, 59000));
 ok('credit requested amount is NOT the ex-GST value', Number(assess.requestedAmount) > 50000);
+
+// ---- BUG 3: rate-contract order draft is ALSO GST-inclusive ----
+const rc = await approveRateContract([{ gradeId: grade.id, gradeLabel: gl, ratePerM3: 5000, transportCharge: 0, gstRate: '18' }]);
+const o4 = await api('POST', `/order-drafts/from-rate-contract/${rc.id}`, {
+  plantId: plant.id, orderDate: TODAY, lines: [{ gradeId: grade.id, quantityM3: 10 }],
+});
+const o4full = await api('GET', `/orders/${o4.id}`);
+ok('rate-contract order preserves the ex-GST value for display', near(o4full.estimatedOrderValue, 50000));
+ok('rate-contract order stores the GST-inclusive value (50000 + 18%)', near(o4full.estimatedOrderValueInclGst, 59000));
+
+const assess4 = await api('GET', `/orders/${o4.id}/credit-check`);
+ok('rate-contract credit requested amount is GST-inclusive', near(assess4.requestedAmount, 59000));
+ok('rate-contract credit requested amount is NOT the ex-GST value', Number(assess4.requestedAmount) > 50000);
 
 console.log(`\nPILOT GAPS TEST: ${pass} passed ✓`);
 process.exit(0);

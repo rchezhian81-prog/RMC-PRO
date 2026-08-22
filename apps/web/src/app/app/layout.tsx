@@ -386,7 +386,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             Logout
           </Button>
         </header>
-        <main id="main" className="mn-main" tabIndex={-1} style={{ maxWidth: 1120, width: '100%', minWidth: 0 }}>
+        <main id="main" className="mn-main" tabIndex={-1} style={{ maxWidth: isUiV2() ? 1760 : 1120, width: '100%', minWidth: 0 }}>
           {children}
         </main>
       </div>

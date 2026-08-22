@@ -56,7 +56,8 @@ export default function PlansPage() {
     <div>
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Subscription Plans</h1>
 
-      <div style={{ marginBottom: 18 }}>
+      <div className="mn-crud mn-crud--wide">
+        <div className="mn-crud-aside">
         <Card title="New plan">
           <Form onSubmit={create}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
@@ -106,8 +107,8 @@ export default function PlansPage() {
           </Form>
           {error && <div style={{ marginTop: 12 }}><ErrorState message={error} /></div>}
         </Card>
-      </div>
-
+        </div>
+        <div className="mn-crud-main">
       <Card title="Plans" padded={false}>
         {plans.length ? (
           <Table>
@@ -138,6 +139,8 @@ export default function PlansPage() {
           <EmptyState title="No plans yet" description="Create your first subscription plan above." />
         )}
       </Card>
+        </div>
+      </div>
     </div>
   );
 }

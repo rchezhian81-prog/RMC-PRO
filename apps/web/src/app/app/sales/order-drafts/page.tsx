@@ -44,12 +44,13 @@ export default function OrderDraftsPage() {
 
       <Card title="Order drafts" padded={false}>
         {!loaded ? (
-          <TableSkeleton cols={7} />
+          <TableSkeleton cols={8} />
         ) : rows.length ? (
           <Table>
             <thead>
               <tr>
                 <Th>Order No</Th>
+                <Th>Customer</Th>
                 <Th>Source</Th>
                 <Th>Order date</Th>
                 <Th>Credit</Th>
@@ -62,6 +63,7 @@ export default function OrderDraftsPage() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.orderNo ?? '')}</Td>
+                  <Td>{String(r.customerName ?? '—')}</Td>
                   <Td>{String(r.pricingSource ?? '—')}</Td>
                   <Td>{String(r.orderDate ?? '—')}</Td>
                   <Td>{String(r.creditStatus ?? '')}</Td>

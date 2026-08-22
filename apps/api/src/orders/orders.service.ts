@@ -17,6 +17,7 @@ import { summarisePourSchedule } from './pour-schedule.util';
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 import { CreditService, type CreditAssessment } from './credit.service';
 import { creditExposureValue } from './credit-value.util';
+import { attachCustomerName } from '../common/attach-customer-name';
 import { recordHistory } from './history.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Order not found' });
@@ -36,9 +37,10 @@ export class OrdersService {
   ) {}
 
   list(tenantId: string, status?: string) {
-    return this.db.runInTenant(tenantId, (m) => {
+    return this.db.runInTenant(tenantId, async (m) => {
       const where = status ? { orderStatus: status } : {};
-      return m.getRepository(Order).find({ where, order: { createdAt: 'DESC' } });
+      const orders = await m.getRepository(Order).find({ where, order: { createdAt: 'DESC' } });
+      return attachCustomerName(m, orders);
     });
   }
 

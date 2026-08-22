@@ -147,5 +147,13 @@ const assess4 = await api('GET', `/orders/${o4.id}/credit-check`);
 ok('rate-contract credit requested amount is GST-inclusive', near(assess4.requestedAmount, 59000));
 ok('rate-contract credit requested amount is NOT the ex-GST value', Number(assess4.requestedAmount) > 50000);
 
+// ---- BUG 4: list responses carry the customer name (server join, no client-side lookup) ----
+const ordersList = await api('GET', '/orders');
+const o1row = (Array.isArray(ordersList) ? ordersList : []).find((r) => String(r.id) === String(o1.id));
+ok('orders list row carries customerName', !!o1row && String(o1row.customerName || '') === String(customer.customerName));
+const draftsList = await api('GET', '/order-drafts');
+const o3row = (Array.isArray(draftsList) ? draftsList : []).find((r) => String(r.id) === String(o3.id));
+ok('order-drafts list row carries customerName', !!o3row && String(o3row.customerName || '') === String(customer.customerName));
+
 console.log(`\nPILOT GAPS TEST: ${pass} passed ✓`);
 process.exit(0);

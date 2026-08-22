@@ -12,6 +12,7 @@ import {
   RateContractItem,
 } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
+import { attachCustomerName } from '../common/attach-customer-name';
 import { NumberingService } from './numbering.service';
 import { summariseGst, isInterstateSupply, type QuoteLine } from '../billing/tax.util';
 
@@ -35,9 +36,10 @@ export class OrdersDraftService {
   ) {}
 
   list(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Order).find({ where: { orderStatus: 'draft' }, order: { createdAt: 'DESC' } }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const drafts = await m.getRepository(Order).find({ where: { orderStatus: 'draft' }, order: { createdAt: 'DESC' } });
+      return attachCustomerName(m, drafts);
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

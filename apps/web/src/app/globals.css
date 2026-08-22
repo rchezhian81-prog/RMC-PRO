@@ -2068,21 +2068,27 @@ main:focus-visible {
   :root[data-ui='v2'] .mn-crud {
     grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
   }
+  /* wider aside for a form that carries a full-width picker (Plans modules).
+     These keep their own single-column flow — no compact 2-col field grid. */
+  :root[data-ui='v2'] .mn-crud.mn-crud--wide {
+    grid-template-columns: minmax(460px, 560px) minmax(0, 1fr);
+  }
   /* the form panel follows the list while it scrolls */
   :root[data-ui='v2'] .mn-crud-aside { position: sticky; top: 84px; }
   /* compact the aside form into a 2-column grid so a many-field form stays
      short (a tall single-column form looks unbalanced beside a short list).
      !important overrides the component's inline flex layout — scoped to the
-     two-column context only, so narrow screens keep the original flow. */
-  :root[data-ui='v2'] .mn-crud-aside form {
+     two-column context only, so narrow screens keep the original flow.
+     Skipped on .mn-crud--wide (picker forms keep single-column flow). */
+  :root[data-ui='v2'] .mn-crud:not(.mn-crud--wide) .mn-crud-aside form {
     display: grid !important;
     grid-template-columns: 1fr 1fr;
     gap: 12px 12px;
     align-items: end;
   }
-  :root[data-ui='v2'] .mn-crud-aside form > div { min-width: 0 !important; margin-bottom: 0; }
+  :root[data-ui='v2'] .mn-crud:not(.mn-crud--wide) .mn-crud-aside form > div { min-width: 0 !important; margin-bottom: 0; }
   /* the submit-button row spans both columns, left-aligned */
-  :root[data-ui='v2'] .mn-crud-aside form > div:last-child { grid-column: 1 / -1; justify-self: start; }
+  :root[data-ui='v2'] .mn-crud:not(.mn-crud--wide) .mn-crud-aside form > div:last-child { grid-column: 1 / -1; justify-self: start; }
 }
 /* the form reflows naturally into the narrower aside; keep its own bottom
    spacing from doubling up with the grid gap */

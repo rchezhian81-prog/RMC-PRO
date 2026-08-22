@@ -7,7 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Table, Th, Td } from '../../../components/ui/Table';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { ErrorState, EmptyState } from '../../../components/ui/States';
+import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const FILTERS = ['', 'draft', 'confirmed', 'credit_hold', 'cancelled'];
@@ -16,13 +16,16 @@ export default function OrdersPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoaded(false);
     setRows(await ordersApi.list(filter || undefined));
+    setLoaded(true);
   }, [filter]);
 
   useEffect(() => {
-    reload().catch((e) => setError(String(e)));
+    reload().catch((e) => { setError(String(e)); setLoaded(true); });
   }, [reload]);
 
   return (
@@ -63,7 +66,9 @@ export default function OrdersPage() {
         }
         padded={false}
       >
-        {rows.length ? (
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : rows.length ? (
           <Table>
             <thead>
               <tr>

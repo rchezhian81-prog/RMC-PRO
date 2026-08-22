@@ -6,11 +6,7 @@ import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { round2 } from './tax.util';
-import { allocateAcrossInvoices } from './receipt-allocation.util';
-
-/** Payment status of an invoice given its paid / outstanding, honouring write-offs. */
-const paymentStatusFor = (outstanding: number, paid: number): string =>
-  outstanding <= 0.001 ? 'paid' : paid > 0.001 ? 'partially_paid' : 'unpaid';
+import { allocateAcrossInvoices, invoiceBalanceAfter } from './receipt-allocation.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Receipt not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -55,7 +51,6 @@ export class ReceiptService {
     return this.db.runInTenant(tenantId, async (m) => {
       const receiptNo = await this.numbering.next(m, tenantId, 'receipt', 'RCPT-');
       const invoiceRepo = m.getRepository(Invoice);
-      const allocRepo = m.getRepository(PaymentAllocation);
       const paymentRepo = m.getRepository(Payment);
 
       const mode = ((dto.paymentMode as string) ?? 'cash').toLowerCase();
@@ -82,13 +77,9 @@ export class ReceiptService {
         const outstanding = num(invoice.outstandingAmount);
         if (amt > outstanding + 0.001) throw badReq(`Allocation ${amt} exceeds invoice outstanding ${outstanding}`);
 
-        await allocRepo.save(allocRepo.create({ tenantId, paymentId: payment.id, invoiceId: invoice.id, allocatedAmount: String(amt) }));
-        const paid = round2(num(invoice.amountPaid) + amt);
-        const newOutstanding = round2(num(invoice.totalAmount) - paid);
-        await invoiceRepo.update(invoice.id, {
-          amountPaid: String(paid), outstandingAmount: String(newOutstanding),
-          paymentStatus: newOutstanding <= 0.001 ? 'paid' : 'partially_paid',
-        });
+        // Settle through the shared helper so a manual allocation honours the
+        // invoice's write-off exactly like advance-apply and bounce do.
+        await this.creditInvoice(m, tenantId, payment.id, invoice, amt);
         allocated = round2(allocated + amt);
       }
 
@@ -107,9 +98,9 @@ export class ReceiptService {
       m.getRepository(PaymentAllocation).create({ tenantId, paymentId, invoiceId: invoice.id, allocatedAmount: String(amt) }),
     );
     const paid = round2(num(invoice.amountPaid) + amt);
-    const outstanding = round2(num(invoice.totalAmount) - paid - num(invoice.writtenOffAmount));
+    const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
     await m.getRepository(Invoice).update(invoice.id, {
-      amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus: paymentStatusFor(outstanding, paid),
+      amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,
     });
   }
 
@@ -141,9 +132,9 @@ export class ReceiptService {
         const invoice = await invoiceRepo.findOne({ where: { id: a.invoiceId } });
         if (invoice) {
           const paid = round2(num(invoice.amountPaid) - num(a.allocatedAmount));
-          const outstanding = round2(num(invoice.totalAmount) - paid - num(invoice.writtenOffAmount));
+          const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
           await invoiceRepo.update(invoice.id, {
-            amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus: paymentStatusFor(outstanding, paid),
+            amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,
           });
         }
         await allocRepo.delete(a.id);

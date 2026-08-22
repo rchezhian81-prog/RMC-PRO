@@ -28,6 +28,7 @@ export default function LeadsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
   const [form, setForm] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '' });
+  const [edit, setEdit] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '' });
   const [fu, setFu] = useState({ notes: '', outcome: '', nextFollowupDate: '', leadStage: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -43,7 +44,25 @@ export default function LeadsPage() {
 
   async function open(id: string) {
     setError(null);
-    setSel(await leadsApi.get(id));
+    const l = await leadsApi.get(id);
+    setSel(l);
+    setEdit({
+      customerName: String(l.customerName ?? ''), contactPerson: String(l.contactPerson ?? ''),
+      mobile: String(l.mobile ?? ''), siteLocation: String(l.siteLocation ?? ''), leadSource: String(l.leadSource ?? ''),
+    });
+  }
+
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!sel) return;
+    setError(null);
+    try {
+      await leadsApi.update(String(sel.id), edit);
+      await open(String(sel.id));
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+    }
   }
 
   async function create(e: FormEvent) {
@@ -129,6 +148,19 @@ export default function LeadsPage() {
 
       {sel && (
         <Card title={`${String(sel.leadNo)} — ${String(sel.customerName)}`} actions={<StatusBadge status={String(sel.leadStage)} />}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mn-muted)', marginBottom: 8 }}>Edit details</div>
+          <Form onSubmit={saveEdit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 18 }}>
+            <F label="Customer name" v={edit.customerName} on={(v) => setEdit({ ...edit, customerName: v })} w={190} req />
+            <F label="Contact" v={edit.contactPerson} on={(v) => setEdit({ ...edit, contactPerson: v })} w={140} />
+            <F label="Mobile" v={edit.mobile} on={(v) => setEdit({ ...edit, mobile: v })} w={130} />
+            <F label="Site location" v={edit.siteLocation} on={(v) => setEdit({ ...edit, siteLocation: v })} w={160} />
+            <F label="Source" v={edit.leadSource} on={(v) => setEdit({ ...edit, leadSource: v })} w={120} />
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit" variant="secondary">Save details</Button>
+            </div>
+          </Form>
+
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--mn-muted)', marginBottom: 8 }}>Add follow-up</div>
           <Form onSubmit={addFollowup} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginBottom: 16 }}>
             <F label="Notes" v={fu.notes} on={(v) => setFu({ ...fu, notes: v })} w={220} />
             <F label="Outcome" v={fu.outcome} on={(v) => setFu({ ...fu, outcome: v })} w={130} />

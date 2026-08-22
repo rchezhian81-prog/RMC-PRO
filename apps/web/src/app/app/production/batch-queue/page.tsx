@@ -16,7 +16,7 @@ const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN');
 
 export default function BatchQueuePage() {
   const router = useRouter();
-  const { prompt } = useConfirm();
+  const { prompt, confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [orders, setOrders] = useState<Row[]>([]);
   const [mixes, setMixes] = useState<Row[]>([]);
@@ -47,6 +47,17 @@ export default function BatchQueuePage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
+  }
+
+  async function setQueueStatus(r: Row, status: string, okMsg: string) {
+    if (status === 'cancelled') {
+      const ok = await confirm({ title: 'Cancel load', message: `Cancel the queued load for ${String(r.gradeLabel ?? 'this grade')}?`, confirmLabel: 'Cancel load' });
+      if (!ok) return;
+    }
+    await run(async () => {
+      await batchQueueApi.setStatus(String(r.id), status);
+      await reload();
+    }, okMsg);
   }
 
   async function enqueue(e: FormEvent) {
@@ -132,25 +143,36 @@ export default function BatchQueuePage() {
                     <Td numeric>{money(r.producedQuantityM3)}</Td>
                     <Td><StatusBadge status={st} /></Td>
                     <Td style={{ textAlign: 'right' }}>
-                      {(st === 'waiting' || st === 'batching') && (
-                        <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                          <select
-                            className="mn-input"
-                            style={{ maxWidth: 190 }}
-                            value={mixByRow[String(r.id)] ?? ''}
-                            onChange={(e) => setMixByRow({ ...mixByRow, [String(r.id)]: e.target.value })}
-                            title="Mix design — defaults to the grade's approved mix"
-                          >
-                            <option value="">Auto by grade</option>
-                            {mixes
-                              .filter((mx) => mx.approvalStatus === 'approved')
-                              .map((mx) => (
-                                <option key={mx.id} value={String(mx.id)}>{String(mx.mixCode ?? mx.id)}</option>
-                              ))}
-                          </select>
-                          <Button size="sm" onClick={() => startBatch(r)}>Start batch</Button>
-                        </div>
-                      )}
+                      <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {(st === 'waiting' || st === 'batching') && (
+                          <>
+                            <select
+                              className="mn-input"
+                              style={{ maxWidth: 190 }}
+                              value={mixByRow[String(r.id)] ?? ''}
+                              onChange={(e) => setMixByRow({ ...mixByRow, [String(r.id)]: e.target.value })}
+                              title="Mix design — defaults to the grade's approved mix"
+                            >
+                              <option value="">Auto by grade</option>
+                              {mixes
+                                .filter((mx) => mx.approvalStatus === 'approved')
+                                .map((mx) => (
+                                  <option key={mx.id} value={String(mx.id)}>{String(mx.mixCode ?? mx.id)}</option>
+                                ))}
+                            </select>
+                            <Button size="sm" onClick={() => startBatch(r)}>Start batch</Button>
+                          </>
+                        )}
+                        {st === 'waiting' && (
+                          <Button variant="secondary" size="sm" onClick={() => setQueueStatus(r, 'held', 'Load held')}>Hold</Button>
+                        )}
+                        {st === 'held' && (
+                          <Button variant="secondary" size="sm" onClick={() => setQueueStatus(r, 'waiting', 'Load resumed')}>Resume</Button>
+                        )}
+                        {(st === 'waiting' || st === 'held') && (
+                          <Button variant="danger" size="sm" onClick={() => setQueueStatus(r, 'cancelled', 'Load cancelled')}>Cancel</Button>
+                        )}
+                      </div>
                     </Td>
                   </tr>
                 );

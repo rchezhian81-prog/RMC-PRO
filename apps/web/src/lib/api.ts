@@ -457,6 +457,8 @@ export const quotationsApi = {
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/quotations/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   addItem: (id: string, b: Record<string, unknown>) => post(`/quotations/${id}/items`, b),
+  updateItem: (id: string, itemId: string, b: Record<string, unknown>) =>
+    apiFetch<Row>(`/quotations/${id}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteItem: (id: string, itemId: string) =>
     apiFetch<Row>(`/quotations/${id}/items/${itemId}`, { method: 'DELETE' }),
   submit: (id: string) => post(`/quotations/${id}/submit`),
@@ -525,12 +527,16 @@ export const productionPlansApi = {
   get: (id: string) => apiFetch<Row>(`/production-plans/${id}`),
   create: (b: Record<string, unknown>) => post('/production-plans', b),
   addItem: (id: string, b: Record<string, unknown>) => post(`/production-plans/${id}/items`, b),
+  removeItem: (id: string, itemId: string) =>
+    apiFetch<Row>(`/production-plans/${id}/items/${itemId}`, { method: 'DELETE' }),
+  setStatus: (id: string, status: string) => post(`/production-plans/${id}/status`, { status }),
   enqueue: (id: string) => post(`/production-plans/${id}/enqueue`),
 };
 
 export const batchQueueApi = {
   list: (status?: string) => apiFetch<Row[]>(`/batch-queue${status ? `?status=${status}` : ''}`),
   enqueueFromOrder: (orderId: string) => post(`/batch-queue/from-order/${orderId}`),
+  setStatus: (id: string, status: string) => post(`/batch-queue/${id}/status`, { status }),
 };
 
 export const batchTicketsApi = {

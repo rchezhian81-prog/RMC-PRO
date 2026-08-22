@@ -9,8 +9,10 @@ import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 export default function ProductionPlansPage() {
+  const { confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
   const [orders, setOrders] = useState<Row[]>([]);
@@ -66,6 +68,25 @@ export default function ProductionPlansPage() {
       setSel(updated);
       setItem({ orderId: '', plannedQuantityM3: '' });
     });
+  }
+  async function removeItem(itemId: string) {
+    if (!sel) return;
+    await run(async () => {
+      await productionPlansApi.removeItem(String(sel.id), itemId);
+      setSel(await productionPlansApi.get(String(sel.id)));
+    }, 'Line removed');
+  }
+  async function setPlanStatus(status: string, okMsg: string) {
+    if (!sel) return;
+    if (status === 'cancelled') {
+      const ok = await confirm({ title: 'Cancel plan', message: `Cancel plan ${String(sel.planNo)}? Its lines will no longer be batched.`, confirmLabel: 'Cancel plan' });
+      if (!ok) return;
+    }
+    await run(async () => {
+      await productionPlansApi.setStatus(String(sel.id), status);
+      setSel(await productionPlansApi.get(String(sel.id)));
+      await reload();
+    }, okMsg);
   }
 
   const items = (sel?.items as Row[]) ?? [];
@@ -153,6 +174,7 @@ export default function ProductionPlansPage() {
                 <Th>Grade</Th>
                 <Th numeric>Planned m³</Th>
                 <Th>Status</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
@@ -162,11 +184,16 @@ export default function ProductionPlansPage() {
                   <Td>{String(it.gradeLabel ?? '—')}</Td>
                   <Td numeric>{String(it.plannedQuantityM3)}</Td>
                   <Td><StatusBadge status={String(it.status)} /></Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    {String(sel.status) === 'draft' && (
+                      <Button variant="ghost" size="sm" onClick={() => removeItem(String(it.id))}>Remove</Button>
+                    )}
+                  </Td>
                 </tr>
               ))}
               {!items.length && (
                 <tr>
-                  <Td colSpan={4} style={{ color: 'var(--mn-muted)' }}>No items yet.</Td>
+                  <Td colSpan={5} style={{ color: 'var(--mn-muted)' }}>No items yet.</Td>
                 </tr>
               )}
             </tbody>
@@ -193,7 +220,7 @@ export default function ProductionPlansPage() {
             </div>
           </Form>
 
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Button
               onClick={() =>
                 run(async () => {
@@ -206,6 +233,12 @@ export default function ProductionPlansPage() {
             >
               Enqueue to batch queue
             </Button>
+            {String(sel.status) === 'draft' && (
+              <>
+                <Button variant="secondary" onClick={() => setPlanStatus('confirmed', 'Plan confirmed')}>Confirm plan</Button>
+                <Button variant="danger" onClick={() => setPlanStatus('cancelled', 'Plan cancelled')}>Cancel plan</Button>
+              </>
+            )}
           </div>
         </Card>
       )}

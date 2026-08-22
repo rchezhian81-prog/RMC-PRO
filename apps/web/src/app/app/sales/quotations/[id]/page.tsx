@@ -41,15 +41,29 @@ export default function QuotationDetail() {
   const [q, setQ] = useState<Row | null>(null);
   const [grades, setGrades] = useState<Row[]>([]);
   const [revs, setRevs] = useState<Row[]>([]);
-  const [item, setItem] = useState({ gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' });
+  const [customers, setCustomers] = useState<Row[]>([]);
+  const [sites, setSites] = useState<Row[]>([]);
+  const EMPTY_ITEM = { gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' };
+  const [item, setItem] = useState(EMPTY_ITEM);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [header, setHeader] = useState({ customerId: '', siteId: '', validUntil: '', paymentTerms: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [full, g, r] = await Promise.all([quotationsApi.get(id), crud('concrete-grades').list(), quotationsApi.revisions(id)]);
+    const [full, g, r, c, s] = await Promise.all([
+      quotationsApi.get(id), crud('concrete-grades').list(), quotationsApi.revisions(id),
+      crud('customers').list(), crud('sites').list(),
+    ]);
     setQ(full);
     setGrades(g);
     setRevs(r);
+    setCustomers(c);
+    setSites(s);
+    setHeader({
+      customerId: String(full.customerId ?? ''), siteId: String(full.siteId ?? ''),
+      validUntil: String(full.validUntil ?? '').slice(0, 10), paymentTerms: String(full.paymentTerms ?? ''),
+    });
   }, [id]);
 
   useEffect(() => {
@@ -68,22 +82,49 @@ export default function QuotationDetail() {
     }
   }
 
-  async function addItem(e: FormEvent) {
+  async function submitItem(e: FormEvent) {
     e.preventDefault();
     const g = grades.find((x) => String(x.id) === item.gradeId);
+    const body = {
+      gradeId: item.gradeId || undefined,
+      gradeLabel: item.gradeLabel || (g ? String(g.gradeCode) : ''),
+      estimatedQuantity: Number(item.estimatedQuantity || 0),
+      ratePerM3: Number(item.ratePerM3 || 0),
+      transportCharge: Number(item.transportCharge || 0),
+      pumpCharge: Number(item.pumpCharge || 0),
+      waitingCharge: Number(item.waitingCharge || 0),
+      gstRate: Number(item.gstRate || 0),
+    };
     await run(async () => {
-      await quotationsApi.addItem(id, {
-        gradeId: item.gradeId || undefined,
-        gradeLabel: item.gradeLabel || (g ? String(g.gradeCode) : ''),
-        estimatedQuantity: Number(item.estimatedQuantity || 0),
-        ratePerM3: Number(item.ratePerM3 || 0),
-        transportCharge: Number(item.transportCharge || 0),
-        pumpCharge: Number(item.pumpCharge || 0),
-        waitingCharge: Number(item.waitingCharge || 0),
-        gstRate: Number(item.gstRate || 0),
-      });
-      setItem({ gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' });
+      if (editingItemId) await quotationsApi.updateItem(id, editingItemId, body);
+      else await quotationsApi.addItem(id, body);
+      setItem(EMPTY_ITEM);
+      setEditingItemId(null);
     });
+  }
+  function startEditItem(it: Row) {
+    setEditingItemId(String(it.id));
+    setItem({
+      gradeId: String(it.gradeId ?? ''), gradeLabel: String(it.gradeLabel ?? ''),
+      estimatedQuantity: String(it.estimatedQuantity ?? ''), ratePerM3: String(it.ratePerM3 ?? ''),
+      transportCharge: String(it.transportCharge ?? ''), pumpCharge: String(it.pumpCharge ?? ''),
+      waitingCharge: String(it.waitingCharge ?? ''), gstRate: String(it.gstRate ?? '18'),
+    });
+  }
+  function cancelEditItem() {
+    setEditingItemId(null);
+    setItem(EMPTY_ITEM);
+  }
+  async function saveHeader(e: FormEvent) {
+    e.preventDefault();
+    await run(async () => {
+      await quotationsApi.update(id, {
+        customerId: header.customerId || undefined,
+        siteId: header.siteId || undefined,
+        validUntil: header.validUntil || undefined,
+        paymentTerms: header.paymentTerms || undefined,
+      });
+    }, 'Details updated');
   }
 
   if (!q) return error ? <ErrorState message={error} /> : <Loading label="Loading quotation…" />;
@@ -131,6 +172,46 @@ export default function QuotationDetail() {
         </div>
       </Card>
 
+      {!locked && (
+        <Card title="Details">
+          <Form onSubmit={saveHeader} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ minWidth: 200 }}>
+              <Field label="Customer">
+                <select className="mn-input" value={header.customerId} onChange={(e) => setHeader({ ...header, customerId: e.target.value })}>
+                  <option value="">— select —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{String(c.customerName)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 180 }}>
+              <Field label="Site">
+                <select className="mn-input" value={header.siteId} onChange={(e) => setHeader({ ...header, siteId: e.target.value })}>
+                  <option value="">— select —</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={String(s.id)}>{String(s.siteName)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Valid until">
+                <Input type="date" value={header.validUntil} onChange={(e) => setHeader({ ...header, validUntil: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Payment terms">
+                <Input value={header.paymentTerms} onChange={(e) => setHeader({ ...header, paymentTerms: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button type="submit" variant="secondary">Save details</Button>
+            </div>
+          </Form>
+        </Card>
+      )}
+
       <Card title="Grade-wise items" padded={false}>
         <Table>
           <thead>
@@ -157,7 +238,10 @@ export default function QuotationDetail() {
                 <Td numeric>{it.gstApplicable === false ? '—' : `${money(it.gstRate)}%`}</Td>
                 <Td style={{ textAlign: 'right' }}>
                   {!locked && (
-                    <Button variant="ghost" size="sm" onClick={() => run(() => quotationsApi.deleteItem(id, String(it.id)))}>Remove</Button>
+                    <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <Button variant="ghost" size="sm" onClick={() => startEditItem(it)}>Edit</Button>
+                      <Button variant="ghost" size="sm" onClick={() => run(() => quotationsApi.deleteItem(id, String(it.id)))}>Remove</Button>
+                    </div>
                   )}
                 </Td>
               </tr>
@@ -176,7 +260,7 @@ export default function QuotationDetail() {
             <strong>Transport</strong> = delivery to the site · <strong>Pump</strong> = concrete pumping charge ·{' '}
             <strong>Waiting</strong> = charge for a truck kept waiting at the site. Leave a charge at 0 if it does not apply.
           </p>
-          <Form onSubmit={addItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
+          <Form onSubmit={submitItem} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', margin: 16 }}>
             <div style={{ minWidth: 130 }}>
               <Field label="Grade">
                 <select className="mn-input" value={item.gradeId} onChange={(e) => setItem({ ...item, gradeId: e.target.value })}>
@@ -193,8 +277,11 @@ export default function QuotationDetail() {
             <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
             <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
             <Num label="GST %" v={item.gstRate} on={(v) => setItem({ ...item, gstRate: v })} />
-            <div style={{ marginBottom: 14 }}>
-              <Button type="submit" variant="secondary">Add item</Button>
+            <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
+              <Button type="submit" variant="secondary">{editingItemId ? 'Update line' : 'Add item'}</Button>
+              {editingItemId && (
+                <Button type="button" variant="ghost" onClick={cancelEditItem}>Cancel</Button>
+              )}
             </div>
           </Form>
           </>

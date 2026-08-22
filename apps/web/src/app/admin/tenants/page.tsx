@@ -46,7 +46,8 @@ export default function TenantsPage() {
     <div>
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 16 }}>Tenants</h1>
 
-      <div style={{ marginBottom: 18 }}>
+      <div className="mn-crud">
+        <div className="mn-crud-aside">
         <Card title="New tenant">
           <Form onSubmit={create} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <div style={{ minWidth: 140 }}>
@@ -75,8 +76,8 @@ export default function TenantsPage() {
           </Form>
           {error && <div style={{ marginTop: 4 }}><ErrorState message={error} /></div>}
         </Card>
-      </div>
-
+        </div>
+        <div className="mn-crud-main">
       <Card title="Tenants" padded={false}>
         {tenants.length ? (
           <Table>
@@ -111,6 +112,8 @@ export default function TenantsPage() {
           <EmptyState title="No tenants yet" description="Create your first tenant above." />
         )}
       </Card>
+        </div>
+      </div>
     </div>
   );
 }

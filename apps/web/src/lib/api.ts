@@ -329,6 +329,7 @@ export const api = {
     planCode: string;
     planName: string;
     monthlyPrice?: number;
+    yearlyPrice?: number;
     maxPlants?: number;
     maxUsers?: number;
   }) => apiFetch<{ id: string }>('/platform/plans', { method: 'POST', body: JSON.stringify(b) }),

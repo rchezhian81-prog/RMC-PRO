@@ -62,7 +62,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/users', label: 'Users', icon: <Users size={IS} />, perm: 'users.manage' },
       { href: '/app/roles', label: 'Roles', icon: <ShieldCheck size={IS} />, perm: 'roles.manage' },
       { href: '/app/entity/number-series', label: 'Number Series', icon: <Hash size={IS} />, perm: 'number_series.manage', module: 'masters' },
-      { href: '/app/numbering', label: 'Numbering', icon: <ListOrdered size={IS} />, perm: 'sync.manage' },
+      { href: '/app/numbering', label: 'Numbering', icon: <ListOrdered size={IS} />, perm: 'sync.manage', module: 'offline_sync' },
       { href: '/app/imports', label: 'Bulk Import', icon: <Upload size={IS} />, perm: 'imports.view' },
       { href: '/app/settings', label: 'Settings', icon: <Settings size={IS} />, perm: 'settings.manage' },
     ],

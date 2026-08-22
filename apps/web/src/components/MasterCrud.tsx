@@ -195,9 +195,10 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
         </div>
       )}
 
-      {showForm && (
-        <div style={{ marginBottom: 18 }}>
-          <Card title={editingId ? `Edit ${singular}` : `New ${singular}`}>
+      <div className={showForm ? 'mn-crud' : undefined}>
+        {showForm && (
+          <div className="mn-crud-aside">
+            <Card title={editingId ? `Edit ${singular}` : `New ${singular}`}>
             <Form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
               {config.fields.map((f) => (
                 <div key={f.key} style={{ minWidth: 150 }}>
@@ -255,6 +256,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
         </div>
       )}
 
+      <div className="mn-crud-main">
       <input
         ref={fileRef}
         type="file"
@@ -346,6 +348,8 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
           />
         )}
       </Card>
+      </div>
+      </div>
 
       {!showForm && !showActions && (
         <p style={{ color: 'var(--mn-muted)', fontSize: 13, marginTop: 10 }}>

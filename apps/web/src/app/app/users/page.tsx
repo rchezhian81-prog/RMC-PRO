@@ -165,7 +165,8 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: 18 }}>
+      <div className="mn-crud">
+        <div className="mn-crud-aside">
         <Card
           title={
             seatLimit === null
@@ -218,8 +219,8 @@ export default function UsersPage() {
             </div>
           </Form>
         </Card>
-      </div>
-
+        </div>
+        <div className="mn-crud-main">
       <Card title="Users" padded={false}>
         {!loaded ? (
           <TableSkeleton cols={5} />
@@ -315,6 +316,8 @@ export default function UsersPage() {
           <EmptyState title="No users yet" description="Add your first user above." />
         )}
       </Card>
+        </div>
+      </div>
 
       <p style={{ color: 'var(--mn-subtle)', fontSize: 12, marginTop: 12 }}>
         Changing a role takes effect on the person&apos;s next sign-in. To fine-tune what a role can do, go to

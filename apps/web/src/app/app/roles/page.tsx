@@ -111,6 +111,8 @@ export default function RolesPage() {
       <h1 style={{ fontSize: 24, margin: 0 }}>Roles &amp; Permissions</h1>
       {error && <ErrorState message={error} />}
 
+      <div className="mn-crud">
+        <div className="mn-crud-aside">
       <Card title="New role">
         <Form onSubmit={createRole} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 180 }}>
@@ -128,7 +130,8 @@ export default function RolesPage() {
           </div>
         </Form>
       </Card>
-
+        </div>
+        <div className="mn-crud-main">
       <Card title="Roles" padded={false}>
         {!loaded ? (
           <TableSkeleton cols={4} />
@@ -199,6 +202,8 @@ export default function RolesPage() {
           <EmptyState title="No roles yet" />
         )}
       </Card>
+        </div>
+      </div>
 
       {selRole && (
         <Card

@@ -15,6 +15,9 @@ export default function PlansPage() {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [price, setPrice] = useState('0');
+  const [yearly, setYearly] = useState('');
+  const [maxPlants, setMaxPlants] = useState('');
+  const [maxUsers, setMaxUsers] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -40,11 +43,23 @@ export default function PlansPage() {
     e.preventDefault();
     setError(null);
     try {
-      const plan = await api.createPlan({ planCode: code, planName: name, monthlyPrice: Number(price) || 0 });
+      // Caps are optional: send only when filled so the server applies its own
+      // defaults (plants→1, users→5) rather than us forcing a value.
+      const plan = await api.createPlan({
+        planCode: code,
+        planName: name,
+        monthlyPrice: Number(price) || 0,
+        ...(yearly.trim() ? { yearlyPrice: Number(yearly) || 0 } : {}),
+        ...(maxPlants.trim() ? { maxPlants: Number(maxPlants) } : {}),
+        ...(maxUsers.trim() ? { maxUsers: Number(maxUsers) } : {}),
+      });
       if (selected.size) await api.setPlanModules(plan.id, [...selected]);
       setCode('');
       setName('');
       setPrice('0');
+      setYearly('');
+      setMaxPlants('');
+      setMaxUsers('');
       setSelected(new Set());
       await reload();
     } catch (err) {
@@ -74,6 +89,21 @@ export default function PlansPage() {
               <div style={{ minWidth: 120 }}>
                 <Field label="Monthly ₹">
                   <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+                </Field>
+              </div>
+              <div style={{ minWidth: 120 }}>
+                <Field label="Yearly ₹">
+                  <Input type="number" value={yearly} onChange={(e) => setYearly(e.target.value)} placeholder="0" />
+                </Field>
+              </div>
+              <div style={{ minWidth: 110 }}>
+                <Field label="Max plants" help="Blank = 1">
+                  <Input type="number" min={1} value={maxPlants} onChange={(e) => setMaxPlants(e.target.value)} placeholder="1" />
+                </Field>
+              </div>
+              <div style={{ minWidth: 110 }}>
+                <Field label="Max users" help="Blank = 5">
+                  <Input type="number" min={1} value={maxUsers} onChange={(e) => setMaxUsers(e.target.value)} placeholder="5" />
                 </Field>
               </div>
             </div>

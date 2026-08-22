@@ -32,6 +32,9 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Dropdown options for relational (`ref`) fields, keyed by field key. Fetched
+  // from the referenced master so the operator picks a real record, not an id.
+  const [refOptions, setRefOptions] = useState<Record<string, { value: string; label: string }[]>>({});
   const [busy, setBusy] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [access, setAccess] = useState<Access>(NO_ACCESS);
@@ -55,6 +58,38 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     reload()
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoaded(true));
+  }, [config.path]);
+
+  // Populate dropdown options for relational (`ref`) fields from their masters.
+  // One fetch per distinct referenced path; a failure (e.g. no read permission)
+  // leaves that field's options empty so the select still renders, just blank.
+  useEffect(() => {
+    const refFields = config.fields.filter((f) => f.ref);
+    if (!refFields.length) {
+      setRefOptions({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cache: Record<string, Row[]> = {};
+      const collected: Record<string, { value: string; label: string }[]> = {};
+      for (const f of refFields) {
+        const ref = f.ref!;
+        try {
+          const refRows = cache[ref.path] ?? (cache[ref.path] = await crud(ref.path).list());
+          collected[f.key] = refRows.map((row) => ({
+            value: String(row[ref.value] ?? ''),
+            label: String(row[ref.label] ?? row[ref.value] ?? ''),
+          }));
+        } catch {
+          collected[f.key] = [];
+        }
+      }
+      if (!cancelled) setRefOptions(collected);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [config.path]);
 
   function startEdit(r: Row) {
@@ -200,10 +235,13 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
           <div className="mn-crud-aside">
             <Card title={editingId ? `Edit ${singular}` : `New ${singular}`}>
             <Form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
-              {config.fields.map((f) => (
+              {config.fields.map((f) => {
+                // A static option list, or one fetched from a referenced master.
+                const opts = f.options ?? (f.ref ? refOptions[f.key] ?? [] : undefined);
+                return (
                 <div key={f.key} style={{ minWidth: 150 }}>
                   <Field label={f.label} required={f.required}>
-                    {f.options ? (
+                    {opts ? (
                       <select
                         value={form[f.key] ?? ''}
                         onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
@@ -219,7 +257,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                         }}
                       >
                         <option value="">—</option>
-                        {f.options.map((o) => (
+                        {opts.map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
                           </option>
@@ -240,7 +278,8 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                     <p style={{ color: 'var(--mn-danger)', fontSize: 12, margin: '4px 0 0' }}>{fieldErrors[f.key]}</p>
                   )}
                 </div>
-              ))}
+                );
+              })}
               <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
                 <Button type="submit" loading={busy}>
                   {editingId ? 'Update' : 'Create'}

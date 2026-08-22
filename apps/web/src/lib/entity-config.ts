@@ -7,6 +7,13 @@ export interface FieldDef {
   required?: boolean;
   /** When set, the field renders as a dropdown of these options. */
   options?: { value: string; label: string }[];
+  /**
+   * Renders as a dropdown whose options are fetched from another master.
+   * `value`/`label` name the columns to read from each fetched row. Use this
+   * for foreign keys (e.g. a site's customer, a series' plant) so the operator
+   * picks a real record instead of typing an id.
+   */
+  ref?: { path: string; value: string; label: string };
 }
 
 const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
@@ -38,9 +45,13 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'customerCode', label: 'Code', required: true },
       { key: 'customerName', label: 'Name', required: true },
       { key: 'gstin', label: 'GSTIN' },
+      { key: 'billingAddress', label: 'Billing address' },
+      { key: 'city', label: 'City' },
       { key: 'state', label: 'State' },
+      { key: 'pincode', label: 'PIN code' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
+      { key: 'email', label: 'Email' },
       { key: 'creditLimit', label: 'Credit limit', type: 'number' },
       { key: 'creditDays', label: 'Credit days', type: 'number' },
     ],
@@ -52,6 +63,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     fields: [
       { key: 'siteCode', label: 'Code', required: true },
       { key: 'siteName', label: 'Name', required: true },
+      { key: 'customerId', label: 'Customer', ref: { path: 'customers', value: 'id', label: 'customerName' } },
       { key: 'address', label: 'Address' },
       { key: 'city', label: 'City' },
       { key: 'state', label: 'State' },
@@ -68,7 +80,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'materialName', label: 'Name', required: true },
       { key: 'materialType', label: 'Type', options: MATERIAL_TYPE_OPTIONS },
       { key: 'category', label: 'Category' },
-      { key: 'uom', label: 'UOM' },
+      { key: 'uom', label: 'UOM', ref: { path: 'uoms', value: 'uomCode', label: 'uomName' } },
       { key: 'hsnCode', label: 'HSN' },
       { key: 'reorderLevel', label: 'Reorder level', type: 'number' },
       { key: 'standardRate', label: 'Standard rate', type: 'number' },
@@ -109,6 +121,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'state', label: 'State' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
+      { key: 'email', label: 'Email' },
       { key: 'paymentTerms', label: 'Payment terms' },
     ],
   },
@@ -119,6 +132,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     fields: [
       { key: 'vehicleNo', label: 'Vehicle No', required: true },
       { key: 'vehicleType', label: 'Type' },
+      { key: 'driverId', label: 'Assigned driver', ref: { path: 'drivers', value: 'id', label: 'driverName' } },
       { key: 'capacityM3', label: 'Capacity (m³)', type: 'number' },
       { key: 'ownershipType', label: 'Ownership' },
       { key: 'insuranceExpiry', label: 'Insurance expiry', type: 'date' },
@@ -180,9 +194,20 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     columns: ['documentType', 'prefix', 'currentNumber', 'financialYear', 'isActive'],
     fields: [
       { key: 'documentType', label: 'Document type', required: true },
+      { key: 'plantId', label: 'Plant', ref: { path: 'plants', value: 'id', label: 'plantName' } },
       { key: 'prefix', label: 'Prefix' },
+      { key: 'suffix', label: 'Suffix' },
       { key: 'paddingLength', label: 'Padding', type: 'number' },
+      { key: 'currentNumber', label: 'Current number', type: 'number' },
       { key: 'financialYear', label: 'Financial year' },
+      {
+        key: 'resetFrequency',
+        label: 'Reset',
+        options: [
+          { value: 'yearly', label: 'Yearly (restart each financial year)' },
+          { value: 'never', label: 'Never (continuous)' },
+        ],
+      },
     ],
   },
 };

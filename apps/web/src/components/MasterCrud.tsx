@@ -182,6 +182,20 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     }
   }
 
+  async function reactivate(r: Row) {
+    setError(null);
+    try {
+      await client.reactivate(r.id);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+    }
+  }
+
+  // A soft-deleted row shows a status of 'inactive' (status-based masters) or
+  // isActive === false (number series); it gets Reactivate instead of Deactivate.
+  const isInactive = (r: Row) => String(r.status ?? '') === 'inactive' || r.isActive === false;
+
   function exportCsv() {
     const cols = Array.from(new Set([...config.columns, ...fieldKeys]));
     downloadCsv(`${config.path}-${new Date().toISOString().slice(0, 10)}`, toCsv(rows, cols));
@@ -390,9 +404,14 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
                             Edit
                           </Button>
                         )}
-                        {can('delete') && (
+                        {can('delete') && !isInactive(r) && (
                           <Button variant="danger" size="sm" onClick={() => deactivate(r)}>
                             Deactivate
+                          </Button>
+                        )}
+                        {can('edit') && isInactive(r) && (
+                          <Button variant="secondary" size="sm" onClick={() => reactivate(r)}>
+                            Reactivate
                           </Button>
                         )}
                       </div>

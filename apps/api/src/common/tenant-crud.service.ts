@@ -115,4 +115,29 @@ export class TenantCrudService<T extends ObjectLiteral> {
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });
   }
+
+  /**
+   * Reverse of {@link deactivate}: flip a soft-deleted row back to active, so a
+   * mistakenly-deactivated record isn't stranded. The active value is the
+   * inverse of the soft-delete value (false→true for a boolean flag, else the
+   * 'active' status). Hard-delete entities have nothing to restore.
+   */
+  reactivate(tenantId: string, id: string): Promise<T> {
+    if (this.opts.hardDelete) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'This record was permanently removed and cannot be reactivated.',
+      });
+    }
+    const field = this.opts.softDelete?.field ?? 'status';
+    const sd = this.opts.softDelete?.value;
+    const activeValue = typeof sd === 'boolean' ? !sd : 'active';
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(this.entity);
+      const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
+      if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
+      await repo.update(id, { [field]: activeValue } as any);
+      return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
+    });
+  }
 }

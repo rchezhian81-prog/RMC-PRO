@@ -10,7 +10,7 @@
  */
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { validateMasterFields, isValidGstin, isValidMobile } = require('@rmc/shared');
+const { validateMasterFields, isValidGstin, isValidMobile, validateCompanyProfile, isValidPan, isValidEmail } = require('@rmc/shared');
 
 let pass = 0;
 const ok = (name, cond) => { console.log((cond ? '  PASS ' : '  FAIL ') + name); if (!cond) throw new Error('FAIL: ' + name); pass++; };
@@ -32,6 +32,21 @@ ok('vehicle negative capacity flagged', !!validateMasterFields({ capacityM3: -3 
 ok('uom-conversion factor 0 flagged (÷0 makes an unusable row)', !!validateMasterFields({ factor: 0 }).factor);
 ok('uom-conversion factor negative flagged', !!validateMasterFields({ factor: -2 }).factor);
 ok('uom-conversion factor positive accepted', !validateMasterFields({ factor: 2.5 }).factor);
+
+// Company profile validation (the GSTIN prints on every tax invoice).
+ok('PAN "ABCDE1234F" accepted', isValidPan('ABCDE1234F'));
+ok('PAN "ABC123" rejected', !isValidPan('ABC123'));
+ok('email "a@b.com" accepted', isValidEmail('a@b.com'));
+ok('email "not-an-email" rejected', !isValidEmail('not-an-email'));
+{
+  const e = validateCompanyProfile({ gstin: 'BADGSTIN', pan: 'nope', pincode: '12', email: 'x@', phone: '12345' });
+  ok('company bad gstin flagged', !!e.gstin);
+  ok('company bad pan flagged', !!e.pan);
+  ok('company bad pincode flagged', !!e.pincode);
+  ok('company bad email flagged', !!e.email);
+  ok('company bad phone flagged', !!e.phone);
+}
+ok('valid company profile has no errors', Object.keys(validateCompanyProfile({ gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F', pincode: '600001', email: 'ops@acme.co', phone: '9943602633' })).length === 0);
 
 const LOGIN = process.env.LOGIN, PASSWORD = process.env.RMC_PASSWORD;
 const API_BASE = process.env.API_BASE || 'http://localhost:4000/api/v1';
@@ -84,6 +99,21 @@ const uom = await j('POST', '/uom-conversions', { fromUom: 'QA' + Date.now(), to
 ok('valid uom-conversion created (2xx)', uom.status >= 200 && uom.status < 300);
 const del = await j('DELETE', `/uom-conversions/${uom.body?.data?.id}`, null, tok);
 ok('uom-conversion deactivate succeeds (no 500)', del.status >= 200 && del.status < 300);
+
+// Company profile: an invalid GSTIN is rejected per-field (it prints on invoices).
+const coBad = await j('PATCH', '/company', { gstin: 'INVALIDGSTIN123' }, tok);
+ok('invalid company GSTIN rejected with 400', coBad.status === 400);
+ok('company error.fields.gstin present', !!coBad.body?.error?.fields?.gstin);
+
+// Reactivate: a deactivated master can be flipped back to active.
+const made = await j('POST', '/customers', { customerCode: 'QA-RC-' + Date.now(), customerName: 'Reactivate Co' }, tok);
+const rid = made.body?.data?.id;
+await j('DELETE', `/customers/${rid}`, null, tok);
+const afterDel = await j('GET', `/customers/${rid}`, null, tok);
+ok('customer is inactive after deactivate', afterDel.body?.data?.status === 'inactive');
+const react = await j('PATCH', `/customers/${rid}/reactivate`, null, tok);
+ok('reactivate succeeds (2xx)', react.status >= 200 && react.status < 300);
+ok('customer is active again after reactivate', react.body?.data?.status === 'active');
 
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

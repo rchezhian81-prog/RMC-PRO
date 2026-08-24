@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DeepPartial } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { ROLE_KEYS, passwordProblemMessage } from '@rmc/shared';
+import { ROLE_KEYS, passwordProblemMessage, validateCompanyProfile } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
@@ -31,6 +31,17 @@ export class CompanyService {
   }
 
   update(tenantId: string, dto: Record<string, unknown>) {
+    // Validate the identity fields before saving — the company GSTIN prints on
+    // every tax invoice, so a malformed one must never be persisted (PAN / PIN /
+    // email / phone are checked for the same reason).
+    const bad = validateCompanyProfile(dto);
+    if (Object.keys(bad).length) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: Object.values(bad).join(' '),
+        fields: bad,
+      });
+    }
     // Whitelist the columns the profile actually has. Anything else the client
     // sends is ignored rather than crashing the update — TypeORM throws on an
     // unknown property, which would otherwise surface as an opaque 500.

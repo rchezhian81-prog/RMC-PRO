@@ -40,4 +40,11 @@ export abstract class BaseCrudController<T extends ObjectLiteral> {
   remove(@CurrentUser() u: AuthUser, @Param('id') id: string) {
     return this.service.deactivate(u.tenantId as string, id);
   }
+
+  /** Restore a deactivated record — the inverse of remove. PATCH so the crud
+   * permission guard treats it as an edit, not a create. */
+  @Patch(':id/reactivate')
+  reactivate(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.service.reactivate(u.tenantId as string, id);
+  }
 }

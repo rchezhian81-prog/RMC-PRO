@@ -373,6 +373,7 @@ export function crud(path: string) {
     update: (id: string, b: Record<string, unknown>) =>
       apiFetch<Row>(`/${path}/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
     remove: (id: string) => apiFetch<Row>(`/${path}/${id}`, { method: 'DELETE' }),
+    reactivate: (id: string) => apiFetch<Row>(`/${path}/${id}/reactivate`, { method: 'PATCH' }),
   };
 }
 

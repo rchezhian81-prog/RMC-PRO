@@ -155,5 +155,15 @@ const draftsList = await api('GET', '/order-drafts');
 const o3row = (Array.isArray(draftsList) ? draftsList : []).find((r) => String(r.id) === String(o3.id));
 ok('order-drafts list row carries customerName', !!o3row && String(o3row.customerName || '') === String(customer.customerName));
 
+// ---- BUG 5: freight (transport/pump/waiting) is PER-M³ in the order value ----
+// so the ex-GST order value reconciles with its GST-inclusive value and the
+// eventual invoice, instead of adding the charge only once (flat).
+const q5 = await approveQuotation([{ gradeId: grade.id, gradeLabel: gl, estimatedQuantity: 10, ratePerM3: 5000, transportCharge: 200, gstRate: '18' }]);
+const o5 = await api('POST', `/order-drafts/from-quotation/${q5.id}`, { plantId: plant.id, orderDate: TODAY });
+const o5full = await api('GET', `/orders/${o5.id}`);
+// per-m³: 10 × (5000 + 200) = 52000 ex-GST — NOT the flat 10×5000 + 200 = 50200.
+ok('order freight is per-m³ (ex-GST value reconciles, not flat)', near(o5full.estimatedOrderValue, 52000));
+ok('order incl-GST = per-m³ ex-GST + 18%', near(o5full.estimatedOrderValueInclGst, 61360));
+
 console.log(`\nPILOT GAPS TEST: ${pass} passed ✓`);
 process.exit(0);

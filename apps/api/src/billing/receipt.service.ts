@@ -72,7 +72,10 @@ export class ReceiptService {
         if (amt <= 0) continue;
         const invoice = await invoiceRepo.findOne({ where: { id: String(a.invoiceId ?? '') } });
         if (!invoice) throw badReq('Invoice not found for allocation');
-        if (invoice.invoiceStatus === 'cancelled') throw badReq('Cannot allocate to a cancelled invoice');
+        // Only an issued invoice is a real receivable. A draft carries
+        // outstanding = total but was never billed, so allocating to it would
+        // mis-state AR and then block the draft from being cancelled.
+        if (invoice.invoiceStatus !== 'issued') throw badReq(`Invoice ${invoice.invoiceNo} is not issued`);
         if (invoice.customerId !== customerId) throw badReq('Invoice belongs to a different customer');
         const outstanding = num(invoice.outstandingAmount);
         if (amt > outstanding + 0.001) throw badReq(`Allocation ${amt} exceeds invoice outstanding ${outstanding}`);

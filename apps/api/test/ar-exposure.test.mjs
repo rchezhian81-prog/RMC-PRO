@@ -135,7 +135,7 @@ async function confirmReleased(orderId) {
 }
 
 /** Drive a confirmed order all the way to an ISSUED invoice; returns { invoice, total }. */
-async function deliverAndIssue({ customer, site }, order, qty = QTY, rate = RATE) {
+async function deliverAndIssue({ customer }, order, qty = QTY, rate = RATE) {
   const queue = await api('POST', `/batch-queue/from-order/${order.id}`);
   const queueId = (Array.isArray(queue) ? queue[0] : queue)?.id;
   let ticket = await api('POST', `/batch-tickets/from-queue/${queueId}`, { batchQuantityM3: qty, mixDesignId: mix.id });

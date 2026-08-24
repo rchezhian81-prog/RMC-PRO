@@ -15,7 +15,7 @@ import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import type { InvoicePdfData } from '../sales/pdf.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
-import { computeLineTax, round2 } from './tax.util';
+import { computeLineTax, round2, isInterstateSupply } from './tax.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -66,7 +66,7 @@ export class InvoiceService {
       // Suggest the rate the customer already agreed to on the order, so the
       // clerk confirms it rather than re-typing (and mistyping) it.
       return Promise.all(
-        challans.map(async (c) => ({ ...c, suggestedRate: await this.agreedRate(m, c.orderId, c.gradeId) })),
+        challans.map(async (c) => ({ ...c, suggestedRate: (await this.agreedLine(m, c.orderId, c.gradeId)).rate })),
       );
     });
   }
@@ -77,12 +77,22 @@ export class InvoiceService {
    * what the customer signed up to pay, so it is what the invoice should bill.
    * Returns 0 when the order line cannot be found (e.g. an ad-hoc challan).
    */
-  private async agreedRate(m: EntityManager, orderId: string | null, gradeId: string | null): Promise<number> {
-    if (!orderId) return 0;
+  private async agreedLine(
+    m: EntityManager,
+    orderId: string | null,
+    gradeId: string | null,
+  ): Promise<{ rate: number; gstRate: number }> {
+    if (!orderId) return { rate: 0, gstRate: 18 };
     const items = await m.getRepository(OrderItem).find({ where: { orderId } });
     const item = items.find((i) => i.gradeId === gradeId) ?? items[0];
-    if (!item) return 0;
-    return round2(num(item.ratePerM3) + num(item.transportCharge) + num(item.pumpCharge) + num(item.waitingCharge));
+    if (!item) return { rate: 0, gstRate: 18 };
+    return {
+      rate: round2(num(item.ratePerM3) + num(item.transportCharge) + num(item.pumpCharge) + num(item.waitingCharge)),
+      // The order line already stores its resolved GST rate (0 for an exempt
+      // line), so the invoice bills the rate the customer agreed to, not a
+      // blanket 18%.
+      gstRate: num(item.gstRate),
+    };
   }
 
   /** Create a draft invoice from a set of delivered challans (same customer). */
@@ -96,7 +106,10 @@ export class InvoiceService {
       const customer = await m.getRepository(Customer).findOne({ where: { id: customerId } });
       if (!customer) throw badReq('Customer not found');
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];
-      const isInterstate = !!(customer.state && company?.state && customer.state !== company.state);
+      // Normalise state names (trim + case) exactly like the order/quotation
+      // paths, so a same-state supply written "Karnataka " vs "Karnataka" is not
+      // mis-classified as inter-state (wrong CGST/SGST-vs-IGST heads + portal reject).
+      const isInterstate = isInterstateSupply(company?.state, customer.state);
 
       const invoiceNo = await this.numbering.next(m, tenantId, 'invoice', 'INV-');
       const invoiceRepo = m.getRepository(Invoice);
@@ -124,13 +137,13 @@ export class InvoiceService {
         if (challan.customerId && challan.customerId !== customerId) throw badReq('Challan belongs to a different customer');
 
         const quantity = num(challan.quantityM3);
-        // Use the rate the clerk entered; otherwise fall back to the price
-        // agreed on the order, so a blank line still bills the right amount
-        // rather than producing a zero-value invoice.
-        const rate = num(line.rate) || (await this.agreedRate(m, challan.orderId, challan.gradeId));
-        // Concrete is 18% GST in India; default it so an unspecified line is
-        // still taxed correctly. An explicit 0 from the caller is respected.
-        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : 18;
+        const agreed = await this.agreedLine(m, challan.orderId, challan.gradeId);
+        // Use the rate/GST the clerk entered; otherwise fall back to the order's
+        // agreed line. An explicit 0 is respected (a genuinely free line stays
+        // free, and an exempt line stays 0% — not silently bumped to the default).
+        const hasRate = line.rate !== undefined && line.rate !== null && String(line.rate).trim() !== '';
+        const rate = hasRate ? num(line.rate) : agreed.rate;
+        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : agreed.gstRate;
         const cessRate = num(line.cessRate);
         const t = computeLineTax(quantity, rate, gstRate, cessRate, isInterstate);
 

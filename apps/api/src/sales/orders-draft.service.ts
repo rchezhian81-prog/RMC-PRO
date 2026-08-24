@@ -56,7 +56,11 @@ export class OrdersDraftService {
   }
 
   private lineValue(quantity: number, rate: number, transport: number, pump: number, waiting: number): number {
-    return quantity * rate + transport + pump + waiting;
+    // Transport/pump/waiting are per-m³ (quoted per cubic metre), exactly like
+    // summariseGst and the invoice's all-in rate — so the ex-GST order value
+    // reconciles with estimatedOrderValueInclGst and the eventual invoice
+    // instead of understating them by (qty − 1) × freight.
+    return quantity * (rate + transport + pump + waiting);
   }
 
   /**

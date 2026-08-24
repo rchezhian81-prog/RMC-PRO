@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DeepPartial } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { ROLE_KEYS, passwordProblemMessage, validateCompanyProfile } from '@rmc/shared';
+import {
+  ROLE_KEYS, passwordProblemMessage, validateCompanyProfile,
+  SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue,
+} from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
@@ -110,18 +113,44 @@ export class CompanyService {
 export class SettingsService {
   constructor(private readonly db: TenantDbService) {}
 
+  /**
+   * The catalogue, in order, each enriched with the tenant's stored value (or
+   * its default when unset). Drives the typed Settings screen — every known
+   * setting appears whether or not it has a row yet.
+   */
   list(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(TenantSetting).find({ order: { settingKey: 'ASC' } }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const stored = await m.getRepository(TenantSetting).find();
+      const byKey = new Map(stored.map((s) => [s.settingKey, s.settingValue]));
+      return SETTINGS_CATALOG.map((def) => ({
+        key: def.key,
+        label: def.label,
+        description: def.description,
+        type: def.type,
+        options: def.options ?? null,
+        value: byKey.has(def.key) ? byKey.get(def.key) ?? '' : def.default,
+      }));
+    });
   }
 
-  set(tenantId: string, key: string, value: string, dataType = 'string') {
+  /**
+   * Write a catalogue setting. The key must be known and the value must match
+   * the catalogue type (number/boolean/enum), so a typo or a wrong-typed value
+   * is rejected with a 400 instead of persisting an orphan/garbage row. The
+   * stored data_type always comes from the catalogue, never the client.
+   */
+  set(tenantId: string, key: string, value: string) {
+    const def = SETTINGS_BY_KEY[key];
+    const err = validateSettingValue(key, value);
+    if (!def || err) {
+      const message = err ?? `Unknown setting "${key}".`;
+      throw new BadRequestException({ code: 'VALIDATION_ERROR', message, fields: { value: message } });
+    }
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(TenantSetting);
       const existing = await repo.findOne({ where: { settingKey: key } });
-      if (existing) await repo.update(existing.id, { settingValue: value, dataType });
-      else await repo.save(repo.create({ tenantId, settingKey: key, settingValue: value, dataType }));
+      if (existing) await repo.update(existing.id, { settingValue: value, dataType: def.type });
+      else await repo.save(repo.create({ tenantId, settingKey: key, settingValue: value, dataType: def.type }));
       return repo.findOne({ where: { settingKey: key } });
     });
   }

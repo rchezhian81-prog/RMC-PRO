@@ -10,7 +10,7 @@
  */
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { validateMasterFields, isValidGstin, isValidMobile, validateCompanyProfile, isValidPan, isValidEmail } = require('@rmc/shared');
+const { validateMasterFields, isValidGstin, isValidMobile, validateCompanyProfile, isValidPan, isValidEmail, validateSettingValue, SETTINGS_CATALOG } = require('@rmc/shared');
 
 let pass = 0;
 const ok = (name, cond) => { console.log((cond ? '  PASS ' : '  FAIL ') + name); if (!cond) throw new Error('FAIL: ' + name); pass++; };
@@ -47,6 +47,16 @@ ok('email "not-an-email" rejected', !isValidEmail('not-an-email'));
   ok('company bad phone flagged', !!e.phone);
 }
 ok('valid company profile has no errors', Object.keys(validateCompanyProfile({ gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F', pincode: '600001', email: 'ops@acme.co', phone: '9943602633' })).length === 0);
+
+// Settings catalogue: typed validation, catalogue-only.
+ok('settings catalogue is non-empty', Array.isArray(SETTINGS_CATALOG) && SETTINGS_CATALOG.length > 0);
+ok('unknown setting key rejected', !!validateSettingValue('made_up_key', 'x'));
+ok('number setting rejects text', !!validateSettingValue('default_gst_rate', 'eighteen'));
+ok('number setting accepts a number', !validateSettingValue('default_gst_rate', '18'));
+ok('boolean setting rejects junk', !!validateSettingValue('low_stock_alerts', 'yes'));
+ok('boolean setting accepts true/false', !validateSettingValue('low_stock_alerts', 'false'));
+ok('enum setting rejects an off-list value', !!validateSettingValue('credit_block_stage', 'whenever'));
+ok('enum setting accepts a listed value', !validateSettingValue('credit_block_stage', 'dispatch'));
 
 const LOGIN = process.env.LOGIN, PASSWORD = process.env.RMC_PASSWORD;
 const API_BASE = process.env.API_BASE || 'http://localhost:4000/api/v1';
@@ -114,6 +124,16 @@ ok('customer is inactive after deactivate', afterDel.body?.data?.status === 'ina
 const react = await j('PATCH', `/customers/${rid}/reactivate`, null, tok);
 ok('reactivate succeeds (2xx)', react.status >= 200 && react.status < 300);
 ok('customer is active again after reactivate', react.body?.data?.status === 'active');
+
+// Settings: the catalogue drives the list, and writes are typed + catalogue-only.
+const setList = await j('GET', '/settings', null, tok);
+ok('settings list returns the catalogue', Array.isArray(setList.body?.data) && setList.body.data.some((s) => s.key === 'default_gst_rate'));
+const setOk = await j('PUT', '/settings/default_gst_rate', { value: '18' }, tok);
+ok('valid setting write accepted (2xx)', setOk.status >= 200 && setOk.status < 300);
+const setBadNum = await j('PUT', '/settings/default_gst_rate', { value: 'eighteen' }, tok);
+ok('non-numeric setting write rejected with 400', setBadNum.status === 400);
+const setUnknown = await j('PUT', '/settings/not_a_real_setting', { value: 'x' }, tok);
+ok('unknown setting key rejected with 400', setUnknown.status === 400);
 
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

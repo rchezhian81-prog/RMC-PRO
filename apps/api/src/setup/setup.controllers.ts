@@ -56,12 +56,8 @@ export class SettingsController {
     @Param('key') key: string,
     @Body() dto: Record<string, unknown>,
   ) {
-    return this.svc.set(
-      u.tenantId as string,
-      key,
-      String(dto.value ?? ''),
-      dto.dataType ? String(dto.dataType) : 'string',
-    );
+    // The catalogue owns each setting's type; the client only sends the value.
+    return this.svc.set(u.tenantId as string, key, String(dto.value ?? ''));
   }
 }
 

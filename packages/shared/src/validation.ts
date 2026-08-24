@@ -39,6 +39,19 @@ export function isValidPincode(value: string): boolean {
   return PINCODE_REGEX.test(value.trim());
 }
 
+/** Indian PAN: five letters, four digits, one letter (e.g. ABCDE1234F). */
+export const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+/** True for a well-formed 10-character PAN (case-insensitive input). */
+export function isValidPan(value: string): boolean {
+  return PAN_REGEX.test(value.trim().toUpperCase());
+}
+
+/** Lenient email shape check — one @, a dot in the domain, no spaces. */
+export function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 /**
  * GST Transporter ID (TRANSIN) or a transporter's GSTIN, as accepted by the NIC
  * e-way `TransId` field: 15 characters — 2 leading state-code digits then 13
@@ -111,5 +124,30 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   if (materialType && !(MATERIAL_TYPES as readonly string[]).includes(materialType)) {
     errors.materialType = 'Choose a valid material type.';
   }
+  return errors;
+}
+
+/**
+ * Field checks for the company profile (Setup → Company). The company GSTIN
+ * prints on every tax invoice, so a malformed one must never be saved; PAN,
+ * PIN, email and phone are validated for the same reason. Each is optional —
+ * only a present-but-malformed value is flagged.
+ */
+export function validateCompanyProfile(dto: Record<string, unknown>): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const str = (k: string): string | null => {
+    const v = dto[k];
+    return v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim();
+  };
+  const gstin = str('gstin');
+  if (gstin && !isValidGstin(gstin)) errors.gstin = 'Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).';
+  const pan = str('pan');
+  if (pan && !isValidPan(pan)) errors.pan = 'Enter a valid 10-character PAN (e.g. ABCDE1234F).';
+  const pincode = str('pincode');
+  if (pincode && !isValidPincode(pincode)) errors.pincode = 'Enter a valid 6-digit PIN code.';
+  const email = str('email');
+  if (email && !isValidEmail(email)) errors.email = 'Enter a valid email address.';
+  const phone = str('phone');
+  if (phone && !isValidMobile(phone)) errors.phone = 'Enter a valid 10-digit phone number.';
   return errors;
 }

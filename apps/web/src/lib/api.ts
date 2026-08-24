@@ -390,8 +390,16 @@ export const company = {
   removeLogo: () => apiFetch<{ hasLogo: boolean }>('/company/logo', { method: 'DELETE' }),
 };
 
+export interface SettingRow {
+  key: string;
+  label: string;
+  description: string;
+  type: 'string' | 'number' | 'boolean' | 'enum';
+  options: { value: string; label: string }[] | null;
+  value: string;
+}
 export const settings = {
-  list: () => apiFetch<Row[]>('/settings'),
+  list: () => apiFetch<SettingRow[]>('/settings'),
   set: (key: string, value: string) =>
     apiFetch<Row>(`/settings/${encodeURIComponent(key)}`, {
       method: 'PUT',

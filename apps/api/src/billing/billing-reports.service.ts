@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Customer, Invoice, Payment } from '../core/database/entities';
 import { round2 } from './tax.util';
+import { computeCustomerExposure } from '../orders/exposure.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 const daysBetween = (dateStr: string | null): number => {
@@ -50,7 +51,20 @@ export class BillingReportsService {
         totals.total = round2(totals.total + out);
         byCustomer.set(key, row);
       }
-      return { rows: [...byCustomer.values()].sort((a, b) => b.total - a.total), totals };
+      // Attach each customer's full credit exposure (opening + un-invoiced
+      // orders + invoice outstanding − advances) from the single source of
+      // truth, alongside the invoice-aging `total`, so the report reconciles
+      // with the customer page and the credit gate (design plan §3). The aging
+      // buckets stay invoice-based; `total` is unchanged.
+      const rows = await Promise.all(
+        [...byCustomer.entries()]
+          .sort((a, b) => b[1].total - a[1].total)
+          .map(async ([id, row]) => ({
+            ...row,
+            exposure: id && id !== 'unknown' ? (await computeCustomerExposure(m, id)).exposure : row.total,
+          })),
+      );
+      return { rows, totals };
     });
   }
 

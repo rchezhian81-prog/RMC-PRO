@@ -1,5 +1,6 @@
-import { Controller, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { BaseCrudController } from '../common/base-crud.controller';
+import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { RequireModule } from '../rbac/module.decorator';
@@ -37,6 +38,12 @@ import {
 export class CustomersController extends BaseCrudController<Customer> {
   constructor(protected readonly service: CustomersService) {
     super();
+  }
+
+  /** Live credit-exposure breakdown for this customer (design plan §3/§6). */
+  @Get(':id/exposure')
+  exposure(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.service.exposure(u.tenantId as string, id);
   }
 }
 

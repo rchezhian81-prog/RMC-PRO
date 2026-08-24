@@ -79,6 +79,10 @@ const TESTS = [
   'test/agents-compliance.test.mjs',
   'test/agents-llm.test.mjs',
   'test/agents-gst-execution.test.mjs',
+  // AR / credit-exposure TDD scenarios (design plan §7). No-op until the core
+  // lands: it self-skips unless AR_EXPOSURE_CORE=1, so it stays green in CI now
+  // and the core PR flips the flag to turn T1–T10 on.
+  'test/ar-exposure.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',

@@ -43,6 +43,9 @@ const E = {
   SUPERADMIN_EMAIL: 'super@ci.test',
   SUPERADMIN_PASSWORD: 'SuperCI#12345',
   SUPERADMIN_NAME: 'CI Super',
+  // Turn on the AR/credit-exposure scenarios (T1–T10) now that the core is
+  // built (design plan §7). Without this the ar-exposure test self-skips.
+  AR_EXPOSURE_CORE: '1',
 };
 const OWNER_LOGIN = 'owner@ci.test';
 const OWNER_PW = 'OwnerCI#12345';

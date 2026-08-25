@@ -43,6 +43,9 @@ const E = {
   SUPERADMIN_EMAIL: 'super@ci.test',
   SUPERADMIN_PASSWORD: 'SuperCI#12345',
   SUPERADMIN_NAME: 'CI Super',
+  // Turn on the AR/credit-exposure scenarios (T1–T10) now that the core is
+  // built (design plan §7). Without this the ar-exposure test self-skips.
+  AR_EXPOSURE_CORE: '1',
 };
 const OWNER_LOGIN = 'owner@ci.test';
 const OWNER_PW = 'OwnerCI#12345';
@@ -79,6 +82,10 @@ const TESTS = [
   'test/agents-compliance.test.mjs',
   'test/agents-llm.test.mjs',
   'test/agents-gst-execution.test.mjs',
+  // AR / credit-exposure TDD scenarios (design plan §7). No-op until the core
+  // lands: it self-skips unless AR_EXPOSURE_CORE=1, so it stays green in CI now
+  // and the core PR flips the flag to turn T1–T10 on.
+  'test/ar-exposure.test.mjs',
   // Last: it changes the fixture owner's password (token_version bump), so
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',

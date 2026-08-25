@@ -30,6 +30,11 @@ export class DashboardService {
         one(`SELECT count(*) n FROM delivery_challans WHERE challan_status='delivered'`),
         one(`SELECT count(*) n FROM delivery_challans WHERE invoice_status='not_invoiced' AND challan_status='delivered'`),
         one(`SELECT count(*) n FROM invoices WHERE invoice_status='issued'`),
+        // Company AR = issued-invoice outstanding — the single "outstanding"
+        // definition, identical to the outstanding report's grand total. Credit
+        // EXPOSURE (opening + un-invoiced orders + invoice outstanding −
+        // advances) is a distinct number surfaced per-customer by the credit
+        // gate, alerts and /customers/:id/exposure — deliberately not merged in.
         sum(`SELECT COALESCE(SUM(outstanding_amount),0) s FROM invoices WHERE invoice_status='issued'`),
         one(`SELECT count(*) n FROM stock_balances b JOIN materials mt ON mt.id=b.material_id WHERE mt.reorder_level>0 AND b.current_quantity<=mt.reorder_level`),
         one(`SELECT count(*) n FROM stock_balances WHERE current_quantity<0`),

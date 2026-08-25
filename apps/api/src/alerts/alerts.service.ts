@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { fleetComplianceAlerts, type FleetDoc } from './fleet-compliance.util';
 import { fleetMaintenanceAlerts, type MaintenanceDueRow } from './fleet-maintenance.util';
+import { computeCustomerExposure } from '../orders/exposure.util';
 
 export type AlertSeverity = 'danger' | 'warning' | 'info';
 
@@ -41,7 +42,7 @@ export class AlertsService {
       const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> =>
         m.query(sql, params) as Promise<T[]>;
 
-      const [receivables, overLimit, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc, serviceDue] = await Promise.all([
+      const [receivables, creditCustomers, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc, serviceDue] = await Promise.all([
         // Receivables, bucketed by age of the invoice and by contractual due date.
         q(`SELECT
              COALESCE(sum(outstanding_amount) FILTER (WHERE invoice_date IS NOT NULL AND CURRENT_DATE - invoice_date > 90), 0)::float AS over90_amount,
@@ -52,15 +53,11 @@ export class AlertsService {
            FROM invoices
           WHERE invoice_status = 'issued' AND outstanding_amount > 0`),
 
-        // Customers whose unpaid balance has passed the credit limit on their master.
-        q(`SELECT c.customer_name,
-                  c.credit_limit::float                AS credit_limit,
-                  sum(i.outstanding_amount)::float     AS outstanding
-             FROM invoices i JOIN customers c ON c.id = i.customer_id
-            WHERE i.invoice_status = 'issued' AND i.outstanding_amount > 0 AND c.credit_limit > 0
-            GROUP BY c.id, c.customer_name, c.credit_limit
-           HAVING sum(i.outstanding_amount) > c.credit_limit
-            ORDER BY sum(i.outstanding_amount) - c.credit_limit DESC`),
+        // Candidates for the credit-limit breach check: every customer with a
+        // limit configured. Their exposure (the SAME figure the booking gate
+        // uses) is computed below, so the alert and the gate never disagree.
+        q(`SELECT c.id, c.customer_name, c.credit_limit::float AS credit_limit
+             FROM customers c WHERE c.credit_limit > 0`),
 
         q(`SELECT
              count(*) FILTER (WHERE b.current_quantity < 0)                                                                  AS negative_count,
@@ -139,6 +136,20 @@ export class AlertsService {
              AND (s.next_due_date IS NOT NULL OR s.next_due_odometer IS NOT NULL)`),
       ]);
 
+      // Credit-limit breaches by EXPOSURE (opening + un-invoiced orders +
+      // invoice outstanding − advances), not raw invoice outstanding — so this
+      // alert matches exactly when the booking gate would block a new order.
+      const overLimit = (
+        await Promise.all(
+          (creditCustomers as Array<Record<string, unknown>>).map(async (c) => {
+            const exp = await computeCustomerExposure(m, String(c.id));
+            return { customer_name: c.customer_name, credit_limit: num(c.credit_limit), outstanding: exp.exposure };
+          }),
+        )
+      )
+        .filter((c) => c.outstanding > c.credit_limit)
+        .sort((a, b) => b.outstanding - b.credit_limit - (a.outstanding - a.credit_limit));
+
       const r = receivables[0] ?? {};
       const s = stockCounts[0] ?? {};
       const o = ops[0] ?? {};
@@ -184,7 +195,7 @@ export class AlertsService {
             overLimit.length === 1
               ? `${String(worst.customer_name)} is over their credit limit`
               : `${overLimit.length} customers are over their credit limit`,
-          detail: `${String(worst.customer_name)} owes ${inr(worst.outstanding)} against a limit of ${inr(
+          detail: `${String(worst.customer_name)} is exposed for ${inr(worst.outstanding)} against a limit of ${inr(
             worst.credit_limit,
           )} — ${inr(excess)} over. New orders will hit credit hold.`,
           href: '/app/billing/outstanding',

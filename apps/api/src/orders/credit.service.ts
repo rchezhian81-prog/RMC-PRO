@@ -1,12 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
-import { Customer, Order } from '../core/database/entities';
+import { round2 } from '../billing/tax.util';
+import { computeCustomerExposure } from './exposure.util';
 
 export interface CreditAssessment {
   /** Whether a credit limit is configured (limit > 0). If false, control is off. */
   enforced: boolean;
   creditLimit: number;
-  /** opening_balance + value of already-committed (confirmed) orders. */
+  /**
+   * The customer's live exposure BEFORE this booking — the unified figure:
+   * opening_balance + un-invoiced confirmed orders + issued-invoice outstanding
+   * − unapplied advances. May be negative when advances exceed what is owed.
+   */
   outstandingBefore: number;
   requestedAmount: number;
   exposureAfter: number;
@@ -17,9 +22,13 @@ export interface CreditAssessment {
 /**
  * Credit assessment at booking (Design Doc 2 credit rules, DEV-PLAN B8).
  *
- * Phase-1 exposure model (billing/invoicing arrives in Sprint 9): a customer's
- * outstanding is opening_balance + the value of their already-CONFIRMED orders.
- * A new booking is within limit when outstanding + this order value <= limit.
+ * Reads the single source of truth, `computeCustomerExposure` (design plan §3):
+ * a customer's exposure is opening_balance + the un-invoiced value of their
+ * CONFIRMED orders + issued-invoice outstanding − unapplied advances (advances
+ * auto-net). A new booking is within limit when that exposure + this order's
+ * value <= limit. Because the order under assessment is still a draft (or is
+ * passed as excludeOrderId), its value is counted once — via requestedAmount,
+ * never also in the confirmed-order sum.
  *
  * Convention: credit_limit = 0 means "no limit configured" → credit control is
  * NOT enforced for that customer (booking passes). A positive limit is enforced.
@@ -33,31 +42,12 @@ export class CreditService {
     excludeOrderId?: string,
   ): Promise<CreditAssessment> {
     const amount = Number(requestedAmount) || 0;
-    let creditLimit = 0;
-    let outstandingBefore = 0;
-
-    if (customerId) {
-      const customer = await m.getRepository(Customer).findOne({ where: { id: customerId } });
-      creditLimit = Number(customer?.creditLimit ?? 0);
-      outstandingBefore = Number(customer?.openingBalance ?? 0);
-
-      // Sum value of this customer's already-committed (confirmed) orders.
-      // GST-inclusive exposure so outstanding reconciles with the invoice; fall
-      // back to the ex-GST value for legacy rows created before that column.
-      const rows: Array<{ total: string | null }> = await m
-        .getRepository(Order)
-        .createQueryBuilder('o')
-        .select('COALESCE(SUM(COALESCE(o.estimated_order_value_incl_gst, o.estimated_order_value)), 0)', 'total')
-        .where('o.customer_id = :customerId', { customerId })
-        .andWhere('o.order_status = :status', { status: 'confirmed' })
-        .andWhere(excludeOrderId ? 'o.id != :excludeOrderId' : '1=1', { excludeOrderId })
-        .getRawOne<{ total: string | null }>()
-        .then((r) => [r ?? { total: '0' }]);
-      outstandingBefore += Number(rows[0]?.total ?? 0);
-    }
+    const exposure = await computeCustomerExposure(m, customerId, excludeOrderId);
+    const creditLimit = exposure.creditLimit;
+    const outstandingBefore = exposure.exposure;
 
     const enforced = creditLimit > 0;
-    const exposureAfter = outstandingBefore + amount;
+    const exposureAfter = round2(outstandingBefore + amount);
     const withinLimit = !enforced || exposureAfter <= creditLimit;
 
     return {
@@ -66,7 +56,7 @@ export class CreditService {
       outstandingBefore,
       requestedAmount: amount,
       exposureAfter,
-      availableBefore: Math.max(0, creditLimit - outstandingBefore),
+      availableBefore: Math.max(0, round2(creditLimit - outstandingBefore)),
       withinLimit,
     };
   }

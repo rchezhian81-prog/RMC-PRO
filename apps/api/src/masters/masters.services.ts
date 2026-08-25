@@ -3,6 +3,7 @@ import { validateMasterFields } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { assertFields } from '../common/validation';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { computeCustomerExposure } from '../orders/exposure.util';
 import {
   ConcreteGrade,
   Customer,
@@ -24,6 +25,16 @@ export class CustomersService extends TenantCrudService<Customer> {
   // GSTIN, mobile, creditLimit, creditDays.
   protected override validateWrite(dto: Record<string, unknown>): void {
     assertFields(validateMasterFields(dto));
+  }
+
+  /**
+   * Live credit-exposure breakdown for the customer detail / credit view — the
+   * single source of truth (design plan §3): opening + un-invoiced confirmed
+   * orders + issued-invoice outstanding − auto-netted advances, plus the limit
+   * and available credit.
+   */
+  exposure(tenantId: string, id: string) {
+    return this.db.runInTenant(tenantId, (m) => computeCustomerExposure(m, id));
   }
 }
 

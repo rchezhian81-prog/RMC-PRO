@@ -31,7 +31,10 @@ export default function OutstandingPage() {
   return (
     <div>
       <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Customer Outstanding</h1>
-      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 18px' }}>Outstanding on issued invoices, aged by invoice date.</p>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 18px' }}>
+        Outstanding on issued invoices, aged by invoice date. <strong>Exposure</strong> is the customer&rsquo;s full
+        credit exposure — it also counts un-invoiced confirmed orders and nets unapplied advances.
+      </p>
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
 
       {totals && rows.length > 0 && (
@@ -50,7 +53,7 @@ export default function OutstandingPage() {
         actions={
           <ExportButton
             rows={rows}
-            columns={['customerName', 'b0_30', 'b31_60', 'b61_90', 'b90', 'total']}
+            columns={['customerName', 'b0_30', 'b31_60', 'b61_90', 'b90', 'total', 'exposure']}
             filename="customer-outstanding"
           />
         }
@@ -67,6 +70,7 @@ export default function OutstandingPage() {
                 <Th numeric>61–90</Th>
                 <Th numeric>90+</Th>
                 <Th numeric>Total</Th>
+                <Th numeric>Exposure</Th>
                 <Th />
               </tr>
             </thead>
@@ -79,6 +83,9 @@ export default function OutstandingPage() {
                   <Td numeric>{money(r.b61_90)}</Td>
                   <Td numeric style={{ color: Number(r.b90) > 0 ? 'var(--mn-danger)' : 'var(--mn-text)' }}>{money(r.b90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(r.total)}</Td>
+                  <Td numeric title="Full credit exposure: opening + un-invoiced confirmed orders + invoice outstanding − advances">
+                    {money(r.exposure)}
+                  </Td>
                   <Td>
                     <TemplateButton
                       // Lead with the firmer wording once anything has aged past 60 days.
@@ -110,6 +117,7 @@ export default function OutstandingPage() {
                   <Td numeric style={{ fontWeight: 700 }}>{money(totals.b61_90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(totals.b90)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{money(totals.total)}</Td>
+                  <Td numeric style={{ fontWeight: 700 }}>{money(rows.reduce((s, r) => s + Number(r.exposure ?? 0), 0))}</Td>
                   <Td />
                 </tr>
               </tfoot>

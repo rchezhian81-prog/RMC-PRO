@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { crud, invoicesApi, receiptsApi, type Row } from '../../../../lib/api';
+import { crud, customersApi, invoicesApi, receiptsApi, type CustomerExposure, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
+import { StatCard } from '../../../../components/ui/StatCard';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
@@ -18,6 +19,7 @@ export default function ReceiptsPage() {
   const [customers, setCustomers] = useState<Row[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [openInvoices, setOpenInvoices] = useState<Row[]>([]);
+  const [exposure, setExposure] = useState<CustomerExposure | null>(null);
   const [alloc, setAlloc] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ amount: '', paymentMode: 'neft', receiptDate: '', bankReference: '' });
   const [error, setError] = useState<string | null>(null);
@@ -42,10 +44,15 @@ export default function ReceiptsPage() {
     setMsg(null);
     if (!cid) {
       setOpenInvoices([]);
+      setExposure(null);
       return;
     }
-    const all = await invoicesApi.list('issued');
+    const [all, exp] = await Promise.all([
+      invoicesApi.list('issued'),
+      customersApi.exposure(cid).catch(() => null),
+    ]);
     setOpenInvoices(all.filter((i) => i.customerId === cid && Number(i.outstandingAmount) > 0));
+    setExposure(exp);
   }
 
   /** Run a receipt action, then refresh and report — errors surface inline. */
@@ -80,6 +87,7 @@ export default function ReceiptsPage() {
       setForm({ amount: '', paymentMode: 'neft', receiptDate: '', bankReference: '' });
       setCustomerId('');
       setOpenInvoices([]);
+      setExposure(null);
       setAlloc({});
       await reload();
     } catch (e) {
@@ -136,6 +144,23 @@ export default function ReceiptsPage() {
               </Field>
             </div>
           </div>
+
+          {customerId && exposure && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
+              <StatCard label="Exposure" value={'₹' + money(exposure.exposure)} tone="info" />
+              <StatCard label="Invoice outstanding" value={'₹' + money(exposure.invoiceOutstanding)} />
+              <StatCard
+                label="Advance on account"
+                value={'₹' + money(exposure.advanceCredit)}
+                tone={exposure.advanceCredit > 0 ? 'success' : 'neutral'}
+              />
+              <StatCard
+                label="Available credit"
+                value={exposure.availableCredit === null ? 'No limit' : '₹' + money(exposure.availableCredit)}
+                tone={exposure.availableCredit !== null && exposure.availableCredit < 0 ? 'danger' : 'neutral'}
+              />
+            </div>
+          )}
 
           {customerId &&
             (openInvoices.length ? (

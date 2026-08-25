@@ -377,6 +377,22 @@ export function crud(path: string) {
   };
 }
 
+/** A customer's live credit exposure breakdown (single source of truth). */
+export type CustomerExposure = {
+  openingBalance: number;
+  unInvoicedOrderValue: number;
+  invoiceOutstanding: number;
+  advanceCredit: number;
+  exposure: number;
+  creditLimit: number;
+  /** credit_limit − exposure, or null when no limit is configured (unlimited). */
+  availableCredit: number | null;
+};
+
+export const customersApi = {
+  exposure: (id: string) => apiFetch<CustomerExposure>(`/customers/${id}/exposure`),
+};
+
 export const company = {
   get: () => apiFetch<Row | null>('/company'),
   update: (b: Record<string, unknown>) =>

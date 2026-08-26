@@ -90,6 +90,7 @@ export class BillingReportsController {
   @Get('sales-register') sales(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesRegister(tid(u), from, to); }
   @Get('gst-summary') gst(@CurrentUser() u: AuthUser) { return this.service.gstSummary(tid(u)); }
   @Get('receipts-register') receipts(@CurrentUser() u: AuthUser) { return this.service.receiptsRegister(tid(u)); }
+  @Get('customer-statement') statement(@CurrentUser() u: AuthUser, @Query('customerId') customerId?: string, @Query('from') from?: string, @Query('to') to?: string) { return this.service.customerStatement(tid(u), customerId ?? '', from, to); }
 
   @Get('tally-export') @RequirePermissions('tally_export.generate')
   async tally(@CurrentUser() u: AuthUser, @Res() res: Response, @Query('from') from?: string, @Query('to') to?: string) {

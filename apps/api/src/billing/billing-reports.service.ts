@@ -69,26 +69,73 @@ export class BillingReportsService {
     });
   }
 
-  /** Sales register — invoices (optionally date-bounded) with a grand total. */
+  /**
+   * Sales register — issued invoices (optionally date-bounded), GSTR-1-shaped:
+   * each row already carries GSTIN, place-of-supply and the tax-head split, and
+   * a B2B/B2C summary classifies registered (has GSTIN) vs unregistered buyers.
+   */
   salesRegister(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const all = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' }, order: { invoiceDate: 'ASC' } });
       const rows = all.filter((i) => (!from || (i.invoiceDate ?? '') >= from) && (!to || (i.invoiceDate ?? '') <= to));
       const total = round2(rows.reduce((s, i) => s + num(i.totalAmount), 0));
       const taxable = round2(rows.reduce((s, i) => s + num(i.taxableAmount), 0));
-      return { rows, total, taxable, count: rows.length };
+      const bucket = (list: Invoice[]) => ({
+        count: list.length,
+        taxable: round2(list.reduce((s, i) => s + num(i.taxableAmount), 0)),
+        total: round2(list.reduce((s, i) => s + num(i.totalAmount), 0)),
+      });
+      const isB2b = (i: Invoice) => !!(i.gstin && String(i.gstin).trim());
+      const summary = { b2b: bucket(rows.filter(isB2b)), b2c: bucket(rows.filter((i) => !isB2b(i))) };
+      return { rows, total, taxable, count: rows.length, summary };
     });
   }
 
-  /** GST summary over issued invoices. */
-  gstSummary(tenantId: string) {
+  /** GST summary (tax heads) over issued invoices, optionally date-bounded. */
+  gstSummary(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const rows = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } });
+      const all = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } });
+      const rows = all.filter((i) => (!from || (i.invoiceDate ?? '') >= from) && (!to || (i.invoiceDate ?? '') <= to));
       const sum = (f: (i: Invoice) => unknown) => round2(rows.reduce((s, i) => s + num(f(i)), 0));
       return {
         taxable: sum((i) => i.taxableAmount), cgst: sum((i) => i.cgstAmount), sgst: sum((i) => i.sgstAmount),
         igst: sum((i) => i.igstAmount), cess: sum((i) => i.cessAmount), total: sum((i) => i.totalAmount),
       };
+    });
+  }
+
+  /**
+   * HSN/SAC summary (GSTR-1 Table 12): issued-invoice line items grouped by HSN
+   * and GST rate — quantity, taxable and each tax head — optionally date-bounded.
+   * Read via raw SQL (RLS-scoped) so the group-by runs in the database.
+   */
+  hsnSummary(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const where = ["i.invoice_status = 'issued'"];
+      const params: unknown[] = [];
+      if (from) { params.push(from); where.push(`i.invoice_date >= $${params.length}`); }
+      if (to) { params.push(to); where.push(`i.invoice_date <= $${params.length}`); }
+      const rows: Array<Record<string, number | string>> = await m.query(
+        `SELECT COALESCE(NULLIF(ii.hsn_sac, ''), '—') AS hsn,
+                ii.gst_rate::float                    AS "gstRate",
+                SUM(ii.quantity)::float               AS quantity,
+                SUM(ii.taxable_amount)::float         AS taxable,
+                SUM(ii.cgst_amount)::float            AS cgst,
+                SUM(ii.sgst_amount)::float            AS sgst,
+                SUM(ii.igst_amount)::float            AS igst,
+                SUM(ii.cess_amount)::float            AS cess,
+                SUM(ii.line_total)::float             AS total
+           FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+          WHERE ${where.join(' AND ')}
+          GROUP BY ii.hsn_sac, ii.gst_rate
+          ORDER BY hsn, "gstRate"`,
+        params,
+      );
+      const totals = ['quantity', 'taxable', 'cgst', 'sgst', 'igst', 'cess', 'total'].reduce(
+        (acc, k) => ({ ...acc, [k]: round2(rows.reduce((s, r) => s + num(r[k]), 0)) }),
+        {} as Record<string, number>,
+      );
+      return { rows, totals };
     });
   }
 

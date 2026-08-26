@@ -785,10 +785,18 @@ export const receiptsApi = {
 export type StatementRow = { date: string | null; type: string; ref: string; particulars: string; debit: number; credit: number; balance: number };
 export type CustomerStatement = { customerName: string; opening: number; rows: StatementRow[]; totalDebit: number; totalCredit: number; closing: number; from: string | null; to: string | null };
 
+export type GstBucket = { count: number; taxable: number; total: number };
+export type SalesRegister = { rows: Row[]; total: number; taxable: number; count: number; summary: { b2b: GstBucket; b2c: GstBucket } };
+const dateQs = (from?: string, to?: string) => {
+  const parts = [from ? `from=${from}` : '', to ? `to=${to}` : ''].filter(Boolean);
+  return parts.length ? `?${parts.join('&')}` : '';
+};
+
 export const billingReportsApi = {
   outstanding: () => apiFetch<{ rows: Row[]; totals: Row }>('/billing-reports/outstanding'),
-  salesRegister: () => apiFetch<{ rows: Row[]; total: number; taxable: number; count: number }>('/billing-reports/sales-register'),
-  gstSummary: () => apiFetch<Row>('/billing-reports/gst-summary'),
+  salesRegister: (from?: string, to?: string) => apiFetch<SalesRegister>(`/billing-reports/sales-register${dateQs(from, to)}`),
+  gstSummary: (from?: string, to?: string) => apiFetch<Row>(`/billing-reports/gst-summary${dateQs(from, to)}`),
+  hsnSummary: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/billing-reports/hsn-summary${dateQs(from, to)}`),
   receiptsRegister: () => apiFetch<Row[]>('/billing-reports/receipts-register'),
   customerStatement: (customerId: string, from?: string, to?: string) =>
     apiFetch<CustomerStatement>(

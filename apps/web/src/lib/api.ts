@@ -782,11 +782,19 @@ export const receiptsApi = {
   share: (id: string, mobile: string) => post(`/receipts/${id}/share`, { mobile }),
 };
 
+export type StatementRow = { date: string | null; type: string; ref: string; particulars: string; debit: number; credit: number; balance: number };
+export type CustomerStatement = { customerName: string; opening: number; rows: StatementRow[]; totalDebit: number; totalCredit: number; closing: number; from: string | null; to: string | null };
+
 export const billingReportsApi = {
   outstanding: () => apiFetch<{ rows: Row[]; totals: Row }>('/billing-reports/outstanding'),
   salesRegister: () => apiFetch<{ rows: Row[]; total: number; taxable: number; count: number }>('/billing-reports/sales-register'),
   gstSummary: () => apiFetch<Row>('/billing-reports/gst-summary'),
   receiptsRegister: () => apiFetch<Row[]>('/billing-reports/receipts-register'),
+  customerStatement: (customerId: string, from?: string, to?: string) =>
+    apiFetch<CustomerStatement>(
+      `/billing-reports/customer-statement?customerId=${encodeURIComponent(customerId)}` +
+        (from ? `&from=${from}` : '') + (to ? `&to=${to}` : ''),
+    ),
 };
 
 /** Download the Tally export CSV (auth header required). */

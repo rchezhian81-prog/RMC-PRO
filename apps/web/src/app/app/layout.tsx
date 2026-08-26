@@ -162,6 +162,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/billing/invoices', label: 'Invoices', icon: <ReceiptText size={IS} />, module: 'billing' },
       { href: '/app/billing/receipts', label: 'Receipts', icon: <Wallet size={IS} />, module: 'billing' },
       { href: '/app/billing/outstanding', label: 'Outstanding', icon: <Clock size={IS} />, module: 'billing' },
+      { href: '/app/billing/statement', label: 'Statements', icon: <ScrollText size={IS} />, module: 'billing' },
       { href: '/app/billing/reports', label: 'Billing Reports', icon: <BarChart3 size={IS} />, module: 'billing' },
     ],
   },

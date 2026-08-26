@@ -261,7 +261,7 @@ export default function BatchTicketDetail() {
             )}
             <Button variant="secondary" onClick={saveActuals}>Save actuals</Button>
             <Button onClick={() => confirm(false)}>Confirm batch</Button>
-            <Button variant="secondary" onClick={() => run(() => batchTicketsApi.cancel(id), 'Ticket cancelled')}>Cancel</Button>
+            <Button variant="secondary" onClick={async () => { if (!(await askConfirm({ title: 'Cancel batch ticket', message: 'Cancel this batch ticket? This cannot be undone.', confirmLabel: 'Cancel ticket', danger: true }))) return; run(() => batchTicketsApi.cancel(id), 'Ticket cancelled'); }}>Cancel</Button>
           </div>
         )}
       </Card>

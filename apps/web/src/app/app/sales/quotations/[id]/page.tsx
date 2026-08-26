@@ -43,6 +43,7 @@ export default function QuotationDetail() {
   const [revs, setRevs] = useState<Row[]>([]);
   const [customers, setCustomers] = useState<Row[]>([]);
   const [sites, setSites] = useState<Row[]>([]);
+  const [plants, setPlants] = useState<Row[]>([]);
   const EMPTY_ITEM = { gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' };
   const [item, setItem] = useState(EMPTY_ITEM);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -51,15 +52,16 @@ export default function QuotationDetail() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [full, g, r, c, s] = await Promise.all([
+    const [full, g, r, c, s, p] = await Promise.all([
       quotationsApi.get(id), crud('concrete-grades').list(), quotationsApi.revisions(id),
-      crud('customers').list(), crud('sites').list(),
+      crud('customers').list(), crud('sites').list(), crud('plants').list(),
     ]);
     setQ(full);
     setGrades(g);
     setRevs(r);
     setCustomers(c);
     setSites(s);
+    setPlants(p);
     setHeader({
       customerId: String(full.customerId ?? ''), siteId: String(full.siteId ?? ''),
       validUntil: String(full.validUntil ?? '').slice(0, 10), paymentTerms: String(full.paymentTerms ?? ''),
@@ -167,7 +169,19 @@ export default function QuotationDetail() {
           <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' }); if (m !== null) await quotationsApi.share(id, m); }, 'WhatsApp message logged')}>Share on WhatsApp</Button>
           <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'New revision', label: 'Revision reason', defaultValue: '' }); if (reason !== null) await quotationsApi.createRevision(id, reason); }, 'New revision created')}>New revision</Button>
           {status === 'approved' && (
-            <Button onClick={() => run(async () => { const od = await orderDraftsApi.fromQuotation(id, {}); setMsg(`Order draft ${String(od.orderNo)} created`); })}>Convert → Order draft</Button>
+            <Button onClick={() => run(async () => {
+              const plantId = await prompt({
+                title: 'Convert → Order draft',
+                label: 'Producing plant',
+                message: 'Assign the order to a plant (used for scheduling and batching). The order date is set to today.',
+                options: plants.map((p) => ({ value: String(p.id), label: String(p.plantName ?? p.plantCode ?? p.id) })),
+                defaultValue: plants[0] ? String(plants[0].id) : '',
+                confirmLabel: 'Create order draft',
+              });
+              if (plantId === null) return;
+              const od = await orderDraftsApi.fromQuotation(id, { plantId: plantId || undefined, orderDate: new Date().toISOString().slice(0, 10) });
+              setMsg(`Order draft ${String(od.orderNo)} created`);
+            })}>Convert → Order draft</Button>
           )}
         </div>
       </Card>

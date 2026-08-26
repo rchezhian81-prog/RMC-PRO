@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { crud, purchaseApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -76,26 +77,6 @@ export default function PurchaseOrdersPage() {
     setError(null); setMsg(null);
     try { await fn(); await reload(); setMsg(okMsg); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-  }
-
-  /** Receive everything still outstanding on a PO: build a GRN from the remaining
-   *  quantities, create it and post it (which increases stock). */
-  async function receive(poId: string) {
-    const po = await purchaseApi.order(poId);
-    const items = (po.items as Row[]) ?? [];
-    const grnLines = items
-      .map((it) => ({ it, remaining: Number(it.quantity) - Number(it.receivedQuantity) }))
-      .filter((x) => x.remaining > 0.0005)
-      .map(({ it, remaining }) => ({
-        purchaseOrderItemId: String(it.id), materialId: it.materialId, materialLabel: it.materialLabel,
-        uom: it.uom, receivedQuantity: remaining, acceptedQuantity: remaining, rate: Number(it.rate),
-      }));
-    if (!grnLines.length) { setError('Nothing left to receive on this PO'); return; }
-    if (!(await confirm({ title: 'Receive goods', message: `Receive the outstanding quantity on ${String(po.poNo)} and post it to stock?`, confirmLabel: 'Receive & post' }))) return;
-    await act(async () => {
-      const grn = await purchaseApi.createGrn({ purchaseOrderId: poId, plantId: po.plantId ?? undefined, receiptDate: new Date().toISOString().slice(0, 10), lines: grnLines });
-      await purchaseApi.postGrn(String(grn.id));
-    }, 'Goods received and posted to stock.');
   }
 
   return (
@@ -181,7 +162,9 @@ export default function PurchaseOrdersPage() {
                           <Button variant="secondary" size="sm" onClick={() => act(() => purchaseApi.issueOrder(String(r.id)), `PO ${String(r.poNo)} issued.`)}>Issue</Button>
                         )}
                         {canReceive && (status === 'issued' || status === 'partially_received') && (
-                          <Button variant="secondary" size="sm" onClick={() => receive(String(r.id))}>Receive</Button>
+                          <Link href={`/app/purchase/goods-receipts?po=${r.id}`} style={{ textDecoration: 'none' }}>
+                            <Button variant="secondary" size="sm">Receive…</Button>
+                          </Link>
                         )}
                         {canCreate && status === 'draft' && (
                           <Button variant="ghost" size="sm" onClick={async () => { if (!(await confirm({ title: 'Cancel purchase order', message: `Cancel PO ${String(r.poNo)}? This cannot be undone.`, confirmLabel: 'Cancel PO', danger: true }))) return; act(() => purchaseApi.cancelOrder(String(r.id)), `PO ${String(r.poNo)} cancelled.`); }}>Cancel</Button>

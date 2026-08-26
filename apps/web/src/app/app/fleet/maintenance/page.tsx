@@ -232,7 +232,7 @@ export default function FleetMaintenancePage() {
                           <Button variant="secondary" size="sm" onClick={() => completeJob(j)}>Complete</Button>
                         )}
                         {canRecord && status === 'open' && (
-                          <Button variant="ghost" size="sm" onClick={() => act(() => fleetApi.cancelJob(String(j.id)), `Job ${String(j.jobNo)} cancelled.`)}>Cancel</Button>
+                          <Button variant="ghost" size="sm" onClick={async () => { if (!(await confirm({ title: 'Cancel maintenance job', message: `Cancel job ${String(j.jobNo)}? This cannot be undone.`, confirmLabel: 'Cancel job', danger: true }))) return; act(() => fleetApi.cancelJob(String(j.id)), `Job ${String(j.jobNo)} cancelled.`); }}>Cancel</Button>
                         )}
                       </div>
                     </Td>

@@ -9,6 +9,7 @@ import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -40,6 +41,7 @@ function Num({ label, v, on, req }: { label: string; v: string; on: (v: string) 
 }
 
 export default function MaterialInwardPage() {
+  const { confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
@@ -150,7 +152,7 @@ export default function MaterialInwardPage() {
                     {r.status === 'draft' && (
                       <span style={{ display: 'inline-flex', gap: 6 }}>
                         <Button size="sm" onClick={() => run(() => materialInwardApi.post(String(r.id)), 'Posted to stock')}>Post</Button>
-                        <Button variant="secondary" size="sm" onClick={() => run(() => materialInwardApi.cancel(String(r.id)))}>Cancel</Button>
+                        <Button variant="secondary" size="sm" onClick={async () => { if (!(await confirm({ title: 'Cancel material inward', message: `Cancel this inward entry${r.grnNo ? ` (${String(r.grnNo)})` : ''}? This reverses its stock.`, confirmLabel: 'Cancel inward', danger: true }))) return; run(() => materialInwardApi.cancel(String(r.id))); }}>Cancel</Button>
                       </span>
                     )}
                   </Td>

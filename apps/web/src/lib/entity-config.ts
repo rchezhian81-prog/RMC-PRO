@@ -62,13 +62,19 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'gstin', label: 'GSTIN' },
       { key: 'billingAddress', label: 'Billing address' },
       { key: 'city', label: 'City' },
-      { key: 'state', label: 'State' },
+      // State is required: it is the place-of-supply that decides CGST/SGST vs
+      // IGST on every quotation, order and invoice — a customer saved without it
+      // is silently taxed intra-state.
+      { key: 'state', label: 'State', required: true },
       { key: 'pincode', label: 'PIN code' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
       { key: 'email', label: 'Email' },
       { key: 'creditLimit', label: 'Credit limit', type: 'number' },
       { key: 'creditDays', label: 'Credit days', type: 'number' },
+      // Pre-existing receivable at go-live — the first term of the customer's
+      // credit exposure, so it must be capturable.
+      { key: 'openingBalance', label: 'Opening balance (₹)', type: 'number' },
     ],
   },
   sites: {

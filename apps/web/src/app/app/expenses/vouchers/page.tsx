@@ -9,6 +9,7 @@ import { Button } from '../../../../components/ui/Button';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const PAYMENT_MODES = ['cash', 'bank', 'upi', 'cheque'];
@@ -20,6 +21,7 @@ const emptyLine = (): LineDraft => ({ expenseHeadId: '', description: '', amount
 interface Bucket { key: string; label: string; amount: number; share: number }
 
 export default function ExpenseVouchersPage() {
+  const { confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [heads, setHeads] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
@@ -184,7 +186,7 @@ export default function ExpenseVouchersPage() {
                             <Button variant="secondary" size="sm" onClick={() => act(() => expensesApi.postVoucher(String(r.id)), `Voucher ${String(r.voucherNo)} posted.`)}>Post</Button>
                           )}
                           {canManage && status === 'draft' && (
-                            <Button variant="ghost" size="sm" onClick={() => act(() => expensesApi.cancelVoucher(String(r.id)), `Voucher ${String(r.voucherNo)} cancelled.`)}>Cancel</Button>
+                            <Button variant="ghost" size="sm" onClick={async () => { if (!(await confirm({ title: 'Cancel voucher', message: `Cancel voucher ${String(r.voucherNo)}? This cannot be undone.`, confirmLabel: 'Cancel voucher', danger: true }))) return; act(() => expensesApi.cancelVoucher(String(r.id)), `Voucher ${String(r.voucherNo)} cancelled.`); }}>Cancel</Button>
                           )}
                         </div>
                       </Td>

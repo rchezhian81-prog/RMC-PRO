@@ -184,7 +184,7 @@ export default function PurchaseOrdersPage() {
                           <Button variant="secondary" size="sm" onClick={() => receive(String(r.id))}>Receive</Button>
                         )}
                         {canCreate && status === 'draft' && (
-                          <Button variant="ghost" size="sm" onClick={() => act(() => purchaseApi.cancelOrder(String(r.id)), `PO ${String(r.poNo)} cancelled.`)}>Cancel</Button>
+                          <Button variant="ghost" size="sm" onClick={async () => { if (!(await confirm({ title: 'Cancel purchase order', message: `Cancel PO ${String(r.poNo)}? This cannot be undone.`, confirmLabel: 'Cancel PO', danger: true }))) return; act(() => purchaseApi.cancelOrder(String(r.id)), `PO ${String(r.poNo)} cancelled.`); }}>Cancel</Button>
                         )}
                       </div>
                     </Td>

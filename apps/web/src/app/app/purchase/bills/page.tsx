@@ -142,7 +142,7 @@ export default function VendorBillsPage() {
                           <Button variant="secondary" size="sm" onClick={() => pay(r)}>Pay</Button>
                         )}
                         {canApprove && status === 'draft' && (
-                          <Button variant="ghost" size="sm" onClick={() => act(() => purchaseApi.cancelBill(String(r.id)), `Bill ${String(r.billNo)} cancelled.`)}>Cancel</Button>
+                          <Button variant="ghost" size="sm" onClick={async () => { if (!(await confirm({ title: 'Cancel vendor bill', message: `Cancel bill ${String(r.billNo)}? This cannot be undone.`, confirmLabel: 'Cancel bill', danger: true }))) return; act(() => purchaseApi.cancelBill(String(r.id)), `Bill ${String(r.billNo)} cancelled.`); }}>Cancel</Button>
                         )}
                       </div>
                     </Td>

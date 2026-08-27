@@ -178,4 +178,5 @@ export class ProductionReportsController {
   @Get('summary') summary(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.productionSummary(tid(u), from, to); }
   @Get('variance') variance(@CurrentUser() u: AuthUser) { return this.service.varianceReport(tid(u)); }
   @Get('material-consumption') consumption(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.materialConsumption(tid(u), from, to); }
+  @Get('batch-register') batchRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.batchRegister(tid(u), from, to); }
 }

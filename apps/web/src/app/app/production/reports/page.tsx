@@ -16,21 +16,24 @@ export default function ProductionReportsPage() {
   const [totals, setTotals] = useState<Row | null>(null);
   const [variance, setVariance] = useState<Row[]>([]);
   const [consumption, setConsumption] = useState<Row[]>([]);
+  const [batch, setBatch] = useState<{ rows: Row[]; totalM3: number; count: number } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [s, v, c] = await Promise.all([
+    const [s, v, c, b] = await Promise.all([
       productionReportsApi.summary(from || undefined, to || undefined),
       productionReportsApi.variance(),
       productionReportsApi.consumption(from || undefined, to || undefined),
+      productionReportsApi.batchRegister(from || undefined, to || undefined),
     ]);
     setByGrade(s.byGrade as Row[]);
     setTotals(s.totals as Row);
     setVariance(v);
     setConsumption(c);
+    setBatch(b);
   }
 
   useEffect(() => {
@@ -82,6 +85,39 @@ export default function ProductionReportsPage() {
           </Table>
         ) : (
           <EmptyState title="No production yet" />
+        )}
+      </Card>
+
+      <Card
+        title={`Batch register${batch ? ` — ${batch.count} batches · ${fmt(batch.totalM3)} m³` : ''}`}
+        padded={false}
+        actions={<ExportButton rows={batch?.rows ?? []} columns={['date', 'batchTicketNo', 'gradeLabel', 'm3']} filename="batch-register" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={4} />
+        ) : batch?.rows?.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Ticket</Th>
+                <Th>Grade</Th>
+                <Th numeric>m³</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {batch.rows.map((r, i) => (
+                <tr key={i}>
+                  <Td>{String(r.date ?? '')}</Td>
+                  <Td style={{ fontWeight: 600 }}>{String(r.batchTicketNo)}</Td>
+                  <Td>{String(r.gradeLabel ?? '')}</Td>
+                  <Td numeric>{fmt(r.m3)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No batches" />
         )}
       </Card>
 

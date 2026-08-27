@@ -44,6 +44,33 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Order book — confirmed orders with ordered vs delivered vs balance m³, so
+   * operations can see what is still to pour. Delivered is net of returns from
+   * the customer's delivered challans; balance = ordered − delivered.
+   */
+  orderBook(tenantId: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows: Array<{ ordered: number | string; delivered: number | string; balance: number | string }> = await m.query(
+        `SELECT o.order_no AS "orderNo", o.order_date AS "orderDate", c.customer_name AS "customerName",
+                COALESCE(oi.ordered, 0)::float AS ordered,
+                COALESCE(dl.delivered, 0)::float AS delivered,
+                (COALESCE(oi.ordered, 0) - COALESCE(dl.delivered, 0))::float AS balance
+           FROM orders o
+           LEFT JOIN customers c ON c.id = o.customer_id
+           LEFT JOIN (SELECT order_id, SUM(quantity_m3) AS ordered FROM order_items GROUP BY order_id) oi ON oi.order_id = o.id
+           LEFT JOIN (SELECT order_id, SUM(quantity_m3 - return_quantity_m3) AS delivered
+                        FROM delivery_challans WHERE challan_status = 'delivered' GROUP BY order_id) dl ON dl.order_id = o.id
+          WHERE o.order_status = 'confirmed'
+          ORDER BY balance DESC, o.order_date`,
+      );
+      const sum = (f: (r: (typeof rows)[number]) => unknown) =>
+        Math.round(rows.reduce((s, r) => s + (Number(f(r)) || 0), 0) * 1000) / 1000;
+      const totals = { ordered: sum((r) => r.ordered), delivered: sum((r) => r.delivered), balance: sum((r) => r.balance), count: rows.length };
+      return { rows, totals };
+    });
+  }
+
   private async loadFull(m: EntityManager, id: string) {
     const order = await m.getRepository(Order).findOne({ where: { id } });
     if (!order) throw notFound();

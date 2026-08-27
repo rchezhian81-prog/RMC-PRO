@@ -56,6 +56,17 @@ export class DeliveryChallanController {
     return this.service.wastageReport(tid(u), { from, to, plantId });
   }
 
+  @Get('report/delivery-register')
+  @RequirePermissions('reports.view')
+  deliveryRegister(
+    @CurrentUser() u: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('plantId') plantId?: string,
+  ) {
+    return this.service.deliveryRegister(tid(u), { from, to, plantId });
+  }
+
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-dispatch/:dispatchId')

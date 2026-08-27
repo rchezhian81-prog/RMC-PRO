@@ -30,7 +30,7 @@ export default function BillingReportsPage() {
       billingReportsApi.gstSummary(from || undefined, to || undefined),
       billingReportsApi.salesRegister(from || undefined, to || undefined),
       billingReportsApi.hsnSummary(from || undefined, to || undefined),
-      billingReportsApi.receiptsRegister(),
+      billingReportsApi.receiptsRegister(from || undefined, to || undefined),
     ]);
     setGst(g); setSales(s); setHsn(h); setReceipts(r);
   }
@@ -60,7 +60,7 @@ export default function BillingReportsPage() {
           {(range.from || range.to) && (
             <Button variant="ghost" onClick={() => { setRange({ from: '', to: '' }); load('', '').catch((e) => setError(String(e))); }}>Clear</Button>
           )}
-          <span style={{ color: 'var(--mn-muted)', fontSize: 12 }}>Filters the GST summary, HSN summary and sales register. Leave blank for all-time.</span>
+          <span style={{ color: 'var(--mn-muted)', fontSize: 12 }}>Filters the GST summary, HSN summary, sales register and receipts. Leave blank for all-time.</span>
         </div>
       </Card>
 

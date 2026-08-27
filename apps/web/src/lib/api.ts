@@ -621,10 +621,15 @@ export const stockApi = {
   setOpening: (b: Record<string, unknown>) => post('/stock/opening', b),
 };
 
+const dateQs = (from?: string, to?: string) => {
+  const parts = [from ? `from=${from}` : '', to ? `to=${to}` : ''].filter(Boolean);
+  return parts.length ? `?${parts.join('&')}` : '';
+};
+
 export const productionReportsApi = {
-  summary: () => apiFetch<{ byGrade: Row[]; totals: Row }>('/production-reports/summary'),
+  summary: (from?: string, to?: string) => apiFetch<{ byGrade: Row[]; totals: Row }>(`/production-reports/summary${dateQs(from, to)}`),
   variance: () => apiFetch<Row[]>('/production-reports/variance'),
-  consumption: () => apiFetch<Row[]>('/production-reports/material-consumption'),
+  consumption: (from?: string, to?: string) => apiFetch<Row[]>(`/production-reports/material-consumption${dateQs(from, to)}`),
 };
 
 // ---- Dispatch & delivery challan (Sprint 7) ----
@@ -707,7 +712,7 @@ export const inventoryReportsApi = {
   lowStock: () => apiFetch<Row[]>('/inventory-reports/low-stock'),
   negativeStock: () => apiFetch<Row[]>('/inventory-reports/negative-stock'),
   valuation: () => apiFetch<{ rows: Row[]; total: number }>('/inventory-reports/valuation'),
-  movement: () => apiFetch<Row[]>('/inventory-reports/movement'),
+  movement: (from?: string, to?: string) => apiFetch<Row[]>(`/inventory-reports/movement${dateQs(from, to)}`),
 };
 
 // ---- Billing & payments (Sprint 9) ----
@@ -787,17 +792,12 @@ export type CustomerStatement = { customerName: string; opening: number; rows: S
 
 export type GstBucket = { count: number; taxable: number; total: number };
 export type SalesRegister = { rows: Row[]; total: number; taxable: number; count: number; summary: { b2b: GstBucket; b2c: GstBucket } };
-const dateQs = (from?: string, to?: string) => {
-  const parts = [from ? `from=${from}` : '', to ? `to=${to}` : ''].filter(Boolean);
-  return parts.length ? `?${parts.join('&')}` : '';
-};
-
 export const billingReportsApi = {
   outstanding: () => apiFetch<{ rows: Row[]; totals: Row }>('/billing-reports/outstanding'),
   salesRegister: (from?: string, to?: string) => apiFetch<SalesRegister>(`/billing-reports/sales-register${dateQs(from, to)}`),
   gstSummary: (from?: string, to?: string) => apiFetch<Row>(`/billing-reports/gst-summary${dateQs(from, to)}`),
   hsnSummary: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/billing-reports/hsn-summary${dateQs(from, to)}`),
-  receiptsRegister: () => apiFetch<Row[]>('/billing-reports/receipts-register'),
+  receiptsRegister: (from?: string, to?: string) => apiFetch<Row[]>(`/billing-reports/receipts-register${dateQs(from, to)}`),
   customerStatement: (customerId: string, from?: string, to?: string) =>
     apiFetch<CustomerStatement>(
       `/billing-reports/customer-statement?customerId=${encodeURIComponent(customerId)}` +

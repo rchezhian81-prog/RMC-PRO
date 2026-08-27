@@ -96,6 +96,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Orders',
     items: [
       { href: '/app/orders', label: 'Orders', icon: <ClipboardList size={IS} />, perm: 'orders.view', module: 'orders' },
+      { href: '/app/orders/order-book', label: 'Order Book', icon: <ListOrdered size={IS} />, perm: 'orders.view', module: 'orders' },
       { href: '/app/credit-holds', label: 'Credit Holds', icon: <Lock size={IS} />, perm: 'credit_hold.approve', module: 'orders' },
     ],
   },
@@ -123,6 +124,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, module: 'dispatch' },
       { href: '/app/dispatch/tracking', label: 'Live Tracking', icon: <Navigation size={IS} />, perm: 'gps.view', module: 'gps' },
       { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, module: 'dispatch' },
+      { href: '/app/dispatch/delivery-register', label: 'Delivery Register', icon: <BarChart3 size={IS} />, perm: 'reports.view', module: 'dispatch' },
     ],
   },
   {

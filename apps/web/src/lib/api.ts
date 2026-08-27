@@ -544,6 +544,7 @@ export const ordersApi = {
   addPourSlot: (id: string, b: Record<string, unknown>) => post(`/orders/${id}/pour-slots`, b),
   removePourSlot: (id: string, slotId: string) =>
     apiFetch<Row>(`/orders/${id}/pour-slots/${slotId}`, { method: 'DELETE' }),
+  orderBook: () => apiFetch<{ rows: Row[]; totals: Row }>('/orders/order-book'),
 };
 
 export const creditHoldsApi = {
@@ -656,6 +657,14 @@ export const challansApi = {
     if (params.plantId) qs.set('plantId', params.plantId);
     const s = qs.toString();
     return apiFetch<Row>(`/delivery-challans/report/wastage${s ? `?${s}` : ''}`);
+  },
+  deliveryRegister: (params: { from?: string; to?: string; plantId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.plantId) qs.set('plantId', params.plantId);
+    const s = qs.toString();
+    return apiFetch<{ rows: Row[]; totalM3: number; count: number }>(`/delivery-challans/report/delivery-register${s ? `?${s}` : ''}`);
   },
 };
 

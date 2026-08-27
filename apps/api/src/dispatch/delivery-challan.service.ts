@@ -177,6 +177,37 @@ export class DeliveryChallanService {
     });
   }
 
+  /**
+   * Delivery register — delivered challans over a period (net of returns), with
+   * the customer and grade. The daily record of concrete supplied, optionally
+   * bounded by date and plant.
+   */
+  deliveryRegister(tenantId: string, filters: { from?: string; to?: string; plantId?: string } = {}) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params: unknown[] = [];
+      const where: string[] = [`dc.challan_status = 'delivered'`];
+      const dateExpr = `COALESCE(dc.dispatch_time::date, dc.created_at::date)`;
+      if (filters.from) { params.push(filters.from); where.push(`${dateExpr} >= $${params.length}`); }
+      if (filters.to) { params.push(filters.to); where.push(`${dateExpr} <= $${params.length}`); }
+      if (filters.plantId) { params.push(filters.plantId); where.push(`dc.plant_id = $${params.length}`); }
+
+      const rows: Array<{ delivered: number | string }> = await m.query(
+        `SELECT dc.challan_no AS "challanNo",
+                ${dateExpr} AS date,
+                c.customer_name AS "customerName",
+                dc.grade_label AS "gradeLabel",
+                (dc.quantity_m3 - dc.return_quantity_m3)::float AS delivered
+           FROM delivery_challans dc
+           LEFT JOIN customers c ON c.id = dc.customer_id
+          WHERE ${where.join(' AND ')}
+          ORDER BY date DESC, dc.challan_no`,
+        params,
+      );
+      const totalM3 = Math.round(rows.reduce((s, r) => s + (Number(r.delivered) || 0), 0) * 1000) / 1000;
+      return { rows, totalM3, count: rows.length };
+    });
+  }
+
   cancel(tenantId: string, id: string, userId: string, reason?: string) {
     return this.transition(tenantId, id, ['draft', 'issued'], 'cancelled', userId, { note: reason ?? null });
   }

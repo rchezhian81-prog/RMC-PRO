@@ -22,6 +22,13 @@ export class OrdersController {
     return this.service.list(tid(u), status);
   }
 
+  // Declared before `:id` so the literal path wins over the id param route.
+  @Get('order-book')
+  @RequirePermissions('orders.view')
+  orderBook(@CurrentUser() u: AuthUser) {
+    return this.service.orderBook(tid(u));
+  }
+
   @Get(':id')
   @RequirePermissions('orders.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) {

@@ -8,6 +8,7 @@ import {
   GoodsReceiptController,
   VendorBillController,
   VendorPaymentController,
+  PurchaseReportsController,
 } from './purchase.controllers';
 import { PurchaseOrderService } from './purchase-order.service';
 import { GrnService } from './goods-receipt.service';
@@ -22,7 +23,7 @@ import { VendorPaymentService } from './vendor-payment.service';
  * AuditModule; `StockService` (the ledger) is provided here so the GRN can post.
  */
 @Module({
-  controllers: [PurchaseOrderController, GoodsReceiptController, VendorBillController, VendorPaymentController],
+  controllers: [PurchaseOrderController, GoodsReceiptController, VendorBillController, VendorPaymentController, PurchaseReportsController],
   providers: [
     PurchaseOrderService,
     GrnService,

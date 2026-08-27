@@ -15,6 +15,16 @@ const tid = (u: AuthUser) => u.tenantId as string;
 export class QcController {
   constructor(private readonly service: QcService) {}
 
+  @Get('cube-register') @RequirePermissions('qc.view')
+  cubeRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.cubeRegister(tid(u), from, to);
+  }
+
+  @Get('slump-register') @RequirePermissions('qc.view')
+  slumpRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.slumpRegister(tid(u), from, to);
+  }
+
   @Get('slump-tests') @RequirePermissions('qc.view')
   listSlump(@CurrentUser() u: AuthUser) { return this.service.listSlump(tid(u)); }
 

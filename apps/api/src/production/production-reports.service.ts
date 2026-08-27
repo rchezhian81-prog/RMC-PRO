@@ -73,6 +73,26 @@ export class ProductionReportsService {
     });
   }
 
+  /** Batch-wise production register — each confirmed ticket (date, grade, m³),
+   *  optionally bounded to [from, to] on the batch date. */
+  batchRegister(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const qb = m
+        .getRepository(BatchTicket)
+        .createQueryBuilder('t')
+        .select('t.batch_ticket_no', 'batchTicketNo')
+        .addSelect('COALESCE(t.batch_start_time::date, t.created_at::date)', 'date')
+        .addSelect('t.grade_label', 'gradeLabel')
+        .addSelect('t.batch_quantity_m3::float', 'm3')
+        .where("t.status = 'confirmed'");
+      if (from) qb.andWhere('COALESCE(t.batch_start_time, t.created_at)::date >= :from', { from });
+      if (to) qb.andWhere('COALESCE(t.batch_start_time, t.created_at)::date <= :to', { to });
+      const rows: Array<{ m3: number | string }> = await qb.orderBy('date', 'DESC').getRawMany();
+      const totalM3 = Math.round(rows.reduce((s, r) => s + (Number(r.m3) || 0), 0) * 1000) / 1000;
+      return { rows, totalM3, count: rows.length };
+    });
+  }
+
   /** Total consumed quantity by material (from the stock ledger), optionally
    *  bounded to [from, to] on the transaction date. */
   materialConsumption(tenantId: string, from?: string, to?: string) {

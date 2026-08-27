@@ -631,6 +631,7 @@ export const productionReportsApi = {
   summary: (from?: string, to?: string) => apiFetch<{ byGrade: Row[]; totals: Row }>(`/production-reports/summary${dateQs(from, to)}`),
   variance: () => apiFetch<Row[]>('/production-reports/variance'),
   consumption: (from?: string, to?: string) => apiFetch<Row[]>(`/production-reports/material-consumption${dateQs(from, to)}`),
+  batchRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totalM3: number; count: number }>(`/production-reports/batch-register${dateQs(from, to)}`),
 };
 
 // ---- Dispatch & delivery challan (Sprint 7) ----
@@ -834,6 +835,8 @@ export const qcApi = {
   cubeSetCreate: (b: Record<string, unknown>) => post('/qc/cube-sets', b),
   recordResults: (id: string, results: Record<string, unknown>[]) =>
     post(`/qc/cube-sets/${id}/results`, { results }),
+  cubeRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; count: number; accepted: number; rejected: number }>(`/qc/cube-register${dateQs(from, to)}`),
+  slumpRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; count: number; passed: number; failed: number }>(`/qc/slump-register${dateQs(from, to)}`),
 };
 
 // ---- Purchase / AP-lite (Plan D2) ----

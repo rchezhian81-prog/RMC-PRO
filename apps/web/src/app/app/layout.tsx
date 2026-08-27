@@ -116,6 +116,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/qc/slump', label: 'Slump Tests', icon: <FlaskConical size={IS} />, perm: 'qc.view', module: 'qc' },
       { href: '/app/qc/cubes', label: 'Cube Sets', icon: <ClipboardList size={IS} />, perm: 'qc.view', module: 'qc' },
+      { href: '/app/qc/register', label: 'QC Register', icon: <BarChart3 size={IS} />, perm: 'qc.view', module: 'qc' },
     ],
   },
   {

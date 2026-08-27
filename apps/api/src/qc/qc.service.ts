@@ -37,6 +37,32 @@ export class QcService {
     );
   }
 
+  /** Cube-set register — sets over a period (cast date) with target vs 28-day
+   *  mean strength and acceptance, plus accepted/rejected counts. */
+  cubeRegister(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const all = await m.getRepository(QcCubeSet).find({ order: { castDate: 'DESC' } });
+      const rows = all.filter((s) => (!from || (s.castDate ?? '') >= from) && (!to || (s.castDate ?? '') <= to));
+      const accepted = rows.filter((s) => s.acceptanceStatus === 'accepted').length;
+      const rejected = rows.filter((s) => s.acceptanceStatus === 'rejected').length;
+      return { rows, count: rows.length, accepted, rejected };
+    });
+  }
+
+  /** Slump register — tests over a period (test date) with measured vs target
+   *  range and pass/fail counts. */
+  slumpRegister(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const all = await m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' } });
+      const rows = all.filter((s) => {
+        const d = String(s.testedAt ?? '').slice(0, 10);
+        return (!from || d >= from) && (!to || d <= to);
+      });
+      const passed = rows.filter((s) => s.passed).length;
+      return { rows, count: rows.length, passed, failed: rows.length - passed };
+    });
+  }
+
   getSlump(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const row = await m.getRepository(QcSlumpTest).findOne({ where: { id } });

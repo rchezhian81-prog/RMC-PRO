@@ -2,15 +2,18 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
+  Company,
   GoodsReceipt,
   GoodsReceiptItem,
   PurchaseOrderItem,
+  Supplier,
   VendorBill,
   VendorBillItem,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
-import { summariseMatch, type MatchLineInput } from './purchase.util';
+import { isInterstateSupply } from '../billing/tax.util';
+import { summariseMatch, deriveGstSplit, type MatchLineInput } from './purchase.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Vendor bill not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -46,6 +49,38 @@ export class VendorBillService {
 
   get(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
+  }
+
+  /**
+   * Input-tax-credit (ITC) register — approved vendor bills over a period, with
+   * the supplier's GSTIN and the CGST/SGST vs IGST split derived from the stored
+   * tax and the supplier-vs-company state test. For claiming ITC and reconciling
+   * with GSTR-2B.
+   */
+  itcRegister(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved' }, order: { billDate: 'ASC' } }))
+        .filter((b) => (!from || (b.billDate ?? '') >= from) && (!to || (b.billDate ?? '') <= to));
+      const suppliers = await m.getRepository(Supplier).find();
+      const supOf = new Map(suppliers.map((s) => [s.id, s]));
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const rows = bills.map((b) => {
+        const s = b.supplierId ? supOf.get(b.supplierId) : null;
+        const interstate = isInterstateSupply(company?.state, s?.state);
+        const split = deriveGstSplit(num(b.taxAmount), interstate);
+        return {
+          billNo: b.billNo, supplierBillNo: b.supplierBillNo, billDate: b.billDate,
+          supplierName: s?.supplierName ?? '', gstin: s?.gstin ?? '',
+          taxable: round2(num(b.taxableAmount)), ...split, total: round2(num(b.totalAmount)),
+        };
+      });
+      const sum = (f: (r: (typeof rows)[number]) => number) => round2(rows.reduce((acc, r) => acc + num(f(r)), 0));
+      const totals = {
+        taxable: sum((r) => r.taxable), cgst: sum((r) => r.cgst), sgst: sum((r) => r.sgst),
+        igst: sum((r) => r.igst), total: sum((r) => r.total), count: rows.length,
+      };
+      return { rows, totals };
+    });
   }
 
   /**
@@ -102,10 +137,14 @@ export class VendorBillService {
         const quantity = num(line.quantity);
         if (quantity <= 0) throw badReq('Each line needs a quantity greater than zero');
         const rate = num(line.rate);
-        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : 18;
+        const poItemId = (line.purchaseOrderItemId as string) || null;
+        const poItem = poItemId ? await poItemRepo.findOne({ where: { id: poItemId } }) : null;
+        // Inherit the GST rate the PO agreed (cement 28%, diesel 0, fly-ash /
+        // admixture 5–18%…) rather than a blanket 18%, unless the caller passed
+        // an explicit rate on the line.
+        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : poItem ? num(poItem.gstRate) : 18;
         const lineTaxable = round2(quantity * rate);
         const lineTax = round2((lineTaxable * gstRate) / 100);
-        const poItemId = (line.purchaseOrderItemId as string) || null;
         await itemRepo.save(
           itemRepo.create({
             tenantId, vendorBillId: bill.id, purchaseOrderItemId: poItemId,
@@ -120,11 +159,10 @@ export class VendorBillService {
         tax = round2(tax + lineTax);
 
         // Build a 3-way match input when we can tie the line to a PO line.
-        if (poItemId) {
-          const poItem = await poItemRepo.findOne({ where: { id: poItemId } });
+        if (poItem) {
           const grnItem = grnItems.find((g) => g.purchaseOrderItemId === poItemId);
-          const acceptedQty = grnItem ? num(grnItem.acceptedQuantity) : num(poItem?.receivedQuantity);
-          matchInputs.push({ billedQty: quantity, billedRate: rate, orderedRate: num(poItem?.rate), acceptedQty });
+          const acceptedQty = grnItem ? num(grnItem.acceptedQuantity) : num(poItem.receivedQuantity);
+          matchInputs.push({ billedQty: quantity, billedRate: rate, orderedRate: num(poItem.rate), acceptedQty });
         }
       }
 

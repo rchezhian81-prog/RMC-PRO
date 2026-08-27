@@ -141,6 +141,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/purchase/orders', label: 'Purchase Orders', icon: <ShoppingCart size={IS} />, perm: 'purchase.view', module: 'purchase' },
       { href: '/app/purchase/goods-receipts', label: 'Goods Receipts', icon: <PackagePlus size={IS} />, perm: 'purchase.view', module: 'purchase' },
       { href: '/app/purchase/bills', label: 'Vendor Bills', icon: <FileText size={IS} />, perm: 'purchase.view', module: 'purchase' },
+      { href: '/app/purchase/itc-register', label: 'ITC Register', icon: <Receipt size={IS} />, perm: 'purchase.view', module: 'purchase' },
     ],
   },
   {

@@ -845,6 +845,7 @@ export const purchaseApi = {
   cancelBill: (id: string) => post(`/vendor-bills/${id}/cancel`),
   payments: () => apiFetch<Row[]>('/vendor-payments'),
   createPayment: (b: Record<string, unknown>) => post('/vendor-payments', b),
+  itcRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/purchase-reports/itc-register${dateQs(from, to)}`),
 };
 
 // ---- Bulk import framework (Plan F1) ----

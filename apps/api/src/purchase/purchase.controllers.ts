@@ -90,3 +90,15 @@ export class VendorPaymentController {
   @Post() @RequirePermissions('vendor_payments.create')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto, u.userId); }
 }
+
+@Controller('purchase-reports')
+@RequireModule('purchase')
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+export class PurchaseReportsController {
+  constructor(private readonly bills: VendorBillService) {}
+
+  @Get('itc-register') @RequirePermissions('purchase.view')
+  itc(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.bills.itcRegister(tid(u), from, to);
+  }
+}

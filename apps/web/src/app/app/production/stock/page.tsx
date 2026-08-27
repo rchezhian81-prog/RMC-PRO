@@ -143,7 +143,7 @@ export default function StockPage() {
       </Card>
 
       <Card
-        title="Recent ledger"
+        title="Ledger — latest 200 (export for the full set)"
         padded={false}
         actions={
           <ExportButton
@@ -168,7 +168,7 @@ export default function StockPage() {
               </tr>
             </thead>
             <tbody>
-              {ledger.slice(0, 30).map((l) => (
+              {ledger.slice(0, 200).map((l) => (
                 <tr key={l.id}>
                   <Td>{String(l.createdAt ?? '').slice(0, 19).replace('T', ' ')}</Td>
                   <Td>{String(l.materialLabel ?? '')}</Td>

@@ -139,8 +139,12 @@ export class BillingReportsService {
     });
   }
 
-  receiptsRegister(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) => m.getRepository(Payment).find({ order: { createdAt: 'DESC' } }));
+  /** Receipts register, optionally bounded to [from, to] on the receipt date. */
+  receiptsRegister(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const all = await m.getRepository(Payment).find({ order: { createdAt: 'DESC' } });
+      return all.filter((p) => (!from || (p.receiptDate ?? '') >= from) && (!to || (p.receiptDate ?? '') <= to));
+    });
   }
 
   /**

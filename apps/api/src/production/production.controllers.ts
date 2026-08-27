@@ -175,7 +175,7 @@ export class StockController {
 export class ProductionReportsController {
   constructor(private readonly service: ProductionReportsService) {}
 
-  @Get('summary') summary(@CurrentUser() u: AuthUser) { return this.service.productionSummary(tid(u)); }
+  @Get('summary') summary(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.productionSummary(tid(u), from, to); }
   @Get('variance') variance(@CurrentUser() u: AuthUser) { return this.service.varianceReport(tid(u)); }
-  @Get('material-consumption') consumption(@CurrentUser() u: AuthUser) { return this.service.materialConsumption(tid(u)); }
+  @Get('material-consumption') consumption(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.materialConsumption(tid(u), from, to); }
 }

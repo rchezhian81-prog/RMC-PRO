@@ -50,19 +50,20 @@ export class InventoryReportsService {
     });
   }
 
-  /** Total in/out movement by material from the ledger. */
-  movement(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m
+  /** Total in/out movement by material from the ledger, optionally bounded to
+   *  [from, to] on the transaction date. */
+  movement(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, (m) => {
+      const qb = m
         .getRepository(StockTransaction)
         .createQueryBuilder('s')
         .select('COALESCE(s.material_label, :none)', 'material')
         .addSelect('COALESCE(SUM(s.in_quantity), 0)', 'totalIn')
         .addSelect('COALESCE(SUM(s.out_quantity), 0)', 'totalOut')
-        .setParameter('none', 'Unspecified')
-        .groupBy('s.material_label')
-        .orderBy('material', 'ASC')
-        .getRawMany(),
-    );
+        .setParameter('none', 'Unspecified');
+      if (from) qb.andWhere('s.created_at::date >= :from', { from });
+      if (to) qb.andWhere('s.created_at::date <= :to', { to });
+      return qb.groupBy('s.material_label').orderBy('material', 'ASC').getRawMany();
+    });
   }
 }

@@ -131,5 +131,5 @@ export class InventoryReportsController {
   @Get('low-stock') low(@CurrentUser() u: AuthUser) { return this.service.lowStock(tid(u)); }
   @Get('negative-stock') negative(@CurrentUser() u: AuthUser) { return this.service.negativeStock(tid(u)); }
   @Get('valuation') valuation(@CurrentUser() u: AuthUser) { return this.service.valuation(tid(u)); }
-  @Get('movement') movement(@CurrentUser() u: AuthUser) { return this.service.movement(tid(u)); }
+  @Get('movement') movement(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.movement(tid(u), from, to); }
 }

@@ -33,6 +33,7 @@ export class Site extends TenantScopedEntity {
   @Column({ name: 'address', type: 'varchar', nullable: true }) address!: string | null;
   @Column({ name: 'city', type: 'varchar', nullable: true }) city!: string | null;
   @Column({ name: 'state', type: 'varchar', nullable: true }) state!: string | null;
+  @Column({ name: 'pincode', type: 'varchar', length: 6, nullable: true }) pincode!: string | null;
   @Column({ name: 'contact_person', type: 'varchar', nullable: true }) contactPerson!: string | null;
   @Column({ name: 'mobile', type: 'varchar', nullable: true }) mobile!: string | null;
   @Column({ name: 'pump_required', type: 'boolean', default: false }) pumpRequired!: boolean;

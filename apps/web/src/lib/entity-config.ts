@@ -106,6 +106,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'address', label: 'Address' },
       { key: 'city', label: 'City' },
       { key: 'state', label: 'State' },
+      { key: 'pincode', label: 'PIN code' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
       { key: 'pumpRequired', label: 'Pump required', type: 'boolean', default: false },

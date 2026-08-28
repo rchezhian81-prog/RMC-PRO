@@ -11,6 +11,7 @@ import { Button } from '../../../../../components/ui/Button';
 import { Form } from '../../../../../components/ui/Form';
 import { Field, Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
+import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -31,6 +32,7 @@ function Num({ label, v, on }: { label: string; v: string; on: (v: string) => vo
 
 export default function RateContractDetail() {
   const { id } = useParams<{ id: string }>();
+  const { prompt } = useConfirm();
   const router = useRouter();
   const [rc, setRc] = useState<Row | null>(null);
   const [grades, setGrades] = useState<Row[]>([]);
@@ -119,7 +121,7 @@ export default function RateContractDetail() {
           {status === 'draft' && <Button onClick={() => run(() => rateContractsApi.submit(id), 'Submitted')}>Submit</Button>}
           {status === 'rejected' && <Button onClick={() => run(() => rateContractsApi.submit(id), 'Re-submitted')}>Re-submit</Button>}
           {status === 'submitted' && <Button onClick={() => run(() => rateContractsApi.approve(id), 'Approved')}>Approve</Button>}
-          {status === 'submitted' && <Button variant="secondary" onClick={() => run(() => rateContractsApi.reject(id, 'Not accepted'), 'Rejected')}>Reject</Button>}
+          {status === 'submitted' && <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'Reject rate contract', label: 'Rejection reason', defaultValue: '' }); if (reason !== null) await rateContractsApi.reject(id, reason || 'Not accepted'); }, 'Rate contract rejected')}>Reject</Button>}
         </div>
       </Card>
 

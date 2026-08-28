@@ -9,8 +9,10 @@ import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 export default function MixDesignsPage() {
+  const { confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [grades, setGrades] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
@@ -193,7 +195,7 @@ export default function MixDesignsPage() {
                   <Td numeric>{String(mm.tolerancePercentage)}</Td>
                   <Td style={{ textAlign: 'right' }}>
                     {!locked && (
-                      <Button variant="ghost" size="sm" onClick={() => run(async () => setSel(await mixDesignsApi.deleteMaterial(String(sel.id), String(mm.id))))}>
+                      <Button variant="ghost" size="sm" onClick={() => run(async () => { if (!(await confirm({ title: 'Remove material', message: `Remove ${String(mm.materialLabel ?? 'this material')} from the mix? It changes what can be batched.`, confirmLabel: 'Remove', danger: true }))) return; setSel(await mixDesignsApi.deleteMaterial(String(sel.id), String(mm.id))); })}>
                         Remove
                       </Button>
                     )}
@@ -241,7 +243,7 @@ export default function MixDesignsPage() {
               <Button onClick={() => run(async () => { setSel(await mixDesignsApi.approve(String(sel.id))); await reload(); }, 'Mix design approved')}>Approve</Button>
             )}
             {sel.approvalStatus === 'draft' && (
-              <Button variant="secondary" onClick={() => run(async () => { setSel(await mixDesignsApi.reject(String(sel.id))); await reload(); }, 'Mix design rejected')}>Reject</Button>
+              <Button variant="secondary" onClick={() => run(async () => { if (!(await confirm({ title: 'Reject mix design', message: 'Reject this mix design? It will not be usable for batching.', confirmLabel: 'Reject', danger: true }))) return; setSel(await mixDesignsApi.reject(String(sel.id))); await reload(); }, 'Mix design rejected')}>Reject</Button>
             )}
           </div>
         </Card>

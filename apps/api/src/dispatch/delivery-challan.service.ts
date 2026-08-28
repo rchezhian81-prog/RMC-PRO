@@ -74,6 +74,18 @@ export class DeliveryChallanService {
         throw badReq('A challan already exists for this dispatch');
       }
 
+      // Required slump defaults to the order line's spec (matched by grade) so
+      // it flows order → challan without re-keying; an explicit dto.slump wins.
+      let slump: string | null = (dto.slump as string) ?? null;
+      if (slump == null && dispatch.orderId) {
+        const line = await m.getRepository(OrderItem).findOne({
+          where: dispatch.gradeId
+            ? { orderId: dispatch.orderId, gradeId: dispatch.gradeId }
+            : { orderId: dispatch.orderId },
+        });
+        slump = line?.slumpRequired ?? null;
+      }
+
       const challanNo = await this.numbering.next(m, tenantId, 'delivery_challan', 'DC-');
       const repo = m.getRepository(DeliveryChallan);
       const challan = await repo.save(
@@ -83,7 +95,7 @@ export class DeliveryChallanService {
           customerId: dispatch.customerId, siteId: dispatch.siteId,
           vehicleId: dispatch.vehicleId, driverId: dispatch.driverId,
           gradeId: dispatch.gradeId, gradeLabel: dispatch.gradeLabel,
-          quantityM3: dispatch.quantityM3, slump: (dto.slump as string) ?? null,
+          quantityM3: dispatch.quantityM3, slump,
           dispatchTime: dispatch.dispatchTime ?? new Date(),
           invoiceStatus: 'not_invoiced', challanStatus: 'draft',
         }),

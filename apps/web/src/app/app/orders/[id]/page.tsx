@@ -52,6 +52,21 @@ export default function OrderDetail() {
     }
   }
 
+  // Required slump is the customer's workability spec for the pour; it flows
+  // onto the delivery challan. Kept as free text so a range (e.g. 100-120) or a
+  // single target both fit.
+  async function editSlump(it: Row) {
+    const v = await prompt({
+      title: 'Required slump',
+      message: `Grade ${String(it.gradeLabel ?? '')} — target workability, printed on the delivery challan.`,
+      label: 'Slump (mm)',
+      placeholder: 'e.g. 100 or 100-120',
+      defaultValue: it.slumpRequired ? String(it.slumpRequired) : '',
+    });
+    if (v === null) return;
+    await run(() => ordersApi.setLineSlump(id, String(it.id), v), 'Slump updated');
+  }
+
   async function addSlot(e: FormEvent) {
     e.preventDefault();
     await run(async () => {
@@ -147,6 +162,7 @@ export default function OrderDetail() {
               <Th numeric>Transport</Th>
               <Th numeric>Pump</Th>
               <Th numeric>Waiting</Th>
+              <Th>Slump</Th>
               <Th>Line</Th>
             </tr>
           </thead>
@@ -159,12 +175,17 @@ export default function OrderDetail() {
                 <Td numeric>{money(it.transportCharge)}</Td>
                 <Td numeric>{money(it.pumpCharge)}</Td>
                 <Td numeric>{money(it.waitingCharge)}</Td>
+                <Td>
+                  <Button variant="ghost" size="sm" onClick={() => editSlump(it)}>
+                    {it.slumpRequired ? `${String(it.slumpRequired)} mm` : 'Set'}
+                  </Button>
+                </Td>
                 <Td>{String(it.lineStatus ?? '')}</Td>
               </tr>
             ))}
             {!items.length && (
               <tr>
-                <Td colSpan={7} style={{ color: 'var(--mn-muted)' }}>No lines.</Td>
+                <Td colSpan={8} style={{ color: 'var(--mn-muted)' }}>No lines.</Td>
               </tr>
             )}
           </tbody>

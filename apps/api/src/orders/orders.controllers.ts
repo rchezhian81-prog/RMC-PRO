@@ -64,6 +64,12 @@ export class OrdersController {
   removePourSlot(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('slotId') slotId: string) {
     return this.service.removePourSlot(tid(u), id, slotId);
   }
+
+  @Post(':id/items/:itemId/slump')
+  @RequirePermissions('orders.create')
+  setLineSlump(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('itemId') itemId: string, @Body() dto: Record<string, unknown>) {
+    return this.service.setLineSlump(tid(u), id, itemId, dto.slump);
+  }
 }
 
 @Controller('credit-holds')

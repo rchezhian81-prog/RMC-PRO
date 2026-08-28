@@ -148,6 +148,23 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Set the required slump (workability) on an order line. It is the customer's
+   * spec for the pour and flows onto the delivery challan, so it stays editable
+   * on the line rather than being fixed only at quotation time. An empty value
+   * clears it.
+   */
+  setLineSlump(tenantId: string, orderId: string, itemId: string, slump: unknown) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(OrderItem);
+      const item = await repo.findOne({ where: { id: itemId, orderId } });
+      if (!item) throw notFound();
+      const value = slump == null ? '' : String(slump).trim();
+      await repo.update(itemId, { slumpRequired: value || null });
+      return this.loadFull(m, orderId);
+    });
+  }
+
   get(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
   }

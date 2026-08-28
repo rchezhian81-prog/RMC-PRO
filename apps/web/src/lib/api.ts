@@ -544,6 +544,7 @@ export const ordersApi = {
   addPourSlot: (id: string, b: Record<string, unknown>) => post(`/orders/${id}/pour-slots`, b),
   removePourSlot: (id: string, slotId: string) =>
     apiFetch<Row>(`/orders/${id}/pour-slots/${slotId}`, { method: 'DELETE' }),
+  setLineSlump: (id: string, itemId: string, slump: string) => post(`/orders/${id}/items/${itemId}/slump`, { slump }),
   orderBook: () => apiFetch<{ rows: Row[]; totals: Row }>('/orders/order-book'),
 };
 

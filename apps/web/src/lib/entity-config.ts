@@ -32,6 +32,23 @@ const MATERIAL_TYPE_LABELS: Record<string, string> = {
 const MATERIAL_TYPE_OPTIONS = MATERIAL_TYPES.map((t) => ({ value: t, label: MATERIAL_TYPE_LABELS[t] ?? t }));
 const UOM_CATEGORY_OPTIONS = UOM_CATEGORIES.map((c) => ({ value: c, label: titleCase(c) }));
 
+const CUSTOMER_TYPE_OPTIONS = [
+  { value: 'b2b', label: 'B2B (registered)' },
+  { value: 'b2c', label: 'B2C (unregistered)' },
+  { value: 'government', label: 'Government' },
+  { value: 'dealer', label: 'Dealer' },
+];
+const VEHICLE_TYPE_OPTIONS = [
+  { value: 'transit_mixer', label: 'Transit mixer' },
+  { value: 'concrete_pump', label: 'Concrete pump' },
+  { value: 'tipper', label: 'Tipper' },
+  { value: 'other', label: 'Other' },
+];
+const OWNERSHIP_OPTIONS = [
+  { value: 'own', label: 'Own' },
+  { value: 'hired', label: 'Hired' },
+];
+
 // The document types that actually own a number series (every value the server
 // allocates a series for, from the numbering call-sites). A dropdown of these
 // stops a typo creating an orphan series no document ever uses. value = the key
@@ -59,6 +76,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     fields: [
       { key: 'customerCode', label: 'Code', required: true },
       { key: 'customerName', label: 'Name', required: true },
+      { key: 'customerType', label: 'Customer type', options: CUSTOMER_TYPE_OPTIONS },
       { key: 'gstin', label: 'GSTIN' },
       { key: 'billingAddress', label: 'Billing address' },
       { key: 'city', label: 'City' },
@@ -153,10 +171,10 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     columns: ['vehicleNo', 'vehicleType', 'capacityM3', 'insuranceExpiry', 'fitnessExpiry', 'status'],
     fields: [
       { key: 'vehicleNo', label: 'Vehicle No', required: true },
-      { key: 'vehicleType', label: 'Type' },
+      { key: 'vehicleType', label: 'Type', options: VEHICLE_TYPE_OPTIONS },
       { key: 'driverId', label: 'Assigned driver', ref: { path: 'drivers', value: 'id', label: 'driverName' } },
       { key: 'capacityM3', label: 'Capacity (m³)', type: 'number' },
-      { key: 'ownershipType', label: 'Ownership' },
+      { key: 'ownershipType', label: 'Ownership', options: OWNERSHIP_OPTIONS },
       { key: 'insuranceExpiry', label: 'Insurance expiry', type: 'date' },
       { key: 'fitnessExpiry', label: 'Fitness (FC) expiry', type: 'date' },
       { key: 'permitExpiry', label: 'Permit expiry', type: 'date' },

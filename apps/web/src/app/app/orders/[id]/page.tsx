@@ -14,6 +14,7 @@ import { Loading, ErrorState } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const qty = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -153,7 +154,7 @@ export default function OrderDetail() {
             {items.map((it) => (
               <tr key={it.id}>
                 <Td>{String(it.gradeLabel ?? '')}</Td>
-                <Td numeric>{money(it.quantityM3)}</Td>
+                <Td numeric>{qty(it.quantityM3)}</Td>
                 <Td numeric>{money(it.ratePerM3)}</Td>
                 <Td numeric>{money(it.transportCharge)}</Td>
                 <Td numeric>{money(it.pumpCharge)}</Td>

@@ -7,12 +7,15 @@ import { Table, Th, Td } from '../../../../components/ui/Table';
 import { Button } from '../../../../components/ui/Button';
 import { Form } from '../../../../components/ui/Form';
 import { Field, Input } from '../../../../components/ui/Field';
+import { ExportButton } from '../../../../components/ExportButton';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const when = (v: unknown) => { try { return new Date(v as string).toLocaleString('en-IN'); } catch { return String(v ?? ''); } };
 
 export default function StockAdjustmentsPage() {
   const [balances, setBalances] = useState<Row[]>([]);
+  const [history, setHistory] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
   const [form, setForm] = useState({ plantId: '', materialId: '', quantity: '', direction: 'increase', reason: '' });
@@ -21,8 +24,9 @@ export default function StockAdjustmentsPage() {
   const [loaded, setLoaded] = useState(false);
 
   async function reload() {
-    const [b, m, p] = await Promise.all([stockApi.balances(), crud('materials').list(), crud('plants').list()]);
+    const [b, h, m, p] = await Promise.all([stockApi.balances(), stockAdjustApi.list(), crud('materials').list(), crud('plants').list()]);
     setBalances(b);
+    setHistory(h);
     setMaterials(m);
     setPlants(p);
   }
@@ -145,6 +149,50 @@ export default function StockAdjustmentsPage() {
           <EmptyState title="No stock yet" />
         )}
       </Card>
+
+      <div style={{ marginTop: 18 }}>
+        <Card
+          title="Adjustment history"
+          padded={false}
+          actions={<ExportButton rows={history} columns={['createdAt', 'materialLabel', 'inQuantity', 'outQuantity', 'balanceAfter', 'remarks']} filename="stock-adjustments" />}
+        >
+          {!loaded ? (
+            <TableSkeleton cols={5} />
+          ) : history.length ? (
+            <div style={{ overflowX: 'auto' }}>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>When</Th>
+                    <Th>Material</Th>
+                    <Th numeric>Change</Th>
+                    <Th numeric>Balance after</Th>
+                    <Th>Reason</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((r) => {
+                    const inc = Number(r.inQuantity) > 0;
+                    return (
+                      <tr key={r.id}>
+                        <Td>{when(r.createdAt)}</Td>
+                        <Td>{String(r.materialLabel ?? '')}</Td>
+                        <Td numeric style={{ color: inc ? 'var(--mn-success)' : 'var(--mn-danger)', fontWeight: 600 }}>
+                          {inc ? `+${money(r.inQuantity)}` : `−${money(r.outQuantity)}`}
+                        </Td>
+                        <Td numeric>{money(r.balanceAfter)}</Td>
+                        <Td>{r.remarks ? String(r.remarks) : <span style={{ color: 'var(--mn-muted)' }}>—</span>}</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyState title="No adjustments yet" description="Applied stock adjustments will appear here, newest first." />
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

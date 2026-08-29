@@ -716,7 +716,13 @@ export const weighbridgeIndicatorApi = {
 };
 
 export const stockAdjustApi = {
+  list: () => apiFetch<Row[]>('/stock-adjustments'),
   adjust: (b: Record<string, unknown>) => post('/stock-adjustments', b),
+};
+
+// ---- Notification / WhatsApp send log ----
+export const notificationsApi = {
+  history: () => apiFetch<Row[]>('/notifications'),
 };
 
 export const negativeStockApi = {

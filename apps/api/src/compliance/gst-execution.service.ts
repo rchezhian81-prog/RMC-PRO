@@ -21,6 +21,7 @@ import {
 import {
   buildEwbRequest,
   buildIrnRequest,
+  gstStateCode,
   stateCodeOf,
   validateEwbPreflight,
   validateIrnPreflight,
@@ -316,11 +317,15 @@ export class GstExecutionService {
     const buyer: BuyerParty = {
       gstin: buyerGstin,
       legalName: customer?.name ?? '(buyer)',
-      posStateCode: inv.placeOfSupply ?? (buyerGstin ? stateCodeOf(buyerGstin) : ''),
+      // Place of supply is stored as the state NAME; the portal needs the
+      // numeric code, so resolve name → code (GSTIN as fallback).
+      posStateCode: gstStateCode(inv.placeOfSupply, buyerGstin),
       address1: customer?.addr ?? '',
       location: customer?.city ?? '',
       pincode: customer?.pincode ?? '', // buyer PIN → BuyerDtls.Pin / e-way toPincode (dropped if absent/invalid)
-      stateCode: buyerGstin ? stateCodeOf(buyerGstin) : inv.placeOfSupply ?? '',
+      // Buyer's registration state: the GSTIN's code for B2B, else the
+      // place-of-supply state resolved to its numeric code.
+      stateCode: buyerGstin ? stateCodeOf(buyerGstin) : gstStateCode(inv.placeOfSupply),
     };
 
     const header: InvoiceHeader = {

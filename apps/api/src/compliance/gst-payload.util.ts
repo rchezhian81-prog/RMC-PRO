@@ -96,6 +96,82 @@ export function isGstin(g: string | null | undefined): boolean {
 export function stateCodeOf(gstin: string): string {
   return gstin.slice(0, 2);
 }
+
+/**
+ * GST state/UT name → 2-digit state code (the numeric code the portal uses).
+ * Keys are normalised (lower-cased, '&'→'and', collapsed spaces). Common
+ * aliases and pre-2020 spellings are included so a state saved as "Orissa" or
+ * "Pondicherry" still resolves.
+ */
+const GST_STATE_CODES: Record<string, string> = {
+  'jammu and kashmir': '01',
+  'himachal pradesh': '02',
+  punjab: '03',
+  chandigarh: '04',
+  uttarakhand: '05',
+  uttaranchal: '05',
+  haryana: '06',
+  delhi: '07',
+  'new delhi': '07',
+  'nct of delhi': '07',
+  rajasthan: '08',
+  'uttar pradesh': '09',
+  bihar: '10',
+  sikkim: '11',
+  'arunachal pradesh': '12',
+  nagaland: '13',
+  manipur: '14',
+  mizoram: '15',
+  tripura: '16',
+  meghalaya: '17',
+  assam: '18',
+  'west bengal': '19',
+  jharkhand: '20',
+  odisha: '21',
+  orissa: '21',
+  chhattisgarh: '22',
+  chattisgarh: '22',
+  'madhya pradesh': '23',
+  gujarat: '24',
+  'daman and diu': '26',
+  'dadra and nagar haveli': '26',
+  'dadra and nagar haveli and daman and diu': '26',
+  maharashtra: '27',
+  karnataka: '29',
+  goa: '30',
+  lakshadweep: '31',
+  kerala: '32',
+  'tamil nadu': '33',
+  tamilnadu: '33',
+  puducherry: '34',
+  pondicherry: '34',
+  'andaman and nicobar islands': '35',
+  'andaman and nicobar': '35',
+  telangana: '36',
+  'andhra pradesh': '37',
+  ladakh: '38',
+  'other territory': '97',
+};
+
+const normaliseStateKey = (s: string): string =>
+  s.trim().toLowerCase().replace(/&/g, 'and').replace(/\s+/g, ' ');
+
+/**
+ * Resolve the 2-digit GST state code for an invoice's place of supply. The
+ * portal's Pos / state-code fields require the numeric code (e.g. '33'), but
+ * invoices store the place of supply as the customer's state NAME. Resolution
+ * order: an already-numeric 2-digit value is kept as-is; a known state name is
+ * mapped; otherwise a valid GSTIN's own state code is used; else '' (the
+ * payload validator then flags the missing POS rather than sending a bad one).
+ */
+export function gstStateCode(placeOfSupply?: string | null, gstin?: string | null): string {
+  const v = (placeOfSupply ?? '').trim();
+  if (/^\d{2}$/.test(v)) return v;
+  const named = GST_STATE_CODES[normaliseStateKey(v)];
+  if (named) return named;
+  if (isGstin(gstin)) return stateCodeOf(gstin as string);
+  return '';
+}
 const HSN_RE = /^\d{4,8}$/; // HSN/SAC: 4–8 digits (6 required at higher AATO)
 const VEHICLE_RE = /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$/i;
 

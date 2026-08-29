@@ -38,12 +38,23 @@ export default function RateContractDetail() {
   const [grades, setGrades] = useState<Row[]>([]);
   const [item, setItem] = useState({ gradeId: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '' });
   const [qty, setQty] = useState<Record<string, string>>({});
+  const [hdr, setHdr] = useState({ validFrom: '', validTo: '', paymentTerms: '', transportTerms: '', pumpTerms: '', remarks: '' });
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [itemEdit, setItemEdit] = useState({ ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [full, g] = await Promise.all([rateContractsApi.get(id), crud('concrete-grades').list()]);
     setRc(full);
+    setHdr({
+      validFrom: String(full.validFrom ?? ''),
+      validTo: String(full.validTo ?? ''),
+      paymentTerms: String(full.paymentTerms ?? ''),
+      transportTerms: String(full.transportTerms ?? ''),
+      pumpTerms: String(full.pumpTerms ?? ''),
+      remarks: String(full.remarks ?? ''),
+    });
     setGrades(g);
   }, [id]);
 
@@ -77,6 +88,39 @@ export default function RateContractDetail() {
       });
       setItem({ gradeId: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '' });
     });
+  }
+
+  async function saveHeader() {
+    await run(() => rateContractsApi.update(id, {
+      validFrom: hdr.validFrom || null,
+      validTo: hdr.validTo || null,
+      paymentTerms: hdr.paymentTerms,
+      transportTerms: hdr.transportTerms,
+      pumpTerms: hdr.pumpTerms,
+      remarks: hdr.remarks,
+    }), 'Contract details saved');
+  }
+
+  function startEditItem(it: Row) {
+    setEditingItem(String(it.id));
+    setItemEdit({
+      ratePerM3: String(it.ratePerM3 ?? ''),
+      transportCharge: String(it.transportCharge ?? ''),
+      pumpCharge: String(it.pumpCharge ?? ''),
+      waitingCharge: String(it.waitingCharge ?? ''),
+    });
+  }
+
+  async function saveEditItem(itemId: string) {
+    await run(async () => {
+      await rateContractsApi.updateItem(id, itemId, {
+        ratePerM3: Number(itemEdit.ratePerM3 || 0),
+        transportCharge: Number(itemEdit.transportCharge || 0),
+        pumpCharge: Number(itemEdit.pumpCharge || 0),
+        waitingCharge: Number(itemEdit.waitingCharge || 0),
+      });
+      setEditingItem(null);
+    }, 'Rate updated');
   }
 
   async function convert() {
@@ -125,6 +169,31 @@ export default function RateContractDetail() {
         </div>
       </Card>
 
+      <Card title="Contract details">
+        {locked ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, fontSize: 13 }}>
+            <div><span style={{ color: 'var(--mn-muted)' }}>Valid from</span><br />{String(rc.validFrom ?? '—')}</div>
+            <div><span style={{ color: 'var(--mn-muted)' }}>Valid to</span><br />{String(rc.validTo ?? '—')}</div>
+            <div><span style={{ color: 'var(--mn-muted)' }}>Payment terms</span><br />{String(rc.paymentTerms ?? '—')}</div>
+            <div><span style={{ color: 'var(--mn-muted)' }}>Transport terms</span><br />{String(rc.transportTerms ?? '—')}</div>
+            <div><span style={{ color: 'var(--mn-muted)' }}>Pump terms</span><br />{String(rc.pumpTerms ?? '—')}</div>
+            <div><span style={{ color: 'var(--mn-muted)' }}>Remarks</span><br />{String(rc.remarks ?? '—')}</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+              <div style={{ minWidth: 150 }}><Field label="Valid from"><Input type="date" value={hdr.validFrom} onChange={(e) => setHdr({ ...hdr, validFrom: e.target.value })} /></Field></div>
+              <div style={{ minWidth: 150 }}><Field label="Valid to"><Input type="date" value={hdr.validTo} onChange={(e) => setHdr({ ...hdr, validTo: e.target.value })} /></Field></div>
+              <div style={{ minWidth: 160 }}><Field label="Payment terms"><Input value={hdr.paymentTerms} onChange={(e) => setHdr({ ...hdr, paymentTerms: e.target.value })} /></Field></div>
+              <div style={{ minWidth: 160 }}><Field label="Transport terms"><Input value={hdr.transportTerms} onChange={(e) => setHdr({ ...hdr, transportTerms: e.target.value })} /></Field></div>
+              <div style={{ minWidth: 160 }}><Field label="Pump terms"><Input value={hdr.pumpTerms} onChange={(e) => setHdr({ ...hdr, pumpTerms: e.target.value })} /></Field></div>
+              <div style={{ minWidth: 200, flex: 1 }}><Field label="Remarks"><Input value={hdr.remarks} onChange={(e) => setHdr({ ...hdr, remarks: e.target.value })} /></Field></div>
+            </div>
+            <div><Button variant="secondary" onClick={saveHeader}>Save details</Button></div>
+          </div>
+        )}
+      </Card>
+
       <Card title="Grade-wise agreed rates" padded={false}>
         <Table>
           <thead>
@@ -139,23 +208,44 @@ export default function RateContractDetail() {
             </tr>
           </thead>
           <tbody>
-            {items.map((it) => (
-              <tr key={it.id}>
-                <Td>{String(it.gradeLabel ?? '')}</Td>
-                <Td numeric>{money(it.ratePerM3)}</Td>
-                <Td numeric>{money(it.transportCharge)}</Td>
-                <Td numeric>{money(it.pumpCharge)}</Td>
-                <Td numeric>{money(it.waitingCharge)}</Td>
-                {locked && (
+            {items.map((it) => {
+              const editing = editingItem === String(it.id);
+              const cell = (k: 'ratePerM3' | 'transportCharge' | 'pumpCharge' | 'waitingCharge') =>
+                editing ? (
                   <Td numeric>
-                    <Input type="number" step="any" style={{ width: 90, textAlign: 'right' }} value={qty[String(it.id)] ?? ''} onChange={(e) => setQty({ ...qty, [String(it.id)]: e.target.value })} />
+                    <Input type="number" step="any" style={{ width: 90, textAlign: 'right' }} value={itemEdit[k]} onChange={(e) => setItemEdit({ ...itemEdit, [k]: e.target.value })} />
                   </Td>
-                )}
-                <Td style={{ textAlign: 'right' }}>
-                  {!locked && <Button variant="ghost" size="sm" onClick={() => run(() => rateContractsApi.deleteItem(id, String(it.id)))}>Remove</Button>}
-                </Td>
-              </tr>
-            ))}
+                ) : (
+                  <Td numeric>{money(it[k])}</Td>
+                );
+              return (
+                <tr key={it.id}>
+                  <Td>{String(it.gradeLabel ?? '')}</Td>
+                  {cell('ratePerM3')}
+                  {cell('transportCharge')}
+                  {cell('pumpCharge')}
+                  {cell('waitingCharge')}
+                  {locked && (
+                    <Td numeric>
+                      <Input type="number" step="any" style={{ width: 90, textAlign: 'right' }} value={qty[String(it.id)] ?? ''} onChange={(e) => setQty({ ...qty, [String(it.id)]: e.target.value })} />
+                    </Td>
+                  )}
+                  <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {!locked && (editing ? (
+                      <>
+                        <Button variant="secondary" size="sm" onClick={() => saveEditItem(String(it.id))}>Save</Button>{' '}
+                        <Button variant="ghost" size="sm" onClick={() => setEditingItem(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => startEditItem(it)}>Edit</Button>{' '}
+                        <Button variant="ghost" size="sm" onClick={() => run(() => rateContractsApi.deleteItem(id, String(it.id)))}>Remove</Button>
+                      </>
+                    ))}
+                  </Td>
+                </tr>
+              );
+            })}
             {!items.length && (
               <tr>
                 <Td colSpan={locked ? 7 : 6} style={{ color: 'var(--mn-muted)' }}>No items yet.</Td>

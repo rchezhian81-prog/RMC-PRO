@@ -9,6 +9,7 @@ import {
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { recordDeliveryHistory } from './delivery-history.util';
+import { buildCycleTimes } from './dispatch-cycle.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Dispatch not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -44,6 +45,28 @@ export class DispatchService {
         order: { createdAt: 'DESC' },
       }),
     );
+  }
+
+  /**
+   * Delivery cycle-time report — travel / on-site wait / pour / turnaround from
+   * the timestamps each completed dispatch stamps, over [from, to] on the
+   * dispatch date. RLS scopes it to the tenant.
+   */
+  cycleTimeReport(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.query(
+        `SELECT dispatch_no AS "dispatchNo", grade_label AS "gradeLabel",
+                dispatch_time AS "dispatchTime", site_arrival_time AS "siteArrivalTime",
+                pour_start_time AS "pourStartTime", pour_end_time AS "pourEndTime"
+           FROM dispatches
+          WHERE dispatch_status = 'completed'
+            AND ($1::date IS NULL OR COALESCE(dispatch_time, created_at)::date >= $1::date)
+            AND ($2::date IS NULL OR COALESCE(dispatch_time, created_at)::date <= $2::date)
+          ORDER BY COALESCE(dispatch_time, created_at) DESC`,
+        [from ?? null, to ?? null],
+      );
+      return buildCycleTimes(rows);
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

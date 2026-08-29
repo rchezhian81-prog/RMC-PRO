@@ -643,6 +643,8 @@ export const dispatchApi = {
   get: (id: string) => apiFetch<Row>(`/dispatches/${id}`),
   createFromBatch: (batchTicketId: string, b: Record<string, unknown>) => post(`/dispatches/from-batch-ticket/${batchTicketId}`, b),
   setStatus: (id: string, status: string, extra: Record<string, unknown> = {}) => post(`/dispatches/${id}/status`, { status, ...extra }),
+  cycleTimes: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; averages: Row; count: number }>(`/dispatches/report/cycle-times${dateQs(from, to)}`),
 };
 
 export const challansApi = {

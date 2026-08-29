@@ -17,7 +17,7 @@ export default function MixDesignsPage() {
   const [grades, setGrades] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
-  const [form, setForm] = useState({ mixCode: '', gradeId: '', slumpMin: '', slumpMax: '', cementType: '' });
+  const [form, setForm] = useState({ mixCode: '', gradeId: '', slumpMin: '', slumpMax: '', cementType: '', waterCementRatio: '', pumpable: false });
   const [mat, setMat] = useState({ materialId: '', targetQuantity: '', tolerancePercentage: '2' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -56,9 +56,11 @@ export default function MixDesignsPage() {
         slumpMin: form.slumpMin || undefined,
         slumpMax: form.slumpMax || undefined,
         cementType: form.cementType || undefined,
+        waterCementRatio: form.waterCementRatio ? Number(form.waterCementRatio) : undefined,
+        pumpable: form.pumpable,
         gradeLabel: g ? String(g.gradeCode) : undefined,
       });
-      setForm({ mixCode: '', gradeId: '', slumpMin: '', slumpMax: '', cementType: '' });
+      setForm({ mixCode: '', gradeId: '', slumpMin: '', slumpMax: '', cementType: '', waterCementRatio: '', pumpable: false });
       await reload();
       setSel(await mixDesignsApi.get(String(created.id)));
     });
@@ -135,6 +137,15 @@ export default function MixDesignsPage() {
               <Input value={form.cementType} onChange={(e) => setForm({ ...form, cementType: e.target.value })} />
             </Field>
           </div>
+          <div style={{ minWidth: 110 }}>
+            <Field label="W/C ratio">
+              <Input type="number" step="any" value={form.waterCementRatio} onChange={(e) => setForm({ ...form, waterCementRatio: e.target.value })} placeholder="e.g. 0.45" />
+            </Field>
+          </div>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, marginBottom: 14, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.pumpable} onChange={(e) => setForm({ ...form, pumpable: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--mn-primary)' }} />
+            <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>Pumpable</span>
+          </label>
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Create</Button>
           </div>
@@ -176,6 +187,12 @@ export default function MixDesignsPage() {
 
       {sel && (
         <Card title={`${String(sel.mixCode)} — materials`} actions={<StatusBadge status={String(sel.approvalStatus)} />}>
+          <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px' }}>
+            Cement: {String(sel.cementType ?? '—')}
+            {' · '}W/C ratio: {sel.waterCementRatio != null && sel.waterCementRatio !== '' ? String(sel.waterCementRatio) : '—'}
+            {' · '}Slump: {sel.slumpMin != null || sel.slumpMax != null ? `${String(sel.slumpMin ?? '?')}–${String(sel.slumpMax ?? '?')} mm` : '—'}
+            {' · '}{sel.pumpable ? 'Pumpable' : 'Not pumpable'}
+          </p>
           <Table>
             <thead>
               <tr>

@@ -22,6 +22,12 @@ import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy }
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
+/** Add whole days to a 'yyyy-mm-dd' date, returning the same format (UTC). */
+const addDays = (iso: string, days: number): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
 /** e-way transport modes NIC accepts (mapped to codes in the payload builder). */
 const TRANSPORT_MODES = new Set(['road', 'rail', 'air', 'ship']);
@@ -126,13 +132,27 @@ export class InvoiceService {
       // mis-classified as inter-state (wrong CGST/SGST-vs-IGST heads + portal reject).
       const isInterstate = isInterstateSupply(company?.state, customer.state);
 
+      // Due date defaults to invoiceDate + the customer's credit days (falling
+      // back to the tenant default_credit_days setting), so aging and overdue
+      // alerts key off the agreed terms instead of a hand-typed date.
+      const invoiceDate = (dto.invoiceDate as string) || new Date().toISOString().slice(0, 10);
+      let dueDate = (dto.dueDate as string) || null;
+      if (!dueDate) {
+        let days = num(customer.creditDays);
+        if (days <= 0) {
+          const [s] = await m.query(`SELECT value FROM tenant_settings WHERE key = 'default_credit_days'`);
+          days = num(s?.value);
+        }
+        if (days > 0) dueDate = addDays(invoiceDate, days);
+      }
+
       const invoiceNo = await this.numbering.next(m, tenantId, 'invoice', 'INV-');
       const invoiceRepo = m.getRepository(Invoice);
       const invoice = await invoiceRepo.save(
         invoiceRepo.create({
           tenantId, invoiceNo,
-          invoiceDate: (dto.invoiceDate as string) ?? null,
-          dueDate: (dto.dueDate as string) ?? null,
+          invoiceDate,
+          dueDate,
           customerId, siteId: (dto.siteId as string) ?? null,
           billingAddress: customer.billingAddress, placeOfSupply: customer.state, gstin: customer.gstin,
           isInterstate, invoiceStatus: 'draft', paymentStatus: 'unpaid',

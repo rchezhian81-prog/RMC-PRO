@@ -83,8 +83,14 @@ export class CreditHoldService {
         });
         await recordHistory(m, tenantId, order.id, 'credit_hold', 'confirmed', 'credit_approve', userId, note ?? 'Credit hold approved');
       } else {
-        await orderRepo.update(order.id, { creditStatus: 'rejected' });
-        await recordHistory(m, tenantId, order.id, 'credit_hold', 'credit_hold', 'credit_reject', userId, note ?? 'Credit hold rejected');
+        // Return the order to draft rather than stranding it in credit_hold:
+        // rejecting the hold declines credit for now, but the order must stay
+        // recoverable — the operator can revise it (or the customer can clear
+        // their dues) and re-confirm, which re-runs the credit gate. Leaving it
+        // in credit_hold made confirm() throw and the hold un-decidable, so the
+        // order could only be cancelled.
+        await orderRepo.update(order.id, { orderStatus: 'draft', creditStatus: 'rejected' });
+        await recordHistory(m, tenantId, order.id, 'credit_hold', 'draft', 'credit_reject', userId, note ?? 'Credit hold rejected — order returned to draft');
       }
 
       return {

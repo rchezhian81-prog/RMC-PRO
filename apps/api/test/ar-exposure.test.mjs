@@ -155,6 +155,23 @@ async function deliverAndIssue({ customer }, order, qty = QTY, rate = RATE) {
   return { invoice, total };
 }
 
+/** Produce one DELIVERED challan of `qty` m³ against a confirmed order (each
+ *  call enqueues a fresh load), without invoicing — used to build a single
+ *  invoice from several challans of the same order. */
+async function deliverOneChallan(order, qty) {
+  const queue = await api('POST', `/batch-queue/from-order/${order.id}`);
+  const queueId = (Array.isArray(queue) ? queue[0] : queue)?.id;
+  let ticket = await api('POST', `/batch-tickets/from-queue/${queueId}`, { batchQuantityM3: qty, mixDesignId: mix.id });
+  ticket = await api('POST', `/batch-tickets/${ticket.id}/confirm`, {});
+  const dispatch = await api('POST', `/dispatches/from-batch-ticket/${ticket.id}`, {
+    ...(vehicle ? { vehicleId: vehicle.id } : {}), ...(driver ? { driverId: driver.id } : {}),
+  });
+  let challan = await api('POST', `/delivery-challans/from-dispatch/${dispatch.id}`, { slump: '100' });
+  await api('POST', `/delivery-challans/${challan.id}/issue`);
+  challan = await api('POST', `/delivery-challans/${challan.id}/deliver`, { receiverName: 'Site Engineer', returnQuantityM3: 0 });
+  return challan;
+}
+
 const exposureOf = (customerId) => api('GET', `/customers/${customerId}/exposure`);
 const creditCheck = (orderId) => api('GET', `/orders/${orderId}/credit-check`);
 
@@ -308,6 +325,38 @@ await scenario('T10 legacy customer computes a finite exposure', async () => {
 });
 
 // ---- report ------------------------------------------------------------------
+// T11 — a single invoice raised from SEVERAL challans of one order must reduce
+// that order's un-invoiced value by ONE invoice total, not once per challan.
+// Guards the exposure fan-out bug: SUM(invoice.total) over the invoice→challan
+// join multiplied billed by the challan count and under-counted exposure.
+await scenario('T11 multi-challan invoice bills once, not per challan (fan-out guard)', async () => {
+  const fx = await freshCustomer(0, 0); // no limit → confirm never holds
+  const order = await confirmReleased((await makeDraftOrder(fx, QTY, RATE)).id); // order for QTY (INCL_VAL)
+  const orderValIncl = Number(order.estimatedOrderValueInclGst || 0);
+  must(near(orderValIncl, INCL_VAL), `order incl value should be ${INCL_VAL}, got ${orderValIncl}`);
+
+  // Partial delivery: two small challans (2 m³ each) invoiced on ONE invoice.
+  const c1 = await deliverOneChallan(order, 2);
+  const c2 = await deliverOneChallan(order, 2);
+  let inv = await api('POST', '/invoices/from-challans', {
+    customerId: fx.customer.id, invoiceDate: TODAY, dueDate: plusDays(30),
+    lines: [
+      { challanId: c1.id, rate: RATE, gstRate: GST, hsnSac: '3824', uom: 'm3' },
+      { challanId: c2.id, rate: RATE, gstRate: GST, hsnSac: '3824', uom: 'm3' },
+    ],
+  });
+  const invTotal = Number(inv.totalAmount || 0); // ~23600 (4 m³ incl-GST)
+  inv = await api('POST', `/invoices/${inv.id}/issue`);
+
+  const exp = await exposureOf(fx.customer.id);
+  // Correct: order reduced by ONE invoice total. Fan-out bug would give
+  // orderValIncl − 2×invTotal (= 0 here) and under-count exposure.
+  must(near(exp.unInvoicedOrderValue, orderValIncl - invTotal),
+    `un-invoiced should be ${orderValIncl - invTotal} (order − one invoice), got ${exp.unInvoicedOrderValue}`);
+  must(near(exp.invoiceOutstanding, invTotal), `invoice outstanding should be ${invTotal}, got ${exp.invoiceOutstanding}`);
+  must(near(exp.exposure, orderValIncl), `total exposure should stay ${orderValIncl}, got ${exp.exposure}`);
+});
+
 console.log(results.join('\n'));
 if (failures.length) {
   console.error(`\nAR-EXPOSURE: ${results.length - failures.length}/${results.length} passed — RED (${failures.length} awaiting the core): ${failures.join(', ')}`);

@@ -517,7 +517,11 @@ export const rateContractsApi = {
   list: () => apiFetch<Row[]>('/rate-contracts'),
   get: (id: string) => apiFetch<Row>(`/rate-contracts/${id}`),
   create: (b: Record<string, unknown>) => post('/rate-contracts', b),
+  update: (id: string, b: Record<string, unknown>) =>
+    apiFetch<Row>(`/rate-contracts/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   addItem: (id: string, b: Record<string, unknown>) => post(`/rate-contracts/${id}/items`, b),
+  updateItem: (id: string, itemId: string, b: Record<string, unknown>) =>
+    apiFetch<Row>(`/rate-contracts/${id}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteItem: (id: string, itemId: string) =>
     apiFetch<Row>(`/rate-contracts/${id}/items/${itemId}`, { method: 'DELETE' }),
   submit: (id: string) => post(`/rate-contracts/${id}/submit`),

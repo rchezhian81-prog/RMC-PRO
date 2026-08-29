@@ -8,6 +8,10 @@ import { NumberingService } from './numbering.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
+/** Reject a validity window whose end precedes its start (ISO dates compare lexically). */
+const assertWindow = (from: unknown, to: unknown): void => {
+  if (from && to && String(to) < String(from)) throw badReq('Valid-to date cannot be before valid-from');
+};
 
 const ITEM_FIELDS = [
   'gradeId',
@@ -61,6 +65,7 @@ export class RateContractsService {
       const rateContractNo = await this.numbering.next(m, tenantId, 'rate_contract', 'RC-');
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items']) delete rest[k];
+      assertWindow(rest.validFrom, rest.validTo);
       const contract = await repo.save(
         repo.create({
           ...rest,
@@ -91,6 +96,7 @@ export class RateContractsService {
       }
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items']) delete rest[k];
+      assertWindow(rest.validFrom ?? contract.validFrom, rest.validTo ?? contract.validTo);
       await repo.update(id, rest as Record<string, unknown>);
       return this.loadFull(m, id);
     });

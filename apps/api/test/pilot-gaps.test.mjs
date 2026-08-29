@@ -147,6 +147,27 @@ const assess4 = await api('GET', `/orders/${o4.id}/credit-check`);
 ok('rate-contract credit requested amount is GST-inclusive', near(assess4.requestedAmount, 59000));
 ok('rate-contract credit requested amount is NOT the ex-GST value', Number(assess4.requestedAmount) > 50000);
 
+// ---- A7: rate-contract conversion guards ----
+let rcUnmatched = false;
+try { await api('POST', `/order-drafts/from-rate-contract/${rc.id}`, { plantId: plant.id, orderDate: TODAY, lines: [{ gradeLabel: 'ZZ-NO-SUCH-GRADE', quantityM3: 5 }] }); } catch { rcUnmatched = true; }
+ok('rate-contract conversion rejects a grade not in the contract (no first-line fallback)', rcUnmatched);
+
+let rcZeroQty = false;
+try { await api('POST', `/order-drafts/from-rate-contract/${rc.id}`, { plantId: plant.id, orderDate: TODAY, lines: [{ gradeId: grade.id, quantityM3: 0 }] }); } catch { rcZeroQty = true; }
+ok('rate-contract conversion rejects a zero/negative quantity', rcZeroQty);
+
+let rcBadWindow = false;
+try { await api('POST', '/rate-contracts', { customerId: customer.id, siteId: site?.id, validFrom: TODAY, validTo: '2000-01-01', items: [{ gradeId: grade.id, gradeLabel: gl, ratePerM3: 5000, gstRate: '18' }] }); } catch { rcBadWindow = true; }
+ok('rate-contract create rejects valid-to before valid-from', rcBadWindow);
+
+const YESTERDAY = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+const rcExpired = await api('POST', '/rate-contracts', { customerId: customer.id, siteId: site?.id, validFrom: '2000-01-01', validTo: YESTERDAY, items: [{ gradeId: grade.id, gradeLabel: gl, ratePerM3: 5000, gstRate: '18' }] });
+await api('POST', `/rate-contracts/${rcExpired.id}/submit`);
+await api('POST', `/rate-contracts/${rcExpired.id}/approve`);
+let rcExpiredBlocked = false;
+try { await api('POST', `/order-drafts/from-rate-contract/${rcExpired.id}`, { plantId: plant.id, orderDate: TODAY, lines: [{ gradeId: grade.id, quantityM3: 5 }] }); } catch { rcExpiredBlocked = true; }
+ok('an expired rate contract cannot be converted', rcExpiredBlocked);
+
 // ---- BUG 4: list responses carry the customer name (server join, no client-side lookup) ----
 const ordersList = await api('GET', '/orders');
 const o1row = (Array.isArray(ordersList) ? ordersList : []).find((r) => String(r.id) === String(o1.id));

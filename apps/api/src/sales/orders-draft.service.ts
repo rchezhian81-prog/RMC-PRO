@@ -166,6 +166,15 @@ export class OrdersDraftService {
       if (contract.approvalStatus !== 'approved') {
         throw badReq('Only an approved rate contract can be converted to an order draft');
       }
+      // Enforce the contract's validity window (when set) so an expired or
+      // not-yet-effective contract can't be converted at stale rates.
+      const asOf = (dto.orderDate as string) || new Date().toISOString().slice(0, 10);
+      if (contract.validFrom && asOf < contract.validFrom) {
+        throw badReq(`Rate contract is not yet effective (valid from ${contract.validFrom})`);
+      }
+      if (contract.validTo && asOf > contract.validTo) {
+        throw badReq(`Rate contract expired on ${contract.validTo}`);
+      }
       const contractItems = await m
         .getRepository(RateContractItem)
         .find({ where: { rateContractId }, order: { createdAt: 'ASC' } });
@@ -197,12 +206,15 @@ export class OrdersDraftService {
       let total = 0;
       const gstLines: QuoteLine[] = [];
       for (const line of lines) {
+        // Match the line to a contract item by grade. NEVER fall back to the
+        // first item — that would price a line at another grade's rate. An
+        // unmatched grade is an error the caller must fix.
         const match =
           contractItems.find((c) => line.gradeId && c.gradeId === line.gradeId) ??
-          contractItems.find((c) => line.gradeLabel && c.gradeLabel === line.gradeLabel) ??
-          contractItems[0];
-        if (!match) throw badReq('No matching rate contract item for line');
+          contractItems.find((c) => line.gradeLabel && c.gradeLabel === line.gradeLabel);
+        if (!match) throw badReq(`No rate contract item matches grade ${String(line.gradeLabel ?? line.gradeId ?? '(unspecified)')}`);
         const qty = num(line.quantityM3);
+        if (qty <= 0) throw badReq('Each line quantity (m³) must be greater than zero');
         total += this.lineValue(
           qty,
           num(match.ratePerM3),

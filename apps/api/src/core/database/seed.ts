@@ -229,7 +229,7 @@ async function main() {
       tenantId: at,
       vehicleNo: 'TN01AB1234',
       vehicleType: 'Transit Mixer',
-      capacityM3: 6,
+      capacityM3: '6',
       ownershipType: 'own',
       driverId: driver.id,
     }),

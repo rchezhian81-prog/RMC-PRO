@@ -792,6 +792,24 @@ export const gstApi = {
     runCompliance(invoiceId, 'eway_cancel', { reasonCode, ...(remarks ? { remarks } : {}) }),
 };
 
+// GST-portal credentials (per GSTIN). The server only ever returns REDACTED
+// status — the username/password never come back.
+export interface GstCredentialStatus {
+  gstin: string;
+  configured: boolean;
+  lastTestedAt: string | null;
+  lastTestSuccess: boolean | null;
+  lastTestMessage: string | null;
+}
+export const gstCredentialsApi = {
+  list: () => apiFetch<GstCredentialStatus[]>('/compliance/gst-credentials'),
+  set: (gstin: string, username: string, password: string) =>
+    post('/compliance/gst-credentials', { gstin, username, password }),
+  remove: (gstin: string) =>
+    apiFetch<{ deleted: boolean }>(`/compliance/gst-credentials/${encodeURIComponent(gstin)}`, { method: 'DELETE' }),
+  test: (gstin: string) => post(`/compliance/gst-credentials/${encodeURIComponent(gstin)}/test`),
+};
+
 export const receiptsApi = {
   list: () => apiFetch<Row[]>('/receipts'),
   get: (id: string) => apiFetch<Row>(`/receipts/${id}`),

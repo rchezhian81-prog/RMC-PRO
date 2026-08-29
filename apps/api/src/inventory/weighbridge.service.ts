@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { leavesTerminal } from '../common/state-machine.util';
 import { Company, Material, MaterialInward, Supplier, UomConversion, WeighbridgeEntry } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
@@ -75,6 +76,11 @@ export class WeighbridgeService {
       const repo = m.getRepository(WeighbridgeEntry);
       const entry = await repo.findOne({ where: { id } });
       if (!entry) throw notFound();
+      // A matched entry has been converted to an inward, a cancelled one is
+      // void — neither may be re-opened (that would enable a re-conversion).
+      if (leavesTerminal(entry.status, status, ['matched', 'cancelled'])) {
+        throw badReq(`A ${entry.status} weighbridge entry cannot change status`);
+      }
       await repo.update(id, { status });
       return repo.findOne({ where: { id } });
     });

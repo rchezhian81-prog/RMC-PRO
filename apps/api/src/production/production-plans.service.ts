@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { leavesTerminal } from '../common/state-machine.util';
 import {
   BatchQueueEntry,
   Order,
@@ -123,6 +124,9 @@ export class ProductionPlansService {
       const repo = m.getRepository(ProductionPlan);
       const plan = await repo.findOne({ where: { id } });
       if (!plan) throw notFound();
+      if (leavesTerminal(plan.status, status, ['completed', 'cancelled'])) {
+        throw badReq(`A ${plan.status} production plan cannot change status`);
+      }
       await repo.update(id, { status });
       return this.loadFull(m, id);
     });

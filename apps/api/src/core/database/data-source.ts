@@ -47,6 +47,7 @@ import { GpsTracking1720000042000 } from './migrations/1720000042000-GpsTracking
 import { OrderValueInclGst1720000043000 } from './migrations/1720000043000-OrderValueInclGst';
 import { SitePincode1720000044000 } from './migrations/1720000044000-SitePincode';
 import { WidenMoneyColumns1720000045000 } from './migrations/1720000045000-WidenMoneyColumns';
+import { OrderReturnBilling1720000046000 } from './migrations/1720000046000-OrderReturnBilling';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -109,6 +110,7 @@ export const AppDataSource = new DataSource({
     OrderValueInclGst1720000043000,
     SitePincode1720000044000,
     WidenMoneyColumns1720000045000,
+    OrderReturnBilling1720000046000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

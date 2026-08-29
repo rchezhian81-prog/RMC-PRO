@@ -70,6 +70,12 @@ export class OrdersController {
   setLineSlump(@CurrentUser() u: AuthUser, @Param('id') id: string, @Param('itemId') itemId: string, @Body() dto: Record<string, unknown>) {
     return this.service.setLineSlump(tid(u), id, itemId, dto.slump);
   }
+
+  @Post(':id/return-billing')
+  @RequirePermissions('orders.create')
+  setReturnBilling(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.service.setReturnBilling(tid(u), id, dto.policy, dto.feePerM3);
+  }
 }
 
 @Controller('credit-holds')

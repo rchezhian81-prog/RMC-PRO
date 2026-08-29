@@ -19,6 +19,7 @@ import { CreditService, type CreditAssessment } from './credit.service';
 import { creditExposureValue } from './credit-value.util';
 import { attachCustomerName } from '../common/attach-customer-name';
 import { recordHistory } from './history.util';
+import { isReturnBillingPolicy } from '../billing/return-billing.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Order not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -161,6 +162,23 @@ export class OrdersService {
       if (!item) throw notFound();
       const value = slump == null ? '' : String(slump).trim();
       await repo.update(itemId, { slumpRequired: value || null });
+      return this.loadFull(m, orderId);
+    });
+  }
+
+  /**
+   * Set how returned concrete on this order's challans is billed (Tier 5B):
+   * 'net' (poured only, default), 'gross' (full load), or 'net_plus_fee'
+   * (poured + a return charge). The fee is kept only for net_plus_fee.
+   */
+  setReturnBilling(tenantId: string, orderId: string, policy: unknown, feePerM3: unknown) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Order);
+      const order = await repo.findOne({ where: { id: orderId } });
+      if (!order) throw notFound();
+      if (!isReturnBillingPolicy(policy)) throw badReq('Return billing policy must be net, gross or net_plus_fee');
+      const fee = policy === 'net_plus_fee' ? Math.max(0, num(feePerM3)) : 0;
+      await repo.update(orderId, { returnBillingPolicy: policy, returnFeePerM3: String(fee) });
       return this.loadFull(m, orderId);
     });
   }

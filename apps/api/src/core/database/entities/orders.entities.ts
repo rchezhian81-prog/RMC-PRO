@@ -37,6 +37,11 @@ export class Order extends TenantScopedEntity {
   @Column({ name: 'confirmed_by', type: 'uuid', nullable: true }) confirmedBy!: string | null;
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true }) confirmedAt!: Date | null;
   @Column({ name: 'cancelled_reason', type: 'varchar', nullable: true }) cancelledReason!: string | null;
+  // Returned-concrete billing (Tier 5B): how a short pour / rejected load is
+  // billed — 'net' (poured only), 'gross' (full load), or 'net_plus_fee'
+  // (poured + a return charge of return_fee_per_m3 × returned m³).
+  @Column({ name: 'return_billing_policy', type: 'varchar', default: 'net' }) returnBillingPolicy!: string;
+  @Column({ name: 'return_fee_per_m3', type: 'numeric', precision: 14, scale: 2, default: 0 }) returnFeePerM3!: string;
 }
 
 /** Order line — grade-wise draft line (Doc 6 §9.1). */

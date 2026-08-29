@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Customer, Invoice, Payment } from '../core/database/entities';
-import { round2 } from './tax.util';
+import { Company, Customer, Invoice, Payment, Supplier, VendorBill } from '../core/database/entities';
+import { round2, isInterstateSupply } from './tax.util';
+import { deriveGstSplit } from '../purchase/purchase.util';
 import { computeCustomerExposure } from '../orders/exposure.util';
 import { buildStatement, type StatementTxn } from './statement.util';
 
@@ -198,6 +199,122 @@ export class BillingReportsService {
         ].join(','));
       }
       return { csv: lines.join('\n'), count: invoices.length };
+    });
+  }
+
+  /**
+   * GSTR-3B net liability — the output tax on issued sales invoices less the
+   * input tax credit on approved purchase bills, over a period. Combines the two
+   * sides the system already tracks separately (the GST summary and the ITC
+   * register) into the net cash payable per tax head. The purchase side has no
+   * stored CGST/SGST/IGST split, so it is derived from the bill's tax and the
+   * supplier-vs-company state test, exactly as the ITC register does.
+   */
+  gstr3b(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const inPeriod = (d: string | null) => (!from || (d ?? '') >= from) && (!to || (d ?? '') <= to);
+
+      // Output tax — issued invoices, from the stored header tax heads.
+      const invoices = (await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } })).filter((i) => inPeriod(i.invoiceDate));
+      const oSum = (f: (i: Invoice) => unknown) => round2(invoices.reduce((s, i) => s + num(f(i)), 0));
+      const output = {
+        taxable: oSum((i) => i.taxableAmount), cgst: oSum((i) => i.cgstAmount), sgst: oSum((i) => i.sgstAmount),
+        igst: oSum((i) => i.igstAmount), cess: oSum((i) => i.cessAmount), total: oSum((i) => i.totalAmount),
+      };
+
+      // Input tax credit — approved bills, split derived from state test.
+      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved' } })).filter((b) => inPeriod(b.billDate));
+      const suppliers = await m.getRepository(Supplier).find();
+      const supOf = new Map(suppliers.map((s) => [s.id, s]));
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const itc = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
+      for (const b of bills) {
+        const s = b.supplierId ? supOf.get(b.supplierId) : null;
+        const split = deriveGstSplit(num(b.taxAmount), isInterstateSupply(company?.state, s?.state));
+        itc.taxable = round2(itc.taxable + num(b.taxableAmount));
+        itc.cgst = round2(itc.cgst + split.cgst);
+        itc.sgst = round2(itc.sgst + split.sgst);
+        itc.igst = round2(itc.igst + split.igst);
+      }
+      const itcTotal = round2(itc.cgst + itc.sgst + itc.igst);
+
+      // Net liability per head (output − ITC); cess has no ITC here.
+      const net = {
+        cgst: round2(output.cgst - itc.cgst), sgst: round2(output.sgst - itc.sgst),
+        igst: round2(output.igst - itc.igst), cess: output.cess,
+      };
+      const netTotal = round2(net.cgst + net.sgst + net.igst + net.cess);
+
+      return {
+        output: { ...output },
+        itc: { ...itc, total: itcTotal },
+        net: { ...net, total: netTotal },
+        from: from ?? null, to: to ?? null,
+      };
+    });
+  }
+
+  /**
+   * Cash / bank day book — every money movement in a period from the three
+   * transactional sources, since there is no single ledger table: customer
+   * receipts (inflow), vendor payments and expense vouchers (outflow). Direction
+   * is implicit by source; reversed receipts and unposted vouchers are excluded.
+   * Returns the line items plus overall and per-mode (cash/bank/upi/cheque)
+   * totals. RLS-scoped raw SQL so the union runs in the database.
+   */
+  cashBankDayBook(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params = [from ?? null, to ?? null];
+      const rows: Array<{ date: string; kind: string; ref: string; mode: string; party: string; inflow: number; outflow: number }> = await m.query(
+        `WITH tx AS (
+            SELECT p.receipt_date AS date, 'Receipt' AS kind, p.receipt_no AS ref,
+                   COALESCE(NULLIF(p.payment_mode, ''), '—') AS mode,
+                   COALESCE(c.customer_name, '') AS party,
+                   p.amount::float AS inflow, 0::float AS outflow
+              FROM payments p LEFT JOIN customers c ON c.id = p.customer_id
+             WHERE p.status <> 'reversed'
+            UNION ALL
+            SELECT vp.payment_date, 'Vendor payment', vp.payment_no,
+                   COALESCE(NULLIF(vp.payment_mode, ''), '—'),
+                   COALESCE(s.supplier_name, ''),
+                   0::float, vp.amount::float
+              FROM vendor_payments vp LEFT JOIN suppliers s ON s.id = vp.supplier_id
+             WHERE vp.status = 'posted'
+            UNION ALL
+            SELECT ev.voucher_date, 'Expense', ev.voucher_no,
+                   COALESCE(NULLIF(ev.payment_mode, ''), '—'),
+                   COALESCE(ev.payee, ''),
+                   0::float, ev.total_amount::float
+              FROM expense_vouchers ev
+             WHERE ev.status = 'posted'
+         )
+         SELECT date, kind, ref, mode, party, inflow, outflow
+           FROM tx
+          WHERE ($1::date IS NULL OR date >= $1::date)
+            AND ($2::date IS NULL OR date <= $2::date)
+          ORDER BY date, ref`,
+        params,
+      );
+
+      const totals = {
+        inflow: round2(rows.reduce((s, r) => s + num(r.inflow), 0)),
+        outflow: round2(rows.reduce((s, r) => s + num(r.outflow), 0)),
+        net: 0, count: rows.length,
+      };
+      totals.net = round2(totals.inflow - totals.outflow);
+
+      const modeMap = new Map<string, { mode: string; inflow: number; outflow: number; net: number }>();
+      for (const r of rows) {
+        const key = r.mode || '—';
+        const e = modeMap.get(key) ?? { mode: key, inflow: 0, outflow: 0, net: 0 };
+        e.inflow = round2(e.inflow + num(r.inflow));
+        e.outflow = round2(e.outflow + num(r.outflow));
+        e.net = round2(e.inflow - e.outflow);
+        modeMap.set(key, e);
+      }
+      const byMode = [...modeMap.values()].sort((a, b) => b.inflow + b.outflow - (a.inflow + a.outflow));
+
+      return { rows, totals, byMode, from: from ?? null, to: to ?? null };
     });
   }
 }

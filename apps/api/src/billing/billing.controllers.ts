@@ -94,6 +94,7 @@ export class BillingReportsController {
   @Get('customer-statement') statement(@CurrentUser() u: AuthUser, @Query('customerId') customerId?: string, @Query('from') from?: string, @Query('to') to?: string) { return this.service.customerStatement(tid(u), customerId ?? '', from, to); }
   @Get('gstr-3b') gstr3b(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstr3b(tid(u), from, to); }
   @Get('day-book') dayBook(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cashBankDayBook(tid(u), from, to); }
+  @Get('sales-mis') salesMis(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesMis(tid(u), from, to); }
 
   @Get('tally-export') @RequirePermissions('tally_export.generate')
   async tally(@CurrentUser() u: AuthUser, @Res() res: Response, @Query('from') from?: string, @Query('to') to?: string) {

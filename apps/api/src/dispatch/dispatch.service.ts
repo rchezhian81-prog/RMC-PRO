@@ -69,6 +69,47 @@ export class DispatchService {
     });
   }
 
+  /**
+   * Fleet utilization / trip report — per vehicle, the completed trips, concrete
+   * delivered, average turnaround, and average load factor (delivered per trip
+   * vs rated capacity) over [from, to]. The date + completed filters live in the
+   * LEFT JOIN's ON clause so idle vehicles still list (zero trips). RLS-scoped.
+   */
+  fleetUtilizationReport(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows: Array<Record<string, string | number | null>> = await m.query(
+        `SELECT v.vehicle_no        AS "vehicleNo",
+                v.vehicle_type       AS "vehicleType",
+                v.capacity_m3::float AS "capacityM3",
+                COUNT(d.id)::int     AS trips,
+                COALESCE(SUM(d.quantity_m3), 0)::float AS "totalM3",
+                COALESCE(AVG(EXTRACT(EPOCH FROM (d.pour_end_time - d.dispatch_time)) / 60.0)
+                         FILTER (WHERE d.pour_end_time IS NOT NULL AND d.dispatch_time IS NOT NULL
+                                   AND d.pour_end_time > d.dispatch_time), 0)::float AS "avgTurnaroundMin",
+                CASE WHEN v.capacity_m3 > 0 AND COUNT(d.id) > 0
+                     THEN ROUND((COALESCE(SUM(d.quantity_m3), 0) / COUNT(d.id) / v.capacity_m3 * 100)::numeric, 1)::float
+                     ELSE NULL END AS "avgLoadPct"
+           FROM vehicles v
+           LEFT JOIN dispatches d
+                  ON d.vehicle_id = v.id
+                 AND d.dispatch_status = 'completed'
+                 AND ($1::date IS NULL OR COALESCE(d.dispatch_time, d.created_at)::date >= $1::date)
+                 AND ($2::date IS NULL OR COALESCE(d.dispatch_time, d.created_at)::date <= $2::date)
+          GROUP BY v.id, v.vehicle_no, v.vehicle_type, v.capacity_m3
+          ORDER BY trips DESC, "totalM3" DESC`,
+        [from ?? null, to ?? null],
+      );
+      const n = (v: unknown) => Number(v ?? 0) || 0;
+      const totals = {
+        vehicles: rows.length,
+        activeVehicles: rows.filter((r) => n(r.trips) > 0).length,
+        trips: rows.reduce((s, r) => s + n(r.trips), 0),
+        totalM3: Math.round(rows.reduce((s, r) => s + n(r.totalM3), 0) * 1000) / 1000,
+      };
+      return { rows, totals };
+    });
+  }
+
   private async loadFull(m: EntityManager, id: string) {
     const dispatch = await m.getRepository(Dispatch).findOne({ where: { id } });
     if (!dispatch) throw notFound();

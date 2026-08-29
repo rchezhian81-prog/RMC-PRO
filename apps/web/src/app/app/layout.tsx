@@ -126,6 +126,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/dispatch/tracking', label: 'Live Tracking', icon: <Navigation size={IS} />, perm: 'gps.view', module: 'gps' },
       { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, module: 'dispatch' },
       { href: '/app/dispatch/delivery-register', label: 'Delivery Register', icon: <BarChart3 size={IS} />, perm: 'reports.view', module: 'dispatch' },
+      { href: '/app/dispatch/fleet-utilization', label: 'Fleet Utilization', icon: <BarChart3 size={IS} />, module: 'dispatch' },
     ],
   },
   {
@@ -170,6 +171,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: '/app/billing/outstanding', label: 'Outstanding', icon: <Clock size={IS} />, module: 'billing' },
       { href: '/app/billing/statement', label: 'Statements', icon: <ScrollText size={IS} />, module: 'billing' },
       { href: '/app/billing/reports', label: 'Billing Reports', icon: <BarChart3 size={IS} />, module: 'billing' },
+      { href: '/app/billing/sales-mis', label: 'Sales MIS', icon: <BarChart3 size={IS} />, module: 'billing' },
     ],
   },
   {

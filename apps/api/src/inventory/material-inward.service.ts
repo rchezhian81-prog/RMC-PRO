@@ -41,8 +41,11 @@ export class MaterialInwardService {
       const material = await m.getRepository(Material).findOne({ where: { id: String(dto.materialId) } });
       const inwardNo = await this.numbering.next(m, tenantId, 'material_inward', 'INW-');
       const received = num(dto.quantityReceived);
+      if (received <= 0) throw badReq('Received quantity must be greater than zero');
       const accepted = dto.quantityAccepted !== undefined ? num(dto.quantityAccepted) : received;
+      if (accepted < 0 || accepted > received + 0.0005) throw badReq('Accepted quantity must be between 0 and received');
       const rate = num(dto.rate);
+      if (rate < 0) throw badReq('Rate cannot be negative');
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'inwardNo', 'status', 'amount']) delete rest[k];
       const repo = m.getRepository(MaterialInward);

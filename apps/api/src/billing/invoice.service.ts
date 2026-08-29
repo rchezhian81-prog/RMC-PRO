@@ -164,7 +164,9 @@ export class InvoiceService {
         // free, and an exempt line stays 0% — not silently bumped to the default).
         const hasRate = line.rate !== undefined && line.rate !== null && String(line.rate).trim() !== '';
         const rate = hasRate ? num(line.rate) : agreed.rate;
+        if (rate < 0) throw badReq('Invoice line rate cannot be negative');
         const gstRate = line.gstRate !== undefined ? num(line.gstRate) : agreed.gstRate;
+        if (gstRate < 0) throw badReq('Invoice line GST rate cannot be negative');
         const cessRate = num(line.cessRate);
         const t = computeLineTax(quantity, rate, gstRate, cessRate, isInterstate);
 
@@ -240,6 +242,9 @@ export class InvoiceService {
       if (!invoice) throw notFound();
       if (invoice.invoiceStatus === 'cancelled') throw badReq('Invoice already cancelled');
       if (num(invoice.amountPaid) > 0) throw badReq('Cannot cancel an invoice with receipts allocated');
+      // A write-off is a financial event on this invoice; cancelling would erase
+      // it and silently make the challans billable again. Reverse it first.
+      if (num(invoice.writtenOffAmount) > 0) throw badReq('Cannot cancel an invoice that has a write-off — reverse the write-off first');
       // Revert linked challans back to not_invoiced.
       const links = await m.getRepository(InvoiceChallan).find({ where: { invoiceId: id } });
       const challanRepo = m.getRepository(DeliveryChallan);

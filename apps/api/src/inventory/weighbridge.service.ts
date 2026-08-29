@@ -90,6 +90,14 @@ export class WeighbridgeService {
       const net = num(entry.netWeight);
       if (net <= 0) throw badReq('Net weight must be greater than zero');
 
+      // One inward per weighbridge entry: block a repeat conversion that would
+      // post the same truck's material into stock twice. Checks the inward table
+      // (not the entry's status) so it holds even if the entry status is changed.
+      const existingInward = await m.getRepository(MaterialInward).findOne({ where: { weighbridgeEntryId: id } });
+      if (existingInward && existingInward.status !== 'cancelled') {
+        throw badReq(`This weighbridge entry is already converted (inward ${existingInward.inwardNo})`);
+      }
+
       const material = await m.getRepository(Material).findOne({ where: { id: entry.materialId } });
       // The weighbridge weighs in kg, but stock is kept in the material's UOM
       // (bulk material is usually the tonne) — convert so a 25 t load is not

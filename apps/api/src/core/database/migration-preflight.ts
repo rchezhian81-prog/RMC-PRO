@@ -4,10 +4,13 @@ import { AppDataSource } from './data-source';
 import {
   FK_CONSTRAINTS,
   NONNEG_CONSTRAINTS,
+  UNIQUE_CONSTRAINTS,
   fkCountQuery,
   nonNegCountQuery,
   nonNegViolationPredicate,
   tableExistsQuery,
+  uniqueCountQuery,
+  uniqueViolationQuery,
 } from './integrity-constraints';
 
 /**
@@ -78,6 +81,21 @@ async function run(ds: DataSource): Promise<number> {
           `WHERE t.${c.column} IS NOT NULL AND r.${c.refColumn} IS NULL LIMIT ${SAMPLE_LIMIT}`,
       );
       console.table(sample);
+    } else {
+      log(`ok    ${c.table}.${c.constraint}`);
+    }
+  }
+
+  for (const c of UNIQUE_CONSTRAINTS) {
+    if (!(await tableExists(ds, c.table))) {
+      skipped.push(`${c.table} (table not present yet)`);
+      continue;
+    }
+    const n = Number((await ds.query(uniqueCountQuery(c)))[0].violations);
+    if (n > 0) {
+      violations += n;
+      log(`FAIL  ${c.table}.${c.constraint} (${c.columns.join(', ')}) — ${n} duplicate group(s)`);
+      console.table(await ds.query(`${uniqueViolationQuery(c)} LIMIT ${SAMPLE_LIMIT}`));
     } else {
       log(`ok    ${c.table}.${c.constraint}`);
     }

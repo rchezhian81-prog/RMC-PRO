@@ -20,11 +20,14 @@ import { dirname, resolve } from 'node:path';
 import {
   NONNEG_CONSTRAINTS,
   FK_CONSTRAINTS,
+  UNIQUE_CONSTRAINTS,
   nonNegViolationPredicate,
   nonNegViolationQuery,
   nonNegCountQuery,
   fkViolationQuery,
   fkCountQuery,
+  uniqueCountQuery,
+  uniqueViolationQuery,
   tableExistsQuery,
 } from '../../dist/core/database/integrity-constraints.js';
 
@@ -33,6 +36,7 @@ const migrationSrc = readFileSync(
   resolve(here, '../../src/core/database/migrations/1720000016000-DataIntegrityChecks.ts'),
   'utf8',
 );
+const readMigration = (file) => readFileSync(resolve(here, '../../src/core/database/migrations/', file), 'utf8');
 
 const byTable = (list, table) => list.find((c) => c.table === table);
 
@@ -77,6 +81,18 @@ test('tableExistsQuery uses to_regclass so a missing table is null, not an error
   assert.equal(tableExistsQuery('customers'), "SELECT to_regclass('public.customers') AS oid");
 });
 
+test('uniqueCountQuery counts duplicate groups under the partial predicate', () => {
+  const wb = UNIQUE_CONSTRAINTS.find((c) => c.table === 'material_inwards');
+  assert.ok(wb, 'material_inwards unique constraint must be covered');
+  assert.equal(
+    uniqueCountQuery(wb),
+    "SELECT count(*)::int AS violations FROM (SELECT weighbridge_entry_id FROM material_inwards " +
+      "WHERE weighbridge_entry_id IS NOT NULL AND status <> 'cancelled' " +
+      'GROUP BY weighbridge_entry_id HAVING count(*) > 1) d',
+  );
+  assert.match(uniqueViolationQuery(wb), /HAVING count\(\*\) > 1$/);
+});
+
 test('the customers non-negativity check is present (the constraint that caused the outage)', () => {
   const customers = byTable(NONNEG_CONSTRAINTS, 'customers');
   assert.ok(customers, 'customers must be covered');
@@ -112,6 +128,15 @@ test('every declared FK constraint matches the migration', () => {
       `${c.constraint} must reference ${c.refTable}(${c.refColumn})`,
     );
   }
+});
+
+test('the declared unique constraint matches its migration (name + predicate)', () => {
+  const wb = UNIQUE_CONSTRAINTS.find((c) => c.constraint === 'uq_material_inwards_weighbridge_entry');
+  assert.ok(wb, 'the weighbridge-inward unique constraint must be declared');
+  const src = readMigration('1720000047000-WeighbridgeInwardUnique.ts');
+  assert.match(src, new RegExp(`CREATE UNIQUE INDEX "${wb.constraint}"`), 'migration must create the unique index');
+  assert.match(src, /status <> 'cancelled'/, 'index must be partial over non-cancelled rows (matches the declared predicate)');
+  assert.ok(wb.predicate.includes("status <> 'cancelled'"), 'declared predicate must ignore cancelled inwards');
 });
 
 test('DRIFT GUARD: no chk_*_nonneg constraint in the migration is missing from the preflight', () => {

@@ -357,6 +357,28 @@ await scenario('T11 multi-challan invoice bills once, not per challan (fan-out g
   must(near(exp.exposure, orderValIncl), `total exposure should stay ${orderValIncl}, got ${exp.exposure}`);
 });
 
+// T12 — rejecting a credit hold must return the order to DRAFT so it stays
+// recoverable (re-confirmable once dues clear), not strand it in credit_hold
+// where confirm() throws and the order can only be cancelled.
+await scenario('T12 rejected credit hold returns the order to draft (re-confirmable)', async () => {
+  const fx = await freshCustomer(1, 0); // ₹1 limit → any order breaches → holds
+  const order = await confirmRaw((await makeDraftOrder(fx)).id);
+  must(String(order.orderStatus) === 'credit_hold', `order should hold, got ${order.orderStatus}`);
+  const holds = await api('GET', '/credit-holds?status=pending');
+  const hold = (Array.isArray(holds) ? holds : []).find((h) => String(h.orderId) === String(order.id));
+  must(hold, 'a pending hold should exist for the held order');
+
+  await api('POST', `/credit-holds/${hold.id}/reject`, { note: 'declined for now' });
+  const after = await api('GET', `/orders/${order.id}`);
+  must(String(after.orderStatus) === 'draft', `rejected order should return to draft, got ${after.orderStatus}`);
+  must(String(after.creditStatus) === 'rejected', `credit status should be rejected, got ${after.creditStatus}`);
+
+  // Proves it is no longer a dead-end: the draft order re-enters the credit gate.
+  const reconfirmed = await confirmRaw(order.id);
+  must(['credit_hold', 'confirmed'].includes(String(reconfirmed.orderStatus)),
+    `re-confirm should re-run the credit gate, got ${reconfirmed.orderStatus}`);
+});
+
 console.log(results.join('\n'));
 if (failures.length) {
   console.error(`\nAR-EXPOSURE: ${results.length - failures.length}/${results.length} passed — RED (${failures.length} awaiting the core): ${failures.join(', ')}`);

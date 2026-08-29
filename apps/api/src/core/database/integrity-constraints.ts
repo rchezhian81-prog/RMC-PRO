@@ -108,6 +108,30 @@ export const FK_CONSTRAINTS: ForeignKeyConstraint[] = [
   },
 ];
 
+/**
+ * A (partial) UNIQUE index: the listed `columns` must be unique across the rows
+ * matching `predicate`. A duplicate group would make the CREATE UNIQUE INDEX
+ * abort, so the preflight must be able to find one.
+ */
+export interface UniqueConstraint {
+  table: string;
+  columns: string[];
+  /** Row filter the index is partial over (the index's WHERE clause). */
+  predicate: string;
+  constraint: string;
+}
+
+export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
+  {
+    // One live material inward per weighbridge entry — a repeat conversion would
+    // double-count the same truck's material into stock.
+    table: 'material_inwards',
+    columns: ['weighbridge_entry_id'],
+    predicate: "weighbridge_entry_id IS NOT NULL AND status <> 'cancelled'",
+    constraint: 'uq_material_inwards_weighbridge_entry',
+  },
+];
+
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */
 export function nonNegViolationPredicate(c: NonNegConstraint): string {
   return c.columns.map((col) => `${col} < 0`).join(' OR ');
@@ -138,6 +162,25 @@ export function fkCountQuery(c: ForeignKeyConstraint): string {
     `SELECT count(*)::int AS violations FROM ${c.table} t ` +
     `LEFT JOIN ${c.refTable} r ON r.${c.refColumn} = t.${c.column} ` +
     `WHERE t.${c.column} IS NOT NULL AND r.${c.refColumn} IS NULL`
+  );
+}
+
+/** The duplicate groups that would fail the unique index — each listed once. */
+export function uniqueViolationQuery(c: UniqueConstraint): string {
+  const cols = c.columns.join(', ');
+  return (
+    `SELECT ${cols}, count(*)::int AS copies FROM ${c.table} ` +
+    `WHERE ${c.predicate} GROUP BY ${cols} HAVING count(*) > 1`
+  );
+}
+
+/** Fast count of duplicate groups (rows sharing the key under the predicate). */
+export function uniqueCountQuery(c: UniqueConstraint): string {
+  const cols = c.columns.join(', ');
+  return (
+    `SELECT count(*)::int AS violations FROM (` +
+    `SELECT ${cols} FROM ${c.table} WHERE ${c.predicate} ` +
+    `GROUP BY ${cols} HAVING count(*) > 1) d`
   );
 }
 

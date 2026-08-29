@@ -14,6 +14,7 @@ import { PurchaseOrderService } from './purchase-order.service';
 import { GrnService } from './goods-receipt.service';
 import { VendorBillService } from './vendor-bill.service';
 import { VendorPaymentService } from './vendor-payment.service';
+import { PurchaseReportsService } from './purchase-reports.service';
 
 /**
  * Purchase / AP-lite (Plan D2). Procurement chain — purchase order → goods
@@ -29,6 +30,7 @@ import { VendorPaymentService } from './vendor-payment.service';
     GrnService,
     VendorBillService,
     VendorPaymentService,
+    PurchaseReportsService,
     NumberingService,
     StockService,
     TenantGuard,

@@ -177,21 +177,31 @@ export class VendorBillService {
     });
   }
 
-  /** Approve a draft bill — commits the payable. Audited. */
-  async approve(tenantId: string, id: string, userId: string) {
-    const { result, billNo, total, matchStatus } = await this.db.runInTenant(tenantId, async (m) => {
+  /**
+   * Approve a draft bill — commits the payable. A bill that fails the 3-way
+   * match (quantity or price over tolerance vs the PO/GRN) is blocked unless the
+   * caller passes overrideMatch, mirroring the batch-ticket variance override —
+   * otherwise the match control the module advertises did nothing at the gate.
+   * Audited, with the override recorded.
+   */
+  async approve(tenantId: string, id: string, userId: string, overrideMatch = false) {
+    const { result, billNo, total, matchStatus, overridden } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(VendorBill);
       const bill = await repo.findOne({ where: { id } });
       if (!bill) throw notFound();
       if (bill.status !== 'draft') throw badReq(`Vendor bill already ${bill.status}`);
+      const failsMatch = bill.matchStatus === 'over_tolerance';
+      if (failsMatch && !overrideMatch) {
+        throw badReq('Vendor bill fails the 3-way match (quantity/price over tolerance). Resolve the mismatch or approve with override.');
+      }
       await repo.update(id, { status: 'approved' });
-      return { result: await this.loadFull(m, id), billNo: bill.billNo, total: bill.totalAmount, matchStatus: bill.matchStatus };
+      return { result: await this.loadFull(m, id), billNo: bill.billNo, total: bill.totalAmount, matchStatus: bill.matchStatus, overridden: failsMatch };
     });
     await this.audit.record({
       tenantId, actorUserId: userId, action: AUDIT_ACTIONS.VENDOR_BILL_APPROVE,
       entityType: 'vendor_bill', entityId: id, entityLabel: billNo,
-      summary: `Approved vendor bill ${billNo} (₹${total}) — match ${matchStatus ?? 'n/a'}`.trim(),
-      details: { totalAmount: total, matchStatus },
+      summary: `Approved vendor bill ${billNo} (₹${total}) — match ${matchStatus ?? 'n/a'}${overridden ? ' (match override)' : ''}`.trim(),
+      details: { totalAmount: total, matchStatus, overrideMatch: overridden },
     });
     return result;
   }

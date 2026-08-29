@@ -69,7 +69,7 @@ export class VendorBillController {
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
 
   @Post(':id/approve') @RequirePermissions('vendor_bills.approve')
-  approve(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.approve(tid(u), id, u.userId); }
+  approve(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown> = {}) { return this.service.approve(tid(u), id, u.userId, dto?.overrideMatch === true); }
 
   @Post(':id/cancel') @RequirePermissions('vendor_bills.approve')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.cancel(tid(u), id); }

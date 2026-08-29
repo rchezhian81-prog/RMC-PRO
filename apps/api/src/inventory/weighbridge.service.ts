@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Company, Material, MaterialInward, Supplier, WeighbridgeEntry } from '../core/database/entities';
+import { Company, Material, MaterialInward, Supplier, UomConversion, WeighbridgeEntry } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
+import { weighbridgeQuantity } from './weighbridge-uom.util';
 import type { WeighbridgePdfData } from '../sales/pdf.service';
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Weighbridge entry not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -88,6 +91,13 @@ export class WeighbridgeService {
       if (net <= 0) throw badReq('Net weight must be greater than zero');
 
       const material = await m.getRepository(Material).findOne({ where: { id: entry.materialId } });
+      // The weighbridge weighs in kg, but stock is kept in the material's UOM
+      // (bulk material is usually the tonne) — convert so a 25 t load is not
+      // booked as 25000. See weighbridgeQuantity.
+      const conversions = (await m.getRepository(UomConversion).find()).map((c) => ({
+        from: c.fromUom, to: c.toUom, factor: num(c.factor),
+      }));
+      const qty = weighbridgeQuantity(net, material?.uom, conversions);
       const rate = num(dto.rate);
       const inwardNo = await this.numbering.next(m, tenantId, 'material_inward', 'INW-');
       const repo = m.getRepository(MaterialInward);
@@ -96,8 +106,8 @@ export class WeighbridgeService {
           tenantId, inwardNo, plantId: entry.plantId, supplierId: entry.supplierId,
           materialId: entry.materialId, materialLabel: entry.materialLabel ?? material?.materialName ?? null,
           uom: material?.uom ?? null, vehicleNo: entry.vehicleNo, supplierChallanNo: entry.supplierChallanNo,
-          weighbridgeEntryId: entry.id, quantityReceived: String(net), quantityAccepted: String(net),
-          rate: String(rate), amount: String(net * rate), status: 'draft',
+          weighbridgeEntryId: entry.id, quantityReceived: String(qty), quantityAccepted: String(qty),
+          rate: String(rate), amount: String(round2(qty * rate)), status: 'draft',
         }),
       );
       await m.getRepository(WeighbridgeEntry).update(id, { status: 'matched' });

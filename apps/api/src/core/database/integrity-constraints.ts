@@ -130,6 +130,14 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: "weighbridge_entry_id IS NOT NULL AND status <> 'cancelled'",
     constraint: 'uq_material_inwards_weighbridge_entry',
   },
+  {
+    // One live dispatch per batch ticket — each dispatch claims the ticket's full
+    // batched quantity, so a second would double the delivered/billable volume.
+    table: 'dispatches',
+    columns: ['batch_ticket_id'],
+    predicate: "batch_ticket_id IS NOT NULL AND dispatch_status NOT IN ('cancelled', 'rejected')",
+    constraint: 'uq_dispatches_batch_ticket',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

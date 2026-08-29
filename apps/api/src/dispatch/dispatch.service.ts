@@ -66,6 +66,15 @@ export class DispatchService {
       if (!bt) throw badReq('Batch ticket not found');
       if (bt.status !== 'confirmed') throw badReq('Only a confirmed batch ticket can be dispatched');
 
+      // One live dispatch per batch ticket: each dispatch claims the ticket's
+      // full batched quantity, so a second one would double the delivered (and
+      // billable) volume for concrete that was batched once. A cancelled/rejected
+      // dispatch frees the ticket to be dispatched again.
+      const priorDispatches = await m.getRepository(Dispatch).find({ where: { batchTicketId } });
+      if (priorDispatches.some((d) => !['cancelled', 'rejected'].includes(d.dispatchStatus))) {
+        throw badReq('This batch ticket is already dispatched');
+      }
+
       let customerId: string | null = null;
       let siteId: string | null = null;
       if (bt.orderId) {

@@ -47,7 +47,9 @@ export default function InvoicesPage() {
       const challans = await invoicesApi.billableChallans(cid);
       setLines(
         challans.map((c) => ({
-          challanId: String(c.id), challanNo: String(c.challanNo), quantity: Number(c.quantityM3),
+          // Preview the quantity that will actually be billed under the order's
+          // return policy (net of returns unless the order bills gross).
+          challanId: String(c.id), challanNo: String(c.challanNo), quantity: Number(c.billedQuantityM3 ?? c.quantityM3),
           hsnSac: '68109990', uom: 'm3',
           // Pre-fill the rate agreed on the order so the clerk confirms rather
           // than re-types it. 0 (no order line found) leaves it blank to fill in.

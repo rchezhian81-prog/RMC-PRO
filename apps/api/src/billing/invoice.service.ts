@@ -8,6 +8,7 @@ import {
   Invoice,
   InvoiceChallan,
   InvoiceItem,
+  Order,
   OrderItem,
   Transporter,
 } from '../core/database/entities';
@@ -16,6 +17,7 @@ import { WhatsAppService } from '../sales/whatsapp.service';
 import type { InvoicePdfData } from '../sales/pdf.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeLineTax, round2, isInterstateSupply } from './tax.util';
+import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy } from './return-billing.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -64,9 +66,22 @@ export class InvoiceService {
       if (customerId) where.customerId = customerId;
       const challans = await m.getRepository(DeliveryChallan).find({ where, order: { createdAt: 'DESC' } });
       // Suggest the rate the customer already agreed to on the order, so the
-      // clerk confirms it rather than re-typing (and mistyping) it.
+      // clerk confirms it rather than re-typing (and mistyping) it. Also surface
+      // the order's return-billing policy and the quantity that will actually be
+      // billed, so the clerk sees the net (not gross) up front.
       return Promise.all(
-        challans.map(async (c) => ({ ...c, suggestedRate: (await this.agreedLine(m, c.orderId, c.gradeId)).rate })),
+        challans.map(async (c) => {
+          const order = c.orderId ? await m.getRepository(Order).findOne({ where: { id: c.orderId } }) : null;
+          const policy: ReturnBillingPolicy = isReturnBillingPolicy(order?.returnBillingPolicy) ? order!.returnBillingPolicy : 'net';
+          const billing = resolveReturnBilling(c.quantityM3, c.returnQuantityM3, policy, order?.returnFeePerM3);
+          return {
+            ...c,
+            suggestedRate: (await this.agreedLine(m, c.orderId, c.gradeId)).rate,
+            returnBillingPolicy: policy,
+            billedQuantityM3: billing.billedQuantity,
+            returnFee: billing.returnFee,
+          };
+        }),
       );
     });
   }
@@ -136,7 +151,13 @@ export class InvoiceService {
         if (challan.invoiceStatus !== 'not_invoiced') throw badReq(`Challan ${challan.challanNo} already invoiced`);
         if (challan.customerId && challan.customerId !== customerId) throw badReq('Challan belongs to a different customer');
 
-        const quantity = num(challan.quantityM3);
+        // Bill per the order's returned-concrete policy (default net): the main
+        // line carries the poured quantity, and a return charge is added only
+        // under net_plus_fee. See resolveReturnBilling.
+        const order = challan.orderId ? await m.getRepository(Order).findOne({ where: { id: challan.orderId } }) : null;
+        const policy: ReturnBillingPolicy = isReturnBillingPolicy(order?.returnBillingPolicy) ? order!.returnBillingPolicy : 'net';
+        const billing = resolveReturnBilling(challan.quantityM3, challan.returnQuantityM3, policy, order?.returnFeePerM3);
+        const quantity = billing.billedQuantity;
         const agreed = await this.agreedLine(m, challan.orderId, challan.gradeId);
         // Use the rate/GST the clerk entered; otherwise fall back to the order's
         // agreed line. An explicit 0 is respected (a genuinely free line stays
@@ -165,6 +186,28 @@ export class InvoiceService {
         await challanRepo.update(challan.id, { invoiceStatus: 'invoiced' });
 
         taxable += t.taxableAmount; cgst += t.cgstAmount; sgst += t.sgstAmount; igst += t.igstAmount; cess += t.cessAmount;
+
+        // net_plus_fee: a separate return / short-load charge line for the
+        // returned m³, taxed at the same rate as the concrete (composite supply).
+        if (billing.returnFee > 0) {
+          const feeRate = order && num(order.returnFeePerM3) > 0 ? num(order.returnFeePerM3) : 0;
+          const ft = computeLineTax(billing.returnedQuantity, feeRate, gstRate, 0, isInterstate);
+          await itemRepo.save(
+            itemRepo.create({
+              tenantId, invoiceId: invoice.id, challanId: challan.id, gradeId: challan.gradeId,
+              description: `Return / short-load charge — ${challan.challanNo}`,
+              hsnSac: (line.hsnSac as string) ?? null, uom: 'm3',
+              quantity: String(billing.returnedQuantity), rate: String(feeRate), taxableAmount: String(ft.taxableAmount),
+              gstRate: String(gstRate),
+              cgstRate: String(ft.cgstRate), cgstAmount: String(ft.cgstAmount),
+              sgstRate: String(ft.sgstRate), sgstAmount: String(ft.sgstAmount),
+              igstRate: String(ft.igstRate), igstAmount: String(ft.igstAmount),
+              cessRate: String(ft.cessRate), cessAmount: String(ft.cessAmount),
+              lineTotal: String(ft.lineTotal),
+            }),
+          );
+          taxable += ft.taxableAmount; cgst += ft.cgstAmount; sgst += ft.sgstAmount; igst += ft.igstAmount; cess += ft.cessAmount;
+        }
       }
 
       const grand = taxable + cgst + sgst + igst + cess;

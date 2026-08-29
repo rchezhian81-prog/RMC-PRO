@@ -16,6 +16,15 @@ import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const qty = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
+const RETURN_BILLING_OPTIONS = [
+  { value: 'net', label: 'Net delivered (bill poured only)' },
+  { value: 'gross', label: 'Gross loaded (bill full load)' },
+  { value: 'net_plus_fee', label: 'Net + return charge' },
+];
+const RETURN_BILLING_LABELS: Record<string, string> = Object.fromEntries(
+  RETURN_BILLING_OPTIONS.map((o) => [o.value, o.label]),
+);
+
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -65,6 +74,29 @@ export default function OrderDetail() {
     });
     if (v === null) return;
     await run(() => ordersApi.setLineSlump(id, String(it.id), v), 'Slump updated');
+  }
+
+  async function editReturnBilling() {
+    const policy = await prompt({
+      title: 'Returned-concrete billing',
+      message: 'How a short pour / returned load is billed for this order.',
+      label: 'Policy',
+      options: RETURN_BILLING_OPTIONS,
+      defaultValue: String(o?.returnBillingPolicy ?? 'net'),
+    });
+    if (policy === null) return;
+    let feePerM3: number | undefined;
+    if (policy === 'net_plus_fee') {
+      const fee = await prompt({
+        title: 'Return charge',
+        message: 'Charge per returned m³ (added as a separate invoice line).',
+        label: 'Fee (₹/m³)',
+        defaultValue: o?.returnFeePerM3 ? String(o.returnFeePerM3) : '',
+      });
+      if (fee === null) return;
+      feePerM3 = Number(fee) || 0;
+    }
+    await run(() => ordersApi.setReturnBilling(id, policy, feePerM3), 'Return billing updated');
   }
 
   async function addSlot(e: FormEvent) {
@@ -193,6 +225,19 @@ export default function OrderDetail() {
         <p style={{ textAlign: 'right', margin: '12px 16px', fontWeight: 700, fontFamily: 'var(--mn-font-display)' }}>
           Estimated value: {money(o.estimatedOrderValue)}
         </p>
+      </Card>
+
+      <Card title="Returned-concrete billing">
+        <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 10px', maxWidth: 720 }}>
+          How a short pour / returned load is billed when this order&rsquo;s challans are invoiced.
+        </p>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600 }}>{RETURN_BILLING_LABELS[String(o.returnBillingPolicy ?? 'net')] ?? String(o.returnBillingPolicy ?? 'net')}</span>
+          {String(o.returnBillingPolicy) === 'net_plus_fee' && (
+            <span style={{ color: 'var(--mn-muted)', fontSize: 13 }}>fee ₹{money(o.returnFeePerM3)}/m³</span>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => editReturnBilling()}>Change</Button>
+        </div>
       </Card>
 
       {(() => {

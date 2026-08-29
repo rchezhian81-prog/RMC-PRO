@@ -151,6 +151,11 @@ export class QcService {
       const setRepo = m.getRepository(QcCubeSet);
       const set = await setRepo.findOne({ where: { id: setId } });
       if (!set) throw notFound('Cube set');
+      // Once a set has a final verdict, appending more results and re-assessing
+      // could flip a rejected set toward acceptance — the verdict is a record.
+      if (set.acceptanceStatus === 'accepted' || set.acceptanceStatus === 'rejected') {
+        throw badReq(`This cube set is already ${set.acceptanceStatus} — its result is final`);
+      }
       const rows = Array.isArray(dto.results) ? (dto.results as Record<string, unknown>[]) : [];
       if (!rows.length) throw badReq('No cube results supplied');
 

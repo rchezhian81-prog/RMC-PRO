@@ -45,6 +45,7 @@ export class WeighbridgeService {
       const gross = num(dto.grossWeight);
       const tare = num(dto.tareWeight);
       const net = dto.netWeight !== undefined ? num(dto.netWeight) : gross - tare;
+      if (net < 0) throw badReq('Net weight cannot be negative — check the gross and tare weights');
       const slipNo = await this.numbering.next(m, tenantId, 'weighbridge', 'WB-');
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'slipNo', 'status', 'netWeight', 'weightSource', 'indicatorId', 'manualOverride'])

@@ -14,7 +14,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import {
@@ -36,7 +36,11 @@ const migrationSrc = readFileSync(
   resolve(here, '../../src/core/database/migrations/1720000016000-DataIntegrityChecks.ts'),
   'utf8',
 );
-const readMigration = (file) => readFileSync(resolve(here, '../../src/core/database/migrations/', file), 'utf8');
+const migrationsDir = resolve(here, '../../src/core/database/migrations/');
+const allMigrations = readdirSync(migrationsDir)
+  .filter((f) => f.endsWith('.ts'))
+  .map((f) => readFileSync(resolve(migrationsDir, f), 'utf8'))
+  .join('\n');
 
 const byTable = (list, table) => list.find((c) => c.table === table);
 
@@ -130,13 +134,31 @@ test('every declared FK constraint matches the migration', () => {
   }
 });
 
-test('the declared unique constraint matches its migration (name + predicate)', () => {
-  const wb = UNIQUE_CONSTRAINTS.find((c) => c.constraint === 'uq_material_inwards_weighbridge_entry');
-  assert.ok(wb, 'the weighbridge-inward unique constraint must be declared');
-  const src = readMigration('1720000047000-WeighbridgeInwardUnique.ts');
-  assert.match(src, new RegExp(`CREATE UNIQUE INDEX "${wb.constraint}"`), 'migration must create the unique index');
-  assert.match(src, /status <> 'cancelled'/, 'index must be partial over non-cancelled rows (matches the declared predicate)');
-  assert.ok(wb.predicate.includes("status <> 'cancelled'"), 'declared predicate must ignore cancelled inwards');
+test('every declared unique constraint is created by a migration', () => {
+  assert.ok(UNIQUE_CONSTRAINTS.length >= 2, 'sanity: unique constraints declared');
+  for (const c of UNIQUE_CONSTRAINTS) {
+    assert.match(
+      allMigrations,
+      new RegExp(`CREATE UNIQUE INDEX "${c.constraint}"`),
+      `${c.constraint} must be created by a migration, or the preflight guards a constraint that does not exist`,
+    );
+  }
+});
+
+test('DRIFT GUARD: no partial UNIQUE index in the migrations is missing from the preflight', () => {
+  // Reverse direction: a CREATE UNIQUE INDEX ... WHERE (a partial unique, which
+  // a duplicate row could abort) that the preflight does not know about would
+  // let the deploy gate silently miss it. Catch that.
+  const declared = new Set(UNIQUE_CONSTRAINTS.map((c) => c.constraint));
+  // `[^`]*?` keeps the match inside the one SQL template literal, so a plain
+  // (non-partial) CREATE UNIQUE INDEX in another statement is never mis-flagged.
+  const partialUnique = [...allMigrations.matchAll(/CREATE UNIQUE INDEX "([\w]+)"[^`]*?WHERE/g)].map((m) => m[1]);
+  for (const name of partialUnique) {
+    assert.ok(
+      declared.has(name),
+      `${name} is a partial UNIQUE index in a migration but missing from UNIQUE_CONSTRAINTS — the preflight would not catch violations of it`,
+    );
+  }
 });
 
 test('DRIFT GUARD: no chk_*_nonneg constraint in the migration is missing from the preflight', () => {

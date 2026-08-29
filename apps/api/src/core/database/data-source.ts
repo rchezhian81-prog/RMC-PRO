@@ -49,6 +49,7 @@ import { SitePincode1720000044000 } from './migrations/1720000044000-SitePincode
 import { WidenMoneyColumns1720000045000 } from './migrations/1720000045000-WidenMoneyColumns';
 import { OrderReturnBilling1720000046000 } from './migrations/1720000046000-OrderReturnBilling';
 import { WeighbridgeInwardUnique1720000047000 } from './migrations/1720000047000-WeighbridgeInwardUnique';
+import { DispatchBatchTicketUnique1720000048000 } from './migrations/1720000048000-DispatchBatchTicketUnique';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -113,6 +114,7 @@ export const AppDataSource = new DataSource({
     WidenMoneyColumns1720000045000,
     OrderReturnBilling1720000046000,
     WeighbridgeInwardUnique1720000047000,
+    DispatchBatchTicketUnique1720000048000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

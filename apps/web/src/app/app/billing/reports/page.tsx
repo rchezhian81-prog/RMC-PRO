@@ -19,6 +19,8 @@ export default function BillingReportsPage() {
   const [sales, setSales] = useState<SalesRegister | null>(null);
   const [hsn, setHsn] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [receipts, setReceipts] = useState<Row[]>([]);
+  const [gstr3b, setGstr3b] = useState<{ output: Row; itc: Row; net: Row } | null>(null);
+  const [dayBook, setDayBook] = useState<{ rows: Row[]; totals: Row; byMode: Row[] } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -26,13 +28,15 @@ export default function BillingReportsPage() {
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [g, s, h, r] = await Promise.all([
+    const [g, s, h, r, l, d] = await Promise.all([
       billingReportsApi.gstSummary(from || undefined, to || undefined),
       billingReportsApi.salesRegister(from || undefined, to || undefined),
       billingReportsApi.hsnSummary(from || undefined, to || undefined),
       billingReportsApi.receiptsRegister(from || undefined, to || undefined),
+      billingReportsApi.gstr3b(from || undefined, to || undefined),
+      billingReportsApi.dayBook(from || undefined, to || undefined),
     ]);
-    setGst(g); setSales(s); setHsn(h); setReceipts(r);
+    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d);
   }
 
   useEffect(() => {
@@ -60,7 +64,7 @@ export default function BillingReportsPage() {
           {(range.from || range.to) && (
             <Button variant="ghost" onClick={() => { setRange({ from: '', to: '' }); load('', '').catch((e) => setError(String(e))); }}>Clear</Button>
           )}
-          <span style={{ color: 'var(--mn-muted)', fontSize: 12 }}>Filters the GST summary, HSN summary, sales register and receipts. Leave blank for all-time.</span>
+          <span style={{ color: 'var(--mn-muted)', fontSize: 12 }}>Filters every report on this page — GST/GSTR-3B, HSN, registers, receipts and the day book. Leave blank for all-time.</span>
         </div>
       </Card>
 
@@ -78,6 +82,57 @@ export default function BillingReportsPage() {
               <StatCard key={k} label={k} value={money(gst[k])} tone={k === 'total' ? 'info' : 'neutral'} />
             ))}
           </div>
+        )}
+      </Card>
+
+      <Card
+        title="GSTR-3B net liability"
+        padded={false}
+        actions={gstr3b ? <ExportButton rows={[{ ...gstr3b.output, kind: 'Output tax' }, { ...gstr3b.itc, kind: 'Input credit' }, { ...gstr3b.net, kind: 'Net payable' }]} columns={['kind', 'cgst', 'sgst', 'igst', 'cess', 'total']} filename="gstr-3b" /> : null}
+      >
+        {gstr3b ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Head</Th>
+                <Th numeric>CGST</Th>
+                <Th numeric>SGST</Th>
+                <Th numeric>IGST</Th>
+                <Th numeric>Cess</Th>
+                <Th numeric>Total</Th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <Td style={{ fontWeight: 600 }}>Output tax (sales)</Td>
+                <Td numeric>{money(gstr3b.output.cgst)}</Td>
+                <Td numeric>{money(gstr3b.output.sgst)}</Td>
+                <Td numeric>{money(gstr3b.output.igst)}</Td>
+                <Td numeric>{money(gstr3b.output.cess)}</Td>
+                <Td numeric>{money(gstr3b.output.total)}</Td>
+              </tr>
+              <tr>
+                <Td style={{ fontWeight: 600 }}>Less: input credit (purchases)</Td>
+                <Td numeric>{money(gstr3b.itc.cgst)}</Td>
+                <Td numeric>{money(gstr3b.itc.sgst)}</Td>
+                <Td numeric>{money(gstr3b.itc.igst)}</Td>
+                <Td numeric><span style={{ color: 'var(--mn-muted)' }}>—</span></Td>
+                <Td numeric>{money(gstr3b.itc.total)}</Td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <Td style={{ fontWeight: 700 }}>Net payable</Td>
+                <Td numeric style={{ fontWeight: 700 }}>{money(gstr3b.net.cgst)}</Td>
+                <Td numeric style={{ fontWeight: 700 }}>{money(gstr3b.net.sgst)}</Td>
+                <Td numeric style={{ fontWeight: 700 }}>{money(gstr3b.net.igst)}</Td>
+                <Td numeric style={{ fontWeight: 700 }}>{money(gstr3b.net.cess)}</Td>
+                <Td numeric style={{ fontWeight: 700 }}>{money(gstr3b.net.total)}</Td>
+              </tr>
+            </tfoot>
+          </Table>
+        ) : (
+          !loaded && <TableSkeleton cols={6} />
         )}
       </Card>
 
@@ -237,6 +292,84 @@ export default function BillingReportsPage() {
           </Table>
         ) : (
           <EmptyState title="No receipts" />
+        )}
+      </Card>
+
+      {dayBook?.totals && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+          <StatCard label="Cash in" value={money(dayBook.totals.inflow)} tone="success" />
+          <StatCard label="Cash out" value={money(dayBook.totals.outflow)} tone="danger" />
+          <StatCard label="Net movement" value={money(dayBook.totals.net)} tone="info" />
+          <StatCard label="Entries" value={String(dayBook.totals.count ?? 0)} />
+        </div>
+      )}
+
+      {dayBook?.byMode?.length ? (
+        <Card title="By payment mode" padded={false} actions={<ExportButton rows={dayBook.byMode} columns={['mode', 'inflow', 'outflow', 'net']} filename="day-book-by-mode" />}>
+          <Table>
+            <thead><tr><Th>Mode</Th><Th numeric>In</Th><Th numeric>Out</Th><Th numeric>Net</Th></tr></thead>
+            <tbody>
+              {dayBook.byMode.map((r, i) => (
+                <tr key={i}>
+                  <Td style={{ fontWeight: 600 }}>{String(r.mode)}</Td>
+                  <Td numeric>{money(r.inflow)}</Td>
+                  <Td numeric>{money(r.outflow)}</Td>
+                  <Td numeric style={{ fontWeight: 600 }}>{money(r.net)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+      ) : null}
+
+      <Card
+        title="Cash / bank day book"
+        padded={false}
+        actions={<ExportButton rows={dayBook?.rows ?? []} columns={['date', 'kind', 'ref', 'mode', 'party', 'inflow', 'outflow']} filename="day-book" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : dayBook?.rows?.length ? (
+          <div style={{ overflowX: 'auto' }}>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Date</Th>
+                  <Th>Type</Th>
+                  <Th>Reference</Th>
+                  <Th>Mode</Th>
+                  <Th>Party</Th>
+                  <Th numeric>In</Th>
+                  <Th numeric>Out</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayBook.rows.map((r, i) => (
+                  <tr key={i}>
+                    <Td>{String(r.date ?? '—')}</Td>
+                    <Td>{String(r.kind)}</Td>
+                    <Td style={{ fontWeight: 600 }}>{String(r.ref)}</Td>
+                    <Td>{String(r.mode)}</Td>
+                    <Td>{r.party ? String(r.party) : <span style={{ color: 'var(--mn-muted)' }}>—</span>}</Td>
+                    <Td numeric>{Number(r.inflow) ? money(r.inflow) : ''}</Td>
+                    <Td numeric>{Number(r.outflow) ? money(r.outflow) : ''}</Td>
+                  </tr>
+                ))}
+              </tbody>
+              {dayBook.totals && (
+                <tfoot>
+                  <tr>
+                    <Td style={{ fontWeight: 700 }}>Totals</Td>
+                    <Td /><Td /><Td /><Td />
+                    <Td numeric style={{ fontWeight: 700 }}>{money(dayBook.totals.inflow)}</Td>
+                    <Td numeric style={{ fontWeight: 700 }}>{money(dayBook.totals.outflow)}</Td>
+                  </tr>
+                </tfoot>
+              )}
+            </Table>
+          </div>
+        ) : (
+          <EmptyState title="No movements" description="Receipts, vendor payments and expense vouchers in the period appear here." />
         )}
       </Card>
     </div>

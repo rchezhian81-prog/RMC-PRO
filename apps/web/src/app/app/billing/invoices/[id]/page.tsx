@@ -3,14 +3,22 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
-import { invoicesApi, gstApi, openPdf, type GstStatus, type Row } from '../../../../../lib/api';
+import { invoicesApi, gstApi, crud, openPdf, type GstStatus, type Row } from '../../../../../lib/api';
 import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
 import { Button } from '../../../../../components/ui/Button';
+import { Field, Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 import { getAccess } from '../../../../../lib/session';
+
+const TRANSPORT_MODES = [
+  { value: 'road', label: 'Road' },
+  { value: 'rail', label: 'Rail' },
+  { value: 'air', label: 'Air' },
+  { value: 'ship', label: 'Ship' },
+];
 
 /** IRN cancellation reasons (NIC): 1=Duplicate, 2=Data entry, 3=Order cancelled, 4=Other. */
 const IRN_CANCEL_REASONS = [
@@ -47,17 +55,42 @@ export default function InvoiceDetail() {
   const { confirm, prompt } = useConfirm();
   const [inv, setInv] = useState<Row | null>(null);
   const [gst, setGst] = useState<GstStatus | null>(null);
+  const [transporters, setTransporters] = useState<Row[]>([]);
+  const [tp, setTp] = useState({ transporterId: '', vehicleNo: '', transportMode: '', distanceKm: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setInv(await invoicesApi.get(id));
+    const full = await invoicesApi.get(id);
+    setInv(full);
+    // Seed the transport form from the saved invoice (normalised values show
+    // after each save/reload).
+    setTp({
+      transporterId: String(full.transporterId ?? ''),
+      vehicleNo: String(full.vehicleNo ?? ''),
+      transportMode: String(full.transportMode ?? ''),
+      distanceKm: full.distanceKm != null ? String(full.distanceKm) : '',
+    });
   }, [id]);
   useEffect(() => {
     load().catch((e) => setError(String(e)));
     // Best-effort: unavailable (403 for non-agents users) → no live GST actions.
     gstApi.status().then(setGst).catch(() => setGst(null));
+    crud('transporters').list().then(setTransporters).catch(() => setTransporters([]));
   }, [load]);
+
+  function saveTransport() {
+    return run(
+      () =>
+        invoicesApi.setTransport(id, {
+          transporterId: tp.transporterId || null,
+          vehicleNo: tp.vehicleNo.trim() || null,
+          transportMode: tp.transportMode || null,
+          distanceKm: tp.distanceKm === '' ? null : Number(tp.distanceKm),
+        }),
+      'Transport details saved',
+    );
+  }
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
     setError(null);
@@ -205,6 +238,56 @@ export default function InvoiceDetail() {
           strong
           tone={Number(inv.outstandingAmount) > 0 ? 'var(--mn-warning)' : 'var(--mn-success)'}
         />
+      </Card>
+
+      <Card title="Transport (e-way bill)">
+        <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px' }}>
+          Transporter, vehicle, mode and distance for this consignment — these feed the e-way bill.
+        </p>
+        {status === 'cancelled' ? (
+          <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>
+            Transporter: {String(inv.transporterId ? (transporters.find((t) => String(t.id) === String(inv.transporterId))?.transporterName ?? '—') : '—')}
+            {' · '}Vehicle: {String(inv.vehicleNo ?? '—')}
+            {' · '}Mode: {String(inv.transportMode ?? '—')}
+            {' · '}Distance: {inv.distanceKm != null ? `${String(inv.distanceKm)} km` : '—'}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ minWidth: 200 }}>
+              <Field label="Transporter">
+                <select className="mn-input" value={tp.transporterId} onChange={(e) => setTp({ ...tp, transporterId: e.target.value })}>
+                  <option value="">—</option>
+                  {transporters.map((t) => (
+                    <option key={t.id} value={String(t.id)}>{String(t.transporterName)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Vehicle no">
+                <Input value={tp.vehicleNo} onChange={(e) => setTp({ ...tp, vehicleNo: e.target.value })} placeholder="e.g. TN01AB1234" />
+              </Field>
+            </div>
+            <div style={{ minWidth: 120 }}>
+              <Field label="Mode">
+                <select className="mn-input" value={tp.transportMode} onChange={(e) => setTp({ ...tp, transportMode: e.target.value })}>
+                  <option value="">—</option>
+                  {TRANSPORT_MODES.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 110 }}>
+              <Field label="Distance (km)">
+                <Input type="number" value={tp.distanceKm} onChange={(e) => setTp({ ...tp, distanceKm: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <Button variant="secondary" onClick={saveTransport}>Save transport</Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {(() => {

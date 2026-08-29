@@ -645,6 +645,8 @@ export const dispatchApi = {
   setStatus: (id: string, status: string, extra: Record<string, unknown> = {}) => post(`/dispatches/${id}/status`, { status, ...extra }),
   cycleTimes: (from?: string, to?: string) =>
     apiFetch<{ rows: Row[]; averages: Row; count: number }>(`/dispatches/report/cycle-times${dateQs(from, to)}`),
+  fleetUtilization: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; totals: Row }>(`/dispatches/report/fleet-utilization${dateQs(from, to)}`),
 };
 
 export const challansApi = {
@@ -835,6 +837,7 @@ export const billingReportsApi = {
   receiptsRegister: (from?: string, to?: string) => apiFetch<Row[]>(`/billing-reports/receipts-register${dateQs(from, to)}`),
   gstr3b: (from?: string, to?: string) => apiFetch<{ output: Row; itc: Row; net: Row; from: string | null; to: string | null }>(`/billing-reports/gstr-3b${dateQs(from, to)}`),
   dayBook: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row; byMode: Row[]; from: string | null; to: string | null }>(`/billing-reports/day-book${dateQs(from, to)}`),
+  salesMis: (from?: string, to?: string) => apiFetch<{ byCustomer: Row[]; byPlant: Row[]; byGrade: Row[]; totals: Row; from: string | null; to: string | null }>(`/billing-reports/sales-mis${dateQs(from, to)}`),
   customerStatement: (customerId: string, from?: string, to?: string) =>
     apiFetch<CustomerStatement>(
       `/billing-reports/customer-statement?customerId=${encodeURIComponent(customerId)}` +

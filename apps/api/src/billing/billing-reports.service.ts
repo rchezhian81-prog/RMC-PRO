@@ -317,4 +317,62 @@ export class BillingReportsService {
       return { rows, totals, byMode, from: from ?? null, to: to ?? null };
     });
   }
+
+  /**
+   * Sales MIS — issued-invoice sales sliced three ways: by customer, by plant
+   * (invoice header) and by concrete grade (invoice lines). The management view
+   * the sales register (a flat list) does not give. Value-bearing; date-bounded
+   * on the invoice date. RLS-scoped raw SQL so the group-bys run in the database.
+   */
+  salesMis(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params = [from ?? null, to ?? null];
+      const invBounds = `i.invoice_status = 'issued' AND ($1::date IS NULL OR i.invoice_date >= $1::date) AND ($2::date IS NULL OR i.invoice_date <= $2::date)`;
+
+      const byCustomer: Array<Record<string, string | number | null>> = await m.query(
+        `SELECT COALESCE(c.customer_name, 'Unknown') AS "customerName",
+                COALESCE(c.customer_type, '')        AS "customerType",
+                COUNT(i.id)::int                     AS invoices,
+                SUM(i.taxable_amount)::float         AS taxable,
+                SUM(i.total_amount)::float           AS total
+           FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id
+          WHERE ${invBounds}
+          GROUP BY c.customer_name, c.customer_type
+          ORDER BY total DESC`,
+        params,
+      );
+
+      const byPlant: Array<Record<string, string | number | null>> = await m.query(
+        `SELECT COALESCE(p.plant_name, 'Unassigned') AS "plantName",
+                COUNT(i.id)::int             AS invoices,
+                SUM(i.taxable_amount)::float AS taxable,
+                SUM(i.total_amount)::float   AS total
+           FROM invoices i LEFT JOIN plants p ON p.id = i.plant_id
+          WHERE ${invBounds}
+          GROUP BY p.plant_name
+          ORDER BY total DESC`,
+        params,
+      );
+
+      const byGrade: Array<Record<string, string | number | null>> = await m.query(
+        `SELECT COALESCE(cg.grade_name, NULLIF(ii.description, ''), 'Ungraded') AS grade,
+                SUM(ii.quantity)::float       AS quantity,
+                SUM(ii.taxable_amount)::float AS taxable,
+                SUM(ii.line_total)::float     AS total
+           FROM invoice_items ii
+           JOIN invoices i ON i.id = ii.invoice_id AND ${invBounds}
+           LEFT JOIN concrete_grades cg ON cg.id = ii.grade_id
+          GROUP BY COALESCE(cg.grade_name, NULLIF(ii.description, ''), 'Ungraded')
+          ORDER BY total DESC`,
+        params,
+      );
+
+      const totals = {
+        invoices: byCustomer.reduce((s, r) => s + num(r.invoices), 0),
+        taxable: round2(byCustomer.reduce((s, r) => s + num(r.taxable), 0)),
+        total: round2(byCustomer.reduce((s, r) => s + num(r.total), 0)),
+      };
+      return { byCustomer, byPlant, byGrade, totals, from: from ?? null, to: to ?? null };
+    });
+  }
 }

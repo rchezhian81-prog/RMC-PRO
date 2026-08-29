@@ -21,6 +21,7 @@ export class DispatchController {
   @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
   // Literal route declared before `:id` so it wins over the param route.
   @Get('report/cycle-times') cycleTimes(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cycleTimeReport(tid(u), from, to); }
+  @Get('report/fleet-utilization') fleetUtilization(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.fleetUtilizationReport(tid(u), from, to); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-batch-ticket/:batchTicketId')

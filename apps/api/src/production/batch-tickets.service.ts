@@ -9,6 +9,7 @@ import {
   Material,
   MixDesign,
   MixDesignMaterial,
+  User,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from './stock.service';
@@ -48,7 +49,12 @@ export class BatchTicketsService {
     const materials = await m
       .getRepository(BatchTicketMaterial)
       .find({ where: { batchTicketId: id }, order: { createdAt: 'ASC' } });
-    return { ...ticket, materials };
+    // Resolve the batching operator to a name — the ticket stores only the UUID,
+    // so nothing surfaced who ran the batch (accountability for the mix).
+    const operator = ticket.operatorUserId
+      ? await m.getRepository(User).findOne({ where: { id: ticket.operatorUserId } })
+      : null;
+    return { ...ticket, materials, operatorName: operator?.name ?? null };
   }
 
   get(tenantId: string, id: string) {

@@ -163,6 +163,7 @@ export default function BatchTicketDetail() {
         <StatusBadge status={status} />
         <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>
           {String(t.gradeLabel ?? '')} · {fmt(t.batchQuantityM3)} m³
+          {t.operatorName ? ` · Batched by ${String(t.operatorName)}` : ''}
         </span>
         {t.varianceExceeded ? <Badge tone="warning">variance override</Badge> : null}
       </div>

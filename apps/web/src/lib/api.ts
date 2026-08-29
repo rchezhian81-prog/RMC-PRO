@@ -634,6 +634,7 @@ export const productionReportsApi = {
   variance: () => apiFetch<Row[]>('/production-reports/variance'),
   consumption: (from?: string, to?: string) => apiFetch<Row[]>(`/production-reports/material-consumption${dateQs(from, to)}`),
   batchRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totalM3: number; count: number }>(`/production-reports/batch-register${dateQs(from, to)}`),
+  planVsActual: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/production-reports/plan-vs-actual${dateQs(from, to)}`),
 };
 
 // ---- Dispatch & delivery challan (Sprint 7) ----

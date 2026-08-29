@@ -17,23 +17,26 @@ export default function ProductionReportsPage() {
   const [variance, setVariance] = useState<Row[]>([]);
   const [consumption, setConsumption] = useState<Row[]>([]);
   const [batch, setBatch] = useState<{ rows: Row[]; totalM3: number; count: number } | null>(null);
+  const [pva, setPva] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [s, v, c, b] = await Promise.all([
+    const [s, v, c, b, p] = await Promise.all([
       productionReportsApi.summary(from || undefined, to || undefined),
       productionReportsApi.variance(),
       productionReportsApi.consumption(from || undefined, to || undefined),
       productionReportsApi.batchRegister(from || undefined, to || undefined),
+      productionReportsApi.planVsActual(from || undefined, to || undefined),
     ]);
     setByGrade(s.byGrade as Row[]);
     setTotals(s.totals as Row);
     setVariance(v);
     setConsumption(c);
     setBatch(b);
+    setPva(p);
   }
 
   useEffect(() => {
@@ -85,6 +88,45 @@ export default function ProductionReportsPage() {
           </Table>
         ) : (
           <EmptyState title="No production yet" />
+        )}
+      </Card>
+
+      <Card
+        title={`Plan vs actual${pva?.totals ? ` — planned ${fmt(pva.totals.plannedM3)} · actual ${fmt(pva.totals.actualM3)} m³` : ''}`}
+        padded={false}
+        actions={<ExportButton rows={pva?.rows ?? []} columns={['gradeLabel', 'plannedM3', 'actualM3', 'varianceM3', 'variancePct']} filename="plan-vs-actual" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={5} />
+        ) : pva?.rows?.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Grade</Th>
+                <Th numeric>Planned m³</Th>
+                <Th numeric>Actual m³</Th>
+                <Th numeric>Variance m³</Th>
+                <Th numeric>Variance %</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {pva.rows.map((r, i) => {
+                const varM3 = Number(r.varianceM3 ?? 0);
+                const tone = varM3 < 0 ? 'var(--mn-warning)' : varM3 > 0 ? 'var(--mn-success)' : 'inherit';
+                return (
+                  <tr key={i}>
+                    <Td>{String(r.gradeLabel ?? '')}</Td>
+                    <Td numeric>{fmt(r.plannedM3)}</Td>
+                    <Td numeric>{fmt(r.actualM3)}</Td>
+                    <Td numeric style={{ color: tone, fontWeight: 600 }}>{varM3 > 0 ? '+' : ''}{fmt(r.varianceM3)}</Td>
+                    <Td numeric>{r.variancePct == null ? '—' : `${varM3 > 0 ? '+' : ''}${String(r.variancePct)}%`}</Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No plan or production in range" description="Plans are bound by plan date, batches by their batch date." />
         )}
       </Card>
 

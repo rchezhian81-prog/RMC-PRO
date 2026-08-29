@@ -140,7 +140,7 @@ export class InvoiceService {
       if (!dueDate) {
         let days = num(customer.creditDays);
         if (days <= 0) {
-          const [s] = await m.query(`SELECT value FROM tenant_settings WHERE key = 'default_credit_days'`);
+          const [s] = await m.query(`SELECT setting_value AS value FROM tenant_settings WHERE setting_key = 'default_credit_days'`);
           days = num(s?.value);
         }
         if (days > 0) dueDate = addDays(invoiceDate, days);

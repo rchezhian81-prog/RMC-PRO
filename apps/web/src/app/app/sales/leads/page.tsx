@@ -27,8 +27,8 @@ function F({ label, v, on, w, req }: { label: string; v: string; on: (v: string)
 export default function LeadsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
-  const [form, setForm] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '' });
-  const [edit, setEdit] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '' });
+  const [form, setForm] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '', requirementNotes: '' });
+  const [edit, setEdit] = useState({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '', requirementNotes: '', lostReason: '' });
   const [fu, setFu] = useState({ notes: '', outcome: '', nextFollowupDate: '', leadStage: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -49,6 +49,7 @@ export default function LeadsPage() {
     setEdit({
       customerName: String(l.customerName ?? ''), contactPerson: String(l.contactPerson ?? ''),
       mobile: String(l.mobile ?? ''), siteLocation: String(l.siteLocation ?? ''), leadSource: String(l.leadSource ?? ''),
+      requirementNotes: String(l.requirementNotes ?? ''), lostReason: String(l.lostReason ?? ''),
     });
   }
 
@@ -70,7 +71,7 @@ export default function LeadsPage() {
     setError(null);
     try {
       await leadsApi.create(form);
-      setForm({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '' });
+      setForm({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '', requirementNotes: '' });
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
@@ -105,6 +106,7 @@ export default function LeadsPage() {
           <F label="Mobile" v={form.mobile} on={(v) => setForm({ ...form, mobile: v })} w={130} />
           <F label="Site location" v={form.siteLocation} on={(v) => setForm({ ...form, siteLocation: v })} w={160} />
           <F label="Source" v={form.leadSource} on={(v) => setForm({ ...form, leadSource: v })} w={120} />
+          <F label="Requirement" v={form.requirementNotes} on={(v) => setForm({ ...form, requirementNotes: v })} w={200} />
           <div style={{ marginBottom: 14 }}>
             <Button type="submit">Create</Button>
           </div>
@@ -155,6 +157,10 @@ export default function LeadsPage() {
             <F label="Mobile" v={edit.mobile} on={(v) => setEdit({ ...edit, mobile: v })} w={130} />
             <F label="Site location" v={edit.siteLocation} on={(v) => setEdit({ ...edit, siteLocation: v })} w={160} />
             <F label="Source" v={edit.leadSource} on={(v) => setEdit({ ...edit, leadSource: v })} w={120} />
+            <F label="Requirement" v={edit.requirementNotes} on={(v) => setEdit({ ...edit, requirementNotes: v })} w={200} />
+            {String(sel.leadStage) === 'lost' && (
+              <F label="Lost reason" v={edit.lostReason} on={(v) => setEdit({ ...edit, lostReason: v })} w={200} />
+            )}
             <div style={{ marginBottom: 14 }}>
               <Button type="submit" variant="secondary">Save details</Button>
             </div>

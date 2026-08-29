@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { BatchTicket, BatchTicketMaterial, StockTransaction } from '../core/database/entities';
+import { buildPlanVsActual } from './plan-vs-actual.util';
 
 /** Basic production reports (Design Doc 12 §reports, DEV-PLAN B9). */
 @Injectable()
@@ -90,6 +91,38 @@ export class ProductionReportsService {
       const rows: Array<{ m3: number | string }> = await qb.orderBy('date', 'DESC').getRawMany();
       const totalM3 = Math.round(rows.reduce((s, r) => s + (Number(r.m3) || 0), 0) * 1000) / 1000;
       return { rows, totalM3, count: rows.length };
+    });
+  }
+
+  /**
+   * Plan vs actual — planned m³ (from production plans) against actually-batched
+   * m³ (confirmed tickets), by grade, over [from, to]. Plans are bounded by
+   * plan_date; batches by their batch date. RLS scopes both to the tenant.
+   */
+  planVsActual(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params = [from ?? null, to ?? null];
+      const planned: Array<{ gradeLabel: string | null; plannedM3: number }> = await m.query(
+        `SELECT pi.grade_label AS "gradeLabel",
+                COALESCE(SUM(pi.planned_quantity_m3), 0)::float AS "plannedM3"
+           FROM production_plan_items pi
+           JOIN production_plans p ON p.id = pi.production_plan_id
+          WHERE ($1::date IS NULL OR p.plan_date >= $1::date)
+            AND ($2::date IS NULL OR p.plan_date <= $2::date)
+          GROUP BY pi.grade_label`,
+        params,
+      );
+      const actual: Array<{ gradeLabel: string | null; actualM3: number }> = await m.query(
+        `SELECT t.grade_label AS "gradeLabel",
+                COALESCE(SUM(t.batch_quantity_m3), 0)::float AS "actualM3"
+           FROM batch_tickets t
+          WHERE t.status = 'confirmed'
+            AND ($1::date IS NULL OR COALESCE(t.batch_start_time, t.created_at)::date >= $1::date)
+            AND ($2::date IS NULL OR COALESCE(t.batch_start_time, t.created_at)::date <= $2::date)
+          GROUP BY t.grade_label`,
+        params,
+      );
+      return buildPlanVsActual(planned, actual);
     });
   }
 

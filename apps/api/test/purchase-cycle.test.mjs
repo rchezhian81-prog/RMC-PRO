@@ -88,6 +88,19 @@ po = await api('GET', `/purchase-orders/${po.id}`);
 ok('PO now fully received', po.status === 'received');
 ok('PO line received qty rolled up', near(po.items[0].receivedQuantity, QTY));
 
+// A5 — a GRN that would receive far more than the PO ordered is rejected
+// (PO already fully received; another full QTY would be 2× the order).
+let overReceiveBlocked = false;
+try {
+  await api('POST', '/goods-receipts', {
+    purchaseOrderId: po.id, plantId: PLANT_ID, receiptDate: new Date().toISOString().slice(0, 10),
+    lines: [{ purchaseOrderItemId: poItemId, materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, receivedQuantity: QTY, acceptedQuantity: QTY, rate: RATE }],
+  });
+} catch {
+  overReceiveBlocked = true;
+}
+ok('GRN over-receiving beyond the PO is blocked', overReceiveBlocked);
+
 // ---- D. Vendor bill (3-way matched) ----
 let bill = await api('POST', '/vendor-bills', {
   supplierId: supplier.id, purchaseOrderId: po.id, goodsReceiptId: grn.id,

@@ -16,6 +16,10 @@ const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 const round3 = (v: number): number => Math.round((Number(v) || 0) * 1000) / 1000;
+/** Over-delivery allowance on a PO line before a GRN is rejected (bulk material
+ *  often arrives a little over) — a gross mis-key (e.g. 200 t on a 20 t PO) is
+ *  still blocked. Amend the PO to receive more than this. */
+const OVER_RECEIPT_TOLERANCE = 0.1;
 
 /**
  * Goods receipts (Plan D2) — the multi-line GRN. Receiving records what actually
@@ -77,6 +81,10 @@ export class GrnService {
 
       const itemRepo = m.getRepository(GoodsReceiptItem);
       const materialRepo = m.getRepository(Material);
+      const poItemRepo = m.getRepository(PurchaseOrderItem);
+      // Accumulate this GRN's received per PO line so multiple lines against one
+      // PO item are capped together, not each on its own.
+      const receivedThisGrn = new Map<string, number>();
       for (const line of lines) {
         const materialId = (line.materialId as string) || null;
         const received = num(line.receivedQuantity);
@@ -84,6 +92,29 @@ export class GrnService {
         // Default accepted to received when the QC hasn't rejected anything.
         const accepted = line.acceptedQuantity !== undefined ? num(line.acceptedQuantity) : received;
         if (accepted < 0 || accepted > received + 0.0005) throw badReq('Accepted quantity must be between 0 and received');
+
+        // Cap the received quantity at the PO line's ordered amount (plus a
+        // small over-delivery tolerance), counting what earlier posted GRNs and
+        // this GRN's other lines already receive — so a mis-key can't book far
+        // more than was ordered.
+        const poItemId = (line.purchaseOrderItemId as string) || null;
+        if (poItemId) {
+          const poItem = await poItemRepo.findOne({ where: { id: poItemId } });
+          if (poItem) {
+            const soFar = (receivedThisGrn.get(poItemId) ?? 0) + received;
+            receivedThisGrn.set(poItemId, soFar);
+            const ordered = num(poItem.quantity);
+            const cap = ordered * (1 + OVER_RECEIPT_TOLERANCE);
+            if (ordered > 0 && num(poItem.receivedQuantity) + soFar > cap + 0.0005) {
+              const label = (line.materialLabel as string) || materialId || 'this material';
+              throw badReq(
+                `Received quantity exceeds the ordered amount for ${label} ` +
+                  `(ordered ${ordered}, already received ${num(poItem.receivedQuantity)}). ` +
+                  'Amend the purchase order to receive more.',
+              );
+            }
+          }
+        }
         let materialLabel: string | null = (line.materialLabel as string) ?? null;
         let uom: string | null = (line.uom as string) ?? null;
         if (materialId && (!materialLabel || !uom)) {

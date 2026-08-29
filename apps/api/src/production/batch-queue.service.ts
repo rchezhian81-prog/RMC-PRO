@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { leavesTerminal } from '../common/state-machine.util';
 import { BatchQueueEntry, Order, OrderItem } from '../core/database/entities';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Queue entry not found' });
@@ -60,6 +61,11 @@ export class BatchQueueService {
       const repo = m.getRepository(BatchQueueEntry);
       const row = await repo.findOne({ where: { id } });
       if (!row) throw notFound();
+      // A completed queue entry has produced its batch; a cancelled one is void.
+      // Re-opening either would let the same load be batched again.
+      if (leavesTerminal(row.queueStatus, status, ['completed', 'cancelled'])) {
+        throw badReq(`A ${row.queueStatus} queue entry cannot change status`);
+      }
       await repo.update(id, { queueStatus: status });
       return repo.findOne({ where: { id } });
     });

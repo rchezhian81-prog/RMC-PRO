@@ -50,8 +50,10 @@ export class Material extends TenantScopedEntity {
   @Column({ name: 'category', type: 'varchar', nullable: true }) category!: string | null;
   @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;
   @Column({ name: 'hsn_code', type: 'varchar', nullable: true }) hsnCode!: string | null;
-  @Column({ name: 'minimum_stock', type: 'int', default: 0 }) minimumStock!: number;
-  @Column({ name: 'reorder_level', type: 'int', default: 0 }) reorderLevel!: number;
+  // Stock levels are quantities, so numeric(_,3): int truncated fractional units
+  // (a 2.5-tonne reorder level, a fractional minimum stock).
+  @Column({ name: 'minimum_stock', type: 'numeric', precision: 14, scale: 3, default: 0 }) minimumStock!: string;
+  @Column({ name: 'reorder_level', type: 'numeric', precision: 14, scale: 3, default: 0 }) reorderLevel!: string;
   // Per-unit purchase price, so numeric(14,2): int dropped the paise.
   @Column({ name: 'standard_rate', type: 'numeric', precision: 14, scale: 2, default: 0 }) standardRate!: string;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
@@ -107,7 +109,8 @@ export class Supplier extends TenantScopedEntity {
 export class Vehicle extends TenantScopedEntity {
   @Column({ name: 'vehicle_no', type: 'varchar' }) vehicleNo!: string;
   @Column({ name: 'vehicle_type', type: 'varchar', nullable: true }) vehicleType!: string | null;
-  @Column({ name: 'capacity_m3', type: 'int', default: 0 }) capacityM3!: number;
+  // Capacity is a quantity, so numeric(_,3): int truncated a 7.5 m³ mixer.
+  @Column({ name: 'capacity_m3', type: 'numeric', precision: 8, scale: 3, default: 0 }) capacityM3!: string;
   @Column({ name: 'ownership_type', type: 'varchar', nullable: true }) ownershipType!: string | null;
   @Column({ name: 'driver_id', type: 'uuid', nullable: true }) driverId!: string | null;
   @Column({ name: 'insurance_expiry', type: 'date', nullable: true }) insuranceExpiry!: string | null;

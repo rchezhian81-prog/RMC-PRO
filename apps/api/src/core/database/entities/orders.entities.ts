@@ -59,7 +59,6 @@ export class OrderItem extends TenantScopedEntity {
   @Column({ name: 'slump_required', type: 'varchar', nullable: true }) slumpRequired!: string | null;
   @Column({ name: 'pump_required', type: 'boolean', default: false }) pumpRequired!: boolean;
   @Column({ name: 'required_datetime', type: 'timestamptz', nullable: true }) requiredDatetime!: Date | null;
-  @Column({ name: 'delivery_interval_minutes', type: 'int', nullable: true }) deliveryIntervalMinutes!: number | null;
   @Column({ name: 'line_status', type: 'varchar', default: 'draft' }) lineStatus!: string;
 }
 

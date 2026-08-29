@@ -192,7 +192,7 @@ async function main() {
       state: 'TN',
       contactPerson: 'S. Kumar',
       mobile: '9840000001',
-      creditLimit: 500000,
+      creditLimit: '500000',
       creditDays: 30,
     }),
   );

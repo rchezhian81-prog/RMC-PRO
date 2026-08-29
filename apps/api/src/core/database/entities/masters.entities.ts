@@ -17,9 +17,10 @@ export class Customer extends TenantScopedEntity {
   @Column({ name: 'contact_person', type: 'varchar', nullable: true }) contactPerson!: string | null;
   @Column({ name: 'mobile', type: 'varchar', nullable: true }) mobile!: string | null;
   @Column({ name: 'email', type: 'varchar', nullable: true }) email!: string | null;
-  @Column({ name: 'credit_limit', type: 'int', default: 0 }) creditLimit!: number;
+  // Money, so numeric(16,2): int truncated paise and any sub-rupee opening balance.
+  @Column({ name: 'credit_limit', type: 'numeric', precision: 16, scale: 2, default: 0 }) creditLimit!: string;
   @Column({ name: 'credit_days', type: 'int', default: 0 }) creditDays!: number;
-  @Column({ name: 'opening_balance', type: 'int', default: 0 }) openingBalance!: number;
+  @Column({ name: 'opening_balance', type: 'numeric', precision: 16, scale: 2, default: 0 }) openingBalance!: string;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
 }
 
@@ -51,7 +52,8 @@ export class Material extends TenantScopedEntity {
   @Column({ name: 'hsn_code', type: 'varchar', nullable: true }) hsnCode!: string | null;
   @Column({ name: 'minimum_stock', type: 'int', default: 0 }) minimumStock!: number;
   @Column({ name: 'reorder_level', type: 'int', default: 0 }) reorderLevel!: number;
-  @Column({ name: 'standard_rate', type: 'int', default: 0 }) standardRate!: number;
+  // Per-unit purchase price, so numeric(14,2): int dropped the paise.
+  @Column({ name: 'standard_rate', type: 'numeric', precision: 14, scale: 2, default: 0 }) standardRate!: string;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
   // Batching properties (Plan A1) — feed moisture/water correction (A2).
   /** cement | fine_aggregate | coarse_aggregate | water | admixture | additive | other */

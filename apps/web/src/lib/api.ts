@@ -885,6 +885,19 @@ export const purchaseApi = {
   itcRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/purchase-reports/itc-register${dateQs(from, to)}`),
 };
 
+export type VendorLedger = { supplierName: string; opening: number; rows: Row[]; totalDebit: number; totalCredit: number; closing: number; from: string | null; to: string | null };
+export const purchaseReportsApi = {
+  payablesAging: () => apiFetch<{ rows: Row[]; totals: Row }>('/purchase-reports/payables-aging'),
+  vendorLedger: (supplierId: string, from?: string, to?: string) => {
+    const qs = new URLSearchParams({ supplierId });
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    return apiFetch<VendorLedger>(`/purchase-reports/vendor-ledger?${qs.toString()}`);
+  },
+  purchaseRegister: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; byVendor: Row[]; byMaterial: Row[]; totals: Row }>(`/purchase-reports/purchase-register${dateQs(from, to)}`),
+};
+
 // ---- Bulk import framework (Plan F1) ----
 export interface ImportColumn { key: string; label: string; required?: boolean; type?: string; example?: string }
 export interface ImportDef { key: string; label: string; columns: ImportColumn[] }

@@ -9,6 +9,7 @@ import { PurchaseOrderService } from './purchase-order.service';
 import { GrnService } from './goods-receipt.service';
 import { VendorBillService } from './vendor-bill.service';
 import { VendorPaymentService } from './vendor-payment.service';
+import { PurchaseReportsService } from './purchase-reports.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
 
@@ -95,10 +96,33 @@ export class VendorPaymentController {
 @RequireModule('purchase')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class PurchaseReportsController {
-  constructor(private readonly bills: VendorBillService) {}
+  constructor(
+    private readonly bills: VendorBillService,
+    private readonly reports: PurchaseReportsService,
+  ) {}
 
   @Get('itc-register') @RequirePermissions('purchase.view')
   itc(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
     return this.bills.itcRegister(tid(u), from, to);
+  }
+
+  @Get('payables-aging') @RequirePermissions('purchase.view')
+  payablesAging(@CurrentUser() u: AuthUser) {
+    return this.reports.payablesAging(tid(u));
+  }
+
+  @Get('vendor-ledger') @RequirePermissions('purchase.view')
+  vendorLedger(
+    @CurrentUser() u: AuthUser,
+    @Query('supplierId') supplierId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reports.vendorLedger(tid(u), supplierId ?? '', from, to);
+  }
+
+  @Get('purchase-register') @RequirePermissions('purchase.view')
+  purchaseRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.reports.purchaseRegister(tid(u), from, to);
   }
 }

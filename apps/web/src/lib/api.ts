@@ -736,6 +736,8 @@ export const invoicesApi = {
   cancel: (id: string, reason: string) => post(`/invoices/${id}/cancel`, { reason }),
   writeoff: (id: string, amount: number, reason: string) => post(`/invoices/${id}/writeoff`, { amount, reason }),
   share: (id: string, mobile: string) => post(`/invoices/${id}/share`, { mobile }),
+  // e-way transport details (transporter, vehicle, mode, distance) — feed the e-way bill.
+  setTransport: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/invoices/${id}/transport`, { method: 'PATCH', body: JSON.stringify(b) }),
 };
 
 // ---- GST live compliance (IRP / e-way) — prepare → approve → execute ----

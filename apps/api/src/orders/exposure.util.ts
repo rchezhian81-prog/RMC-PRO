@@ -96,21 +96,23 @@ export async function computeCustomerExposure(
   const openingBalance = num(customer?.openingBalance);
   const creditLimit = num(customer?.creditLimit);
 
-  // Un-invoiced confirmed-order value. billed = Σ issued-invoice totals raised
-  // against each order's challans (orders → challans → invoice_challans →
-  // invoices); GREATEST(0, …) floors each order at its remaining value so an
-  // over-billed order never turns exposure negative.
+  // Un-invoiced confirmed-order value. billed = Σ issued-invoice line totals
+  // raised against each order's challans, summed over invoice_items (each item
+  // carries its own challan + line total). Summing i.total_amount over the
+  // invoice→challan join instead fans out — a k-challan invoice would add the
+  // whole invoice total k times and prematurely zero the order's remainder,
+  // under-counting exposure. GREATEST(0, …) floors each order at its remaining
+  // value so an over-billed order never turns exposure negative.
   const orderRows: Array<{ total: number | string | null }> = await m.query(
     `SELECT COALESCE(SUM(GREATEST(0,
          COALESCE(o.estimated_order_value_incl_gst, o.estimated_order_value)
          - COALESCE(b.billed, 0))), 0)::float AS total
        FROM orders o
        LEFT JOIN (
-         SELECT dc.order_id, SUM(i.total_amount) AS billed
-           FROM invoices i
-           JOIN invoice_challans ic ON ic.invoice_id = i.id
-           JOIN delivery_challans dc ON dc.id = ic.challan_id
-          WHERE i.invoice_status = 'issued'
+         SELECT dc.order_id, SUM(ii.line_total) AS billed
+           FROM invoice_items ii
+           JOIN invoices i ON i.id = ii.invoice_id AND i.invoice_status = 'issued'
+           JOIN delivery_challans dc ON dc.id = ii.challan_id
           GROUP BY dc.order_id
        ) b ON b.order_id = o.id
       WHERE o.customer_id = $1

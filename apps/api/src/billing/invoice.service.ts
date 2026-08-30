@@ -10,6 +10,7 @@ import {
   InvoiceItem,
   Order,
   OrderItem,
+  Site,
   Transporter,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
@@ -127,10 +128,27 @@ export class InvoiceService {
       const customer = await m.getRepository(Customer).findOne({ where: { id: customerId } });
       if (!customer) throw badReq('Customer not found');
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+
+      // Place of supply for a supply of GOODS is where the movement terminates —
+      // the delivery site's state — not the customer's registered state. A bill-to
+      // customer HO in one state with a ship-to site in another must be taxed on
+      // the site's state (IGST vs CGST+SGST) with the site as POS. Resolve the site
+      // from the invoice's siteId, else the first challan's site; fall back to the
+      // customer's state only when no site state is known.
+      const siteId =
+        (dto.siteId as string) ||
+        (await (async () => {
+          const firstChallanId = String((lines[0] as Record<string, unknown>)?.challanId ?? '');
+          if (!firstChallanId) return null;
+          const c = await m.getRepository(DeliveryChallan).findOne({ where: { id: firstChallanId } });
+          return c?.siteId ?? null;
+        })());
+      const site = siteId ? await m.getRepository(Site).findOne({ where: { id: siteId } }) : null;
+      const placeOfSupplyState = site?.state && String(site.state).trim() ? site.state : customer.state;
       // Normalise state names (trim + case) exactly like the order/quotation
       // paths, so a same-state supply written "Karnataka " vs "Karnataka" is not
       // mis-classified as inter-state (wrong CGST/SGST-vs-IGST heads + portal reject).
-      const isInterstate = isInterstateSupply(company?.state, customer.state);
+      const isInterstate = isInterstateSupply(company?.state, placeOfSupplyState);
 
       // Due date defaults to invoiceDate + the customer's credit days (falling
       // back to the tenant default_credit_days setting), so aging and overdue
@@ -153,8 +171,8 @@ export class InvoiceService {
           tenantId, invoiceNo,
           invoiceDate,
           dueDate,
-          customerId, siteId: (dto.siteId as string) ?? null,
-          billingAddress: customer.billingAddress, placeOfSupply: customer.state, gstin: customer.gstin,
+          customerId, siteId: siteId ?? null,
+          billingAddress: customer.billingAddress, placeOfSupply: placeOfSupplyState, gstin: customer.gstin,
           isInterstate, invoiceStatus: 'draft', paymentStatus: 'unpaid',
         }),
       );

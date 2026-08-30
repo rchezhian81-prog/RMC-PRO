@@ -74,8 +74,12 @@ export class StockService {
    * plant, use it; otherwise fall back to the tenant's single plant (the common
    * single-plant case), and refuse clearly when it cannot be determined rather
    * than silently writing an unscoped row.
+   *
+   * Public so callers can resolve the plant BEFORE reading a balance — reading
+   * with a null plant (via `balanceOf(..., null, ...)`) matches the IS-NULL ghost
+   * row, not the real plant-scoped balance, so a pre-check must resolve first.
    */
-  private async resolvePlant(m: EntityManager, plantId: string | null): Promise<string> {
+  async resolvePlant(m: EntityManager, plantId: string | null): Promise<string> {
     if (plantId) return plantId;
     const plants = await m.getRepository(Plant).find({ order: { createdAt: 'ASC' }, take: 2 });
     const [first] = plants;

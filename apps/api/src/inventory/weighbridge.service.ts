@@ -44,8 +44,21 @@ export class WeighbridgeService {
       const material = dto.materialId ? await m.getRepository(Material).findOne({ where: { id: String(dto.materialId) } }) : null;
       const gross = num(dto.grossWeight);
       const tare = num(dto.tareWeight);
-      const net = dto.netWeight !== undefined ? num(dto.netWeight) : gross - tare;
+      const derived = gross - tare;
+      const net = dto.netWeight !== undefined ? num(dto.netWeight) : derived;
       if (net < 0) throw badReq('Net weight cannot be negative — check the gross and tare weights');
+      // When the slip carries a real gross weight, the net must reconcile with
+      // gross − tare — that integrity is the whole point of a weighbridge slip,
+      // and this net later becomes stock. A hand-keyed net that contradicts the
+      // weighed figures (or a tare above the gross) is rejected; a net-only entry
+      // with no gross weighed is left alone.
+      if (gross > 0) {
+        if (tare > gross) throw badReq('Tare weight cannot exceed gross weight.');
+        const tol = Math.max(1, gross * 0.005);
+        if (Math.abs(net - derived) > tol) {
+          throw badReq(`Net weight (${net}) does not reconcile with gross − tare (${derived}). Check the weights.`);
+        }
+      }
       const slipNo = await this.numbering.next(m, tenantId, 'weighbridge', 'WB-');
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'slipNo', 'status', 'netWeight', 'weightSource', 'indicatorId', 'manualOverride'])

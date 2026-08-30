@@ -42,6 +42,11 @@ class SetControlsDto {
   @IsOptional() @IsInt() @Min(0) @Max(1000) maxActionsPerRun?: number;
 }
 
+class SetPauseDto {
+  /** true pauses just this one agent; false resumes it. */
+  @IsBoolean() paused!: boolean;
+}
+
 class RunDiagnosticsDto {
   @IsOptional() @IsString() @MaxLength(200) msg?: string;
   @IsOptional() @IsBoolean() mark?: boolean;
@@ -140,6 +145,21 @@ export class AgentsController {
   @Put('controls')
   setControls(@CurrentUser() u: AuthUser, @Body() dto: SetControlsDto) {
     return this.governor.setControls(u.tenantId as string, dto, u.userId);
+  }
+
+  /** Per-agent pause states for this tenant, as { agentName: paused }. */
+  @Get('pauses')
+  getPauses(@CurrentUser() u: AuthUser) {
+    return this.governor.getAgentPauses(u.tenantId as string);
+  }
+
+  /** Pause or resume ONE agent, without touching the tenant-wide kill switch. */
+  @Put('pauses/:name')
+  setPause(@CurrentUser() u: AuthUser, @Param('name') name: string, @Body() dto: SetPauseDto) {
+    if (!this.registry.listAgents().some((a) => a.name === name)) {
+      throw new BadRequestException(`unknown agent '${name}'`);
+    }
+    return this.governor.setAgentPause(u.tenantId as string, name, dto.paused, u.userId);
   }
 
   /** Recent agent runs for this tenant (newest first). */

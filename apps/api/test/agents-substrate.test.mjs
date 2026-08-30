@@ -134,6 +134,17 @@ const runDiag = async (input) => (await api('POST', '/agents/diagnostics/run', i
   ok('a killed run does no work', killed?.stepsUsed === 0);
   await api('PUT', '/agents/controls', { automationPaused: false });
 
+  // Per-agent pause (v2): stop just the diagnostics agent, tenant still running.
+  await api('PUT', '/agents/pauses/diagnostics', { paused: true });
+  const perAgentKilled = await runDiag({ msg: 'should not run' });
+  ok('a per-agent pause halts that agent', perAgentKilled?.status === 'killed');
+  ok('a per-agent-paused run does no work', perAgentKilled?.stepsUsed === 0);
+  const pauses = (await api('GET', '/agents/pauses')).body?.data;
+  ok('the pauses list reflects the paused agent', pauses && pauses.diagnostics === true);
+  await api('PUT', '/agents/pauses/diagnostics', { paused: false });
+  const resumed = await runDiag({ msg: 'hello again' });
+  ok('resuming the agent lets it run', resumed?.status === 'completed');
+
   // Action budget.
   await api('PUT', '/agents/controls', { maxActionsPerRun: 0 });
   const aborted = await runDiag({ mark: true });

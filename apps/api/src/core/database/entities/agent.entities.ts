@@ -54,6 +54,31 @@ export class AgentControl {
   updatedBy!: string | null;
 }
 
+/**
+ * Per-agent pause overrides (one row per tenant × agent). The tenant-wide kill
+ * switch on `agent_controls` stops everything; this stops just one agent (e.g.
+ * pause the automation agent while the read-only monitors keep running). A row's
+ * `paused` flag is authoritative for that agent; no row means the agent follows
+ * the tenant default (runs unless the global kill switch is on).
+ */
+@Entity('agent_pauses')
+export class AgentPause {
+  @PrimaryColumn({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @PrimaryColumn({ name: 'agent_name', type: 'varchar' })
+  agentName!: string;
+
+  @Column({ name: 'paused', type: 'boolean', default: true })
+  paused!: boolean;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
+
+  @Column({ name: 'updated_by', type: 'uuid', nullable: true })
+  updatedBy!: string | null;
+}
+
 /** One orchestrated task run: what agent, for whom, its status and usage. */
 @Entity('agent_runs')
 @Index('idx_agent_runs_tenant_time', ['tenantId', 'createdAt'])

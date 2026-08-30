@@ -138,6 +138,16 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: "batch_ticket_id IS NOT NULL AND dispatch_status NOT IN ('cancelled', 'rejected')",
     constraint: 'uq_dispatches_batch_ticket',
   },
+  {
+    // One numbering series per (tenant, document type, plant, financial year).
+    // GROUP BY treats NULL plant/FY as equal — matching the index's NULLS NOT
+    // DISTINCT — so a cold-start-race duplicate (or a hand-created shadow series)
+    // is caught here before the CREATE UNIQUE INDEX would abort the migration.
+    table: 'number_series',
+    columns: ['tenant_id', 'document_type', 'plant_id', 'financial_year'],
+    predicate: 'true',
+    constraint: 'uq_number_series_key',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

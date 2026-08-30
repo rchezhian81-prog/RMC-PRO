@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { AgentControl } from '../core/database/entities';
+import { AgentControl, AgentPause } from '../core/database/entities';
 
 /** The effective controls for a tenant (a row, or the built-in defaults). */
 export interface AgentControls {
@@ -76,6 +76,36 @@ export class AgentGovernorService {
         maxStepsPerRun: merged.maxStepsPerRun,
         maxActionsPerRun: merged.maxActionsPerRun,
       };
+    });
+  }
+
+  /**
+   * Per-agent pause states for a tenant, as { agentName: paused }. Only agents
+   * with an override row appear; an agent not listed follows the tenant default
+   * (runs unless the global kill switch is on).
+   */
+  async getAgentPauses(tenantId: string): Promise<Record<string, boolean>> {
+    const rows = await this.db.runInTenant(tenantId, (m) => m.getRepository(AgentPause).find());
+    return Object.fromEntries(rows.map((r) => [r.agentName, r.paused]));
+  }
+
+  /**
+   * Is this one agent paused for the tenant? Checked by the kernel at run start,
+   * in addition to (and independent of) the tenant-wide kill switch.
+   */
+  async isAgentPaused(tenantId: string, agentName: string): Promise<boolean> {
+    const row = await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(AgentPause).findOne({ where: { tenantId, agentName } }),
+    );
+    return row?.paused ?? false;
+  }
+
+  /** Upsert one agent's pause override (pause or resume that agent). */
+  async setAgentPause(tenantId: string, agentName: string, paused: boolean, actorUserId: string | null): Promise<{ agentName: string; paused: boolean }> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(AgentPause);
+      await repo.save(repo.create({ tenantId, agentName, paused, updatedBy: actorUserId }));
+      return { agentName, paused };
     });
   }
 }

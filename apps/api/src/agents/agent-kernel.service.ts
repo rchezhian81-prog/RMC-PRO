@@ -73,6 +73,30 @@ export class AgentKernelService {
     return this.runTaskInternal({ ...params, depth: 0, parentRunId: null });
   }
 
+  /**
+   * Record a run refused before it started (the kill switch or a per-agent
+   * pause): a `killed` run with a single blocked step and an audit entry, doing
+   * no work. One path for both refusal reasons so they behave identically.
+   */
+  private async refuseRun(
+    tenantId: string,
+    agentName: string,
+    taskKind: string | null,
+    actorUserId: string | null,
+    parentRunId: string | null,
+    summary: string,
+    stepReason: string,
+    reason: string,
+  ): Promise<AgentRunResult> {
+    const killed = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'killed', summary, parentRunId);
+    await this.recordStep(tenantId, killed.id, 1, {
+      stepType: 'blocked', policyVerdict: 'block', detail: { reason: stepReason },
+    });
+    await this.finalizeRun(tenantId, killed.id, 'killed', 0, 0, { reason });
+    await this.auditRun(tenantId, actorUserId, killed.id, agentName, taskKind, 'killed', { steps: 0, actions: 0 });
+    return { runId: killed.id, status: 'killed', stepsUsed: 0, actionsUsed: 0, outcome: { reason }, reason };
+  }
+
   private async runTaskInternal(params: RunTaskInternal): Promise<AgentRunResult> {
     const { tenantId, agentName, actorUserId, depth, parentRunId } = params;
     const taskKind = params.taskKind ?? null;
@@ -83,13 +107,12 @@ export class AgentKernelService {
 
     // Kill switch: a paused tenant runs nothing (top-level or escalated).
     if (controls.automationPaused) {
-      const killed = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'killed', 'refused: automation paused', parentRunId);
-      await this.recordStep(tenantId, killed.id, 1, {
-        stepType: 'blocked', policyVerdict: 'block', detail: { reason: 'automation paused (kill switch)' },
-      });
-      await this.finalizeRun(tenantId, killed.id, 'killed', 0, 0, { reason: 'automation paused' });
-      await this.auditRun(tenantId, actorUserId, killed.id, agentName, taskKind, 'killed', { steps: 0, actions: 0 });
-      return { runId: killed.id, status: 'killed', stepsUsed: 0, actionsUsed: 0, outcome: { reason: 'automation paused' }, reason: 'automation paused' };
+      return this.refuseRun(tenantId, agentName, taskKind, actorUserId, parentRunId, 'refused: automation paused', 'automation paused (kill switch)', 'automation paused');
+    }
+    // Per-agent pause: an operator can stop one agent without the global kill
+    // switch — a paused agent runs nothing, top-level or as an escalation target.
+    if (await this.governor.isAgentPaused(tenantId, agentName)) {
+      return this.refuseRun(tenantId, agentName, taskKind, actorUserId, parentRunId, `refused: agent ${agentName} paused`, `agent ${agentName} paused`, `agent ${agentName} paused`);
     }
 
     const run = await this.createRun(tenantId, agentName, taskKind, actorUserId, 'running', `agent ${agentName} run`, parentRunId);

@@ -34,6 +34,7 @@ export default function AgentGovernorPage() {
   const [steps, setSteps] = useState('');
   const [actions, setActions] = useState('');
   const [catalog, setCatalog] = useState<Catalog>([]);
+  const [pauses, setPauses] = useState<Record<string, boolean>>({});
   const [llm, setLlm] = useState<Llm | null>(null);
   const [runs, setRuns] = useState<Row[]>([]);
   const [approvals, setApprovals] = useState<Row[]>([]);
@@ -49,9 +50,10 @@ export default function AgentGovernorPage() {
     setError(null);
     const canApp = getAccess().has('agents.approve');
     setCanApprove(canApp);
-    const [c, cat, l, r] = await Promise.all([
+    const [c, cat, p, l, r] = await Promise.all([
       agentsApi.controls(),
       agentsApi.catalog(),
+      agentsApi.pauses(),
       agentsApi.llm(),
       agentsApi.runs(50),
     ]);
@@ -59,6 +61,7 @@ export default function AgentGovernorPage() {
     setSteps(String(c.maxStepsPerRun));
     setActions(String(c.maxActionsPerRun));
     setCatalog(cat as Catalog);
+    setPauses(p);
     setLlm(l);
     setRuns(r);
     if (canApp) {
@@ -106,6 +109,17 @@ export default function AgentGovernorPage() {
     if (!Number.isInteger(s) || s < 0 || s > 10000) { setError('Steps per run must be a whole number from 0 to 10000.'); return; }
     if (!Number.isInteger(a) || a < 0 || a > 1000) { setError('Actions per run must be a whole number from 0 to 1000.'); return; }
     await act(() => agentsApi.setControls({ maxStepsPerRun: s, maxActionsPerRun: a }), 'Budgets saved.');
+  }
+
+  async function togglePause(name: string, currentlyPaused: boolean) {
+    const pausing = !currentlyPaused;
+    if (pausing && !(await confirm({
+      title: `Pause the ${name} agent`,
+      message: `Stop the ${name} agent from running — other agents and scheduled work are unaffected. Resume it here at any time.`,
+      confirmLabel: 'Pause agent',
+      danger: true,
+    }))) return;
+    await act(() => agentsApi.setPause(name, pausing), pausing ? `Paused the ${name} agent.` : `Resumed the ${name} agent.`);
   }
 
   async function approve(a: Row) {
@@ -166,7 +180,7 @@ export default function AgentGovernorPage() {
       {/* B · Agent roster */}
       <Card title="Agent roster" padded={false}>
         {!loaded ? (
-          <TableSkeleton cols={3} />
+          <TableSkeleton cols={5} />
         ) : catalog.length ? (
           <div style={{ overflowX: 'auto' }}>
             <Table>
@@ -175,16 +189,31 @@ export default function AgentGovernorPage() {
                   <Th>Agent</Th>
                   <Th>What it does</Th>
                   <Th>Tools (allow-list)</Th>
+                  <Th>State</Th>
+                  <Th />
                 </tr>
               </thead>
               <tbody>
-                {catalog.map((a) => (
-                  <tr key={a.name}>
-                    <Td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{a.name}</Td>
-                    <Td style={{ color: 'var(--mn-muted)' }}>{a.description}</Td>
-                    <Td style={{ fontSize: 12.5 }}>{a.tools.length ? a.tools.join(', ') : <span style={{ color: 'var(--mn-muted)' }}>none</span>}</Td>
-                  </tr>
-                ))}
+                {catalog.map((a) => {
+                  const agentPaused = pauses[a.name] === true;
+                  return (
+                    <tr key={a.name}>
+                      <Td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{a.name}</Td>
+                      <Td style={{ color: 'var(--mn-muted)' }}>{a.description}</Td>
+                      <Td style={{ fontSize: 12.5 }}>{a.tools.length ? a.tools.join(', ') : <span style={{ color: 'var(--mn-muted)' }}>none</span>}</Td>
+                      <Td>{paused ? <StatusBadge status="paused" /> : <StatusBadge status={agentPaused ? 'paused' : 'active'} />}</Td>
+                      <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {paused ? (
+                          <span style={{ color: 'var(--mn-muted)', fontSize: 12 }}>all paused</span>
+                        ) : (
+                          <Button variant="ghost" size="sm" onClick={() => togglePause(a.name, agentPaused)} disabled={busy}>
+                            {agentPaused ? 'Resume' : 'Pause'}
+                          </Button>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </Table>
           </div>

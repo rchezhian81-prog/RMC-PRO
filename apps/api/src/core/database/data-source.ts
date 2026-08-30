@@ -52,6 +52,7 @@ import { WeighbridgeInwardUnique1720000047000 } from './migrations/1720000047000
 import { DispatchBatchTicketUnique1720000048000 } from './migrations/1720000048000-DispatchBatchTicketUnique';
 import { WidenStockQuantityColumns1720000049000 } from './migrations/1720000049000-WidenStockQuantityColumns';
 import { DropOrderItemDeliveryInterval1720000050000 } from './migrations/1720000050000-DropOrderItemDeliveryInterval';
+import { AgentPauses1720000051000 } from './migrations/1720000051000-AgentPauses';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -119,6 +120,7 @@ export const AppDataSource = new DataSource({
     DispatchBatchTicketUnique1720000048000,
     WidenStockQuantityColumns1720000049000,
     DropOrderItemDeliveryInterval1720000050000,
+    AgentPauses1720000051000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

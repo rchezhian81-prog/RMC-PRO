@@ -734,6 +734,8 @@ export interface AgentControls { automationPaused: boolean; maxStepsPerRun: numb
 export const agentsApi = {
   controls: () => apiFetch<AgentControls>('/agents/controls'),
   setControls: (b: Partial<AgentControls>) => apiFetch<AgentControls>('/agents/controls', { method: 'PUT', body: JSON.stringify(b) }),
+  pauses: () => apiFetch<Record<string, boolean>>('/agents/pauses'),
+  setPause: (name: string, paused: boolean) => apiFetch<{ agentName: string; paused: boolean }>(`/agents/pauses/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ paused }) }),
   catalog: () => apiFetch<Array<{ name: string; description: string; tools: string[] }>>('/agents/catalog'),
   llm: () => apiFetch<{ configured: boolean; provider: string; model: string; askEnabledAgents: string[] }>('/agents/llm'),
   runs: (limit = 50) => apiFetch<Row[]>(`/agents/runs?limit=${limit}`),

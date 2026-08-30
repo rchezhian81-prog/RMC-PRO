@@ -83,11 +83,14 @@ export class AuthController {
     return result;
   }
 
-  /** Clear the refresh cookie so the browser forgets it. */
+  /** Revoke the user's refresh tokens (sign out) and clear the refresh cookie. */
   @Post('logout')
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
+    // Bump token_version so a refresh token captured before logout can no longer
+    // be renewed — clearing the browser cookie alone would not revoke a stolen one.
+    await this.auth.signOut(user.userId);
     // clearCookie sets its own expiry; the path/domain/sameSite/secure must match
     // the cookie we set for the browser to clear it.
     const o = cookieOptions();

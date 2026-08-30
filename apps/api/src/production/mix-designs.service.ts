@@ -99,9 +99,21 @@ export class MixDesignsService {
       const repo = m.getRepository(MixDesign);
       const design = await repo.findOne({ where: { id } });
       if (!design) throw notFound();
-      const materials = await m.getRepository(MixDesignMaterial).count({ where: { mixDesignId: id } });
-      if (!materials) throw badReq('Add at least one material before approving');
-      await repo.update(id, { approvalStatus: 'approved', approvedBy: userId, approvedAt: new Date() });
+      const rows = await m.getRepository(MixDesignMaterial).find({ where: { mixDesignId: id } });
+      if (!rows.length) throw badReq('Add at least one material before approving');
+      // Completeness: no zero/blank target quantities — a recipe with a zero
+      // target scales to a meaningless mix at batching.
+      if (rows.some((r) => !(Number(r.targetQuantity) > 0))) {
+        throw badReq('Every mix material needs a target quantity greater than zero before approving.');
+      }
+      // Supersede: this becomes the single ACTIVE approved version for its grade,
+      // so the batch resolver (approved + is_active_version) picks it
+      // deterministically instead of choosing arbitrarily among several active
+      // versions. Any prior active version for the grade is deactivated first.
+      if (design.gradeId) {
+        await repo.update({ gradeId: design.gradeId }, { isActiveVersion: false });
+      }
+      await repo.update(id, { approvalStatus: 'approved', approvedBy: userId, approvedAt: new Date(), isActiveVersion: true });
       return { result: await this.loadFull(m, id), label: `${design.mixCode} v${design.versionNo}` };
     });
     await this.audit.record({

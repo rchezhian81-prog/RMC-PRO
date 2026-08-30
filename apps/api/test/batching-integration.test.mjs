@@ -127,5 +127,25 @@ ok('actuals now differ from the hand-keyed values (came off the controller)',
 const confirmed = await api('POST', `/batch-tickets/${ticketId}/confirm`, {});
 ok('ticket confirms with the ingested actuals', confirmed.status === 'confirmed');
 
+// ---- F. Mix-design integrity (Tier-3C) ----
+const someMaterial = (await api('GET', '/materials'))[0];
+const stamp = Date.now().toString().slice(-6);
+
+// #19: a mix with a zero-quantity material cannot be approved.
+const zeroMix = await api('POST', '/mix-designs', { gradeId: grade.id, plantId: plant.id, mixCode: `ZERO-${stamp}` });
+await api('POST', `/mix-designs/${zeroMix.id}/materials`, { materialId: someMaterial.id, materialLabel: someMaterial.materialName, targetQuantity: 0, uom: someMaterial.uom, tolerancePercentage: 2, sequenceNo: 1 });
+let zeroApproveBlocked = false;
+try { await api('POST', `/mix-designs/${zeroMix.id}/approve`); } catch { zeroApproveBlocked = true; }
+ok('a mix with a zero-quantity material cannot be approved', zeroApproveBlocked);
+
+// #18: approving a new mix for the grade supersedes the prior active version.
+const newVer = await api('POST', '/mix-designs', { gradeId: grade.id, plantId: plant.id, mixCode: `SUP-${stamp}` });
+await api('POST', `/mix-designs/${newVer.id}/materials`, { materialId: someMaterial.id, materialLabel: someMaterial.materialName, targetQuantity: 7, uom: someMaterial.uom, tolerancePercentage: 2, sequenceNo: 1 });
+await api('POST', `/mix-designs/${newVer.id}/approve`);
+const priorAfter = await api('GET', `/mix-designs/${mix.id}`);
+ok('approving a new version deactivates the grade’s prior active version', priorAfter.isActiveVersion === false);
+const newVerAfter = await api('GET', `/mix-designs/${newVer.id}`);
+ok('the newly approved version is the single active one', newVerAfter.isActiveVersion === true && newVerAfter.approvalStatus === 'approved');
+
 console.log(`\nBATCHING INTEGRATION TEST: ${pass} passed ✓`);
 process.exit(0);

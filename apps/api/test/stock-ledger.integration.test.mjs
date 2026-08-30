@@ -22,6 +22,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { DataSource } = require('typeorm');
 const { StockService } = require('../dist/production/stock.service.js');
+const { StockAdjustmentService } = require('../dist/inventory/stock-adjustment.service.js');
 const { ENTITIES } = require('../dist/core/database/entity-list.js');
 
 const {
@@ -109,6 +110,19 @@ async function balanceRows() {
   ok('no null-plant ghost row exists', rows.every((r) => r.plant_id !== null));
   ok('quantity is 100 - 20 - 20 - 20 = 40', Number(rows[0].current_quantity) === 40);
 
+  // 3b) A manual DECREASE within available stock, with NO plant specified, must
+  //     apply immediately — not be forced into the negative-stock queue. The
+  //     pre-check previously read a null-plant ghost balance of 0, so every
+  //     such decrease on a single-plant tenant was wrongly routed to approval.
+  const adjSvc = new StockAdjustmentService(db, svc);
+  const decrease = await adjSvc.adjust(
+    TEST_TENANT_ID,
+    { materialId: TEST_MATERIAL_ID, quantity: 10, direction: 'decrease' },
+    null,
+  );
+  ok('a within-stock decrease with no plant is applied, not sent to approval', decrease.pendingApproval === false);
+  ok('the decrease posted against the real plant balance (40 - 10 = 30)', Number(decrease.balanceAfter) === 30);
+
   // 4) The DB itself now refuses a null plant_id (defence in depth).
   let rejected = false;
   try {
@@ -124,7 +138,7 @@ async function balanceRows() {
   ok('DB rejects a null plant_id (NOT NULL constraint)', rejected);
 
   await ds.destroy();
-  console.log(`\nSTOCK LEDGER TEST: ${pass}/5 passed`);
+  console.log(`\nSTOCK LEDGER TEST: ${pass} passed`);
   process.exit(0);
 })().catch((e) => {
   console.error('\nTEST FAILED:', e.message);

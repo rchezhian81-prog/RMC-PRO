@@ -176,10 +176,14 @@ export class QcService {
         );
       }
 
-      // Re-assess from all 28-day results, if any are in yet.
+      // Assess ONLY once the full 28-day sample is in. IS 456 acceptance is a
+      // verdict on the whole set (default 3 specimens); assessing on a partial
+      // sample would both judge on incomplete evidence AND lock the set (the
+      // guard above), so the remaining cubes could never be recorded.
       const all = await resRepo.find({ where: { cubeSetId: setId } });
       const at28 = all.filter((x) => num(x.testAgeDays) >= 28).map((x) => num(x.compressiveStrengthMpa));
-      if (at28.length) {
+      const specimens = num(set.specimenCount) > 0 ? num(set.specimenCount) : at28.length;
+      if (at28.length > 0 && at28.length >= specimens) {
         const verdict = assessCubeSet(at28, fck);
         await setRepo.update(setId, {
           meanStrengthMpa: verdict ? String(verdict.mean) : null,
@@ -187,6 +191,8 @@ export class QcService {
           status: verdict?.accepted ? 'accepted' : 'rejected',
         });
       } else {
+        // Results recorded but the sample is not yet complete — stay open so the
+        // remaining specimens can still be entered; no final verdict, no lock.
         await setRepo.update(setId, { status: 'tested' });
       }
       return this.loadSet(m, setId);

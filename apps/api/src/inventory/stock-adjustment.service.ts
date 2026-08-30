@@ -35,7 +35,6 @@ export class StockAdjustmentService {
   adjust(tenantId: string, dto: Record<string, unknown>, userId: string) {
     const materialId = String(dto.materialId ?? '');
     if (!materialId) throw badReq('materialId required');
-    const plantId = (dto.plantId as string) ?? null;
     const qty = Math.abs(num(dto.quantity));
     if (qty <= 0) throw badReq('quantity must be greater than zero');
     const direction = dto.direction === 'decrease' ? 'decrease' : 'increase';
@@ -43,6 +42,11 @@ export class StockAdjustmentService {
     const reason = (dto.reason as string) ?? null;
 
     return this.db.runInTenant(tenantId, async (m) => {
+      // Resolve the plant the SAME way the write path does, then read the balance
+      // for that plant. Reading with the raw (often null) plantId matched the
+      // IS-NULL ghost row and returned 0, so every decrease on a single-plant
+      // tenant was wrongly forced into the negative-stock approval queue.
+      const plantId = await this.stock.resolvePlant(m, (dto.plantId as string) ?? null);
       const material = await m.getRepository(Material).findOne({ where: { id: materialId } });
       const label = material?.materialName ?? null;
       const uom = material?.uom ?? null;

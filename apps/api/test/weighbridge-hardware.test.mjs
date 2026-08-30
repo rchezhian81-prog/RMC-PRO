@@ -85,5 +85,17 @@ ok('manual entry has no indicator', !manualEntry.indicatorId);
 ok('manual entry net = gross − tare (18000)', near(manualEntry.netWeight, 18000));
 ok('manual entry is not flagged as an override', manualEntry.manualOverride === false);
 
+// A hand-keyed net that contradicts gross − tare is rejected — the slip's
+// integrity (this net becomes stock). A consistent net still saves.
+const reconcile = async (body) => {
+  try { await api('POST', '/weighbridge', body); return true; } catch { return false; }
+};
+ok('a net that does not reconcile with gross − tare is rejected',
+  !(await reconcile({ plantId: PLANT_ID, vehicleNo: 'TN09ZZ0001', grossWeight: 30000, tareWeight: 12000, netWeight: 25000 })));
+ok('a tare above the gross is rejected',
+  !(await reconcile({ plantId: PLANT_ID, vehicleNo: 'TN09ZZ0002', grossWeight: 10000, tareWeight: 12000 })));
+ok('a reconciling net override still saves',
+  await reconcile({ plantId: PLANT_ID, vehicleNo: 'TN09ZZ0003', grossWeight: 30000, tareWeight: 12000, netWeight: 18000 }));
+
 console.log(`\nWEIGHBRIDGE HARDWARE TEST: ${pass} passed ✓`);
 process.exit(0);

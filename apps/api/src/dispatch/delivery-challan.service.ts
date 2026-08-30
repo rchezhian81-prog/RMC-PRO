@@ -138,7 +138,24 @@ export class DeliveryChallanService {
         throw badReq(`Cannot move challan from ${challan.challanStatus} to delivered`);
       }
 
-      const returnQty = dto.returnQuantityM3 !== undefined ? Number(dto.returnQuantityM3) || 0 : 0;
+      // Returned/short-load concrete. Prefer what the deliverer enters now (an
+      // explicit 0 means "nothing came back"); when nothing is supplied, inherit
+      // what the dispatch board already recorded on the `returning` leg — that
+      // value was previously dropped, so a return captured upstream never reached
+      // billing and the customer was billed for concrete they sent back.
+      let returnQty = dto.returnQuantityM3 !== undefined ? Number(dto.returnQuantityM3) || 0 : NaN;
+      let returnReasonIn = dto.returnReason as string | undefined;
+      if (Number.isNaN(returnQty)) {
+        const dispatch = challan.dispatchId
+          ? await m.getRepository(Dispatch).findOne({ where: { id: challan.dispatchId } })
+          : null;
+        returnQty = Number(dispatch?.returnQuantityM3 ?? 0) || 0;
+        if (returnReasonIn === undefined) returnReasonIn = dispatch?.returnReason ?? undefined;
+      }
+      // A return can't exceed the load nor be negative — clamp so the delivery
+      // register and wastage report can't be driven negative by a bad value.
+      returnQty = Math.max(0, Math.min(returnQty, Number(challan.quantityM3) || 0));
+
       let costPerM3 = dto.returnCostPerM3 !== undefined ? Number(dto.returnCostPerM3) || 0 : 0;
       // Default the valuation to the order line's rate for this grade.
       if (returnQty > 0 && !costPerM3 && challan.orderId) {
@@ -147,7 +164,7 @@ export class DeliveryChallanService {
         });
         costPerM3 = Number(orderItem?.ratePerM3 ?? 0) || 0;
       }
-      const returnReason = returnQty > 0 ? ((dto.returnReason as string) ?? null) : null;
+      const returnReason = returnQty > 0 ? (returnReasonIn ?? null) : null;
       const cost = returnQty > 0 ? returnCost(returnQty, costPerM3) : 0;
 
       await repo.update(id, {

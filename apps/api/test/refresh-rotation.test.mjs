@@ -71,5 +71,16 @@ ok('the new password logs in', goodLogin.status === 200 && !!goodLogin.body?.dat
 const r4 = await j('POST', '/auth/refresh', { refresh_token: goodLogin.body.data.refresh_token });
 ok('the fresh session can still refresh', r4.status >= 200 && r4.status < 300 && !!r4.body?.data?.access_token);
 
+// 7. Logout revokes the session's refresh tokens — a token captured before
+//    logout can no longer be renewed (Tier-4 #24).
+const sess = await j('POST', '/auth/login', { login: LOGIN, password: NEW_PW });
+const accessS = sess.body.data.access_token;
+const refreshS = sess.body.data.refresh_token;
+const lo = await j('POST', '/auth/logout', {}, accessS);
+ok('logout succeeds', lo.status === 200);
+const afterLogout = await j('POST', '/auth/refresh', { refresh_token: refreshS });
+ok('a refresh token is revoked after logout (401)', afterLogout.status === 401);
+ok('logout revocation reports SESSION_REVOKED', afterLogout.body?.error?.code === 'SESSION_REVOKED');
+
 console.log(`\nREFRESH ROTATION TEST: ${pass} passed`);
 process.exit(0);

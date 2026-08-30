@@ -135,5 +135,19 @@ ok('non-numeric setting write rejected with 400', setBadNum.status === 400);
 const setUnknown = await j('PUT', '/settings/not_a_real_setting', { value: 'x' }, tok);
 ok('unknown setting key rejected with 400', setUnknown.status === 400);
 
+// --- C. A tenant role cannot be granted a platform.* permission (Tier-4 #23) ---
+console.log('\n=== C. platform-permission escalation guard ===');
+const roleName = 'QA Escalation ' + Date.now();
+const role = (await j('POST', '/roles', { roleKey: 'qa_esc_' + Date.now(), roleName }, tok)).body?.data;
+ok('a tenant role can be created', !!role?.id);
+const catalog = (await j('GET', '/roles/permissions-catalog', null, tok)).body?.data ?? [];
+const platformPerm = catalog.find((p) => String(p.permissionKey).startsWith('platform.'));
+const tenantPerm = catalog.find((p) => !String(p.permissionKey).startsWith('platform.'));
+ok('the permission catalog exposes a platform.* permission', !!platformPerm);
+const withPlatform = await j('PUT', `/roles/${role.id}/permissions`, { permissionIds: [platformPerm.id] }, tok);
+ok('assigning a platform.* permission to a tenant role is rejected (400)', withPlatform.status === 400);
+const withTenant = await j('PUT', `/roles/${role.id}/permissions`, { permissionIds: [tenantPerm.id] }, tok);
+ok('assigning an ordinary tenant permission still succeeds', withTenant.status >= 200 && withTenant.status < 300);
+
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

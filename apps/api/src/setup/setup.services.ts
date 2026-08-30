@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { DeepPartial } from 'typeorm';
+import { In, type DeepPartial } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import {
   ROLE_KEYS, passwordProblemMessage, validateCompanyProfile,
-  SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue,
+  SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue, isPlatformPermission,
 } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -485,6 +485,20 @@ export class RolesService {
 
   setPermissions(tenantId: string, roleId: string, permissionIds: string[]) {
     return this.db.runInTenant(tenantId, async (m) => {
+      // Privilege-escalation guard: a tenant admin must never grant a platform.*
+      // permission to a tenant role. The provisioning path already filters these
+      // out; the live editor did not, so it was the one place a tenant could hand
+      // itself cross-tenant/platform authority. Reject any platform key here.
+      if (permissionIds.length) {
+        const perms = await this.db.ds.getRepository(Permission).find({ where: { id: In(permissionIds) } });
+        const platform = perms.filter((p) => isPlatformPermission(p.permissionKey));
+        if (platform.length) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: `Platform permissions cannot be assigned to a tenant role: ${platform.map((p) => p.permissionKey).join(', ')}`,
+          });
+        }
+      }
       const repo = m.getRepository(RolePermission);
       await repo.delete({ roleId });
       if (permissionIds.length) {

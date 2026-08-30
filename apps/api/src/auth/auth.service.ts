@@ -129,6 +129,24 @@ export class AuthService {
     return { changed: true };
   }
 
+  /**
+   * Sign out: bump token_version so every refresh token minted before now is
+   * revoked. The controller also clears the httpOnly cookie, but that alone would
+   * leave a token captured before logout renewable for its full TTL. This is
+   * sign-out-everywhere (all of the user's sessions) — the only server-side
+   * revocation available without a per-session token store, and exactly the
+   * "sign out everywhere" lever token_version was built for.
+   */
+  async signOut(userId: string): Promise<void> {
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { id: userId } }),
+    );
+    if (!user) return;
+    await this.db.runAsPlatform((m) =>
+      m.getRepository(User).update(user.id, { tokenVersion: (user.tokenVersion ?? 0) + 1 }),
+    );
+  }
+
   async me(userId: string) {
     // Identity lookup by id — platform context so RLS admits the row.
     const user = await this.db.runAsPlatform((m) =>

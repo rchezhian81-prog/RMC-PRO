@@ -93,6 +93,18 @@ export class VendorBillService {
     if (!supplierId) throw badReq('supplierId required');
 
     return this.db.runInTenant(tenantId, async (m) => {
+      // Duplicate-invoice guard: the same supplier invoice number keyed twice is
+      // the classic AP error — a double payable, paid twice, with the ITC claimed
+      // twice. Block a second live bill for the same (supplier, supplier bill no);
+      // a cancelled bill frees the number to be re-entered.
+      const supplierBillNo = ((dto.supplierBillNo as string) ?? '').trim();
+      if (supplierBillNo) {
+        const existing = await m.getRepository(VendorBill).findOne({ where: { supplierId, supplierBillNo } });
+        if (existing && existing.status !== 'cancelled') {
+          throw badReq(`Supplier invoice ${supplierBillNo} is already recorded as ${existing.billNo}. Cancel that bill before re-entering it.`);
+        }
+      }
+
       const goodsReceiptId = (dto.goodsReceiptId as string) || null;
       let grn: GoodsReceipt | null = null;
       let grnItems: GoodsReceiptItem[] = [];
@@ -121,7 +133,7 @@ export class VendorBillService {
       const bill = await billRepo.save(
         billRepo.create({
           tenantId, billNo,
-          supplierBillNo: (dto.supplierBillNo as string) ?? null,
+          supplierBillNo: supplierBillNo || null,
           supplierId, purchaseOrderId, goodsReceiptId,
           billDate: (dto.billDate as string) ?? null,
           dueDate: (dto.dueDate as string) ?? null,
@@ -158,11 +170,23 @@ export class VendorBillService {
         taxable = round2(taxable + lineTaxable);
         tax = round2(tax + lineTax);
 
-        // Build a 3-way match input when we can tie the line to a PO line.
-        if (poItem) {
+        // Build a 3-way match input when we can tie the line to a PO line. The
+        // ceiling is the accepted quantity MINUS what other live bills have
+        // already billed against this PO line — otherwise one GRN could be billed
+        // in full N times, each bill passing the match on its own and doubling the
+        // payable for goods received once.
+        if (poItem && poItemId) {
           const grnItem = grnItems.find((g) => g.purchaseOrderItemId === poItemId);
           const acceptedQty = grnItem ? num(grnItem.acceptedQuantity) : num(poItem.receivedQuantity);
-          matchInputs.push({ billedQty: quantity, billedRate: rate, orderedRate: num(poItem.rate), acceptedQty });
+          const [billed] = await m.query(
+            `SELECT COALESCE(SUM(vbi.quantity), 0) AS q
+               FROM vendor_bill_items vbi
+               JOIN vendor_bills vb ON vb.id = vbi.vendor_bill_id
+              WHERE vbi.purchase_order_item_id = $1 AND vb.status <> 'cancelled' AND vb.id <> $2`,
+            [poItemId, bill.id],
+          );
+          const availableQty = Math.max(0, acceptedQty - num(billed?.q));
+          matchInputs.push({ billedQty: quantity, billedRate: rate, orderedRate: num(poItem.rate), acceptedQty: availableQty });
         }
       }
 

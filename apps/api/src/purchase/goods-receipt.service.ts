@@ -149,6 +149,33 @@ export class GrnService {
       if (grn.status !== 'draft') throw badReq(`Goods receipt already ${grn.status}`);
       const items = await m.getRepository(GoodsReceiptItem).find({ where: { goodsReceiptId: id } });
 
+      // Re-validate the over-receipt cap at POST time. The create-time cap reads
+      // received_quantity, which only advances on post, so two concurrent drafts
+      // can each pass it; here received_quantity reflects every already-posted
+      // GRN. Lock the PO-line rows (pessimistic write) so two posts racing on the
+      // same line serialize — the second sees the first's quantity and is blocked.
+      if (grn.purchaseOrderId) {
+        const poItemRepo = m.getRepository(PurchaseOrderItem);
+        const perLine = new Map<string, number>();
+        for (const it of items) {
+          if (!it.purchaseOrderItemId) continue;
+          perLine.set(it.purchaseOrderItemId, (perLine.get(it.purchaseOrderItemId) ?? 0) + num(it.receivedQuantity));
+        }
+        for (const [poItemId, thisGrnQty] of perLine) {
+          const poItem = await poItemRepo.findOne({ where: { id: poItemId }, lock: { mode: 'pessimistic_write' } });
+          if (!poItem) continue;
+          const ordered = num(poItem.quantity);
+          if (ordered <= 0) continue;
+          const cap = ordered * (1 + OVER_RECEIPT_TOLERANCE);
+          if (num(poItem.receivedQuantity) + thisGrnQty > cap + 0.0005) {
+            throw badReq(
+              `Posting this receipt would exceed the ordered quantity (ordered ${ordered}, ` +
+                `already received ${num(poItem.receivedQuantity)}). Amend the purchase order or reduce the receipt.`,
+            );
+          }
+        }
+      }
+
       for (const it of items) {
         const accepted = num(it.acceptedQuantity);
         if (it.materialId && accepted > 0) {

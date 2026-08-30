@@ -87,11 +87,17 @@ const badPin = await j('POST', '/customers', { customerCode: 'QA-PIN-' + Date.no
 ok('bad pincode rejected with 400', badPin.status === 400);
 ok('error.fields.pincode present', !!badPin.body?.error?.fields?.pincode);
 
-// Good: accepted, and the buyer PIN round-trips (feeds GST BuyerDtls.Pin).
+// Bad: a malformed PAN is rejected per-field (Tier-4E #26).
+const badPan = await j('POST', '/customers', { customerCode: 'QA-PAN-' + Date.now(), customerName: 'Pan Co', pan: 'INVALIDPAN' }, tok);
+ok('bad PAN rejected with 400', badPan.status === 400);
+ok('error.fields.pan present', !!badPan.body?.error?.fields?.pan);
+
+// Good: accepted, and the buyer PIN + PAN round-trip (KYC / GST BuyerDtls.Pin).
 const code = 'QA-OK-' + Date.now();
-const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z5', creditLimit: 5000, creditDays: 30, mobile: '9943602633', pincode: '600002' }, tok);
+const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F', creditLimit: 5000, creditDays: 30, mobile: '9943602633', pincode: '600002' }, tok);
 ok('valid customer created (2xx)', good.status >= 200 && good.status < 300 && good.body?.success === true);
 ok('the buyer pincode is persisted + returned', good.body?.data?.pincode === '600002');
+ok('the buyer PAN is persisted + returned', good.body?.data?.pan === 'ABCDE1234F');
 
 // Duplicate code → a clear 409 duplicate, not a generic 500 (Postgres 23505 map).
 const dup = await j('POST', '/customers', { customerCode: code, customerName: 'Dup Co' }, tok);

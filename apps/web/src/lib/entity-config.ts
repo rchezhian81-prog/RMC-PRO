@@ -78,6 +78,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'customerName', label: 'Name', required: true },
       { key: 'customerType', label: 'Customer type', options: CUSTOMER_TYPE_OPTIONS },
       { key: 'gstin', label: 'GSTIN' },
+      { key: 'pan', label: 'PAN' },
       { key: 'billingAddress', label: 'Billing address' },
       { key: 'city', label: 'City' },
       // State is required: it is the place-of-supply that decides CGST/SGST vs
@@ -159,6 +160,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'supplierCode', label: 'Code', required: true },
       { key: 'supplierName', label: 'Name', required: true },
       { key: 'gstin', label: 'GSTIN' },
+      { key: 'pan', label: 'PAN' },
       { key: 'state', label: 'State' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },

@@ -83,6 +83,10 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   if (gstin && !isValidGstin(gstin)) {
     errors.gstin = 'Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).';
   }
+  const pan = str('pan');
+  if (pan && !isValidPan(pan)) {
+    errors.pan = 'Enter a valid 10-character PAN (e.g. ABCDE1234F).';
+  }
   const mobile = str('mobile');
   if (mobile && !isValidMobile(mobile)) {
     errors.mobile = 'Enter a valid 10-digit mobile number.';

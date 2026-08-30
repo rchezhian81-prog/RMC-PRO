@@ -8,6 +8,7 @@ export class Customer extends TenantScopedEntity {
   @Column({ name: 'customer_code', type: 'varchar' }) customerCode!: string;
   @Column({ name: 'customer_name', type: 'varchar' }) customerName!: string;
   @Column({ name: 'gstin', type: 'varchar', nullable: true }) gstin!: string | null;
+  @Column({ name: 'pan', type: 'varchar', nullable: true }) pan!: string | null;
   @Column({ name: 'customer_type', type: 'varchar', nullable: true }) customerType!: string | null;
   @Column({ name: 'billing_address', type: 'varchar', nullable: true }) billingAddress!: string | null;
   @Column({ name: 'city', type: 'varchar', nullable: true }) city!: string | null;
@@ -95,6 +96,7 @@ export class Supplier extends TenantScopedEntity {
   @Column({ name: 'supplier_code', type: 'varchar' }) supplierCode!: string;
   @Column({ name: 'supplier_name', type: 'varchar' }) supplierName!: string;
   @Column({ name: 'gstin', type: 'varchar', nullable: true }) gstin!: string | null;
+  @Column({ name: 'pan', type: 'varchar', nullable: true }) pan!: string | null;
   @Column({ name: 'contact_person', type: 'varchar', nullable: true }) contactPerson!: string | null;
   @Column({ name: 'mobile', type: 'varchar', nullable: true }) mobile!: string | null;
   @Column({ name: 'email', type: 'varchar', nullable: true }) email!: string | null;

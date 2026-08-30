@@ -125,6 +125,13 @@ bill = await api('GET', `/vendor-bills/${bill.id}`);
 ok('bill is now paid', bill.paymentStatus === 'paid');
 ok('bill outstanding is zero', near(bill.outstandingAmount, 0));
 
+// ---- E2. Reverse the payment (#9): the bill's outstanding is restored. ----
+const reversed = await api('POST', `/vendor-payments/${payment.id}/reverse`, { reason: 'wrong bill' });
+ok('the payment is reversed', reversed.status === 'reversed');
+bill = await api('GET', `/vendor-bills/${bill.id}`);
+ok('the bill outstanding is restored after reversal', near(bill.outstandingAmount, 5900));
+ok('the bill is unpaid again after reversal', bill.paymentStatus === 'unpaid');
+
 // ---- F. Duplicate-invoice guard (#6) ----
 let dupBlocked = false;
 try {

@@ -66,7 +66,10 @@ export class VendorPaymentService {
       for (const a of allocations) {
         const amt = num(a.amount);
         if (amt <= 0) continue;
-        const bill = await billRepo.findOne({ where: { id: String(a.billId ?? '') } });
+        // Lock the bill row: two payments allocating to the same bill concurrently
+        // would otherwise each read the same outstanding, both pass the check, and
+        // overpay it into a negative outstanding. The lock serializes them.
+        const bill = await billRepo.findOne({ where: { id: String(a.billId ?? '') }, lock: { mode: 'pessimistic_write' } });
         if (!bill) throw badReq('Bill not found for allocation');
         if (bill.status !== 'approved') throw badReq('Can only pay an approved bill');
         if (bill.supplierId !== supplierId) throw badReq('Bill belongs to a different supplier');
@@ -95,6 +98,105 @@ export class VendorPaymentService {
       entityType: 'vendor_payment', entityId: String(result.id), entityLabel: paymentNo,
       summary: `Recorded vendor payment ${paymentNo} (₹${amount}, ₹${allocated} allocated)`.trim(),
       details: { amount, allocated },
+    });
+    return result;
+  }
+
+  /**
+   * Reverse a posted payment: unwind each allocation (restore the bill's paid /
+   * outstanding / payment status), delete the allocations, and mark the payment
+   * `reversed`. A mis-allocated payment could previously never be undone, and the
+   * bill it wrongly paid could no longer be cancelled. Reversed payments drop out
+   * of the vendor ledger. Audited (money-out correction).
+   */
+  async reverse(tenantId: string, id: string, userId: string, reason?: string) {
+    const { result, paymentNo, amount } = await this.db.runInTenant(tenantId, async (m) => {
+      const paymentRepo = m.getRepository(VendorPayment);
+      const payment = await paymentRepo.findOne({ where: { id } });
+      if (!payment) throw notFound();
+      if (payment.status === 'reversed') throw badReq('Payment already reversed');
+      if (payment.status !== 'posted') throw badReq(`Cannot reverse a ${payment.status} payment`);
+
+      const allocRepo = m.getRepository(VendorPaymentAllocation);
+      const billRepo = m.getRepository(VendorBill);
+      const allocations = await allocRepo.find({ where: { vendorPaymentId: id } });
+      for (const a of allocations) {
+        const bill = await billRepo.findOne({ where: { id: a.vendorBillId }, lock: { mode: 'pessimistic_write' } });
+        if (bill) {
+          const paid = round2(Math.max(0, num(bill.paidAmount) - num(a.allocatedAmount)));
+          await billRepo.update(bill.id, {
+            paidAmount: String(paid), outstandingAmount: String(round2(num(bill.totalAmount) - paid)),
+            paymentStatus: billPaymentStatus(num(bill.totalAmount), paid),
+          });
+        }
+        await allocRepo.delete({ id: a.id });
+      }
+      await paymentRepo.update(id, {
+        status: 'reversed', allocatedAmount: '0', unallocatedAmount: String(round2(num(payment.amount))),
+        remarks: reason ? `Reversed: ${reason}` : payment.remarks,
+      });
+      return { result: await this.loadFull(m, id), paymentNo: payment.paymentNo, amount: num(payment.amount) };
+    });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.VENDOR_PAYMENT_REVERSE,
+      entityType: 'vendor_payment', entityId: id, entityLabel: paymentNo,
+      summary: `Reversed vendor payment ${paymentNo} (₹${amount})${reason ? ` — ${reason}` : ''}`,
+      details: { amount, reason: reason ?? null },
+    });
+    return result;
+  }
+
+  /**
+   * Apply a posted payment's unallocated (advance) amount to approved bills — the
+   * path that was missing, so an advance stayed stranded on the payment. Each
+   * allocation is bounded by the remaining advance and the bill's outstanding,
+   * under a row lock. Audited.
+   */
+  async applyAdvance(tenantId: string, id: string, allocationsIn: unknown, userId: string) {
+    const allocations = Array.isArray(allocationsIn) ? (allocationsIn as Record<string, unknown>[]) : [];
+    if (!allocations.length) throw badReq('At least one allocation is required');
+
+    const { result, paymentNo, applied } = await this.db.runInTenant(tenantId, async (m) => {
+      const paymentRepo = m.getRepository(VendorPayment);
+      const payment = await paymentRepo.findOne({ where: { id } });
+      if (!payment) throw notFound();
+      if (payment.status !== 'posted') throw badReq(`Cannot apply a ${payment.status} payment`);
+      let available = round2(num(payment.unallocatedAmount));
+      if (available <= 0.001) throw badReq('This payment has no unallocated amount to apply');
+
+      const billRepo = m.getRepository(VendorBill);
+      const allocRepo = m.getRepository(VendorPaymentAllocation);
+      let appliedTotal = 0;
+      for (const a of allocations) {
+        const amt = num(a.amount);
+        if (amt <= 0) continue;
+        if (amt > available + 0.001) throw badReq(`Allocation ${amt} exceeds the unallocated amount ${available}`);
+        const bill = await billRepo.findOne({ where: { id: String(a.billId ?? '') }, lock: { mode: 'pessimistic_write' } });
+        if (!bill) throw badReq('Bill not found for allocation');
+        if (bill.status !== 'approved') throw badReq('Can only pay an approved bill');
+        if (bill.supplierId !== payment.supplierId) throw badReq('Bill belongs to a different supplier');
+        const outstanding = round2(num(bill.outstandingAmount));
+        if (amt > outstanding + 0.001) throw badReq(`Allocation ${amt} exceeds bill outstanding ${outstanding}`);
+        await allocRepo.save(allocRepo.create({ tenantId, vendorPaymentId: id, vendorBillId: bill.id, allocatedAmount: String(amt) }));
+        const paid = round2(num(bill.paidAmount) + amt);
+        await billRepo.update(bill.id, {
+          paidAmount: String(paid), outstandingAmount: String(round2(num(bill.totalAmount) - paid)),
+          paymentStatus: billPaymentStatus(num(bill.totalAmount), paid),
+        });
+        available = round2(available - amt);
+        appliedTotal = round2(appliedTotal + amt);
+      }
+      await paymentRepo.update(id, {
+        allocatedAmount: String(round2(num(payment.allocatedAmount) + appliedTotal)),
+        unallocatedAmount: String(available),
+      });
+      return { result: await this.loadFull(m, id), paymentNo: payment.paymentNo, applied: appliedTotal };
+    });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.VENDOR_PAYMENT_RECORD,
+      entityType: 'vendor_payment', entityId: id, entityLabel: paymentNo,
+      summary: `Applied advance ₹${applied} from vendor payment ${paymentNo}`,
+      details: { applied },
     });
     return result;
   }

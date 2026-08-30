@@ -90,6 +90,16 @@ export class VendorPaymentController {
 
   @Post() @RequirePermissions('vendor_payments.create')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto, u.userId); }
+
+  @Post(':id/reverse') @RequirePermissions('vendor_payments.create')
+  reverse(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.service.reverse(tid(u), id, u.userId, dto.reason as string | undefined);
+  }
+
+  @Post(':id/apply-advance') @RequirePermissions('vendor_payments.create')
+  applyAdvance(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.service.applyAdvance(tid(u), id, dto.allocations, u.userId);
+  }
 }
 
 @Controller('purchase-reports')

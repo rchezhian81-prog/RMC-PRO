@@ -14,8 +14,9 @@ import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 export default function VendorBillsPage() {
-  const { confirm } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
+  const [payments, setPayments] = useState<Row[]>([]);
   const [grns, setGrns] = useState<Row[]>([]);
   const [grnId, setGrnId] = useState('');
   const [supplierBillNo, setSupplierBillNo] = useState('');
@@ -28,8 +29,8 @@ export default function VendorBillsPage() {
   const canPay = getAccess().has('vendor_payments.create');
 
   async function reload() {
-    const [b, g] = await Promise.all([purchaseApi.bills(), purchaseApi.grns('posted')]);
-    setRows(b); setGrns(g);
+    const [b, g, p] = await Promise.all([purchaseApi.bills(), purchaseApi.grns('posted'), purchaseApi.payments()]);
+    setRows(b); setGrns(g); setPayments(p);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
@@ -69,6 +70,16 @@ export default function VendorBillsPage() {
       () => purchaseApi.createPayment({ supplierId: bill.supplierId, amount: outstanding, paymentMode: 'neft', allocations: [{ billId: bill.id, amount: outstanding }] }),
       `Paid ₹${money(outstanding)} against ${String(bill.billNo)}.`,
     );
+  }
+
+  async function reverse(payment: Row) {
+    const reason = await prompt({
+      title: 'Reverse vendor payment',
+      message: `Reverse ${String(payment.paymentNo)} (₹${money(payment.amount)})? Each bill it paid is restored to its outstanding.`,
+      label: 'Reason (optional)', placeholder: 'e.g. allocated to the wrong bill', confirmLabel: 'Reverse',
+    });
+    if (reason === null) return; // cancelled
+    await act(() => purchaseApi.reversePayment(String(payment.id), reason || undefined), `Payment ${String(payment.paymentNo)} reversed.`);
   }
 
   return (
@@ -155,6 +166,48 @@ export default function VendorBillsPage() {
           <EmptyState title="No vendor bills yet" description={canCreate ? 'Create one from a posted goods receipt above.' : 'Nothing to show.'} />
         )}
       </Card>
+
+      <div style={{ marginTop: 18 }}>
+        <Card title="Vendor payments" padded={false}>
+          {!loaded ? (
+            <TableSkeleton cols={5} />
+          ) : payments.length ? (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Payment No</Th>
+                  <Th numeric>Amount</Th>
+                  <Th numeric>Allocated</Th>
+                  <Th numeric>Unallocated</Th>
+                  <Th>Status</Th>
+                  <Th />
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => {
+                  const pstatus = String(p.status ?? 'posted');
+                  return (
+                    <tr key={p.id}>
+                      <Td style={{ fontWeight: 600 }}>{String(p.paymentNo)}</Td>
+                      <Td numeric>₹{money(p.amount)}</Td>
+                      <Td numeric>₹{money(p.allocatedAmount)}</Td>
+                      <Td numeric>{Number(p.unallocatedAmount) > 0.001 ? <b>₹{money(p.unallocatedAmount)}</b> : `₹${money(p.unallocatedAmount)}`}</Td>
+                      <Td><StatusBadge status={pstatus} /></Td>
+                      <Td style={{ textAlign: 'right' }}>
+                        {canPay && pstatus === 'posted' && (
+                          <Button variant="ghost" size="sm" onClick={() => reverse(p)}>Reverse</Button>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          ) : (
+            <EmptyState title="No payments yet" description="Payments recorded against approved bills appear here." />
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

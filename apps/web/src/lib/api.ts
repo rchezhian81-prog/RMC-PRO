@@ -915,6 +915,8 @@ export const purchaseApi = {
   cancelBill: (id: string) => post(`/vendor-bills/${id}/cancel`),
   payments: () => apiFetch<Row[]>('/vendor-payments'),
   createPayment: (b: Record<string, unknown>) => post('/vendor-payments', b),
+  reversePayment: (id: string, reason?: string) => post(`/vendor-payments/${id}/reverse`, { reason }),
+  applyAdvance: (id: string, allocations: { billId: string; amount: number }[]) => post(`/vendor-payments/${id}/apply-advance`, { allocations }),
   itcRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/purchase-reports/itc-register${dateQs(from, to)}`),
 };
 

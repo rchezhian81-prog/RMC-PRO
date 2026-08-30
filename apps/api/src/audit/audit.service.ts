@@ -157,6 +157,7 @@ export const AUDIT_ACTIONS = {
   RECEIPT_BOUNCE: 'receipt.bounce',
   VENDOR_BILL_APPROVE: 'vendor_bill.approve',
   VENDOR_PAYMENT_RECORD: 'vendor_payment.record',
+  VENDOR_PAYMENT_REVERSE: 'vendor_payment.reverse',
   VEHICLE_MAINTENANCE_COMPLETE: 'vehicle_maintenance.complete',
   EXPENSE_VOUCHER_POST: 'expense_voucher.post',
   DOCUMENT_CORRECTION: 'document.correction',

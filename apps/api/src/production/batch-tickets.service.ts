@@ -104,6 +104,12 @@ export class BatchTicketsService {
       const remaining = num(queue.plannedQuantityM3) - num(queue.producedQuantityM3);
       const batchQty = dto.batchQuantityM3 !== undefined ? num(dto.batchQuantityM3) : remaining;
       if (batchQty <= 0) throw badReq('Batch quantity must be greater than zero');
+      // Cap the batch at the queued line's remaining quantity. Over-batching
+      // flows challan → invoice → credit exposure, so a mis-key would bill and
+      // expose more than the ordered value the credit gate was assessed against.
+      if (batchQty > remaining + 0.001) {
+        throw badReq(`Batch quantity ${batchQty} m³ exceeds the ${remaining} m³ remaining on this queued line.`);
+      }
 
       const mix = await this.resolveApprovedMix(m, queue.gradeId, dto.mixDesignId as string, queue.gradeLabel);
       if (!mix) throw badReq('No approved mix design available for this grade');
@@ -272,6 +278,32 @@ export class BatchTicketsService {
       const override = dto.overrideVariance === true;
       if (breaches.length && !override) {
         throw badReq('Material variance exceeds tolerance', breaches);
+      }
+
+      // Stock-availability gate (mirrors the manual-adjustment control): batching
+      // must not silently drive raw-material stock negative — the manual path
+      // requires approval for that, and this is the far more common consumption.
+      // Pre-check each material at the ticket's plant; block a shortfall unless
+      // the operator overrides (physical stock present but not yet booked).
+      if (dto.allowNegativeStock !== true) {
+        const plantId = await this.stock.resolvePlant(m, ticket.plantId);
+        const required = new Map<string, number>();
+        for (const mat of materials) {
+          const actual = num(mat.actualQuantity);
+          if (!mat.materialId || actual <= 0) continue;
+          required.set(mat.materialId, (required.get(mat.materialId) ?? 0) + actual);
+        }
+        const shortfalls: Array<{ material: string; available: number; required: number }> = [];
+        for (const [materialId, need] of required) {
+          const available = await this.stock.balanceOf(m, plantId, materialId);
+          if (available - need < -0.0005) {
+            const label = materials.find((x) => x.materialId === materialId)?.materialLabel ?? materialId;
+            shortfalls.push({ material: label, available, required: need });
+          }
+        }
+        if (shortfalls.length) {
+          throw badReq('Insufficient stock to batch this ticket. Adjust stock first, or override to allow negative stock.', shortfalls);
+        }
       }
 
       // Reduce inventory from actual consumption.

@@ -155,12 +155,16 @@ async function deliverAndIssue({ customer }, order, qty = QTY, rate = RATE) {
   return { invoice, total };
 }
 
-/** Produce one DELIVERED challan of `qty` m³ against a confirmed order (each
- *  call enqueues a fresh load), without invoicing — used to build a single
- *  invoice from several challans of the same order. */
+/** Produce one DELIVERED challan of `qty` m³ against a confirmed order, without
+ *  invoicing — used to build a single invoice from several challans of the same
+ *  order. Enqueue is idempotent (one queue entry per line), so each call reuses
+ *  the order's live queue entry and batches it again for the next load. */
 async function deliverOneChallan(order, qty) {
-  const queue = await api('POST', `/batch-queue/from-order/${order.id}`);
-  const queueId = (Array.isArray(queue) ? queue[0] : queue)?.id;
+  await api('POST', `/batch-queue/from-order/${order.id}`);
+  const all = await api('GET', '/batch-queue');
+  const queueId = (Array.isArray(all) ? all : []).find(
+    (e) => String(e.orderId) === String(order.id) && e.queueStatus !== 'cancelled' && e.queueStatus !== 'completed',
+  )?.id;
   let ticket = await api('POST', `/batch-tickets/from-queue/${queueId}`, { batchQuantityM3: qty, mixDesignId: mix.id });
   ticket = await api('POST', `/batch-tickets/${ticket.id}/confirm`, {});
   const dispatch = await api('POST', `/dispatches/from-batch-ticket/${ticket.id}`, {

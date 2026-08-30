@@ -125,5 +125,43 @@ bill = await api('GET', `/vendor-bills/${bill.id}`);
 ok('bill is now paid', bill.paymentStatus === 'paid');
 ok('bill outstanding is zero', near(bill.outstandingAmount, 0));
 
+// ---- F. Duplicate-invoice guard (#6) ----
+let dupBlocked = false;
+try {
+  await api('POST', '/vendor-bills', {
+    supplierId: supplier.id, purchaseOrderId: po.id, supplierBillNo: 'VINV-001',
+    lines: [{ purchaseOrderItemId: poItemId, materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: 1, rate: RATE }],
+  });
+} catch { dupBlocked = true; }
+ok('a duplicate supplier invoice number is rejected', dupBlocked);
+
+// ---- G. Double-billing guard (#7): the PO line is fully billed, so a second
+//         bill against it fails the 3-way match and cannot be approved. ----
+const second = await api('POST', '/vendor-bills', {
+  supplierId: supplier.id, purchaseOrderId: po.id, goodsReceiptId: grn.id, supplierBillNo: 'VINV-002',
+});
+ok('a second bill for the already-billed line fails the match', second.matchStatus === 'over_tolerance');
+let secondApproveBlocked = false;
+try { await api('POST', `/vendor-bills/${second.id}/approve`); } catch { secondApproveBlocked = true; }
+ok('the double-billing bill cannot be approved without override', secondApproveBlocked);
+
+// ---- H. Over-receipt re-check at POST (#8): two full-qty drafts both pass
+//         create (received still 0); once the first posts, the second is blocked
+//         at post even though it passed the create-time cap. ----
+let po2 = await api('POST', '/purchase-orders', {
+  supplierId: supplier.id, plantId: PLANT_ID, orderDate: new Date().toISOString().slice(0, 10),
+  lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: QTY, rate: RATE, gstRate: 18 }],
+});
+po2 = await api('POST', `/purchase-orders/${po2.id}/issue`);
+const po2ItemId = po2.items[0].id;
+const grnLine = { purchaseOrderItemId: po2ItemId, materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, receivedQuantity: QTY, acceptedQuantity: QTY, rate: RATE };
+const g1 = await api('POST', '/goods-receipts', { purchaseOrderId: po2.id, plantId: PLANT_ID, lines: [grnLine] });
+const g2 = await api('POST', '/goods-receipts', { purchaseOrderId: po2.id, plantId: PLANT_ID, lines: [grnLine] });
+ok('two full-qty drafts both pass the create-time cap', !!g1.id && !!g2.id);
+await api('POST', `/goods-receipts/${g1.id}/post`);
+let secondPostBlocked = false;
+try { await api('POST', `/goods-receipts/${g2.id}/post`); } catch { secondPostBlocked = true; }
+ok('the second GRN is blocked at POST by the over-receipt re-check', secondPostBlocked);
+
 console.log(`\nPURCHASE CYCLE TEST: ${pass} passed ✓`);
 process.exit(0);

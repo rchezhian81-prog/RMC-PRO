@@ -96,6 +96,8 @@ export class VendorBill extends TenantScopedEntity {
   /** draft → approved; or cancelled. */
   @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
   @Column({ name: 'payment_status', type: 'varchar', default: 'unpaid' }) paymentStatus!: string;
+  /** Whether this bill's GST is claimable ITC. false = blocked credit (Sec 17(5)). */
+  @Column({ name: 'itc_eligible', type: 'boolean', default: true }) itcEligible!: boolean;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
 }
 

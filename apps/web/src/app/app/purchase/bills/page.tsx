@@ -20,6 +20,7 @@ export default function VendorBillsPage() {
   const [grns, setGrns] = useState<Row[]>([]);
   const [grnId, setGrnId] = useState('');
   const [supplierBillNo, setSupplierBillNo] = useState('');
+  const [itcEligible, setItcEligible] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,9 +52,10 @@ export default function VendorBillsPage() {
       const bill = await purchaseApi.createBill({
         supplierId: grn.supplierId, goodsReceiptId: grn.id, purchaseOrderId: grn.purchaseOrderId ?? undefined,
         supplierBillNo: supplierBillNo || undefined, billDate: new Date().toISOString().slice(0, 10),
+        itcEligible,
       });
       setMsg(`Vendor bill ${String(bill.billNo)} created — match: ${String(bill.matchStatus)}.`);
-      setGrnId(''); setSupplierBillNo('');
+      setGrnId(''); setSupplierBillNo(''); setItcEligible(true);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
@@ -109,6 +111,12 @@ export default function VendorBillsPage() {
                 </Field>
               </div>
               <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--mn-muted)', whiteSpace: 'nowrap' }} title="Uncheck for a blocked credit (Sec 17(5)) — its GST is excluded from the ITC register and GSTR-3B.">
+                  <input type="checkbox" checked={itcEligible} onChange={(e) => setItcEligible(e.target.checked)} />
+                  ITC eligible
+                </label>
+              </div>
+              <div style={{ marginBottom: 14 }}>
                 <Button onClick={createBill} loading={busy}>Create bill</Button>
               </div>
             </div>
@@ -139,7 +147,10 @@ export default function VendorBillsPage() {
                 return (
                   <tr key={r.id}>
                     <Td style={{ fontWeight: 600 }}>{String(r.billNo)}</Td>
-                    <Td>{String(r.supplierBillNo ?? '—')}</Td>
+                    <Td>
+                      {String(r.supplierBillNo ?? '—')}
+                      {r.itcEligible === false && <span style={{ marginLeft: 6 }}><StatusBadge status="blocked" /></span>}
+                    </Td>
                     <Td numeric>₹{money(r.totalAmount)}</Td>
                     <Td numeric>₹{money(r.outstandingAmount)}</Td>
                     <Td>{r.matchStatus ? <StatusBadge status={String(r.matchStatus)} /> : '—'}</Td>

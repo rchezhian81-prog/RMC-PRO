@@ -222,8 +222,10 @@ export class BillingReportsService {
         igst: oSum((i) => i.igstAmount), cess: oSum((i) => i.cessAmount), total: oSum((i) => i.totalAmount),
       };
 
-      // Input tax credit — approved bills, split derived from state test.
-      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved' } })).filter((b) => inPeriod(b.billDate));
+      // Input tax credit — approved AND ITC-eligible bills only; blocked-credit
+      // bills (Sec 17(5)) are excluded from the claimable ITC. Split derived from
+      // the supplier-vs-company state test.
+      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved', itcEligible: true } })).filter((b) => inPeriod(b.billDate));
       const suppliers = await m.getRepository(Supplier).find();
       const supOf = new Map(suppliers.map((s) => [s.id, s]));
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];

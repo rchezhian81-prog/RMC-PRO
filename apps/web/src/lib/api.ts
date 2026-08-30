@@ -729,6 +729,22 @@ export const notificationsApi = {
   history: () => apiFetch<Row[]>('/notifications'),
 };
 
+// ---- Agent governor (the multi-agent substrate control surface) ----
+export interface AgentControls { automationPaused: boolean; maxStepsPerRun: number; maxActionsPerRun: number }
+export const agentsApi = {
+  controls: () => apiFetch<AgentControls>('/agents/controls'),
+  setControls: (b: Partial<AgentControls>) => apiFetch<AgentControls>('/agents/controls', { method: 'PUT', body: JSON.stringify(b) }),
+  catalog: () => apiFetch<Array<{ name: string; description: string; tools: string[] }>>('/agents/catalog'),
+  llm: () => apiFetch<{ configured: boolean; provider: string; model: string; askEnabledAgents: string[] }>('/agents/llm'),
+  runs: (limit = 50) => apiFetch<Row[]>(`/agents/runs?limit=${limit}`),
+  // The following require the higher-trust agents.approve permission.
+  approvals: (status = 'pending') => apiFetch<Row[]>(`/agents/approvals?status=${encodeURIComponent(status)}`),
+  decide: (id: string, decision: 'approved' | 'rejected', reason?: string) => post(`/agents/approvals/${id}/decide`, { decision, reason }),
+  gstStatus: () => apiFetch<{ configured: boolean; provider: string }>('/agents/gst'),
+  gstJobs: () => apiFetch<Row[]>('/agents/gst/jobs'),
+  drainGstJobs: () => post('/agents/gst/jobs/drain', {}),
+};
+
 export const negativeStockApi = {
   list: (status?: string) => apiFetch<Row[]>(`/negative-stock-requests${status ? `?status=${status}` : ''}`),
   approve: (id: string, remarks: string) => post(`/negative-stock-requests/${id}/approve`, { remarks }),

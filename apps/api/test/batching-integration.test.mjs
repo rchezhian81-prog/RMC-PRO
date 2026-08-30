@@ -147,5 +147,18 @@ ok('approving a new version deactivates the grade’s prior active version', pri
 const newVerAfter = await api('GET', `/mix-designs/${newVer.id}`);
 ok('the newly approved version is the single active one', newVerAfter.isActiveVersion === true && newVerAfter.approvalStatus === 'approved');
 
+// ---- G. A deactivated customer cannot have a new order raised (Tier-4D #25) ----
+const deCust = await api('POST', '/customers', { customerCode: 'DEACT-' + Date.now(), customerName: 'Deactivated Co', state: 'Karnataka' });
+await api('DELETE', `/customers/${deCust.id}`); // soft-delete → status inactive
+let q2 = await api('POST', '/quotations', {
+  customerId: deCust.id,
+  items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 5, ratePerM3: 4800 }],
+});
+await api('POST', `/quotations/${q2.id}/submit`);
+q2 = await api('POST', `/quotations/${q2.id}/approve`);
+let orderBlocked = false;
+try { await api('POST', `/order-drafts/from-quotation/${q2.id}`, { plantId: plant.id, orderDate: TODAY }); } catch { orderBlocked = true; }
+ok('an order cannot be raised for a deactivated customer', orderBlocked);
+
 console.log(`\nBATCHING INTEGRATION TEST: ${pass} passed ✓`);
 process.exit(0);

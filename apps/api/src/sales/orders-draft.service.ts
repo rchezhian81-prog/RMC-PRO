@@ -78,6 +78,20 @@ export class OrdersDraftService {
   }
 
   /** Convert an APPROVED quotation into a draft order (handoff only). */
+  /**
+   * A deactivated customer must not have a NEW order raised against it — that
+   * would put fresh AR on a party the tenant marked inactive, and the "deactivate"
+   * control would be cosmetic. (An old approved quotation can be converted after
+   * the customer was deactivated, so the check belongs here, at order creation.)
+   */
+  private async assertActiveCustomer(m: EntityManager, customerId: string | null): Promise<void> {
+    if (!customerId) return;
+    const c = await m.getRepository(Customer).findOne({ where: { id: customerId } });
+    if (c && c.status && String(c.status) !== 'active') {
+      throw badReq(`${c.customerName ?? 'The customer'} is inactive — reactivate the customer before raising an order.`);
+    }
+  }
+
   fromQuotation(tenantId: string, quotationId: string, rawDto: Record<string, unknown>) {
     const dto = nullifyEmpty(rawDto);
     return this.db.runInTenant(tenantId, async (m) => {
@@ -86,6 +100,7 @@ export class OrdersDraftService {
       if (quotation.approvalStatus !== 'approved') {
         throw badReq('Only an approved quotation can be converted to an order draft');
       }
+      await this.assertActiveCustomer(m, quotation.customerId);
       // Enforce the quotation's validity window, exactly as the rate-contract path
       // does — an approved-but-expired quote must not convert at stale rates after
       // a cement/diesel price change.
@@ -182,6 +197,7 @@ export class OrdersDraftService {
       if (contract.validTo && asOf > contract.validTo) {
         throw badReq(`Rate contract expired on ${contract.validTo}`);
       }
+      await this.assertActiveCustomer(m, contract.customerId);
       const contractItems = await m
         .getRepository(RateContractItem)
         .find({ where: { rateContractId }, order: { createdAt: 'ASC' } });

@@ -258,6 +258,18 @@ export class OrdersService {
       const order = await repo.findOne({ where: { id } });
       if (!order) throw notFound();
       if (order.orderStatus === 'cancelled') throw badReq('Order is already cancelled');
+      // Downstream guard: an order whose concrete has already been delivered must
+      // not be silently cancelled — that strands delivered-but-unbilled challans
+      // (still billable) and any issued-invoice AR, while dropping the order's
+      // committed value out of credit exposure. Handle the delivered challans /
+      // completed dispatches first.
+      const [liveChallans] = await m.query(
+        `SELECT count(*)::int AS n FROM delivery_challans WHERE order_id = $1 AND challan_status IN ('issued','delivered')`, [id]);
+      const [completedDispatch] = await m.query(
+        `SELECT count(*)::int AS n FROM dispatches WHERE order_id = $1 AND dispatch_status = 'completed'`, [id]);
+      if (num(liveChallans?.n) > 0 || num(completedDispatch?.n) > 0) {
+        throw badReq('This order has concrete already delivered (an issued/delivered challan or a completed dispatch) and cannot be cancelled. Cancel or bill the downstream first.');
+      }
       const from = order.orderStatus;
       await repo.update(id, { orderStatus: 'cancelled', cancelledReason: reason ?? null });
       await m

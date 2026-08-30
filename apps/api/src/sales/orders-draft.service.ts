@@ -86,6 +86,13 @@ export class OrdersDraftService {
       if (quotation.approvalStatus !== 'approved') {
         throw badReq('Only an approved quotation can be converted to an order draft');
       }
+      // Enforce the quotation's validity window, exactly as the rate-contract path
+      // does — an approved-but-expired quote must not convert at stale rates after
+      // a cement/diesel price change.
+      const asOf = (dto.orderDate as string) || new Date().toISOString().slice(0, 10);
+      if (quotation.validUntil && asOf > quotation.validUntil) {
+        throw badReq(`Quotation expired on ${quotation.validUntil}. Revise and re-approve it before converting.`);
+      }
       const items = await m
         .getRepository(QuotationItem)
         .find({ where: { quotationId }, order: { createdAt: 'ASC' } });

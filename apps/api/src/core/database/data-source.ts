@@ -53,6 +53,7 @@ import { DispatchBatchTicketUnique1720000048000 } from './migrations/17200000480
 import { WidenStockQuantityColumns1720000049000 } from './migrations/1720000049000-WidenStockQuantityColumns';
 import { DropOrderItemDeliveryInterval1720000050000 } from './migrations/1720000050000-DropOrderItemDeliveryInterval';
 import { AgentPauses1720000051000 } from './migrations/1720000051000-AgentPauses';
+import { VendorBillItcEligible1720000052000 } from './migrations/1720000052000-VendorBillItcEligible';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -121,6 +122,7 @@ export const AppDataSource = new DataSource({
     WidenStockQuantityColumns1720000049000,
     DropOrderItemDeliveryInterval1720000050000,
     AgentPauses1720000051000,
+    VendorBillItcEligible1720000052000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

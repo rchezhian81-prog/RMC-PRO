@@ -170,5 +170,23 @@ let secondPostBlocked = false;
 try { await api('POST', `/goods-receipts/${g2.id}/post`); } catch { secondPostBlocked = true; }
 ok('the second GRN is blocked at POST by the over-receipt re-check', secondPostBlocked);
 
+// ---- I. ITC eligibility (#11): a blocked-credit (itcEligible:false) bill is
+//         excluded from the ITC register; an eligible one is included. ----
+const eligibleBill = await api('POST', '/vendor-bills', {
+  supplierId: supplier.id, supplierBillNo: 'VINV-ELIG',
+  lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: 1, rate: 100, gstRate: 18 }],
+});
+await api('POST', `/vendor-bills/${eligibleBill.id}/approve`);
+const blockedBill = await api('POST', '/vendor-bills', {
+  supplierId: supplier.id, supplierBillNo: 'VINV-BLOCK', itcEligible: false,
+  lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: 1, rate: 200, gstRate: 18 }],
+});
+ok('a bill can be flagged ITC-ineligible', blockedBill.itcEligible === false);
+await api('POST', `/vendor-bills/${blockedBill.id}/approve`);
+const itc = await api('GET', '/purchase-reports/itc-register');
+const itcNums = (itc.rows ?? []).map((r) => r.billNo);
+ok('an eligible bill appears in the ITC register', itcNums.includes(eligibleBill.billNo));
+ok('a blocked-credit bill is excluded from the ITC register', !itcNums.includes(blockedBill.billNo));
+
 console.log(`\nPURCHASE CYCLE TEST: ${pass} passed ✓`);
 process.exit(0);

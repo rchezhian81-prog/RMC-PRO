@@ -59,7 +59,9 @@ export class VendorBillService {
    */
   itcRegister(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved' }, order: { billDate: 'ASC' } }))
+      // Only ITC-eligible bills are claimable; blocked-credit bills (Sec 17(5))
+      // are excluded from the register and its totals.
+      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved', itcEligible: true }, order: { billDate: 'ASC' } }))
         .filter((b) => (!from || (b.billDate ?? '') >= from) && (!to || (b.billDate ?? '') <= to));
       const suppliers = await m.getRepository(Supplier).find();
       const supOf = new Map(suppliers.map((s) => [s.id, s]));
@@ -138,6 +140,8 @@ export class VendorBillService {
           billDate: (dto.billDate as string) ?? null,
           dueDate: (dto.dueDate as string) ?? null,
           status: 'draft', paymentStatus: 'unpaid',
+          // Default eligible; the operator flags a blocked-credit bill (Sec 17(5)).
+          itcEligible: dto.itcEligible === false ? false : true,
         }),
       );
 

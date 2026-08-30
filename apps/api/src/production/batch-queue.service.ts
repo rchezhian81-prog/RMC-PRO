@@ -40,6 +40,12 @@ export class BatchQueueService {
       const repo = m.getRepository(BatchQueueEntry);
       const created: BatchQueueEntry[] = [];
       for (const it of items) {
+        // Idempotency: skip a line that already has a live queue entry. Calling
+        // this twice (or via both the order path and a production plan) would
+        // otherwise create duplicate loads — double batching, double consumption
+        // and double dispatchable volume. A cancelled entry frees it to re-queue.
+        const existing = await repo.findOne({ where: { orderItemId: it.id } });
+        if (existing && existing.queueStatus !== 'cancelled') continue;
         created.push(
           await repo.save(
             repo.create({

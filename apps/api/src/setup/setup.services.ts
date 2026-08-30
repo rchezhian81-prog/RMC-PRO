@@ -24,7 +24,7 @@ import {
 /** Company profile — one row per tenant (Design Doc 6 §5.1). */
 @Injectable()
 export class CompanyService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(private readonly db: TenantDbService, private readonly audit: AuditService) {}
 
   get(tenantId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
@@ -33,7 +33,7 @@ export class CompanyService {
     });
   }
 
-  update(tenantId: string, dto: Record<string, unknown>) {
+  async update(tenantId: string, dto: Record<string, unknown>, userId: string) {
     // Validate the identity fields before saving — the company GSTIN prints on
     // every tax invoice, so a malformed one must never be persisted (PAN / PIN /
     // email / phone are checked for the same reason).
@@ -57,7 +57,7 @@ export class CompanyService {
     for (const k of fields) {
       if (dto[k] !== undefined) patch[k] = dto[k];
     }
-    return this.db.runInTenant(tenantId, async (m) => {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Company);
       const existing = (await repo.find({ take: 1 }))[0];
       if (!existing) {
@@ -71,6 +71,16 @@ export class CompanyService {
       await repo.update(existing.id, patch as DeepPartial<Company>);
       return repo.findOne({ where: { id: existing.id } });
     });
+    // The company profile carries the GSTIN that prints on every tax invoice and
+    // the bank details — a change belongs in the trail. Field NAMES only (values
+    // may be sensitive; audit.record redacts, but we keep it to keys regardless).
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.COMPANY_UPDATE,
+      entityType: 'company', entityId: result?.id ?? null, entityLabel: result?.companyName ?? null,
+      summary: 'Updated the company profile',
+      details: { fields: Object.keys(patch) },
+    });
+    return result;
   }
 
   /**
@@ -111,7 +121,7 @@ export class CompanyService {
 /** Tenant settings key/value (Design Doc 6 §5.5). */
 @Injectable()
 export class SettingsService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(private readonly db: TenantDbService, private readonly audit: AuditService) {}
 
   /**
    * The catalogue, in order, each enriched with the tenant's stored value (or
@@ -139,20 +149,29 @@ export class SettingsService {
    * is rejected with a 400 instead of persisting an orphan/garbage row. The
    * stored data_type always comes from the catalogue, never the client.
    */
-  set(tenantId: string, key: string, value: string) {
+  async set(tenantId: string, key: string, value: string, userId: string) {
     const def = SETTINGS_BY_KEY[key];
     const err = validateSettingValue(key, value);
     if (!def || err) {
       const message = err ?? `Unknown setting "${key}".`;
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message, fields: { value: message } });
     }
-    return this.db.runInTenant(tenantId, async (m) => {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(TenantSetting);
       const existing = await repo.findOne({ where: { settingKey: key } });
       if (existing) await repo.update(existing.id, { settingValue: value, dataType: def.type });
       else await repo.save(repo.create({ tenantId, settingKey: key, settingValue: value, dataType: def.type }));
       return repo.findOne({ where: { settingKey: key } });
     });
+    // Tenant settings drive policy (credit gate stage, default credit days …) —
+    // a change is worth a trail entry with the key and its new value.
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.SETTING_CHANGE,
+      entityType: 'tenant_setting', entityId: null, entityLabel: key,
+      summary: `Changed setting "${def.label}" to ${value}`,
+      details: { key, value },
+    });
+    return result;
   }
 }
 
@@ -413,7 +432,7 @@ export class UsersService {
 /** Tenant-side role + permission management (Design Doc 6 §6.2–6.4). */
 @Injectable()
 export class RolesService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(private readonly db: TenantDbService, private readonly audit: AuditService) {}
 
   list(tenantId: string) {
     return this.db.runInTenant(tenantId, (m) =>
@@ -425,20 +444,26 @@ export class RolesService {
     return this.db.ds.getRepository(Permission).find({ order: { moduleKey: 'ASC' } });
   }
 
-  create(tenantId: string, dto: Record<string, unknown>) {
+  async create(tenantId: string, dto: Record<string, unknown>, userId: string) {
     const roleKey = String(dto.roleKey ?? '').trim();
     const roleName = String(dto.roleName ?? '').trim();
     if (!roleKey || !roleName) {
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'roleKey, roleName required' });
     }
-    return this.db.runInTenant(tenantId, (m) =>
+    const role = await this.db.runInTenant(tenantId, (m) =>
       m.getRepository(Role).save(m.getRepository(Role).create({ tenantId, roleKey, roleName })),
     );
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_CREATE,
+      entityType: 'role', entityId: role.id, entityLabel: roleName,
+      summary: `Created role ${roleName}`,
+    });
+    return role;
   }
 
   /** Rename a role. System roles (owner/admin/etc.) are protected. */
-  update(tenantId: string, id: string, dto: Record<string, unknown>) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async update(tenantId: string, id: string, dto: Record<string, unknown>, userId: string) {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Role);
       const role = await repo.findOne({ where: { id } });
       if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
@@ -450,11 +475,17 @@ export class RolesService {
       await repo.update(id, { roleName });
       return repo.findOne({ where: { id } });
     });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_UPDATE,
+      entityType: 'role', entityId: id, entityLabel: result?.roleName ?? null,
+      summary: `Renamed role to ${result?.roleName ?? ''}`.trim(),
+    });
+    return result;
   }
 
   /** Delete a role. Blocked for system roles and roles still assigned to users. */
-  remove(tenantId: string, id: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async remove(tenantId: string, id: string, userId: string) {
+    const label = await this.db.runInTenant(tenantId, async (m) => {
       const role = await m.getRepository(Role).findOne({ where: { id } });
       if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
       if (role.isSystemRole) {
@@ -469,8 +500,14 @@ export class RolesService {
       }
       await m.getRepository(RolePermission).delete({ roleId: id });
       await m.getRepository(Role).delete(id);
-      return { deleted: true };
+      return role.roleName;
     });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_DELETE,
+      entityType: 'role', entityId: id, entityLabel: label,
+      summary: `Deleted role ${label}`,
+    });
+    return { deleted: true };
   }
 
   getPermissions(tenantId: string, roleId: string) {
@@ -483,8 +520,8 @@ export class RolesService {
     });
   }
 
-  setPermissions(tenantId: string, roleId: string, permissionIds: string[]) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async setPermissions(tenantId: string, roleId: string, permissionIds: string[], userId: string) {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       // Privilege-escalation guard: a tenant admin must never grant a platform.*
       // permission to a tenant role. The provisioning path already filters these
       // out; the live editor did not, so it was the one place a tenant could hand
@@ -508,5 +545,14 @@ export class RolesService {
       }
       return this.getPermissions(tenantId, roleId);
     });
+    // A permission grant is the single most privilege-relevant tenant action —
+    // it belongs in the trail (the count of permissions on the role after the set).
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_PERMISSION_CHANGE,
+      entityType: 'role', entityId: roleId, entityLabel: null,
+      summary: `Set ${permissionIds.length} permission(s) on a role`,
+      details: { count: permissionIds.length },
+    });
+    return result;
   }
 }

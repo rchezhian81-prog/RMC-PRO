@@ -180,4 +180,10 @@ export const AUDIT_ACTIONS = {
   TENANT_PLAN_ASSIGN: 'tenant.plan_assign',
   TENANT_DATA_EXPORT: 'tenant.data_export',
   TENANT_USER_CREATE: 'tenant_user.create',
+  ROLE_CREATE: 'role.create',
+  ROLE_UPDATE: 'role.update',
+  ROLE_DELETE: 'role.delete',
+  ROLE_PERMISSION_CHANGE: 'role.permission_change',
+  COMPANY_UPDATE: 'company.update',
+  SETTING_CHANGE: 'setting.change',
 } as const;

@@ -25,7 +25,7 @@ export class CompanyController {
   @Patch()
   @RequirePermissions('settings.manage')
   update(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.svc.update(u.tenantId as string, dto);
+    return this.svc.update(u.tenantId as string, dto, u.userId);
   }
 
   /** Upload / replace the invoice logo. Body: { mime, data } (base64). */
@@ -57,7 +57,7 @@ export class SettingsController {
     @Body() dto: Record<string, unknown>,
   ) {
     // The catalogue owns each setting's type; the client only sends the value.
-    return this.svc.set(u.tenantId as string, key, String(dto.value ?? ''));
+    return this.svc.set(u.tenantId as string, key, String(dto.value ?? ''), u.userId);
   }
 }
 
@@ -116,17 +116,17 @@ export class RolesController {
     return this.svc.list(u.tenantId as string);
   }
   @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.svc.create(u.tenantId as string, dto);
+    return this.svc.create(u.tenantId as string, dto, u.userId);
   }
   @Patch(':id') update(
     @CurrentUser() u: AuthUser,
     @Param('id') id: string,
     @Body() dto: Record<string, unknown>,
   ) {
-    return this.svc.update(u.tenantId as string, id, dto);
+    return this.svc.update(u.tenantId as string, id, dto, u.userId);
   }
   @Delete(':id') remove(@CurrentUser() u: AuthUser, @Param('id') id: string) {
-    return this.svc.remove(u.tenantId as string, id);
+    return this.svc.remove(u.tenantId as string, id, u.userId);
   }
   @Get('permissions-catalog') catalog() {
     return this.svc.permissionCatalog();
@@ -140,6 +140,6 @@ export class RolesController {
     @Body() dto: Record<string, unknown>,
   ) {
     const ids = Array.isArray(dto.permissionIds) ? (dto.permissionIds as string[]) : [];
-    return this.svc.setPermissions(u.tenantId as string, id, ids);
+    return this.svc.setPermissions(u.tenantId as string, id, ids, u.userId);
   }
 }

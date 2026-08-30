@@ -149,5 +149,24 @@ ok('assigning a platform.* permission to a tenant role is rejected (400)', withP
 const withTenant = await j('PUT', `/roles/${role.id}/permissions`, { permissionIds: [tenantPerm.id] }, tok);
 ok('assigning an ordinary tenant permission still succeeds', withTenant.status >= 200 && withTenant.status < 300);
 
+// --- D. Audit coverage (Tier-4B #21/#22) ---
+console.log('\n=== D. audit coverage ===');
+const roleAudit = (await j('GET', '/audit-logs?action=role.permission_change', null, tok)).body?.data ?? [];
+ok('a role permission change is written to the audit trail', Array.isArray(roleAudit) && roleAudit.length >= 1);
+const roleCreateAudit = (await j('GET', '/audit-logs?action=role.create', null, tok)).body?.data ?? [];
+ok('a role creation is written to the audit trail', roleCreateAudit.length >= 1);
+
+await j('PATCH', '/company', { companyName: 'QA Co ' + Date.now() }, tok);
+const coAudit = (await j('GET', '/audit-logs?action=company.update', null, tok)).body?.data ?? [];
+ok('a company profile update is written to the audit trail', coAudit.length >= 1);
+
+const settingsList = (await j('GET', '/settings', null, tok)).body?.data ?? [];
+const aSetting = settingsList[0];
+if (aSetting) {
+  await j('PUT', `/settings/${aSetting.key}`, { value: String(aSetting.value ?? aSetting.default ?? '') }, tok);
+  const setAudit = (await j('GET', '/audit-logs?action=setting.change', null, tok)).body?.data ?? [];
+  ok('a settings change is written to the audit trail', setAudit.length >= 1);
+}
+
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

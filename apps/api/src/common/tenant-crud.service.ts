@@ -72,10 +72,18 @@ export class TenantCrudService<T extends ObjectLiteral> {
     });
   }
 
-  list(tenantId: string): Promise<T[]> {
-    const options = (
-      this.opts.orderBy ? { order: { [this.opts.orderBy]: 'ASC' } } : {}
-    ) as FindManyOptions<T>;
+  list(tenantId: string, activeOnly = false): Promise<T[]> {
+    const options: FindManyOptions<T> = {};
+    if (this.opts.orderBy) options.order = { [this.opts.orderBy]: 'ASC' } as FindManyOptions<T>['order'];
+    if (activeOnly) {
+      // Only rows in the active state — used by pick-lists so a deactivated
+      // master isn't offered for a NEW selection. The management list (activeOnly
+      // false) still returns everything, so inactive rows can be reactivated.
+      const field = this.opts.softDelete?.field ?? 'status';
+      const sd = this.opts.softDelete?.value;
+      const activeValue = typeof sd === 'boolean' ? !sd : 'active';
+      options.where = { [field]: activeValue } as unknown as FindOptionsWhere<T>;
+    }
     return this.db.runInTenant(tenantId, (m) => m.getRepository(this.entity).find(options));
   }
 

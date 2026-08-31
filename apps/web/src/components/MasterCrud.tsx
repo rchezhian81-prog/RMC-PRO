@@ -87,7 +87,9 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
       for (const f of refFields) {
         const ref = f.ref!;
         try {
-          const refRows = cache[ref.path] ?? (cache[ref.path] = await crud(ref.path).list());
+          // Pick-lists offer only ACTIVE masters — a deactivated one shouldn't be
+          // selectable for a new reference (the master's own screen still lists all).
+          const refRows = cache[ref.path] ?? (cache[ref.path] = await crud(ref.path).list({ active: true }));
           collected[f.key] = refRows.map((row) => ({
             value: String(row[ref.value] ?? ''),
             label: String(row[ref.label] ?? row[ref.value] ?? ''),

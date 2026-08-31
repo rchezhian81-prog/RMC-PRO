@@ -1,4 +1,4 @@
-import { Body, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import type { ObjectLiteral } from 'typeorm';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { TenantCrudService } from './tenant-crud.service';
@@ -12,8 +12,9 @@ export abstract class BaseCrudController<T extends ObjectLiteral> {
   protected abstract service: TenantCrudService<T>;
 
   @Get()
-  list(@CurrentUser() u: AuthUser) {
-    return this.service.list(u.tenantId as string);
+  list(@CurrentUser() u: AuthUser, @Query('active') active?: string) {
+    // ?active=true returns only active rows (pick-lists); default returns all.
+    return this.service.list(u.tenantId as string, active === 'true');
   }
 
   @Get(':id')

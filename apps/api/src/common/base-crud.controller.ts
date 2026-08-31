@@ -23,7 +23,7 @@ export abstract class BaseCrudController<T extends ObjectLiteral> {
 
   @Post()
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.service.create(u.tenantId as string, dto);
+    return this.service.create(u.tenantId as string, dto, u.userId);
   }
 
   @Patch(':id')
@@ -32,19 +32,19 @@ export abstract class BaseCrudController<T extends ObjectLiteral> {
     @Param('id') id: string,
     @Body() dto: Record<string, unknown>,
   ) {
-    return this.service.update(u.tenantId as string, id, dto);
+    return this.service.update(u.tenantId as string, id, dto, u.userId);
   }
 
   /** Soft delete (deactivate) — see TenantCrudService.deactivate. */
   @Delete(':id')
   remove(@CurrentUser() u: AuthUser, @Param('id') id: string) {
-    return this.service.deactivate(u.tenantId as string, id);
+    return this.service.deactivate(u.tenantId as string, id, u.userId);
   }
 
   /** Restore a deactivated record — the inverse of remove. PATCH so the crud
    * permission guard treats it as an edit, not a create. */
   @Patch(':id/reactivate')
   reactivate(@CurrentUser() u: AuthUser, @Param('id') id: string) {
-    return this.service.reactivate(u.tenantId as string, id);
+    return this.service.reactivate(u.tenantId as string, id, u.userId);
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { validateMasterFields } from '@rmc/shared';
+import { AuditService } from '../audit/audit.service';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { assertFields } from '../common/validation';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -19,8 +20,8 @@ import {
 
 @Injectable()
 export class CustomersService extends TenantCrudService<Customer> {
-  constructor(db: TenantDbService) {
-    super(db, Customer, { orderBy: 'customerCode', required: ['customerCode', 'customerName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Customer, { orderBy: 'customerCode', required: ['customerCode', 'customerName'], resource: 'customer', labelField: 'customerName' }, audit);
   }
   // GSTIN, mobile, creditLimit, creditDays.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -40,8 +41,8 @@ export class CustomersService extends TenantCrudService<Customer> {
 
 @Injectable()
 export class SitesService extends TenantCrudService<Site> {
-  constructor(db: TenantDbService) {
-    super(db, Site, { orderBy: 'siteCode', required: ['siteCode', 'siteName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Site, { orderBy: 'siteCode', required: ['siteCode', 'siteName'], resource: 'site', labelField: 'siteName' }, audit);
   }
   // Mobile.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -51,8 +52,8 @@ export class SitesService extends TenantCrudService<Site> {
 
 @Injectable()
 export class MaterialsService extends TenantCrudService<Material> {
-  constructor(db: TenantDbService) {
-    super(db, Material, { orderBy: 'materialCode', required: ['materialCode', 'materialName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Material, { orderBy: 'materialCode', required: ['materialCode', 'materialName'], resource: 'material', labelField: 'materialName' }, audit);
   }
   // material_type + specific gravity / bulk density / absorption / moisture.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -62,8 +63,8 @@ export class MaterialsService extends TenantCrudService<Material> {
 
 @Injectable()
 export class SuppliersService extends TenantCrudService<Supplier> {
-  constructor(db: TenantDbService) {
-    super(db, Supplier, { orderBy: 'supplierCode', required: ['supplierCode', 'supplierName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Supplier, { orderBy: 'supplierCode', required: ['supplierCode', 'supplierName'], resource: 'supplier', labelField: 'supplierName' }, audit);
   }
   // GSTIN, mobile.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -73,8 +74,8 @@ export class SuppliersService extends TenantCrudService<Supplier> {
 
 @Injectable()
 export class VehiclesService extends TenantCrudService<Vehicle> {
-  constructor(db: TenantDbService) {
-    super(db, Vehicle, { orderBy: 'vehicleNo', required: ['vehicleNo'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Vehicle, { orderBy: 'vehicleNo', required: ['vehicleNo'], resource: 'vehicle', labelField: 'vehicleNo' }, audit);
   }
   // capacityM3 must be >= 0.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -84,8 +85,8 @@ export class VehiclesService extends TenantCrudService<Vehicle> {
 
 @Injectable()
 export class DriversService extends TenantCrudService<Driver> {
-  constructor(db: TenantDbService) {
-    super(db, Driver, { orderBy: 'driverCode', required: ['driverCode', 'driverName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Driver, { orderBy: 'driverCode', required: ['driverCode', 'driverName'], resource: 'driver', labelField: 'driverName' }, audit);
   }
   // Mobile.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -95,15 +96,15 @@ export class DriversService extends TenantCrudService<Driver> {
 
 @Injectable()
 export class GradesService extends TenantCrudService<ConcreteGrade> {
-  constructor(db: TenantDbService) {
-    super(db, ConcreteGrade, { orderBy: 'gradeCode', required: ['gradeCode', 'gradeName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, ConcreteGrade, { orderBy: 'gradeCode', required: ['gradeCode', 'gradeName'], resource: 'grade', labelField: 'gradeName' }, audit);
   }
 }
 
 @Injectable()
 export class TransportersService extends TenantCrudService<Transporter> {
-  constructor(db: TenantDbService) {
-    super(db, Transporter, { orderBy: 'transporterCode', required: ['transporterCode', 'transporterName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Transporter, { orderBy: 'transporterCode', required: ['transporterCode', 'transporterName'], resource: 'transporter', labelField: 'transporterName' }, audit);
   }
   // GSTIN, TRANSIN, mobile.
   protected override validateWrite(dto: Record<string, unknown>): void {
@@ -113,15 +114,15 @@ export class TransportersService extends TenantCrudService<Transporter> {
 
 @Injectable()
 export class UomsService extends TenantCrudService<Uom> {
-  constructor(db: TenantDbService) {
-    super(db, Uom, { orderBy: 'uomCode', required: ['uomCode', 'uomName'] });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, Uom, { orderBy: 'uomCode', required: ['uomCode', 'uomName'], resource: 'uom', labelField: 'uomName' }, audit);
   }
 }
 
 @Injectable()
 export class UomConversionsService extends TenantCrudService<UomConversion> {
-  constructor(db: TenantDbService) {
-    super(db, UomConversion, { orderBy: 'fromUom', required: ['fromUom', 'toUom', 'factor'], hardDelete: true });
+  constructor(db: TenantDbService, audit: AuditService) {
+    super(db, UomConversion, { orderBy: 'fromUom', required: ['fromUom', 'toUom', 'factor'], hardDelete: true, resource: 'uom_conversion', labelField: 'fromUom' }, audit);
   }
   // factor must be a positive number.
   protected override validateWrite(dto: Record<string, unknown>): void {

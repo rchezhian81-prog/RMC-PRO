@@ -178,13 +178,15 @@ export class SettingsService {
 /** Number series (base CRUD). */
 @Injectable()
 export class NumberSeriesService extends TenantCrudService<NumberSeries> {
-  constructor(db: TenantDbService) {
+  constructor(db: TenantDbService, audit: AuditService) {
     super(db, NumberSeries, {
       orderBy: 'documentType',
       required: ['documentType'],
       // NumberSeries has no `status` column — deactivate via isActive.
       softDelete: { field: 'isActive', value: false },
-    });
+      resource: 'number_series',
+      labelField: 'documentType',
+    }, audit);
   }
 }
 

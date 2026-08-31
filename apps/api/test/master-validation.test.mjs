@@ -174,5 +174,13 @@ if (aSetting) {
   ok('a settings change is written to the audit trail', setAudit.length >= 1);
 }
 
+// Master mutations are audited (Tier-4F): the `good` customer create above, and a
+// credit-limit change now leave a trail.
+const masterCreate = (await j('GET', '/audit-logs?action=master.create', null, tok)).body?.data ?? [];
+ok('a master create is written to the audit trail', masterCreate.length >= 1);
+await j('PATCH', `/customers/${good.body.data.id}`, { creditLimit: 99999 }, tok);
+const masterUpdate = (await j('GET', '/audit-logs?action=master.update', null, tok)).body?.data ?? [];
+ok('a master update (credit-limit change) is written to the audit trail', masterUpdate.length >= 1);
+
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

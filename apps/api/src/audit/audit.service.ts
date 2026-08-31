@@ -186,4 +186,8 @@ export const AUDIT_ACTIONS = {
   ROLE_PERMISSION_CHANGE: 'role.permission_change',
   COMPANY_UPDATE: 'company.update',
   SETTING_CHANGE: 'setting.change',
+  MASTER_CREATE: 'master.create',
+  MASTER_UPDATE: 'master.update',
+  MASTER_DEACTIVATE: 'master.deactivate',
+  MASTER_REACTIVATE: 'master.reactivate',
 } as const;

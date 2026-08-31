@@ -7,10 +7,20 @@ import type {
   ObjectLiteral,
 } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 
 export interface CrudOpts {
   orderBy?: string;
   required?: string[];
+  /**
+   * Audit label for this master (e.g. 'customer'). When set AND an AuditService
+   * is supplied, create/update/deactivate/reactivate are written to the audit
+   * trail — a customer credit-limit change, a supplier GSTIN edit, etc. left no
+   * record before. Omit to leave a master unaudited.
+   */
+  resource?: string;
+  /** Row field used as the human label in the audit entry (e.g. 'customerName'). */
+  labelField?: string;
   /**
    * Field/value written on a soft delete (deactivate). Defaults to
    * status='inactive'; entities without a `status` column (e.g. number series)
@@ -35,7 +45,32 @@ export class TenantCrudService<T extends ObjectLiteral> {
     protected readonly db: TenantDbService,
     protected readonly entity: EntityTarget<T>,
     protected readonly opts: CrudOpts = {},
+    protected readonly audit?: AuditService,
   ) {}
+
+  /** Write a master mutation to the audit trail when this master is audited. */
+  private async recordAudit(
+    tenantId: string,
+    userId: string | null | undefined,
+    action: string,
+    row: T | null,
+    verb: string,
+    details?: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.audit || !this.opts.resource) return;
+    const r = row as Record<string, unknown> | null;
+    const label = r && this.opts.labelField ? (r[this.opts.labelField] as string | undefined) ?? null : null;
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId ?? null,
+      action,
+      entityType: this.opts.resource,
+      entityId: r?.id ? String(r.id) : null,
+      entityLabel: label,
+      summary: `${verb} ${this.opts.resource}${label ? ` ${label}` : ''}`.trim(),
+      details,
+    });
+  }
 
   list(tenantId: string): Promise<T[]> {
     const options = (
@@ -61,7 +96,7 @@ export class TenantCrudService<T extends ObjectLiteral> {
    */
   protected validateWrite(_dto: Record<string, unknown>): void {}
 
-  create(tenantId: string, dto: Record<string, unknown>): Promise<T> {
+  async create(tenantId: string, dto: Record<string, unknown>, userId?: string | null): Promise<T> {
     const missing = (this.opts.required ?? []).filter(
       (k) => dto[k] === undefined || dto[k] === null || dto[k] === '',
     );
@@ -73,16 +108,18 @@ export class TenantCrudService<T extends ObjectLiteral> {
       });
     }
     this.validateWrite(dto);
-    return this.db.runInTenant(tenantId, (m) => {
+    const saved = await this.db.runInTenant(tenantId, (m) => {
       const repo = m.getRepository(this.entity);
       const entity = repo.create({ ...dto, tenantId } as unknown as DeepPartial<T>);
       return repo.save(entity);
     });
+    await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_CREATE, saved, 'Created');
+    return saved;
   }
 
-  update(tenantId: string, id: string, dto: Record<string, unknown>): Promise<T> {
+  async update(tenantId: string, id: string, dto: Record<string, unknown>, userId?: string | null): Promise<T> {
     this.validateWrite(dto);
-    return this.db.runInTenant(tenantId, async (m) => {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(this.entity);
       const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
       if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
@@ -92,6 +129,9 @@ export class TenantCrudService<T extends ObjectLiteral> {
       await repo.update(id, rest as any);
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });
+    const changed = Object.keys(dto).filter((k) => k !== 'tenantId' && k !== 'id');
+    await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_UPDATE, result, 'Updated', { fields: changed });
+    return result;
   }
 
   /**
@@ -99,10 +139,10 @@ export class TenantCrudService<T extends ObjectLiteral> {
    * referenced by transactions (a material used in a mix, a customer with
    * invoices) are never orphaned. Reversible by editing the record's status.
    */
-  deactivate(tenantId: string, id: string): Promise<T> {
+  async deactivate(tenantId: string, id: string, userId?: string | null): Promise<T> {
     const field = this.opts.softDelete?.field ?? 'status';
     const value = this.opts.softDelete?.value ?? 'inactive';
-    return this.db.runInTenant(tenantId, async (m) => {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(this.entity);
       const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
       if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
@@ -114,6 +154,8 @@ export class TenantCrudService<T extends ObjectLiteral> {
       await repo.update(id, { [field]: value } as any);
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });
+    await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_DEACTIVATE, result, this.opts.hardDelete ? 'Deleted' : 'Deactivated');
+    return result;
   }
 
   /**
@@ -122,7 +164,7 @@ export class TenantCrudService<T extends ObjectLiteral> {
    * inverse of the soft-delete value (false→true for a boolean flag, else the
    * 'active' status). Hard-delete entities have nothing to restore.
    */
-  reactivate(tenantId: string, id: string): Promise<T> {
+  async reactivate(tenantId: string, id: string, userId?: string | null): Promise<T> {
     if (this.opts.hardDelete) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
@@ -132,12 +174,14 @@ export class TenantCrudService<T extends ObjectLiteral> {
     const field = this.opts.softDelete?.field ?? 'status';
     const sd = this.opts.softDelete?.value;
     const activeValue = typeof sd === 'boolean' ? !sd : 'active';
-    return this.db.runInTenant(tenantId, async (m) => {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(this.entity);
       const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
       if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
       await repo.update(id, { [field]: activeValue } as any);
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });
+    await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_REACTIVATE, result, 'Reactivated');
+    return result;
   }
 }

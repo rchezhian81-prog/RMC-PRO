@@ -367,7 +367,8 @@ export interface Row {
 /** Generic tenant-scoped CRUD client for a resource path. */
 export function crud(path: string) {
   return {
-    list: () => apiFetch<Row[]>(`/${path}`),
+    // Pass { active: true } to fetch only active rows (pick-lists); default = all.
+    list: (params?: { active?: boolean }) => apiFetch<Row[]>(`/${path}${params?.active ? '?active=true' : ''}`),
     create: (b: Record<string, unknown>) =>
       apiFetch<Row>(`/${path}`, { method: 'POST', body: JSON.stringify(b) }),
     update: (id: string, b: Record<string, unknown>) =>

@@ -182,5 +182,15 @@ await j('PATCH', `/customers/${good.body.data.id}`, { creditLimit: 99999 }, tok)
 const masterUpdate = (await j('GET', '/audit-logs?action=master.update', null, tok)).body?.data ?? [];
 ok('a master update (credit-limit change) is written to the audit trail', masterUpdate.length >= 1);
 
+// Pick-list filter (Tier-4G): ?active=true excludes a deactivated master, while
+// the management list still shows it (so it can be reactivated).
+const plCust = await j('POST', '/customers', { customerCode: 'PL-' + Date.now(), customerName: 'Picklist Co' }, tok);
+const plId = plCust.body.data.id;
+await j('DELETE', `/customers/${plId}`, null, tok);
+const allC = (await j('GET', '/customers', null, tok)).body?.data ?? [];
+const activeC = (await j('GET', '/customers?active=true', null, tok)).body?.data ?? [];
+ok('the management list includes the deactivated master', allC.some((c) => c.id === plId));
+ok('the active-only pick-list excludes the deactivated master', !activeC.some((c) => c.id === plId));
+
 console.log(`\nMASTER VALIDATION TEST: ${pass} passed`);
 process.exit(0);

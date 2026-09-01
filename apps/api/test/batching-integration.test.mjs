@@ -181,5 +181,10 @@ ok('grade-margin returns rows[] + margin totals', Array.isArray(gm.rows) && gm.t
 const ce = await api('GET', '/billing-reports/collection-efficiency');
 ok('collection-efficiency returns rows[] + totals + periodDays', Array.isArray(ce.rows) && ce.totals != null && 'dsoDays' in ce.totals && Number(ce.periodDays) > 0);
 
+// Alerts (Tier-5E): the concrete-on-road SLA probe runs as part of GET /alerts —
+// a shape check catches a SQL error in the new dispatches probe.
+const al = await api('GET', '/alerts');
+ok('alerts endpoint returns an alerts[] (concrete-SLA probe runs)', Array.isArray(al.alerts) && typeof al.generatedAt === 'string');
+
 console.log(`\nBATCHING INTEGRATION TEST: ${pass} passed ✓`);
 process.exit(0);

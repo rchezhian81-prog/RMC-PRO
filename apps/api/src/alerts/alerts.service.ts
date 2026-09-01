@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { fleetComplianceAlerts, type FleetDoc } from './fleet-compliance.util';
 import { fleetMaintenanceAlerts, type MaintenanceDueRow } from './fleet-maintenance.util';
+import { concreteSlaAlerts, CONCRETE_SLA_MINUTES, type OnRoadSlaRow } from './concrete-sla.util';
 import { computeCustomerExposure } from '../orders/exposure.util';
 
 export type AlertSeverity = 'danger' | 'warning' | 'info';
@@ -42,7 +43,7 @@ export class AlertsService {
       const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> =>
         m.query(sql, params) as Promise<T[]>;
 
-      const [receivables, creditCustomers, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc, serviceDue] = await Promise.all([
+      const [receivables, creditCustomers, stockCounts, stockNames, ops, month, quotes, backlog, fleetDocs, qc, serviceDue, roadSla] = await Promise.all([
         // Receivables, bucketed by age of the invoice and by contractual due date.
         q(`SELECT
              COALESCE(sum(outstanding_amount) FILTER (WHERE invoice_date IS NOT NULL AND CURRENT_DATE - invoice_date > 90), 0)::float AS over90_amount,
@@ -134,6 +135,20 @@ export class AlertsService {
            WHERE s.is_active = true
              AND COALESCE(v.status, '') <> 'inactive'
              AND (s.next_due_date IS NOT NULL OR s.next_due_odometer IS NOT NULL)`),
+
+        // Concrete on the road past its working life: dispatched (not yet delivered
+        // / cancelled) more than the SLA minutes ago. Age is measured from
+        // dispatch_time; $1 is the SLA threshold (CONCRETE_SLA_MINUTES).
+        q<OnRoadSlaRow>(
+          `SELECT
+             count(*) FILTER (WHERE EXTRACT(EPOCH FROM (now() - dispatch_time)) / 60 > $1)::int AS "overSla",
+             COALESCE(MAX(EXTRACT(EPOCH FROM (now() - dispatch_time)) / 60)
+                      FILTER (WHERE EXTRACT(EPOCH FROM (now() - dispatch_time)) / 60 > $1), 0)::float AS "oldestMinutes"
+           FROM dispatches
+          WHERE dispatch_status IN ('loaded', 'left_plant', 'reached_site', 'pouring', 'delayed')
+            AND dispatch_time IS NOT NULL`,
+          [CONCRETE_SLA_MINUTES],
+        ),
       ]);
 
       // Credit-limit breaches by EXPOSURE (opening + un-invoiced orders +
@@ -184,6 +199,9 @@ export class AlertsService {
           amount: pastDue,
         });
       }
+
+      // ---- Concrete on the road past its working life -------------------
+      out.push(...concreteSlaAlerts(roadSla[0], CONCRETE_SLA_MINUTES));
 
       if (overLimit.length) {
         const worst = overLimit[0] as Record<string, unknown>;

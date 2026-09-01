@@ -16,6 +16,7 @@ export default function ProductionReportsPage() {
   const [totals, setTotals] = useState<Row | null>(null);
   const [variance, setVariance] = useState<Row[]>([]);
   const [consumption, setConsumption] = useState<Row[]>([]);
+  const [recon, setRecon] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [batch, setBatch] = useState<{ rows: Row[]; totalM3: number; count: number } | null>(null);
   const [pva, setPva] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
@@ -24,12 +25,13 @@ export default function ProductionReportsPage() {
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [s, v, c, b, p] = await Promise.all([
+    const [s, v, c, b, p, r] = await Promise.all([
       productionReportsApi.summary(from || undefined, to || undefined),
       productionReportsApi.variance(),
       productionReportsApi.consumption(from || undefined, to || undefined),
       productionReportsApi.batchRegister(from || undefined, to || undefined),
       productionReportsApi.planVsActual(from || undefined, to || undefined),
+      productionReportsApi.reconciliation(from || undefined, to || undefined),
     ]);
     setByGrade(s.byGrade as Row[]);
     setTotals(s.totals as Row);
@@ -37,6 +39,7 @@ export default function ProductionReportsPage() {
     setConsumption(c);
     setBatch(b);
     setPva(p);
+    setRecon(r);
   }
 
   useEffect(() => {
@@ -185,6 +188,53 @@ export default function ProductionReportsPage() {
           </Table>
         ) : (
           <EmptyState title="No consumption yet" />
+        )}
+      </Card>
+
+      <Card
+        title={`Material reconciliation${recon?.totals ? ` — dosed ${fmt(recon.totals.actualDosed)} vs consumed ${fmt(recon.totals.stockConsumed)}` : ''}`}
+        padded={false}
+        actions={<ExportButton rows={recon?.rows ?? []} columns={['material', 'uom', 'theoretical', 'actualDosed', 'stockConsumed', 'dosingVarianceQty', 'dosingVariancePct', 'stockVarianceQty', 'stockVariancePct']} filename="material-reconciliation" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : recon?.rows?.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Material</Th>
+                <Th numeric>Theoretical</Th>
+                <Th numeric>Dosed</Th>
+                <Th numeric>Stock used</Th>
+                <Th numeric>Dosing var</Th>
+                <Th numeric>Stock var</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {recon.rows.map((r, i) => {
+                const doseVar = Number(r.dosingVarianceQty ?? 0);
+                const stockVar = Number(r.stockVarianceQty ?? 0);
+                const doseTone = Math.abs(doseVar) < 1e-9 ? 'inherit' : 'var(--mn-warning)';
+                const stockTone = Math.abs(stockVar) < 1e-9 ? 'inherit' : 'var(--mn-warning)';
+                return (
+                  <tr key={i}>
+                    <Td>{String(r.material)}{r.uom ? <span style={{ color: 'var(--mn-muted)', fontSize: 11 }}> ({String(r.uom)})</span> : null}</Td>
+                    <Td numeric>{fmt(r.theoretical)}</Td>
+                    <Td numeric>{fmt(r.actualDosed)}</Td>
+                    <Td numeric>{fmt(r.stockConsumed)}</Td>
+                    <Td numeric style={{ color: doseTone, fontWeight: doseTone === 'inherit' ? 400 : 600 }}>
+                      {doseVar > 0 ? '+' : ''}{fmt(r.dosingVarianceQty)}{r.dosingVariancePct == null ? '' : ` (${doseVar > 0 ? '+' : ''}${String(r.dosingVariancePct)}%)`}
+                    </Td>
+                    <Td numeric style={{ color: stockTone, fontWeight: stockTone === 'inherit' ? 400 : 600 }}>
+                      {stockVar > 0 ? '+' : ''}{fmt(r.stockVarianceQty)}{r.stockVariancePct == null ? '' : ` (${stockVar > 0 ? '+' : ''}${String(r.stockVariancePct)}%)`}
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="Nothing to reconcile in range" description="Theoretical (mix-design target) vs dosed (controller) vs stock drawn. Confirmed batches only." />
         )}
       </Card>
 

@@ -12,6 +12,7 @@ const PAGE: Record<string, string> = {
   'production-summary': '/app/production/reports',
   variance: '/app/production/reports',
   'material-consumption': '/app/production/reports',
+  'material-reconciliation': '/app/production/reports',
   'low-stock': '/app/inventory/reports',
   'negative-stock': '/app/inventory/reports',
   valuation: '/app/inventory/reports',

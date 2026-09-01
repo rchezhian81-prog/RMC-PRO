@@ -8,6 +8,7 @@ import { RequirePermissions } from '../rbac/permissions.decorator';
 import { ServiceScheduleService } from './service-schedule.service';
 import { MaintenanceJobService } from './maintenance-job.service';
 import { FuelLogService } from './fuel-log.service';
+import { FleetReportsService } from './fleet-reports.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
 
@@ -72,4 +73,16 @@ export class FuelLogController {
 
   @Post() @RequirePermissions('fleet.fuel.record')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
+}
+
+@Controller('fleet-reports')
+@RequireModule('fleet')
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+export class FleetReportsController {
+  constructor(private readonly service: FleetReportsService) {}
+
+  @Get('running-cost') @RequirePermissions('fleet.view')
+  runningCost(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.runningCost(tid(u), from, to);
+  }
 }

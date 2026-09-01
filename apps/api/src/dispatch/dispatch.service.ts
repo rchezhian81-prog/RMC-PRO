@@ -110,6 +110,46 @@ export class DispatchService {
     });
   }
 
+  /**
+   * Per-driver productivity — per driver, completed trips, concrete delivered,
+   * average turnaround and m³ per trip over [from, to]. Mirrors the fleet
+   * utilization report but grouped by driver; the date + completed filters live
+   * in the LEFT JOIN's ON clause so idle drivers still list (zero trips).
+   */
+  driverProductivityReport(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows: Array<Record<string, string | number | null>> = await m.query(
+        `SELECT dr.driver_name AS "driverName",
+                dr.driver_code AS "driverCode",
+                COUNT(d.id)::int AS trips,
+                COALESCE(SUM(d.quantity_m3), 0)::float AS "totalM3",
+                COALESCE(AVG(EXTRACT(EPOCH FROM (d.pour_end_time - d.dispatch_time)) / 60.0)
+                         FILTER (WHERE d.pour_end_time IS NOT NULL AND d.dispatch_time IS NOT NULL
+                                   AND d.pour_end_time > d.dispatch_time), 0)::float AS "avgTurnaroundMin",
+                CASE WHEN COUNT(d.id) > 0
+                     THEN ROUND((COALESCE(SUM(d.quantity_m3), 0) / COUNT(d.id))::numeric, 3)::float
+                     ELSE 0 END AS "m3PerTrip"
+           FROM drivers dr
+           LEFT JOIN dispatches d
+                  ON d.driver_id = dr.id
+                 AND d.dispatch_status = 'completed'
+                 AND ($1::date IS NULL OR COALESCE(d.dispatch_time, d.created_at)::date >= $1::date)
+                 AND ($2::date IS NULL OR COALESCE(d.dispatch_time, d.created_at)::date <= $2::date)
+          GROUP BY dr.id, dr.driver_name, dr.driver_code
+          ORDER BY trips DESC, "totalM3" DESC`,
+        [from ?? null, to ?? null],
+      );
+      const n = (v: unknown) => Number(v ?? 0) || 0;
+      const totals = {
+        drivers: rows.length,
+        activeDrivers: rows.filter((r) => n(r.trips) > 0).length,
+        trips: rows.reduce((s, r) => s + n(r.trips), 0),
+        totalM3: Math.round(rows.reduce((s, r) => s + n(r.totalM3), 0) * 1000) / 1000,
+      };
+      return { rows, totals };
+    });
+  }
+
   private async loadFull(m: EntityManager, id: string) {
     const dispatch = await m.getRepository(Dispatch).findOne({ where: { id } });
     if (!dispatch) throw notFound();

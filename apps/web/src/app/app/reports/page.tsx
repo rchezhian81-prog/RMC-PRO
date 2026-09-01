@@ -24,6 +24,8 @@ const PAGE: Record<string, string> = {
   'receipts-register': '/app/billing/reports',
   'tally-export': '/app/billing/reports',
   funnel: '/app/dashboard',
+  'driver-productivity': '/app/dispatch/fleet-utilization',
+  'fleet-running-cost': '/app/fleet/reports',
 };
 
 interface Group { module: string; reports: { key: string; name: string; path: string }[] }

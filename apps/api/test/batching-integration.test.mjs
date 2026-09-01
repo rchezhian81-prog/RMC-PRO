@@ -127,6 +127,15 @@ ok('actuals now differ from the hand-keyed values (came off the controller)',
 const confirmed = await api('POST', `/batch-tickets/${ticketId}/confirm`, {});
 ok('ticket confirms with the ingested actuals', confirmed.status === 'confirmed');
 
+// ---- E2. Material reconciliation (Tier-5A) reflects the confirmed batch ----
+// The confirm left batch_ticket_materials (target + actual) AND a stock_transactions
+// batch_consumption drawdown — the two sources the reconciliation report merges.
+const recon = await api('GET', '/production-reports/material-reconciliation');
+ok('reconciliation returns rows + totals', Array.isArray(recon.rows) && recon.rows.length >= 1 && recon.totals != null);
+ok('reconciliation totals show material dosed and stock consumed', Number(recon.totals.actualDosed) > 0 && Number(recon.totals.stockConsumed) > 0);
+const reconciled = recon.rows.find((r) => Number(r.actualDosed) > 0 && Number(r.stockConsumed) > 0);
+ok('a dosed material also shows stock drawdown', reconciled !== undefined);
+
 // ---- F. Mix-design integrity (Tier-3C) ----
 const someMaterial = (await api('GET', '/materials'))[0];
 const stamp = Date.now().toString().slice(-6);

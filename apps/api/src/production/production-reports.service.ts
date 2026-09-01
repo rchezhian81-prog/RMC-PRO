@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { BatchTicket, BatchTicketMaterial, StockTransaction } from '../core/database/entities';
 import { buildPlanVsActual } from './plan-vs-actual.util';
+import { buildMaterialReconciliation, type DoseAggRow, type StockAggRow } from './material-reconciliation.util';
 
 /** Basic production reports (Design Doc 12 §reports, DEV-PLAN B9). */
 @Injectable()
@@ -123,6 +124,45 @@ export class ProductionReportsService {
         params,
       );
       return buildPlanVsActual(planned, actual);
+    });
+  }
+
+  /**
+   * Material reconciliation — per material over [from, to] (optionally one plant):
+   * theoretical (mix-design target) vs actually-dosed (controller weighed) vs
+   * stock-consumed (ledger drawdown), with the dosing and stock variances. The
+   * dosing gap flags recipe over/under-dosing; the stock gap flags ledger
+   * drawdown that doesn't match the controller (untracked issue / leakage).
+   */
+  materialReconciliation(tenantId: string, from?: string, to?: string, plantId?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params = [from ?? null, to ?? null, plantId ?? null];
+      const doseRows: DoseAggRow[] = await m.query(
+        `SELECT btm.material_label AS material,
+                MAX(btm.uom) AS uom,
+                COALESCE(SUM(btm.target_quantity), 0)::float AS theoretical,
+                COALESCE(SUM(btm.actual_quantity), 0)::float AS "actualDosed"
+           FROM batch_ticket_materials btm
+           JOIN batch_tickets t ON t.id = btm.batch_ticket_id
+          WHERE t.status = 'confirmed'
+            AND ($1::date IS NULL OR COALESCE(t.batch_start_time, t.created_at)::date >= $1::date)
+            AND ($2::date IS NULL OR COALESCE(t.batch_start_time, t.created_at)::date <= $2::date)
+            AND ($3::uuid IS NULL OR t.plant_id = $3::uuid)
+          GROUP BY btm.material_label`,
+        params,
+      );
+      const stockRows: StockAggRow[] = await m.query(
+        `SELECT s.material_label AS material,
+                COALESCE(SUM(s.out_quantity), 0)::float AS "stockConsumed"
+           FROM stock_transactions s
+          WHERE s.transaction_type IN ('batch_consumption', 'negative_stock')
+            AND ($1::date IS NULL OR s.created_at::date >= $1::date)
+            AND ($2::date IS NULL OR s.created_at::date <= $2::date)
+            AND ($3::uuid IS NULL OR s.plant_id = $3::uuid)
+          GROUP BY s.material_label`,
+        params,
+      );
+      return { ...buildMaterialReconciliation(doseRows, stockRows), from: from ?? null, to: to ?? null };
     });
   }
 

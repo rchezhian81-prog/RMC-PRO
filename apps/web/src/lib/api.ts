@@ -638,6 +638,8 @@ export const productionReportsApi = {
   summary: (from?: string, to?: string) => apiFetch<{ byGrade: Row[]; totals: Row }>(`/production-reports/summary${dateQs(from, to)}`),
   variance: () => apiFetch<Row[]>('/production-reports/variance'),
   consumption: (from?: string, to?: string) => apiFetch<Row[]>(`/production-reports/material-consumption${dateQs(from, to)}`),
+  reconciliation: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; totals: Row; from: string | null; to: string | null }>(`/production-reports/material-reconciliation${dateQs(from, to)}`),
   batchRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totalM3: number; count: number }>(`/production-reports/batch-register${dateQs(from, to)}`),
   planVsActual: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row }>(`/production-reports/plan-vs-actual${dateQs(from, to)}`),
 };

@@ -12,6 +12,7 @@ export class ReportsService {
             { key: 'production-summary', name: 'Production summary', path: '/production-reports/summary' },
             { key: 'variance', name: 'Batch variance', path: '/production-reports/variance' },
             { key: 'material-consumption', name: 'Material consumption', path: '/production-reports/material-consumption' },
+            { key: 'material-reconciliation', name: 'Material reconciliation', path: '/production-reports/material-reconciliation' },
           ],
         },
         {

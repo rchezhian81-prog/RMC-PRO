@@ -176,5 +176,10 @@ ok('an order cannot be raised for a deactivated customer', orderBlocked);
 const gm = await api('GET', '/billing-reports/grade-margin');
 ok('grade-margin returns rows[] + margin totals', Array.isArray(gm.rows) && gm.totals != null && 'grossMarginPerM3' in gm.totals);
 
+// Collection efficiency & DSO (Tier-5D): exercises the three aggregate queries
+// (billed / collected / outstanding) and the merge helper.
+const ce = await api('GET', '/billing-reports/collection-efficiency');
+ok('collection-efficiency returns rows[] + totals + periodDays', Array.isArray(ce.rows) && ce.totals != null && 'dsoDays' in ce.totals && Number(ce.periodDays) > 0);
+
 console.log(`\nBATCHING INTEGRATION TEST: ${pass} passed ✓`);
 process.exit(0);

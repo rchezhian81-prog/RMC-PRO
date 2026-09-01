@@ -6,6 +6,12 @@ import { deriveGstSplit } from '../purchase/purchase.util';
 import { computeCustomerExposure } from '../orders/exposure.util';
 import { buildStatement, type StatementTxn } from './statement.util';
 import { buildGradeMargin, type MarginRevenueRow, type MarginCostRow } from './gross-margin.util';
+import {
+  buildCollectionEfficiency,
+  type BilledRow,
+  type CollectedRow,
+  type OutstandingRow,
+} from './collection-efficiency.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 const daysBetween = (dateStr: string | null): number => {
@@ -59,6 +65,62 @@ export class BillingReportsService {
           GROUP BY md.grade_id`,
       );
       return { ...buildGradeMargin(revenueRows, costRows), from: from ?? null, to: to ?? null };
+    });
+  }
+
+  /**
+   * Collection efficiency + DSO over [from, to], per customer and overall:
+   * billed (issued invoices in the period), collected (non-reversed receipts in
+   * the period), and closing receivables (current outstanding on issued
+   * invoices). Efficiency = collected/billed; DSO = outstanding × periodDays /
+   * billed. periodDays is the from..to span (inclusive), or 365 when unbounded.
+   */
+  collectionEfficiency(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params = [from ?? null, to ?? null];
+      const billedRows: BilledRow[] = await m.query(
+        `SELECT i.customer_id AS "customerId",
+                MAX(c.customer_name) AS "customerName",
+                COALESCE(SUM(i.total_amount), 0)::float AS billed
+           FROM invoices i
+           LEFT JOIN customers c ON c.id = i.customer_id
+          WHERE i.invoice_status = 'issued'
+            AND ($1::date IS NULL OR i.invoice_date >= $1::date)
+            AND ($2::date IS NULL OR i.invoice_date <= $2::date)
+          GROUP BY i.customer_id`,
+        params,
+      );
+      const collectedRows: CollectedRow[] = await m.query(
+        `SELECT p.customer_id AS "customerId",
+                MAX(c.customer_name) AS "customerName",
+                COALESCE(SUM(p.amount), 0)::float AS collected
+           FROM payments p
+           LEFT JOIN customers c ON c.id = p.customer_id
+          WHERE p.status <> 'reversed'
+            AND ($1::date IS NULL OR p.receipt_date >= $1::date)
+            AND ($2::date IS NULL OR p.receipt_date <= $2::date)
+          GROUP BY p.customer_id`,
+        params,
+      );
+      // Closing receivables are current (not period-bounded) — the AR balance now.
+      const outstandingRows: OutstandingRow[] = await m.query(
+        `SELECT i.customer_id AS "customerId",
+                MAX(c.customer_name) AS "customerName",
+                COALESCE(SUM(i.outstanding_amount), 0)::float AS outstanding
+           FROM invoices i
+           LEFT JOIN customers c ON c.id = i.customer_id
+          WHERE i.invoice_status = 'issued'
+          GROUP BY i.customer_id`,
+      );
+      const periodDays =
+        from && to
+          ? Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1)
+          : 365;
+      return {
+        ...buildCollectionEfficiency(billedRows, collectedRows, outstandingRows, periodDays),
+        from: from ?? null,
+        to: to ?? null,
+      };
     });
   }
 

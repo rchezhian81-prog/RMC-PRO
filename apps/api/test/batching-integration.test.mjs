@@ -186,5 +186,11 @@ ok('collection-efficiency returns rows[] + totals + periodDays', Array.isArray(c
 const al = await api('GET', '/alerts');
 ok('alerts endpoint returns an alerts[] (concrete-SLA probe runs)', Array.isArray(al.alerts) && typeof al.generatedAt === 'string');
 
+// Reports Center catalog (Tier-5F): the refreshed catalog now indexes Purchase
+// and Fleet groups alongside the originals.
+const cat = await api('GET', '/reports/catalog');
+const modules = (cat.groups ?? []).map((g) => g.module);
+ok('reports catalog lists the Purchase + Fleet groups', modules.includes('Purchase') && modules.includes('Fleet'));
+
 console.log(`\nBATCHING INTEGRATION TEST: ${pass} passed ✓`);
 process.exit(0);

@@ -95,6 +95,13 @@ log "2/5 building images: ${BUILD_SVCS[*]} (memory-heavy step)"
 if [ "$WEB_ONLY" = "1" ]; then
   log "3/5 migrate: skipped (WEB_ONLY)"
 else
+  # AUTH GATE: verify both DB roles can log in with the current .env.production
+  # BEFORE we run migrate. If the owner password drifted, migrate would abort with
+  # 28P01 and `api` (gated on it) would never start — a hard outage. Catch it here.
+  if [ -x "$REPO_ROOT/scripts/ops/db-auth-check.sh" ]; then
+    log "3/5 DB auth gate (owner + app roles)"
+    "$REPO_ROOT/scripts/ops/db-auth-check.sh" || die "DB auth check FAILED — a role password is out of sync with the database. Realign it (ALTER ROLE … or fix .env.production) and re-run; nothing migrated."
+  fi
   log "3/5 running migrate one-shot (migrations + idempotent seed)"
   "${DC[@]}" run --rm migrate || die "migrate/seed failed — api NOT recreated. Check: ${DC[*]} logs. DB unchanged beyond any applied migration; restore the pre-redeploy snapshot if needed."
 fi

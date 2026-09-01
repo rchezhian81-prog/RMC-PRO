@@ -39,6 +39,16 @@ command -v docker >/dev/null 2>&1 || die "docker not on PATH"
 [ -f "$COMPOSE_FILE" ] || die "compose file not found: $COMPOSE_FILE"
 [ -f "$ENV_FILE" ] || die "env file not found: $ENV_FILE"
 
+# AUTH GATE FIRST. A role-password mismatch is the OTHER way the migrate step (and
+# then the API) dies — and, unlike a data violation, the data checker can't even
+# report it because it can't connect. Verify both roles can log in before we bother
+# checking rows; bail with the auth check's own exit code if it fails.
+if [ -x "$REPO_ROOT/scripts/ops/db-auth-check.sh" ]; then
+  "$REPO_ROOT/scripts/ops/db-auth-check.sh" || exit $?
+else
+  log "WARN: db-auth-check.sh not found/executable; skipping the DB auth gate"
+fi
+
 log "checking live data against the integrity constraints the migration will add…"
 
 # Run the preflight in a throwaway container built from the (new) API image, with

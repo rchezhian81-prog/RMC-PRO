@@ -109,5 +109,15 @@ let blocked = false;
 try { await api('POST', `/vehicle-maintenance-jobs/${job.id}/cancel`); } catch { blocked = true; }
 ok('a completed job cannot be cancelled', blocked);
 
+// ---- F. Fleet running-cost report (Tier-5C) reflects the completed job + fuel ----
+const rc = await api('GET', '/fleet-reports/running-cost');
+ok('running-cost returns rows[] + totals', Array.isArray(rc.rows) && rc.totals != null && 'totalCost' in rc.totals);
+const thisVeh = rc.rows.find((r) => r.vehicleNo === vehicleNo);
+ok('the test vehicle shows a running cost (maintenance + fuel)', thisVeh !== undefined && Number(thisVeh.totalCost) > 0);
+
+// ---- G. Driver productivity report (Tier-5C) returns a well-formed result ----
+const dp = await api('GET', '/dispatches/report/driver-productivity');
+ok('driver-productivity returns rows[] + totals', Array.isArray(dp.rows) && dp.totals != null && 'trips' in dp.totals);
+
 console.log(`\nFLEET MAINTENANCE TEST: ${pass} passed ✓`);
 process.exit(0);

@@ -15,13 +15,19 @@ const num1 = (v: unknown) => (v == null ? '—' : Number(v).toLocaleString('en-I
 
 export default function FleetUtilizationPage() {
   const [data, setData] = useState<{ rows: Row[]; totals: Row } | null>(null);
+  const [driver, setDriver] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    setData(await dispatchApi.fleetUtilization(from || undefined, to || undefined));
+    const [fu, dp] = await Promise.all([
+      dispatchApi.fleetUtilization(from || undefined, to || undefined),
+      dispatchApi.driverProductivity(from || undefined, to || undefined),
+    ]);
+    setData(fu);
+    setDriver(dp);
   }
 
   useEffect(() => {
@@ -109,6 +115,45 @@ export default function FleetUtilizationPage() {
           </div>
         ) : (
           <EmptyState title="No vehicles" description="Register vehicles and complete dispatches to see utilization." />
+        )}
+      </Card>
+
+      <Card
+        title={`Driver productivity${driver?.totals ? ` — ${String(driver.totals.trips ?? 0)} trips · ${m3(driver.totals.totalM3)} m³` : ''}`}
+        padded={false}
+        actions={<ExportButton rows={driver?.rows ?? []} columns={['driverName', 'driverCode', 'trips', 'totalM3', 'avgTurnaroundMin', 'm3PerTrip']} filename="driver-productivity" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : driver?.rows?.length ? (
+          <div style={{ overflowX: 'auto' }}>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Driver</Th>
+                  <Th>Code</Th>
+                  <Th numeric>Trips</Th>
+                  <Th numeric>Delivered m³</Th>
+                  <Th numeric>Avg turnaround</Th>
+                  <Th numeric>m³ / trip</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {driver.rows.map((r, i) => (
+                  <tr key={i} style={{ opacity: Number(r.trips) > 0 ? 1 : 0.55 }}>
+                    <Td style={{ fontWeight: 600 }}>{String(r.driverName ?? '—')}</Td>
+                    <Td>{String(r.driverCode ?? '—')}</Td>
+                    <Td numeric>{String(r.trips)}</Td>
+                    <Td numeric>{m3(r.totalM3)}</Td>
+                    <Td numeric>{r.trips && Number(r.avgTurnaroundMin) ? `${num1(r.avgTurnaroundMin)}m` : '—'}</Td>
+                    <Td numeric>{r.trips ? m3(r.m3PerTrip) : '—'}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        ) : (
+          <EmptyState title="No drivers" description="Register drivers and complete dispatches to see productivity." />
         )}
       </Card>
     </div>

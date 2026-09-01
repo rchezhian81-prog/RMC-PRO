@@ -654,6 +654,13 @@ export const dispatchApi = {
     apiFetch<{ rows: Row[]; averages: Row; count: number }>(`/dispatches/report/cycle-times${dateQs(from, to)}`),
   fleetUtilization: (from?: string, to?: string) =>
     apiFetch<{ rows: Row[]; totals: Row }>(`/dispatches/report/fleet-utilization${dateQs(from, to)}`),
+  driverProductivity: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; totals: Row }>(`/dispatches/report/driver-productivity${dateQs(from, to)}`),
+};
+
+export const fleetReportsApi = {
+  runningCost: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; totals: Row; from: string | null; to: string | null }>(`/fleet-reports/running-cost${dateQs(from, to)}`),
 };
 
 export const challansApi = {

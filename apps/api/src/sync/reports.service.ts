@@ -39,6 +39,13 @@ export class ReportsService {
           module: 'Operations',
           reports: [
             { key: 'funnel', name: 'Order-to-cash funnel', path: '/dashboard/operations-funnel' },
+            { key: 'driver-productivity', name: 'Driver productivity', path: '/dispatches/report/driver-productivity' },
+          ],
+        },
+        {
+          module: 'Fleet',
+          reports: [
+            { key: 'fleet-running-cost', name: 'Fleet running cost', path: '/fleet-reports/running-cost' },
           ],
         },
       ],

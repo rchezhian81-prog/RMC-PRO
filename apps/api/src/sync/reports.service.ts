@@ -30,6 +30,7 @@ export class ReportsService {
             { key: 'outstanding', name: 'Customer outstanding + aging', path: '/billing-reports/outstanding' },
             { key: 'sales-register', name: 'Sales register', path: '/billing-reports/sales-register' },
             { key: 'gst-summary', name: 'GST summary', path: '/billing-reports/gst-summary' },
+            { key: 'grade-margin', name: 'Gross margin per m³', path: '/billing-reports/grade-margin' },
             { key: 'receipts-register', name: 'Receipts register', path: '/billing-reports/receipts-register' },
             { key: 'tally-export', name: 'Tally CSV export', path: '/billing-reports/tally-export' },
           ],

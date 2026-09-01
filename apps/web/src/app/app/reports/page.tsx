@@ -20,6 +20,7 @@ const PAGE: Record<string, string> = {
   outstanding: '/app/billing/outstanding',
   'sales-register': '/app/billing/reports',
   'gst-summary': '/app/billing/reports',
+  'grade-margin': '/app/billing/reports',
   'receipts-register': '/app/billing/reports',
   'tally-export': '/app/billing/reports',
   funnel: '/app/dashboard',

@@ -21,6 +21,7 @@ export default function BillingReportsPage() {
   const [receipts, setReceipts] = useState<Row[]>([]);
   const [gstr3b, setGstr3b] = useState<{ output: Row; itc: Row; net: Row } | null>(null);
   const [dayBook, setDayBook] = useState<{ rows: Row[]; totals: Row; byMode: Row[] } | null>(null);
+  const [margin, setMargin] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -28,15 +29,16 @@ export default function BillingReportsPage() {
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [g, s, h, r, l, d] = await Promise.all([
+    const [g, s, h, r, l, d, mg] = await Promise.all([
       billingReportsApi.gstSummary(from || undefined, to || undefined),
       billingReportsApi.salesRegister(from || undefined, to || undefined),
       billingReportsApi.hsnSummary(from || undefined, to || undefined),
       billingReportsApi.receiptsRegister(from || undefined, to || undefined),
       billingReportsApi.gstr3b(from || undefined, to || undefined),
       billingReportsApi.dayBook(from || undefined, to || undefined),
+      billingReportsApi.gradeMargin(from || undefined, to || undefined),
     ]);
-    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d);
+    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d); setMargin(mg);
   }
 
   useEffect(() => {
@@ -370,6 +372,52 @@ export default function BillingReportsPage() {
           </div>
         ) : (
           <EmptyState title="No movements" description="Receipts, vendor payments and expense vouchers in the period appear here." />
+        )}
+      </Card>
+
+      <Card
+        title={`Gross margin per m³${margin?.totals ? ` — ₹${qty(margin.totals.grossMarginPerM3)}/m³ (${margin.totals.marginPct == null ? '—' : `${qty(margin.totals.marginPct)}%`})` : ''}`}
+        padded={false}
+        actions={<ExportButton rows={margin?.rows ?? []} columns={['gradeLabel', 'volumeM3', 'revenue', 'revenuePerM3', 'stdMaterialCostPerM3', 'grossMarginPerM3', 'marginPct']} filename="gross-margin-per-m3" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : margin?.rows?.length ? (
+          <>
+          <p style={{ padding: '8px 14px 0', margin: 0, color: 'var(--mn-muted)', fontSize: 12 }}>
+            Invoiced revenue vs standard material cost (mix recipe × material rate). Excludes labour, power, transport &amp; overheads.
+          </p>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Grade</Th>
+                <Th numeric>Volume m³</Th>
+                <Th numeric>Revenue/m³</Th>
+                <Th numeric>Material cost/m³</Th>
+                <Th numeric>Margin/m³</Th>
+                <Th numeric>Margin %</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {margin.rows.map((r, i) => {
+                const mPerM3 = Number(r.grossMarginPerM3 ?? 0);
+                const tone = mPerM3 < 0 ? 'var(--mn-danger)' : mPerM3 > 0 ? 'var(--mn-success)' : 'inherit';
+                return (
+                  <tr key={i}>
+                    <Td style={{ fontWeight: 600 }}>{String(r.gradeLabel ?? '')}</Td>
+                    <Td numeric>{qty(r.volumeM3)}</Td>
+                    <Td numeric>{money(r.revenuePerM3)}</Td>
+                    <Td numeric>{money(r.stdMaterialCostPerM3)}</Td>
+                    <Td numeric style={{ color: tone, fontWeight: 600 }}>{money(r.grossMarginPerM3)}</Td>
+                    <Td numeric>{r.marginPct == null ? '—' : `${qty(r.marginPct)}%`}</Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+          </>
+        ) : (
+          <EmptyState title="No invoiced grades in range" description="Needs issued invoices with grade lines and an approved mix design to cost against." />
         )}
       </Card>
     </div>

@@ -169,5 +169,12 @@ let orderBlocked = false;
 try { await api('POST', `/order-drafts/from-quotation/${q2.id}`, { plantId: plant.id, orderDate: TODAY }); } catch { orderBlocked = true; }
 ok('an order cannot be raised for a deactivated customer', orderBlocked);
 
+// ---- H. Grade margin report (Tier-5B) returns a well-formed result ----
+// Smoke: exercises both aggregate queries (invoice grade lines + active mix-design
+// standard cost) and the merge helper, so a column/join mistake fails the build's
+// integration gate even when this tenant has no issued invoices yet.
+const gm = await api('GET', '/billing-reports/grade-margin');
+ok('grade-margin returns rows[] + margin totals', Array.isArray(gm.rows) && gm.totals != null && 'grossMarginPerM3' in gm.totals);
+
 console.log(`\nBATCHING INTEGRATION TEST: ${pass} passed ✓`);
 process.exit(0);

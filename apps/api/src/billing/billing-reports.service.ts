@@ -5,6 +5,7 @@ import { round2, isInterstateSupply } from './tax.util';
 import { deriveGstSplit } from '../purchase/purchase.util';
 import { computeCustomerExposure } from '../orders/exposure.util';
 import { buildStatement, type StatementTxn } from './statement.util';
+import { buildGradeMargin, type MarginRevenueRow, type MarginCostRow } from './gross-margin.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 const daysBetween = (dateStr: string | null): number => {
@@ -19,6 +20,47 @@ const bucketOf = (days: number): '0-30' | '31-60' | '61-90' | '90+' =>
 @Injectable()
 export class BillingReportsService {
   constructor(private readonly db: TenantDbService) {}
+
+  /**
+   * Gross margin per m³ by concrete grade over [from, to]: invoiced revenue and
+   * volume from grade invoice lines, against the STANDARD material cost per m³
+   * (the active mix design's per-m³ recipe valued at each material's standard
+   * rate). This is margin over material only — it excludes labour, power,
+   * transport and overheads — so it reads as "contribution over material", useful
+   * for spotting an underpriced or loss-making grade.
+   */
+  gradeMargin(tenantId: string, from?: string, to?: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const params = [from ?? null, to ?? null];
+      const revenueRows: MarginRevenueRow[] = await m.query(
+        `SELECT ii.grade_id AS "gradeId",
+                MAX(g.grade_name) AS "gradeLabel",
+                COALESCE(SUM(ii.quantity), 0)::float AS "volumeM3",
+                COALESCE(SUM(ii.taxable_amount), 0)::float AS revenue
+           FROM invoice_items ii
+           JOIN invoices i ON i.id = ii.invoice_id
+           LEFT JOIN concrete_grades g ON g.id = ii.grade_id
+          WHERE i.invoice_status = 'issued'
+            AND ii.grade_id IS NOT NULL
+            AND ($1::date IS NULL OR i.invoice_date >= $1::date)
+            AND ($2::date IS NULL OR i.invoice_date <= $2::date)
+          GROUP BY ii.grade_id`,
+        params,
+      );
+      const costRows: MarginCostRow[] = await m.query(
+        `SELECT md.grade_id AS "gradeId",
+                COALESCE(SUM(mdm.target_quantity * COALESCE(mat.standard_rate, 0)), 0)::float AS "stdCostPerM3"
+           FROM mix_designs md
+           JOIN mix_design_materials mdm ON mdm.mix_design_id = md.id
+           LEFT JOIN materials mat ON mat.id = mdm.material_id
+          WHERE md.is_active_version = true
+            AND md.approval_status = 'approved'
+            AND md.grade_id IS NOT NULL
+          GROUP BY md.grade_id`,
+      );
+      return { ...buildGradeMargin(revenueRows, costRows), from: from ?? null, to: to ?? null };
+    });
+  }
 
   /** Per-customer outstanding with 0-30/31-60/61-90/90+ aging buckets. */
   outstanding(tenantId: string) {

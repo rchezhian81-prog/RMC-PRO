@@ -877,6 +877,7 @@ export const billingReportsApi = {
   dayBook: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row; byMode: Row[]; from: string | null; to: string | null }>(`/billing-reports/day-book${dateQs(from, to)}`),
   salesMis: (from?: string, to?: string) => apiFetch<{ byCustomer: Row[]; byPlant: Row[]; byGrade: Row[]; totals: Row; from: string | null; to: string | null }>(`/billing-reports/sales-mis${dateQs(from, to)}`),
   gradeMargin: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row; from: string | null; to: string | null }>(`/billing-reports/grade-margin${dateQs(from, to)}`),
+  collectionEfficiency: (from?: string, to?: string) => apiFetch<{ rows: Row[]; totals: Row; periodDays: number; from: string | null; to: string | null }>(`/billing-reports/collection-efficiency${dateQs(from, to)}`),
   customerStatement: (customerId: string, from?: string, to?: string) =>
     apiFetch<CustomerStatement>(
       `/billing-reports/customer-statement?customerId=${encodeURIComponent(customerId)}` +

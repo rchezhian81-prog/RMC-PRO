@@ -22,6 +22,7 @@ export default function BillingReportsPage() {
   const [gstr3b, setGstr3b] = useState<{ output: Row; itc: Row; net: Row } | null>(null);
   const [dayBook, setDayBook] = useState<{ rows: Row[]; totals: Row; byMode: Row[] } | null>(null);
   const [margin, setMargin] = useState<{ rows: Row[]; totals: Row } | null>(null);
+  const [collection, setCollection] = useState<{ rows: Row[]; totals: Row; periodDays: number } | null>(null);
   const [range, setRange] = useState({ from: '', to: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export default function BillingReportsPage() {
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [g, s, h, r, l, d, mg] = await Promise.all([
+    const [g, s, h, r, l, d, mg, ce] = await Promise.all([
       billingReportsApi.gstSummary(from || undefined, to || undefined),
       billingReportsApi.salesRegister(from || undefined, to || undefined),
       billingReportsApi.hsnSummary(from || undefined, to || undefined),
@@ -37,8 +38,9 @@ export default function BillingReportsPage() {
       billingReportsApi.gstr3b(from || undefined, to || undefined),
       billingReportsApi.dayBook(from || undefined, to || undefined),
       billingReportsApi.gradeMargin(from || undefined, to || undefined),
+      billingReportsApi.collectionEfficiency(from || undefined, to || undefined),
     ]);
-    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d); setMargin(mg);
+    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d); setMargin(mg); setCollection(ce);
   }
 
   useEffect(() => {
@@ -418,6 +420,63 @@ export default function BillingReportsPage() {
           </>
         ) : (
           <EmptyState title="No invoiced grades in range" description="Needs issued invoices with grade lines and an approved mix design to cost against." />
+        )}
+      </Card>
+
+      {collection?.totals && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+          <StatCard label="Billed" value={money(collection.totals.billed)} />
+          <StatCard label="Collected" value={money(collection.totals.collected)} tone="info" />
+          <StatCard label="Collection efficiency" value={collection.totals.efficiencyPct == null ? '—' : `${qty(collection.totals.efficiencyPct)}%`} />
+          <StatCard label={`DSO (${collection.periodDays}d basis)`} value={collection.totals.dsoDays == null ? '—' : `${qty(collection.totals.dsoDays)}d`} />
+        </div>
+      )}
+
+      <Card
+        title="Collection efficiency & DSO"
+        padded={false}
+        actions={<ExportButton rows={collection?.rows ?? []} columns={['customerName', 'billed', 'collected', 'outstanding', 'efficiencyPct', 'dsoDays']} filename="collection-efficiency" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={6} />
+        ) : collection?.rows?.length ? (
+          <>
+          <p style={{ padding: '8px 14px 0', margin: 0, color: 'var(--mn-muted)', fontSize: 12 }}>
+            Billed &amp; collected are for the period; outstanding is the current AR balance. Efficiency = collected ÷ billed; DSO = outstanding × {collection.periodDays} ÷ billed. Slowest payers first.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Customer</Th>
+                  <Th numeric>Billed</Th>
+                  <Th numeric>Collected</Th>
+                  <Th numeric>Outstanding</Th>
+                  <Th numeric>Efficiency</Th>
+                  <Th numeric>DSO</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {collection.rows.map((r, i) => {
+                  const dso = r.dsoDays == null ? null : Number(r.dsoDays);
+                  const tone = dso != null && dso > 90 ? 'var(--mn-danger)' : dso != null && dso > 60 ? 'var(--mn-warning)' : 'inherit';
+                  return (
+                    <tr key={i}>
+                      <Td style={{ fontWeight: 600 }}>{String(r.customerName ?? '')}</Td>
+                      <Td numeric>{money(r.billed)}</Td>
+                      <Td numeric>{money(r.collected)}</Td>
+                      <Td numeric>{money(r.outstanding)}</Td>
+                      <Td numeric>{r.efficiencyPct == null ? '—' : `${qty(r.efficiencyPct)}%`}</Td>
+                      <Td numeric style={{ color: tone, fontWeight: tone === 'inherit' ? 400 : 600 }}>{r.dsoDays == null ? '—' : `${qty(r.dsoDays)}d`}</Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+          </>
+        ) : (
+          <EmptyState title="No billing activity in range" description="Issue invoices and record receipts to measure collection efficiency." />
         )}
       </Card>
     </div>

@@ -96,6 +96,7 @@ export class BillingReportsController {
   @Get('day-book') dayBook(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cashBankDayBook(tid(u), from, to); }
   @Get('sales-mis') salesMis(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesMis(tid(u), from, to); }
   @Get('grade-margin') gradeMargin(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gradeMargin(tid(u), from, to); }
+  @Get('collection-efficiency') collectionEfficiency(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.collectionEfficiency(tid(u), from, to); }
 
   @Get('tally-export') @RequirePermissions('tally_export.generate')
   async tally(@CurrentUser() u: AuthUser, @Res() res: Response, @Query('from') from?: string, @Query('to') to?: string) {

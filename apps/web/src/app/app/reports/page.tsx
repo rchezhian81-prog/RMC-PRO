@@ -21,6 +21,7 @@ const PAGE: Record<string, string> = {
   'sales-register': '/app/billing/reports',
   'gst-summary': '/app/billing/reports',
   'grade-margin': '/app/billing/reports',
+  'collection-efficiency': '/app/billing/reports',
   'receipts-register': '/app/billing/reports',
   'tally-export': '/app/billing/reports',
   funnel: '/app/dashboard',

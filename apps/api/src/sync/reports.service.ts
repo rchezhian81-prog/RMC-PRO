@@ -31,6 +31,7 @@ export class ReportsService {
             { key: 'sales-register', name: 'Sales register', path: '/billing-reports/sales-register' },
             { key: 'gst-summary', name: 'GST summary', path: '/billing-reports/gst-summary' },
             { key: 'grade-margin', name: 'Gross margin per m³', path: '/billing-reports/grade-margin' },
+            { key: 'collection-efficiency', name: 'Collection efficiency & DSO', path: '/billing-reports/collection-efficiency' },
             { key: 'receipts-register', name: 'Receipts register', path: '/billing-reports/receipts-register' },
             { key: 'tally-export', name: 'Tally CSV export', path: '/billing-reports/tally-export' },
           ],

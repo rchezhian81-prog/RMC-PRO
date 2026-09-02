@@ -88,6 +88,15 @@ const manual = await api('POST', `/batch-tickets/${ticketId}/actuals`, {
 ok('manual actuals still update the ticket', manual.materials.length === mats.length);
 ok('manual path leaves sourceType = manual', manual.sourceType === 'manual');
 
+// A negative actual (phantom stock on an override confirm) and an out-of-range
+// moisture (corrupts the free-water correction) are rejected.
+let negActual = false;
+try { await api('POST', `/batch-tickets/${ticketId}/actuals`, { materials: [{ id: mats[0].id, actualQuantity: -5 }] }); } catch { negActual = true; }
+ok('a negative actual quantity is rejected', negActual);
+let badMoisture = false;
+try { await api('POST', `/batch-tickets/${ticketId}/actuals`, { materials: [{ id: mats[0].id, measuredMoisturePct: 150 }] }); } catch { badMoisture = true; }
+ok('a moisture % above 100 is rejected', badMoisture);
+
 // ---- B. Register a simulated controller ----
 const controller = await api('POST', '/batching-controllers', {
   name: `Sicoma Sim ${Date.now().toString().slice(-6)}`, plantId: plant.id, connectionType: 'simulated', make: 'Sicoma',

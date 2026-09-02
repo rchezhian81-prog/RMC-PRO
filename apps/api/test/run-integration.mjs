@@ -68,6 +68,7 @@ const TESTS = [
   'test/bulk-import.test.mjs',
   'test/numbering-corrections.test.mjs',
   'test/gps-tracking.test.mjs',
+  'test/qc-cube-integrity.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/dashboard-trends.test.mjs',
@@ -155,6 +156,8 @@ async function main() {
   await api('PUT', `/platform/tenants/${tenant.id}/modules/offline_sync`, { isEnabled: true }, su);
   // `gps` (phase-2) — enable it for the GPS live-tracking test.
   await api('PUT', `/platform/tenants/${tenant.id}/modules/gps`, { isEnabled: true }, su);
+  // `qc` (phase-2) — enable it for the QC cube-integrity test.
+  await api('PUT', `/platform/tenants/${tenant.id}/modules/qc`, { isEnabled: true }, su);
   console.log(`pilot tenant ${tenant.id} + owner ready`);
 
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], {

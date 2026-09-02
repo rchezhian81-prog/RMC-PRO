@@ -34,15 +34,24 @@ export class GpsService {
       if (CLOSED.has(dispatch.dispatchStatus)) throw badReq(`Dispatch is ${dispatch.dispatchStatus} — tracking is closed`);
 
       const recordedAt = dto.recordedAt ? new Date(String(dto.recordedAt)) : new Date();
+      // A bad device timestamp would otherwise write an Invalid Date (500) or a
+      // future fix that makes the live board's staleness age go negative.
+      if (Number.isNaN(recordedAt.getTime())) throw badReq('recordedAt is not a valid timestamp');
+      if (recordedAt.getTime() > Date.now() + 60_000) throw badReq('recordedAt cannot be in the future');
       const speedKmph = numOrNull(dto.speedKmph);
+      if (speedKmph !== null && speedKmph < 0) throw badReq('Speed cannot be negative');
+      const heading = numOrNull(dto.heading);
+      if (heading !== null && (heading < 0 || heading > 360)) throw badReq('Heading must be between 0 and 360 degrees');
+      const accuracyM = numOrNull(dto.accuracyM);
+      if (accuracyM !== null && accuracyM < 0) throw badReq('Accuracy cannot be negative');
       const repo = m.getRepository(DispatchLocationPing);
       const ping = await repo.save(
         repo.create({
           tenantId, dispatchId, vehicleId: dispatch.vehicleId,
           latitude: String(latitude), longitude: String(longitude),
           speedKmph: speedKmph === null ? null : String(speedKmph),
-          heading: numOrNull(dto.heading) === null ? null : String(numOrNull(dto.heading)),
-          accuracyM: numOrNull(dto.accuracyM) === null ? null : String(numOrNull(dto.accuracyM)),
+          heading: heading === null ? null : String(heading),
+          accuracyM: accuracyM === null ? null : String(accuracyM),
           source: (dto.source as string) ?? 'device',
           recordedAt,
         }),

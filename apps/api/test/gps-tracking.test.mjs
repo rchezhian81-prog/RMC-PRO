@@ -107,6 +107,14 @@ let badCoord = false;
 try { await api('POST', `/gps/dispatches/${dispatch.id}/ping`, { latitude: 999, longitude: 80 }); } catch { badCoord = true; }
 ok('an out-of-range coordinate is rejected', badCoord);
 
+// Tier-6: a future-dated fix and a negative speed are rejected.
+let futureTs = false;
+try { await api('POST', `/gps/dispatches/${dispatch.id}/ping`, { latitude: 13.0, longitude: 80.0, recordedAt: '2999-01-01T00:00:00Z' }); } catch { futureTs = true; }
+ok('a future-dated fix is rejected', futureTs);
+let negSpeed = false;
+try { await api('POST', `/gps/dispatches/${dispatch.id}/ping`, { latitude: 13.0, longitude: 80.0, speedKmph: -40 }); } catch { negSpeed = true; }
+ok('a negative speed is rejected', negSpeed);
+
 await api('POST', `/dispatches/${dispatch.id}/status`, { status: 'cancelled' });
 let closed = false;
 try { await api('POST', `/gps/dispatches/${dispatch.id}/ping`, { latitude: 13.03, longitude: 80 }); } catch { closed = true; }

@@ -199,6 +199,17 @@ export class BatchTicketsService {
       const byId = new Map(rows.map((r) => [String(r.id ?? ''), r]));
       const has = (v: unknown): boolean => v !== undefined && v !== null && v !== '';
 
+      // A negative actual would, on an override confirm, consume negative
+      // material — a phantom stock increase. Moisture drives the free-water
+      // correction, so a value outside 0–100% corrupts the whole batch's water.
+      for (const r of rows) {
+        if (has(r.actualQuantity) && num(r.actualQuantity) < 0) throw badReq('Actual quantity cannot be negative.');
+        if (has(r.measuredMoisturePct)) {
+          const mp = num(r.measuredMoisturePct);
+          if (mp < 0 || mp > 100) throw badReq('Measured moisture % must be between 0 and 100.');
+        }
+      }
+
       const inputs: MoistureInput[] = mats.map((mat) => {
         const r = byId.get(mat.id);
         const moisture = r && has(r.measuredMoisturePct) ? num(r.measuredMoisturePct) : num(mat.measuredMoisturePct);

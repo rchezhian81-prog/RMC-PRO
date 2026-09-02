@@ -5,6 +5,7 @@ import {
   Company,
   GoodsReceipt,
   GoodsReceiptItem,
+  PurchaseOrder,
   PurchaseOrderItem,
   Supplier,
   VendorBill,
@@ -114,9 +115,17 @@ export class VendorBillService {
         grn = await m.getRepository(GoodsReceipt).findOne({ where: { id: goodsReceiptId } });
         if (!grn) throw badReq('Goods receipt not found');
         if (grn.status !== 'posted') throw badReq('Bill can only be raised against a posted goods receipt');
+        // The GRN carries the quantities being billed — it must belong to the
+        // supplier on this bill, or we'd bill supplier A against B's receipt
+        // (contaminating A's payable and ITC).
+        if (grn.supplierId && grn.supplierId !== supplierId) throw badReq('The goods receipt belongs to a different supplier.');
         grnItems = await m.getRepository(GoodsReceiptItem).find({ where: { goodsReceiptId } });
       }
       const purchaseOrderId = (dto.purchaseOrderId as string) || grn?.purchaseOrderId || null;
+      if (purchaseOrderId) {
+        const po = await m.getRepository(PurchaseOrder).findOne({ where: { id: purchaseOrderId } });
+        if (po?.supplierId && po.supplierId !== supplierId) throw badReq('The purchase order belongs to a different supplier.');
+      }
 
       // Lines: explicit if given, else derived from the GRN's accepted quantities.
       let lines = Array.isArray(dto.lines) ? (dto.lines as Record<string, unknown>[]) : [];

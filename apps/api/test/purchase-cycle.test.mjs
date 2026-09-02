@@ -109,6 +109,19 @@ let bill = await api('POST', '/vendor-bills', {
 ok('bill created from GRN with one line', bill.items.length === 1);
 ok('bill total matches PO (5900)', near(bill.totalAmount, 5900));
 ok('3-way match is matched', bill.matchStatus === 'matched');
+
+// Tier-3B: a bill for a DIFFERENT supplier cannot reference this supplier's GRN.
+const supplier2 = await api('POST', '/suppliers', {
+  supplierCode: `SUP2-${Date.now().toString().slice(-6)}`, supplierName: 'Other Vendor Co', state: 'Tamil Nadu',
+});
+let crossSupplierBlocked = false;
+try {
+  await api('POST', '/vendor-bills', {
+    supplierId: supplier2.id, goodsReceiptId: grn.id,
+    supplierBillNo: 'X-CROSS', billDate: new Date().toISOString().slice(0, 10),
+  });
+} catch { crossSupplierBlocked = true; }
+ok('a bill for a different supplier cannot reference this GRN', crossSupplierBlocked);
 bill = await api('POST', `/vendor-bills/${bill.id}/approve`);
 ok('bill approved', bill.status === 'approved');
 ok('bill outstanding = total before payment', near(bill.outstandingAmount, 5900));

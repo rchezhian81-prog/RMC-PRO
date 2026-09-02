@@ -248,7 +248,10 @@ export class BatchTicketsService {
   confirm(tenantId: string, ticketId: string, dto: Record<string, unknown>, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const ticketRepo = m.getRepository(BatchTicket);
-      const ticket = await ticketRepo.findOne({ where: { id: ticketId } });
+      // Lock the ticket: two concurrent confirms would otherwise both read
+      // status='draft', both consume stock, and both flip to confirmed —
+      // double-consuming inventory (and both passing the stock-availability gate).
+      const ticket = await ticketRepo.findOne({ where: { id: ticketId }, lock: { mode: 'pessimistic_write' } });
       if (!ticket) throw notFound();
       if (ticket.status !== 'draft') throw badReq(`Ticket already ${ticket.status}`);
 

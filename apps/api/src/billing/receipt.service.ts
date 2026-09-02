@@ -70,7 +70,10 @@ export class ReceiptService {
       for (const a of allocations) {
         const amt = num(a.amount);
         if (amt <= 0) continue;
-        const invoice = await invoiceRepo.findOne({ where: { id: String(a.invoiceId ?? '') } });
+        // Lock the invoice row: two receipts allocating to the same invoice
+        // concurrently would otherwise both read a stale amountPaid and the
+        // second UPDATE would clobber the first (lost receipt / over-payment).
+        const invoice = await invoiceRepo.findOne({ where: { id: String(a.invoiceId ?? '') }, lock: { mode: 'pessimistic_write' } });
         if (!invoice) throw badReq('Invoice not found for allocation');
         // Only an issued invoice is a real receivable. A draft carries
         // outstanding = total but was never billed, so allocating to it would
@@ -132,7 +135,7 @@ export class ReceiptService {
       const allocRepo = m.getRepository(PaymentAllocation);
       const allocations = await allocRepo.find({ where: { paymentId: id } });
       for (const a of allocations) {
-        const invoice = await invoiceRepo.findOne({ where: { id: a.invoiceId } });
+        const invoice = await invoiceRepo.findOne({ where: { id: a.invoiceId }, lock: { mode: 'pessimistic_write' } });
         if (invoice) {
           const paid = round2(num(invoice.amountPaid) - num(a.allocatedAmount));
           const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
@@ -169,6 +172,9 @@ export class ReceiptService {
       const open: Invoice[] = await m.getRepository(Invoice).find({
         where: { customerId: payment.customerId as string, invoiceStatus: 'issued' },
         order: { invoiceDate: 'ASC', createdAt: 'ASC' },
+        // Lock the customer's open invoices so a concurrent receipt allocation
+        // can't credit the same invoice from a stale balance.
+        lock: { mode: 'pessimistic_write' },
       });
       const lines = allocateAcrossInvoices(
         unallocated,

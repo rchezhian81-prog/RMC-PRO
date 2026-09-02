@@ -176,6 +176,23 @@ export class DeliveryChallanService {
         returnCost: String(cost),
       });
       await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, 'delivered', userId, (dto.note as string) ?? null);
+
+      // Close the trip: a transit-mixer runs one load per dispatch, so a
+      // delivered challan means that dispatch is done. Without this the load
+      // lingers on the GPS live board and its cycle time never completes. Only
+      // advance a still-open dispatch (skip one already completed/cancelled/
+      // rejected) and stamp the pour-end time if the board never did.
+      if (challan.dispatchId) {
+        const dispatchRepo = m.getRepository(Dispatch);
+        const dispatch = await dispatchRepo.findOne({ where: { id: challan.dispatchId } });
+        if (dispatch && !['completed', 'cancelled', 'rejected'].includes(dispatch.dispatchStatus)) {
+          await dispatchRepo.update(dispatch.id, {
+            dispatchStatus: 'completed',
+            pourEndTime: dispatch.pourEndTime ?? new Date(),
+          });
+          await recordDeliveryHistory(m, tenantId, { dispatchId: dispatch.id }, dispatch.dispatchStatus, 'completed', userId, 'Auto-completed on challan delivery');
+        }
+      }
       return this.loadFull(m, id);
     });
   }

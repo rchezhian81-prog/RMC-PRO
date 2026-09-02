@@ -1,6 +1,19 @@
 import { Controller, Get, Req, Res } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { MetricsService } from './metrics.service';
+
+/**
+ * Constant-time bearer comparison so a wrong guess can't be refined from the
+ * response timing. `timingSafeEqual` needs equal-length buffers, so an unequal
+ * length short-circuits to false (the length itself is not the secret).
+ */
+function tokenMatches(provided: string | undefined, expected: string): boolean {
+  if (provided === undefined) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /**
  * `GET /metrics` — Prometheus scrape endpoint (unprefixed, like `/health`).
@@ -25,7 +38,7 @@ export class MetricsController {
     if (TOKEN) {
       const header = req.headers.authorization;
       const bearer = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
-      if (bearer !== TOKEN) {
+      if (!tokenMatches(bearer, TOKEN)) {
         res.status(401).type('text/plain').send('unauthorized\n');
         return;
       }

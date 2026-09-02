@@ -1,8 +1,9 @@
-import { Controller, Get, HttpCode, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 
 @Controller('health')
 export class HealthController {
+  private readonly logger = new Logger(HealthController.name);
   constructor(private readonly db: TenantDbService) {}
 
   /**
@@ -32,10 +33,13 @@ export class HealthController {
     try {
       await this.db.ds.query('SELECT 1');
     } catch (err) {
+      // /health/ready is unauthenticated, so the raw driver message (which can
+      // carry the host, port, database and role) must not reach the client. Log
+      // the real reason server-side and return only a generic status.
+      this.logger.error('readiness check failed', err instanceof Error ? err.stack : String(err));
       throw new ServiceUnavailableException({
         code: 'NOT_READY',
         message: 'Database is not reachable',
-        detail: err instanceof Error ? err.message : String(err),
       });
     }
     return { status: 'ready', db: 'up', timestamp: new Date().toISOString() };

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { AlertsController, TemplatesController } from './alerts.controllers';
 import { AlertsService } from './alerts.service';
+import { AlertDigestWorker } from './alert-digest.worker';
 import { TemplatesService } from './templates.service';
 
 /**
@@ -11,6 +12,6 @@ import { TemplatesService } from './templates.service';
  */
 @Module({
   controllers: [AlertsController, TemplatesController],
-  providers: [AlertsService, TemplatesService, TenantGuard],
+  providers: [AlertsService, TemplatesService, AlertDigestWorker, TenantGuard],
 })
 export class AlertsModule {}

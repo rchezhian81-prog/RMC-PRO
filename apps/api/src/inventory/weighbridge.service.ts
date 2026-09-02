@@ -127,6 +127,9 @@ export class WeighbridgeService {
       }));
       const qty = weighbridgeQuantity(net, material?.uom, conversions);
       const rate = num(dto.rate);
+      // Mirror material-inward's guard — a negative rate would post a negative
+      // amount into the GRN / valuation.
+      if (rate < 0) throw badReq('Rate cannot be negative');
       const inwardNo = await this.numbering.next(m, tenantId, 'material_inward', 'INW-');
       const repo = m.getRepository(MaterialInward);
       const inward = await repo.save(

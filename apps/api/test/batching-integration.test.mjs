@@ -183,6 +183,11 @@ let negRateBlocked = false;
 try { await api('POST', '/quotations', { customerId: scCust.id, items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 5, ratePerM3: -100 }] }); } catch { negRateBlocked = true; }
 ok('a quotation line with a negative rate is rejected', negRateBlocked);
 
+// ---- I. QC slump range sanity (gap-scan) ----
+let badSlumpBlocked = false;
+try { await api('POST', '/qc/slump-tests', { gradeId: grade.id, gradeLabel: grade.gradeName, measuredSlumpMm: 100, targetMinMm: 120, targetMaxMm: 80 }); } catch { badSlumpBlocked = true; }
+ok('an inverted slump range (min > max) is rejected', badSlumpBlocked);
+
 // ---- H. Grade margin report (Tier-5B) returns a well-formed result ----
 // Smoke: exercises both aggregate queries (invoice grade lines + active mix-design
 // standard cost) and the merge helper, so a column/join mistake fails the build's

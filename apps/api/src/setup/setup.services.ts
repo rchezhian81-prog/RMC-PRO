@@ -255,6 +255,8 @@ export class UsersService {
     if (emailTaken) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Email already exists' });
     }
+    // A users.manage holder must not be able to mint a new Company Owner.
+    await this.assertMayGrantOwnerRole(tenantId, String(dto.roleId ?? ''), actingUserId);
     // Checked after the duplicate test, so retrying an email that already exists
     // does not report a seat problem the administrator cannot act on.
     await this.planLimits.assertCanAddUser(tenantId);
@@ -287,6 +289,29 @@ export class UsersService {
       summary: `Created user ${user.email}`,
     });
     return { id: user.id, name: user.name, email: user.email, status: user.status };
+  }
+
+  /**
+   * Only the company owner may grant the company-owner role. Without this, any
+   * holder of users.manage (e.g. a Company Admin) could assign themselves — or
+   * anyone — the owner role and take over the tenant: the owner-protection rule
+   * only fires when the TARGET is already an owner, not when the owner role is
+   * being GRANTED. The initial owner is provisioned via the platform path (a
+   * direct role grant), not here, so onboarding is unaffected.
+   */
+  private async assertMayGrantOwnerRole(tenantId: string, roleId: string, actingUserId?: string): Promise<void> {
+    if (!roleId) return;
+    const rows: Array<{ role_key: string | null }> = await this.db.runInTenant(tenantId, (m) =>
+      m.query(`SELECT role_key FROM roles WHERE id = $1`, [roleId]),
+    );
+    if (rows[0]?.role_key !== ROLE_KEYS.COMPANY_OWNER) return;
+    const actorIsOwner = actingUserId ? await this.isOwner(tenantId, actingUserId) : false;
+    if (!actorIsOwner) {
+      throw new BadRequestException({
+        code: 'PERMISSION_DENIED',
+        message: 'Only the company owner can grant the company-owner role.',
+      });
+    }
   }
 
   /** Does this user hold the company-owner role? */
@@ -327,6 +352,11 @@ export class UsersService {
           message: 'Only the company owner can change the owner’s password, role, or status.',
         });
       }
+    }
+
+    // Promoting anyone (including oneself) to Company Owner is owner-only.
+    if (dto.roleId !== undefined) {
+      await this.assertMayGrantOwnerRole(tenantId, String(dto.roleId ?? ''), actingUserId);
     }
 
     // Deactivating yourself locks you out of the screen you are standing on.

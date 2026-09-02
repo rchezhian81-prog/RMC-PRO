@@ -155,6 +155,29 @@ ok('assigning a platform.* permission to a tenant role is rejected (400)', withP
 const withTenant = await j('PUT', `/roles/${role.id}/permissions`, { permissionIds: [tenantPerm.id] }, tok);
 ok('assigning an ordinary tenant permission still succeeds', withTenant.status >= 200 && withTenant.status < 300);
 
+// --- C2. A non-owner cannot grant the company-owner role (Tier-2A: self-escalation) ---
+console.log('\n=== C2. owner-role escalation guard ===');
+const umPerm = catalog.find((p) => p.permissionKey === 'users.manage');
+ok('the permission catalog exposes users.manage', !!umPerm);
+const adminRole = (await j('POST', '/roles', { roleKey: 'qa_admin_' + Date.now(), roleName: 'QA Admin ' + Date.now() }, tok)).body?.data;
+await j('PUT', `/roles/${adminRole.id}/permissions`, { permissionIds: [umPerm.id] }, tok);
+const adminEmail = `qa-admin-${Date.now()}@example.com`;
+// Password must not start with a common word (policy), so avoid admin/owner/user prefixes.
+const adminPw = 'Zulu9#Mango!42';
+const adminUser = (await j('POST', '/users', { name: 'QA Admin', email: adminEmail, password: adminPw, roleId: adminRole.id }, tok)).body?.data;
+ok('a users.manage admin can be created', !!adminUser?.id);
+const adminTok = (await j('POST', '/auth/login', { login: adminEmail, password: adminPw })).body?.data?.access_token;
+ok('the admin can log in', !!adminTok);
+const roles = (await j('GET', '/roles', null, tok)).body?.data ?? [];
+const ownerRole = roles.find((r) => (r.roleKey ?? r.role_key) === 'company_owner');
+ok('the seeded company_owner role is present', !!ownerRole?.id);
+// The admin holds users.manage, so the request reaches the service — and the new
+// guard rejects promoting anyone (here, themselves) to company_owner.
+const grantViaUpdate = await j('PATCH', `/users/${adminUser.id}`, { roleId: ownerRole.id }, adminTok);
+ok('a non-owner cannot promote to company_owner via update', grantViaUpdate.status === 400 || grantViaUpdate.status === 403);
+const grantViaCreate = await j('POST', '/users', { name: 'QA Owner2', email: `qa-owner2-${Date.now()}@example.com`, password: 'Yankee7#Delta!9', roleId: ownerRole.id }, adminTok);
+ok('a non-owner cannot mint a new company_owner via create', grantViaCreate.status === 400 || grantViaCreate.status === 403);
+
 // --- D. Audit coverage (Tier-4B #21/#22) ---
 console.log('\n=== D. audit coverage ===');
 const roleAudit = (await j('GET', '/audit-logs?action=role.permission_change', null, tok)).body?.data ?? [];

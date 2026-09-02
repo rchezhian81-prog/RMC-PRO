@@ -25,6 +25,12 @@ function corsOrigins(): string[] {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 
+  // Behind nginx, so trust one proxy hop: req.ip then reflects the real client
+  // (X-Forwarded-For) instead of nginx's container address. Without this every
+  // request keys into ONE throttler bucket — defeating the per-IP login/global
+  // rate limits — and the request/audit log records nginx's IP for everyone.
+  app.set('trust proxy', 1);
+
   // Larger JSON limit so a base64 PO (PDF/image) fits the AI extract endpoint;
   // nginx caps the upstream at 25m. Non-AI payloads are tiny.
   app.useBodyParser('json', { limit: '25mb' });

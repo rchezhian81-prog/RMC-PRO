@@ -5,7 +5,9 @@ import {
   BatchTicket,
   Dispatch,
   DeliveryStatusHistory,
+  Driver,
   Order,
+  Vehicle,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { recordDeliveryHistory } from './delivery-history.util';
@@ -177,6 +179,20 @@ export class DispatchService {
       const priorDispatches = await m.getRepository(Dispatch).find({ where: { batchTicketId } });
       if (priorDispatches.some((d) => !['cancelled', 'rejected'].includes(d.dispatchStatus))) {
         throw badReq('This batch ticket is already dispatched');
+      }
+
+      // Validate the assigned vehicle/driver resolve to active rows in the tenant,
+      // so a bogus or deactivated id can't be stamped on the dispatch (it would
+      // drop out of the fleet reports and show blank on the live board).
+      if (dto.vehicleId) {
+        const v = await m.getRepository(Vehicle).findOne({ where: { id: String(dto.vehicleId) } });
+        if (!v) throw badReq('Assigned vehicle not found');
+        if (v.status === 'inactive') throw badReq(`Vehicle ${v.vehicleNo} is inactive — assign an active vehicle.`);
+      }
+      if (dto.driverId) {
+        const d = await m.getRepository(Driver).findOne({ where: { id: String(dto.driverId) } });
+        if (!d) throw badReq('Assigned driver not found');
+        if (d.status === 'inactive') throw badReq(`Driver ${d.driverName} is inactive — assign an active driver.`);
       }
 
       let customerId: string | null = null;

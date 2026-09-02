@@ -235,7 +235,10 @@ export class UsersService {
 
   async create(tenantId: string, dto: Record<string, unknown>, actingUserId?: string) {
     const name = String(dto.name ?? '').trim();
-    const email = String(dto.email ?? '').trim();
+    // Login is by email alone, so normalise to lowercase on write — otherwise
+    // Foo@bar.com and foo@bar.com become two accounts and the case a user typed
+    // at signup becomes the only case they can log in with.
+    const email = String(dto.email ?? '').trim().toLowerCase();
     const password = String(dto.password ?? '');
     if (!name || !email || !password) {
       throw new BadRequestException({
@@ -250,7 +253,7 @@ export class UsersService {
     // hide a clash in another tenant and the DB unique index would surface it as
     // an opaque 500 instead of this clean message.
     const emailTaken = await this.db.runAsPlatform((m) =>
-      m.getRepository(User).findOne({ where: { email } }),
+      m.getRepository(User).createQueryBuilder('u').where('LOWER(u.email) = :email', { email }).getOne(),
     );
     if (emailTaken) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Email already exists' });

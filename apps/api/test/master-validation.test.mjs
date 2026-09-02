@@ -178,6 +178,10 @@ ok('a non-owner cannot promote to company_owner via update', grantViaUpdate.stat
 const grantViaCreate = await j('POST', '/users', { name: 'QA Owner2', email: `qa-owner2-${Date.now()}@example.com`, password: 'Yankee7#Delta!9', roleId: ownerRole.id }, adminTok);
 ok('a non-owner cannot mint a new company_owner via create', grantViaCreate.status === 400 || grantViaCreate.status === 403);
 
+// --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
+const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
+ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);
+
 // --- D. Audit coverage (Tier-4B #21/#22) ---
 console.log('\n=== D. audit coverage ===');
 const roleAudit = (await j('GET', '/audit-logs?action=role.permission_change', null, tok)).body?.data ?? [];

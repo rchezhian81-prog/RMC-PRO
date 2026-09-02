@@ -74,6 +74,7 @@ const TESTS = [
   'test/metrics.test.mjs',
   'test/sync-pagination.test.mjs',
   'test/rls-users.test.mjs',
+  'test/rls-drift-guard.test.mjs',
   'test/agents-substrate.test.mjs',
   'test/agents-insight.test.mjs',
   'test/agents-specialist.test.mjs',

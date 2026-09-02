@@ -124,6 +124,11 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   ok('the invoice now carries the IRN + ack + QR', !!row.irn && !!row.ack_number && !!row.signed_qr_code);
   ok('einvoice_status flipped to generated', row.einvoice_status === 'generated');
 
+  // Tier-3: an invoice with a LIVE IRN cannot be cancelled locally — that would
+  // make the challans re-billable while the government IRN stays active.
+  const cancelLive = await api('POST', `/invoices/${invId}/cancel`, { reason: 'test' });
+  ok('an invoice with a live IRN cannot be cancelled locally', cancelLive.status === 400);
+
   console.log('\n=== IRN execution is idempotent ===');
   const again = await api('POST', `/agents/approvals/${approvalId}/execute`);
   ok('re-executing an already-generated IRN is a no-op', again.data?.status === 'already_generated');

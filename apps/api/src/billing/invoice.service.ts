@@ -283,6 +283,16 @@ export class InvoiceService {
       const invoice = await repo.findOne({ where: { id } });
       if (!invoice) throw notFound();
       if (invoice.invoiceStatus === 'cancelled') throw badReq('Invoice already cancelled');
+      // A live IRN / e-way bill is filed with the government. Cancelling locally
+      // would flip this row to cancelled and make its challans re-billable while
+      // the portal IRN/e-way stays active — a second IRN for the same supply.
+      // Cancel it on the IRP first (24h window), or raise a credit note.
+      if (invoice.einvoiceStatus === 'generated') {
+        throw badReq('This invoice has a live IRN — cancel the e-invoice on the IRP (within 24h) or raise a credit note before cancelling here.');
+      }
+      if (invoice.ewayStatus === 'generated') {
+        throw badReq('This invoice has a live e-way bill — cancel it on the portal before cancelling the invoice.');
+      }
       if (num(invoice.amountPaid) > 0) throw badReq('Cannot cancel an invoice with receipts allocated');
       // A write-off is a financial event on this invoice; cancelling would erase
       // it and silently make the challans billable again. Reverse it first.

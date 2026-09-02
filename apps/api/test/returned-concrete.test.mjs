@@ -96,6 +96,11 @@ const delivered = await api('POST', `/delivery-challans/${challan.id}/deliver`, 
   receiverName: 'Site Engineer', returnQuantityM3: RETURN, returnReason: 'excess_ordered',
 });
 ok('challan delivered', delivered.challanStatus === 'delivered');
+// Delivering the challan closes the trip — the dispatch is completed and its
+// pour-end time stamped, so the load drops off the live board.
+const doneDispatch = await api('GET', `/dispatches/${dispatch.id}`);
+ok('dispatch auto-completed on delivery', doneDispatch.dispatchStatus === 'completed');
+ok('dispatch pour-end time stamped', !!doneDispatch.pourEndTime);
 ok('returned quantity recorded', near(delivered.returnQuantityM3, RETURN));
 ok('return reason recorded', delivered.returnReason === 'excess_ordered');
 ok('return valued at the order rate for the grade', near(delivered.returnCostPerM3, RATE));

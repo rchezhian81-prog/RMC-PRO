@@ -183,7 +183,11 @@ export class InvoiceService {
       let taxable = 0, cgst = 0, sgst = 0, igst = 0, cess = 0;
 
       for (const line of lines) {
-        const challan = await challanRepo.findOne({ where: { id: String(line.challanId ?? '') } });
+        // Lock the challan row before the not_invoiced check: two concurrent
+        // invoices citing the same challan would otherwise both see not_invoiced
+        // and bill it twice (duplicate revenue). The partial unique index on
+        // invoice_challans (Tier-1B) is the backstop.
+        const challan = await challanRepo.findOne({ where: { id: String(line.challanId ?? '') }, lock: { mode: 'pessimistic_write' } });
         if (!challan) throw badReq('Challan not found');
         if (challan.challanStatus !== 'delivered') throw badReq(`Challan ${challan.challanNo} is not delivered`);
         if (challan.invoiceStatus !== 'not_invoiced') throw badReq(`Challan ${challan.challanNo} already invoiced`);

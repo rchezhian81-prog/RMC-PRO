@@ -212,6 +212,16 @@ export class OrdersService {
       const items = await m.getRepository(OrderItem).find({ where: { orderId: id } });
       if (!items.length) throw badReq('Cannot confirm an order with no lines');
 
+      // Serialize confirmations for one customer on the customer row: without this,
+      // two orders confirmed at once each still see the other as a draft (exposure
+      // only counts confirmed orders), so both pass the credit gate and their
+      // combined exposure blows through the limit. The lock is taken only on this
+      // mutating path — the read-only exposure callers (alerts, hold view) don't
+      // lock. Released when the confirm transaction commits.
+      if (order.customerId) {
+        await m.getRepository(Customer).findOne({ where: { id: order.customerId }, lock: { mode: 'pessimistic_write' } });
+      }
+
       const a = await this.credit.assess(
         m, order.customerId,
         creditExposureValue(order.estimatedOrderValueInclGst, order.estimatedOrderValue),

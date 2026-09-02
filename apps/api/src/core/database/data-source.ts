@@ -56,6 +56,7 @@ import { AgentPauses1720000051000 } from './migrations/1720000051000-AgentPauses
 import { VendorBillItcEligible1720000052000 } from './migrations/1720000052000-VendorBillItcEligible';
 import { NumberSeriesUnique1720000053000 } from './migrations/1720000053000-NumberSeriesUnique';
 import { CustomerSupplierPan1720000054000 } from './migrations/1720000054000-CustomerSupplierPan';
+import { ConcurrencyUniqueIndexes1720000055000 } from './migrations/1720000055000-ConcurrencyUniqueIndexes';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -127,6 +128,7 @@ export const AppDataSource = new DataSource({
     VendorBillItcEligible1720000052000,
     NumberSeriesUnique1720000053000,
     CustomerSupplierPan1720000054000,
+    ConcurrencyUniqueIndexes1720000055000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

@@ -100,6 +100,12 @@ export class OrdersDraftService {
       if (quotation.approvalStatus !== 'approved') {
         throw badReq('Only an approved quotation can be converted to an order draft');
       }
+      // One quotation → one order. Without this, a double-click / retry (or a
+      // deliberate repeat) creates duplicate orders, each carrying full value
+      // into credit exposure. Use a rate contract for genuinely repeat orders.
+      if (quotation.status === 'converted') {
+        throw badReq('This quotation has already been converted to an order. Revise or clone it to raise another.');
+      }
       await this.assertActiveCustomer(m, quotation.customerId);
       // Enforce the quotation's validity window, exactly as the rate-contract path
       // does — an approved-but-expired quote must not convert at stale rates after
@@ -170,6 +176,8 @@ export class OrdersDraftService {
         estimatedOrderValue: total.toFixed(2),
         estimatedOrderValueInclGst: inclGst.toFixed(2),
       });
+      // Mark the quotation converted so it can't be converted again.
+      await m.getRepository(Quotation).update(quotationId, { status: 'converted' });
       return this.loadFull(m, order.id);
     });
   }

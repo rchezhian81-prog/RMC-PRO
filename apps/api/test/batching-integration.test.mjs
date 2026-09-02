@@ -169,6 +169,20 @@ let orderBlocked = false;
 try { await api('POST', `/order-drafts/from-quotation/${q2.id}`, { plantId: plant.id, orderDate: TODAY }); } catch { orderBlocked = true; }
 ok('an order cannot be raised for a deactivated customer', orderBlocked);
 
+// ---- H. Quotation single-conversion + non-negative lines (Tier-4B) ----
+const scCust = await api('POST', '/customers', { customerCode: 'SC-' + Date.now(), customerName: 'Single Convert Co', state: 'Karnataka' });
+let scq = await api('POST', '/quotations', { customerId: scCust.id, items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 5, ratePerM3: 4800 }] });
+await api('POST', `/quotations/${scq.id}/submit`);
+scq = await api('POST', `/quotations/${scq.id}/approve`);
+const firstConv = await api('POST', `/order-drafts/from-quotation/${scq.id}`, { plantId: plant.id, orderDate: TODAY });
+ok('an approved quotation converts to an order once', !!firstConv.id);
+let reconvBlocked = false;
+try { await api('POST', `/order-drafts/from-quotation/${scq.id}`, { plantId: plant.id, orderDate: TODAY }); } catch { reconvBlocked = true; }
+ok('the same quotation cannot be converted twice', reconvBlocked);
+let negRateBlocked = false;
+try { await api('POST', '/quotations', { customerId: scCust.id, items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 5, ratePerM3: -100 }] }); } catch { negRateBlocked = true; }
+ok('a quotation line with a negative rate is rejected', negRateBlocked);
+
 // ---- H. Grade margin report (Tier-5B) returns a well-formed result ----
 // Smoke: exercises both aggregate queries (invoice grade lines + active mix-design
 // standard cost) and the merge helper, so a column/join mistake fails the build's

@@ -56,6 +56,10 @@ export class RateContractsService {
   private pickItem(raw: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const f of ITEM_FIELDS) if (raw[f] !== undefined) out[f] = raw[f] === '' ? null : raw[f];
+    // Reject negative rates/charges — meaningless and understates order value.
+    for (const f of ['ratePerM3', 'transportCharge', 'pumpCharge', 'waitingCharge'] as const) {
+      if (out[f] != null && Number(out[f]) < 0) throw badReq(`${f} cannot be negative`);
+    }
     return out;
   }
 

@@ -271,8 +271,13 @@ export class PlatformService {
         // The name comes from the catalogue, but validate before interpolating
         // it as an identifier so this can never become an injection point.
         if (!/^[a-z_][a-z0-9_]*$/.test(table_name)) continue;
+        // Strip every credential column from the export: the bcrypt password
+        // hash AND the AES-GCM ciphertext of each tenant's GST-portal password
+        // (iv / ciphertext / auth_tag). `to_jsonb - 'col'` is a no-op on tables
+        // that don't have the column, so the same strip is safe for every table.
         const rows: Record<string, unknown>[] = await m.query(
-          `SELECT to_jsonb(t) - 'password_hash' AS row FROM "${table_name}" t WHERE t.tenant_id = $1`,
+          `SELECT to_jsonb(t) - 'password_hash' - 'password_iv' - 'password_ciphertext' - 'password_auth_tag' AS row ` +
+            `FROM "${table_name}" t WHERE t.tenant_id = $1`,
           [id],
         );
         out[table_name] = rows.map((r) => r.row);

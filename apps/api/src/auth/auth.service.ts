@@ -29,7 +29,9 @@ export class AuthService {
     // super-admins carry tenant_id NULL. Runs in the platform context so the
     // RLS policy on `users` admits the row; a plain read would return nothing.
     const user = await this.db.runAsPlatform((m) =>
-      m.getRepository(User).findOne({ where: { email: login } }),
+      // Case-insensitive so login works regardless of the case typed (and matches
+      // however the email was stored before normalisation-on-write existed).
+      m.getRepository(User).createQueryBuilder('u').where('LOWER(u.email) = LOWER(:login)', { login }).getOne(),
     );
     if (!user || user.status !== 'active' || !bcrypt.compareSync(password, user.passwordHash)) {
       throw new UnauthorizedException(INVALID);

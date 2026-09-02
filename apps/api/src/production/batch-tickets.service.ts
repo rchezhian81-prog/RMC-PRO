@@ -114,6 +114,13 @@ export class BatchTicketsService {
       const mix = await this.resolveApprovedMix(m, queue.gradeId, dto.mixDesignId as string, queue.gradeLabel);
       if (!mix) throw badReq('No approved mix design available for this grade');
       if (mix.approvalStatus !== 'approved') throw badReq('Selected mix design is not approved');
+      // An explicitly-chosen mix must be for the queued grade — otherwise an M25
+      // line could be batched with an M40 recipe while the ticket/QC/challan still
+      // read "M25" (a silent wrong-recipe pour). The auto-resolve path already
+      // filters by grade; this covers the explicit-id branch.
+      if (dto.mixDesignId && queue.gradeId && mix.gradeId && mix.gradeId !== queue.gradeId) {
+        throw badReq('The selected mix design is for a different grade than the queued line.');
+      }
 
       const mixMaterials = await m
         .getRepository(MixDesignMaterial)

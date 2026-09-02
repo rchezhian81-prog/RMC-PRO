@@ -77,6 +77,9 @@ export class QcService {
       if (measured <= 0) throw badReq('Measured slump (mm) is required');
       const min = dto.targetMinMm !== undefined && dto.targetMinMm !== null && dto.targetMinMm !== '' ? num(dto.targetMinMm) : null;
       const max = dto.targetMaxMm !== undefined && dto.targetMaxMm !== null && dto.targetMaxMm !== '' ? num(dto.targetMaxMm) : null;
+      // An inverted range (min > max) makes every value fail — reject it so a
+      // typo doesn't silently mislabel good concrete as out-of-slump.
+      if (min !== null && max !== null && min > max) throw badReq('Target min slump cannot exceed target max slump.');
       const passed = (min === null || measured >= min) && (max === null || measured <= max);
       const repo = m.getRepository(QcSlumpTest);
       const row = await repo.save(

@@ -143,6 +143,16 @@ export class ProductionPlansService {
       let queued = 0;
       for (const it of items) {
         if (it.status === 'queued') continue;
+        // Idempotency: if this order line already has a live queue entry (from the
+        // order path or another plan), skip it — otherwise we double-batch the line
+        // and trip uq_batch_queue_order_item. Mirror the order path's dedupe.
+        if (it.orderItemId) {
+          const existing = await queueRepo.findOne({ where: { orderItemId: it.orderItemId } });
+          if (existing && existing.queueStatus !== 'cancelled') {
+            await itemRepo.update(it.id, { status: 'queued' });
+            continue;
+          }
+        }
         await queueRepo.save(
           queueRepo.create({
             tenantId, plantId: plan.plantId, orderId: it.orderId, orderItemId: it.orderItemId,

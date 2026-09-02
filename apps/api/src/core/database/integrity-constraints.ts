@@ -148,6 +148,30 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: 'true',
     constraint: 'uq_number_series_key',
   },
+  {
+    // One live challan per dispatch (Tier-1B) — a second challan for the same
+    // load would double the billable candidates.
+    table: 'delivery_challans',
+    columns: ['dispatch_id'],
+    predicate: "dispatch_id IS NOT NULL AND challan_status <> 'cancelled'",
+    constraint: 'uq_delivery_challans_dispatch',
+  },
+  {
+    // One live queue entry per order line (Tier-1B) — the order path dedupes;
+    // this also backstops the plan path and any race into double batching.
+    table: 'batch_queue',
+    columns: ['order_item_id'],
+    predicate: "order_item_id IS NOT NULL AND queue_status <> 'cancelled'",
+    constraint: 'uq_batch_queue_order_item',
+  },
+  {
+    // One live bill per supplier invoice number (Tier-1B) — the double-payable /
+    // double-ITC guard, backstopping the service-level duplicate check.
+    table: 'vendor_bills',
+    columns: ['tenant_id', 'supplier_id', 'supplier_bill_no'],
+    predicate: "supplier_bill_no IS NOT NULL AND status <> 'cancelled'",
+    constraint: 'uq_vendor_bills_supplier_billno',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

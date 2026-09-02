@@ -33,6 +33,14 @@ const ITEM_FIELDS = [
   'remarks',
 ] as const;
 
+/** A quotation must not be valid-until BEFORE its own date (dates are YYYY-MM-DD,
+ *  so a string compare is a chronological compare). */
+const assertValidity = (quotationDate: unknown, validUntil: unknown): void => {
+  if (quotationDate && validUntil && String(validUntil) < String(quotationDate)) {
+    throw badReq('The quotation’s valid-until date cannot be before its quotation date.');
+  }
+};
+
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 
 /** Quotations: header, grade-wise items, approval flow, revisions, PDF, share. */
@@ -91,6 +99,7 @@ export class QuotationsService {
       delete rest.revisionNo;
       delete rest.approvalStatus;
       delete rest.items;
+      assertValidity(rest.quotationDate, rest.validUntil);
       const quotation = await repo.save(
         repo.create({
           ...rest,
@@ -125,6 +134,7 @@ export class QuotationsService {
       for (const k of ['id', 'tenantId', 'quotationNo', 'revisionNo', 'approvalStatus', 'items']) {
         delete rest[k];
       }
+      assertValidity(rest.quotationDate ?? quotation.quotationDate, rest.validUntil ?? quotation.validUntil);
       await repo.update(id, rest as Record<string, unknown>);
       return this.loadFull(m, id);
     });
@@ -134,6 +144,11 @@ export class QuotationsService {
   private pickItem(raw: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const f of ITEM_FIELDS) if (raw[f] !== undefined) out[f] = raw[f] === '' ? null : raw[f];
+    // Reject negatives — a negative rate/charge/quantity understates the order
+    // value (and so the credit exposure) and is meaningless on a quote line.
+    for (const f of ['estimatedQuantity', 'ratePerM3', 'transportCharge', 'pumpCharge', 'waitingCharge', 'gstRate'] as const) {
+      if (out[f] != null && Number(out[f]) < 0) throw badReq(`${f} cannot be negative`);
+    }
     return out;
   }
 

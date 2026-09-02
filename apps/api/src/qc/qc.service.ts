@@ -166,6 +166,35 @@ export class QcService {
       const tolerance = fck >= 20 ? 3 : 4;
       const individualFloor = fck - tolerance;
       const resRepo = m.getRepository(QcCubeResult);
+
+      // Protect the IS 456 verdict from being computed on the wrong sample. The
+      // acceptance mean is taken over the cast specimens (default 3), so:
+      //  - the number of 28-day results may not exceed the set's specimen count
+      //    (more crushed cubes than were cast would judge the batch on cubes
+      //    that never existed, and let the sample be padded toward acceptance);
+      //  - a numbered specimen may not be recorded twice at the same age (one
+      //    cube double-keyed would be counted twice in the mean).
+      const existing = await resRepo.find({ where: { cubeSetId: setId } });
+      const specimenCap = num(set.specimenCount);
+      const at28Age = (v: unknown) => (num(v) || 28) >= 28;
+      if (specimenCap > 0) {
+        const existing28 = existing.filter((x) => num(x.testAgeDays) >= 28).length;
+        const incoming28 = rows.filter((r) => at28Age(r.testAgeDays)).length;
+        if (existing28 + incoming28 > specimenCap) {
+          throw badReq(
+            `This set was cast with ${specimenCap} specimen(s) — cannot record ${existing28 + incoming28} result(s) at 28-day.`,
+          );
+        }
+      }
+      const seen = new Set(existing.map((x) => `${num(x.specimenNo)}@${num(x.testAgeDays) || 28}`));
+      for (const r of rows) {
+        const sn = num(r.specimenNo) || 0;
+        if (sn <= 0) continue; // an unnumbered specimen can't be de-duplicated
+        const key = `${sn}@${num(r.testAgeDays) || 28}`;
+        if (seen.has(key)) throw badReq(`Specimen ${sn} at ${num(r.testAgeDays) || 28}-day is already recorded for this set.`);
+        seen.add(key);
+      }
+
       for (const r of rows) {
         const strength = num(r.compressiveStrengthMpa);
         if (strength <= 0) throw badReq('Each result needs a compressive strength (N/mm²)');

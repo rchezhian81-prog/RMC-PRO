@@ -132,9 +132,12 @@ export async function computeCustomerExposure(
   const invoiceOutstanding = num(invoiceRows[0]?.total);
 
   // Unapplied advance credit — every non-reversed receipt's leftover. Auto-nets.
+  // A PENDING cheque is money-in-transit, not cleared funds, so it must NOT free
+  // up credit headroom until it clears (cheque bouncing is common) — exclude it.
   const advanceRows: Array<{ total: number | string | null }> = await m.query(
     `SELECT COALESCE(SUM(unallocated_amount), 0)::float AS total
-       FROM payments WHERE customer_id = $1 AND status <> 'reversed'`,
+       FROM payments
+      WHERE customer_id = $1 AND status <> 'reversed' AND COALESCE(clearing_status, '') <> 'pending'`,
     [customerId],
   );
   const advanceCredit = num(advanceRows[0]?.total);

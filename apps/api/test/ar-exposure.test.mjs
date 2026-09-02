@@ -275,6 +275,19 @@ await scenario('T6 unapplied advance auto-nets against exposure', async () => {
   must(near(a.outstandingBefore, -advanceAmt), `gate outstandingBefore should reflect the advance (${-advanceAmt}), got ${a.outstandingBefore}`);
 });
 
+// T6b — a PENDING cheque advance is money-in-transit and must NOT free credit
+// (Tier-4A) — unlike the cleared cash advance above.
+await scenario('T6b a pending cheque advance does not net against exposure', async () => {
+  const fx = await freshCustomer(0);
+  const adv = await api('POST', '/receipts', {
+    customerId: fx.customer.id, amount: 15000, receiptDate: TODAY, paymentMode: 'cheque',
+  });
+  must(adv.isAdvance === true, 'cheque receipt should be a fully-unallocated advance');
+  const exp = await exposureOf(fx.customer.id);
+  must(near(exp.advanceCredit, 0), `a pending cheque must not count as advance credit, got ${exp.advanceCredit}`);
+  must(near(exp.exposure, 0), `exposure must not net down for a pending cheque, got ${exp.exposure}`);
+});
+
 // ============================================================================
 // T7 — cancelling an order returns exposure to its pre-order value.
 // ============================================================================

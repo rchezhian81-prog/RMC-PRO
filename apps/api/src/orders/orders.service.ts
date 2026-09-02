@@ -212,14 +212,20 @@ export class OrdersService {
       const items = await m.getRepository(OrderItem).find({ where: { orderId: id } });
       if (!items.length) throw badReq('Cannot confirm an order with no lines');
 
+      // An order with no customer would confirm with NO credit control and no
+      // billable party downstream.
+      if (!order.customerId) throw badReq('Cannot confirm an order without a customer.');
+
       // Serialize confirmations for one customer on the customer row: without this,
       // two orders confirmed at once each still see the other as a draft (exposure
       // only counts confirmed orders), so both pass the credit gate and their
       // combined exposure blows through the limit. The lock is taken only on this
       // mutating path — the read-only exposure callers (alerts, hold view) don't
-      // lock. Released when the confirm transaction commits.
-      if (order.customerId) {
-        await m.getRepository(Customer).findOne({ where: { id: order.customerId }, lock: { mode: 'pessimistic_write' } });
+      // lock. Released when the confirm transaction commits. Also re-check the
+      // customer is still active (it may have been deactivated after drafting).
+      const cust = await m.getRepository(Customer).findOne({ where: { id: order.customerId }, lock: { mode: 'pessimistic_write' } });
+      if (cust && cust.status && String(cust.status) !== 'active') {
+        throw badReq(`${cust.customerName ?? 'The customer'} is inactive — reactivate the customer before confirming this order.`);
       }
 
       const a = await this.credit.assess(

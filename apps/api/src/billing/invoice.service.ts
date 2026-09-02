@@ -272,6 +272,14 @@ export class InvoiceService {
       const invoice = await repo.findOne({ where: { id } });
       if (!invoice) throw notFound();
       if (invoice.invoiceStatus !== 'draft') throw badReq(`Invoice already ${invoice.invoiceStatus}`);
+      // HSN/SAC is mandatory on a GST tax invoice and is a hard requirement of the
+      // e-invoice schema — an issued invoice with a blank HSN prints '—' on the
+      // GSTR-1 HSN summary and later fails the IRP preflight. Catch it at issue.
+      const items = await m.getRepository(InvoiceItem).find({ where: { invoiceId: id } });
+      const missingHsn = items.filter((it) => !(it.hsnSac ?? '').trim());
+      if (missingHsn.length) {
+        throw badReq(`Every line needs an HSN/SAC before issuing (${missingHsn.length} missing) — it is required on the GST invoice and the e-invoice.`);
+      }
       await repo.update(id, { invoiceStatus: 'issued' });
       return this.loadFull(m, id);
     });

@@ -131,6 +131,9 @@ export class ReceiptService {
       const payment = await paymentRepo.findOne({ where: { id } });
       if (!payment) throw notFound();
       if (payment.status === 'reversed') throw badReq('Receipt is already reversed');
+      // Only a cheque bounces (NSF). Guarding on status alone let a cash/UPI
+      // receipt be "bounced", silently reversing every allocation.
+      if ((payment.paymentMode ?? '').toLowerCase() !== 'cheque') throw badReq('Only a cheque receipt can be bounced.');
       const invoiceRepo = m.getRepository(Invoice);
       const allocRepo = m.getRepository(PaymentAllocation);
       const allocations = await allocRepo.find({ where: { paymentId: id } });

@@ -9,7 +9,20 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeLineTax, round2 } from '../../dist/billing/tax.util.js';
+import { computeLineTax, round2, isInterstateSupply } from '../../dist/billing/tax.util.js';
+
+test('isInterstateSupply classifies by resolved GST state code, not raw name', () => {
+  // Same state, different spellings must stay INTRA-state (CGST+SGST, not IGST).
+  assert.equal(isInterstateSupply('Odisha', 'Orissa'), false);
+  assert.equal(isInterstateSupply('Tamil Nadu', 'Tamilnadu'), false);
+  assert.equal(isInterstateSupply('Uttarakhand', 'Uttaranchal'), false);
+  assert.equal(isInterstateSupply('Chhattisgarh', 'Chattisgarh'), false);
+  // Genuinely different states → inter-state (IGST).
+  assert.equal(isInterstateSupply('Tamil Nadu', 'Karnataka'), true);
+  // Unresolvable names fall back to a plain name compare.
+  assert.equal(isInterstateSupply('Wakanda', 'Wakanda'), false);
+  assert.equal(isInterstateSupply('Foo', 'Bar'), true);
+});
 
 test('round2 rounds to two decimals', () => {
   assert.equal(round2(2.345), 2.35);

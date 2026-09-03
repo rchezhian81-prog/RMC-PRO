@@ -1,3 +1,5 @@
+import { gstStateCode } from '../compliance/gst-payload.util';
+
 export const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 
 export interface LineTax {
@@ -101,7 +103,16 @@ export function summariseGst(lines: QuoteLine[], isInterstate: boolean): TaxSumm
 
 /** Inter-state when buyer and seller states differ (case/space-insensitive). */
 export function isInterstateSupply(sellerState?: string | null, buyerState?: string | null): boolean {
-  const a = (sellerState ?? '').trim().toLowerCase();
-  const b = (buyerState ?? '').trim().toLowerCase();
-  return a !== '' && b !== '' && a !== b;
+  // Classify on the resolved 2-digit GST state CODE, not the raw name. Comparing
+  // names flips an intra-state supply to IGST whenever the two sides spell the
+  // same state differently — "Odisha"/"Orissa", "Tamil Nadu"/"Tamilnadu",
+  // "Uttarakhand"/"Uttaranchal", "Chhattisgarh"/"Chattisgarh" — all of which
+  // resolve to the same code. If either state can't be resolved to a code, fall
+  // back to a name compare rather than guessing.
+  const a = gstStateCode(sellerState);
+  const b = gstStateCode(buyerState);
+  if (a && b) return a !== b;
+  const an = (sellerState ?? '').trim().toLowerCase();
+  const bn = (buyerState ?? '').trim().toLowerCase();
+  return an !== '' && bn !== '' && an !== bn;
 }

@@ -314,6 +314,14 @@ export class BatchTicketsService {
           if (!mat.materialId || actual <= 0) continue;
           required.set(mat.materialId, (required.get(mat.materialId) ?? 0) + actual);
         }
+        // Lock each material's balance (stable, sorted order → no deadlock between
+        // two confirms) so the availability check and the consumption below are
+        // serialized against a concurrent confirm consuming the same raw material.
+        // Without this, two different tickets each pass the gate against the same
+        // reading and together drive stock negative past the approval it requires.
+        for (const materialId of [...required.keys()].sort()) {
+          await this.stock.lockBalance(m, plantId, materialId);
+        }
         const shortfalls: Array<{ material: string; available: number; required: number }> = [];
         for (const [materialId, need] of required) {
           const available = await this.stock.balanceOf(m, plantId, materialId);

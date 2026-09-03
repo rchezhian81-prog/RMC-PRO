@@ -47,6 +47,11 @@ export class StockAdjustmentService {
       // IS-NULL ghost row and returned 0, so every decrease on a single-plant
       // tenant was wrongly forced into the negative-stock approval queue.
       const plantId = await this.stock.resolvePlant(m, (dto.plantId as string) ?? null);
+      // Serialize concurrent movements on this material so the negative-stock gate
+      // below is not a TOCTOU: without it, two decreases each read the same
+      // balance, each compute newBalance >= 0, and both apply — driving stock
+      // negative past the approval the gate is meant to require.
+      await this.stock.lockBalance(m, plantId, materialId);
       const material = await m.getRepository(Material).findOne({ where: { id: materialId } });
       const label = material?.materialName ?? null;
       const uom = material?.uom ?? null;

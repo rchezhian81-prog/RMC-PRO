@@ -144,7 +144,10 @@ export class GrnService {
   post(tenantId: string, id: string, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const grnRepo = m.getRepository(GoodsReceipt);
-      const grn = await grnRepo.findOne({ where: { id } });
+      // Lock the GRN row so two concurrent posts serialize: the second blocks until
+      // the first commits, then re-reads status='posted' and is rejected. Without
+      // this an ad-hoc GRN (no PO line to lock below) could post its stock twice.
+      const grn = await grnRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!grn) throw notFound();
       if (grn.status !== 'draft') throw badReq(`Goods receipt already ${grn.status}`);
       const items = await m.getRepository(GoodsReceiptItem).find({ where: { goodsReceiptId: id } });

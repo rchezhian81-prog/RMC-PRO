@@ -33,6 +33,15 @@ async function api(method, path, body) {
   if (!res.ok || !data?.success) throw new Error(`${method} ${path} -> ${res.status} ${JSON.stringify(data)}`);
   return data.data;
 }
+// A POST that reports success/failure instead of throwing — for firing two at once.
+async function rawPost(path) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+  });
+  const data = await res.json().catch(() => null);
+  return res.ok && data?.success === true;
+}
 
 if (!LOGIN || !PASSWORD || !MATERIAL_ID) {
   console.log('(skipping purchase-cycle — LOGIN/RMC_PASSWORD/TEST_MATERIAL_ID not set)');
@@ -100,6 +109,32 @@ try {
   overReceiveBlocked = true;
 }
 ok('GRN over-receiving beyond the PO is blocked', overReceiveBlocked);
+
+// ---- C2. A row lock serializes concurrent posts (Tier-A A1/A2): only one wins,
+// stock moves exactly once. Uses an ad-hoc GRN (no PO) so the PO-line lock path is
+// skipped and the GRN-row lock is the only thing standing between a double-submit
+// and doubled stock.
+const DBL = 4;
+const adhocGrn = await api('POST', '/goods-receipts', {
+  plantId: PLANT_ID, receiptDate: new Date().toISOString().slice(0, 10),
+  lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, receivedQuantity: DBL, acceptedQuantity: DBL, rate: RATE }],
+});
+ok('ad-hoc GRN created (no PO)', adhocGrn.status === 'draft');
+const grnBefore = await stockOf();
+const grnPosts = await Promise.all([rawPost(`/goods-receipts/${adhocGrn.id}/post`), rawPost(`/goods-receipts/${adhocGrn.id}/post`)]);
+ok('exactly one of two concurrent GRN posts succeeds', grnPosts.filter(Boolean).length === 1);
+ok(`concurrent GRN double-post moved stock by exactly ${DBL} once`, near(await stockOf(), grnBefore + DBL));
+
+// Material inward post has the same guard.
+const inw = await api('POST', '/material-inwards', {
+  plantId: PLANT_ID, materialId: MATERIAL_ID, materialLabel: label, uom: material.uom,
+  quantityReceived: DBL, quantityAccepted: DBL, rate: RATE,
+});
+ok('material inward created (draft)', inw.status === 'draft');
+const inwBefore = await stockOf();
+const inwPosts = await Promise.all([rawPost(`/material-inwards/${inw.id}/post`), rawPost(`/material-inwards/${inw.id}/post`)]);
+ok('exactly one of two concurrent inward posts succeeds', inwPosts.filter(Boolean).length === 1);
+ok(`concurrent inward double-post moved stock by exactly ${DBL} once`, near(await stockOf(), inwBefore + DBL));
 
 // ---- D. Vendor bill (3-way matched) ----
 let bill = await api('POST', '/vendor-bills', {

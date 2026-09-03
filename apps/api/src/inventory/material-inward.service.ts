@@ -66,7 +66,10 @@ export class MaterialInwardService {
   post(tenantId: string, id: string, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(MaterialInward);
-      const inward = await repo.findOne({ where: { id } });
+      // Lock the inward row so a double-submit serializes: the second post blocks
+      // until the first commits, then sees status='posted' and is rejected —
+      // otherwise it would add the accepted quantity to stock twice for one load.
+      const inward = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!inward) throw notFound();
       if (inward.status !== 'draft') throw badReq(`Inward already ${inward.status}`);
       if (!inward.materialId) throw badReq('Inward has no material');

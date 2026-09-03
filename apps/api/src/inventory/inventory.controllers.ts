@@ -124,6 +124,7 @@ export class NegativeStockController {
 
 @Controller('inventory-reports')
 @RequireModule('inventory')
+@RequirePermissions('reports.view') // valuation / movement / stock reports
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class InventoryReportsController {
   constructor(private readonly service: InventoryReportsService) {}

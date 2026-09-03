@@ -82,6 +82,10 @@ export class ReceiptController {
 
 @Controller('billing-reports')
 @RequireModule('billing')
+// Financial reports (receivables ledger, GST returns, day-book, margins) require
+// reports.view — the same gate the dispatch/wastage reports use. tally-export
+// keeps its own route-level permission (route metadata overrides the class).
+@RequirePermissions('reports.view')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class BillingReportsController {
   constructor(private readonly service: BillingReportsService) {}

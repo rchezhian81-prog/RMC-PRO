@@ -178,6 +178,18 @@ ok('a non-owner cannot promote to company_owner via update', grantViaUpdate.stat
 const grantViaCreate = await j('POST', '/users', { name: 'QA Owner2', email: `qa-owner2-${Date.now()}@example.com`, password: 'Yankee7#Delta!9', roleId: ownerRole.id }, adminTok);
 ok('a non-owner cannot mint a new company_owner via create', grantViaCreate.status === 400 || grantViaCreate.status === 403);
 
+// --- C2c. Financial reports require reports.view (Tier-C C1/C4 RBAC gate) ---
+console.log('\n=== C2c. reports.view gate on financial reports ===');
+// adminUser's role holds only users.manage — no reports.view — so the receivables
+// report (previously ungated) must now refuse it, and granting reports.view opens it.
+const rvBlocked = await j('GET', '/billing-reports/outstanding', null, adminTok);
+ok('a user without reports.view is blocked from the receivables report (403)', rvBlocked.status === 403);
+const rvPerm = catalog.find((p) => p.permissionKey === 'reports.view');
+ok('the permission catalog exposes reports.view', !!rvPerm);
+await j('PUT', `/roles/${adminRole.id}/permissions`, { permissionIds: [umPerm.id, rvPerm.id] }, tok);
+const rvAllowed = await j('GET', '/billing-reports/outstanding', null, adminTok);
+ok('granting reports.view unblocks the receivables report', rvAllowed.status >= 200 && rvAllowed.status < 300);
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

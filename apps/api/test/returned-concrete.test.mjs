@@ -182,5 +182,21 @@ const converts = await Promise.all([
 ok('exactly one of two concurrent quotation-converts succeeds', converts.filter(Boolean).length === 1);
 ok('the quotation ends up converted exactly once', (await api('GET', `/quotations/${cq.id}`)).status === 'converted');
 
+// ---- Concurrency (Tier-A A6): confirming one order twice at once confirms it
+// once. The order-row lock serializes the two confirms; the second sees a
+// non-draft status and is rejected (no duplicate confirm / spurious hold). ----
+let oq = await api('POST', '/quotations', {
+  customerId: customer.id, siteId: site?.id, quotationDate: TODAY,
+  items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 6, ratePerM3: RATE }],
+});
+await api('POST', `/quotations/${oq.id}/submit`);
+oq = await api('POST', `/quotations/${oq.id}/approve`);
+const draftOrder = await api('POST', `/order-drafts/from-quotation/${oq.id}`, { plantId: plant.id, orderDate: TODAY });
+const confirms = await Promise.all([
+  rawPost(`/orders/${draftOrder.id}/confirm`),
+  rawPost(`/orders/${draftOrder.id}/confirm`),
+]);
+ok('exactly one of two concurrent order-confirms succeeds', confirms.filter(Boolean).length === 1);
+
 console.log(`\nRETURNED CONCRETE TEST: ${pass} passed ✓`);
 process.exit(0);

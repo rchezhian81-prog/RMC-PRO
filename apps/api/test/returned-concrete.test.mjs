@@ -35,6 +35,16 @@ const lookup = async (path, field, value) => {
   const list = await api('GET', `/${path}`);
   return (Array.isArray(list) ? list : []).find((r) => String(r[field]) === value);
 };
+// A POST that reports success/failure instead of throwing — for firing two at once.
+async function rawPost(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => null);
+  return res.ok && data?.success === true;
+}
 
 if (!LOGIN || !PASSWORD) {
   console.log('(skipping returned-concrete — LOGIN/RMC_PASSWORD not set)');
@@ -156,6 +166,21 @@ const rejBucket = (after.byReason ?? []).find((b) => b.label === 'Rejected load'
 ok('rejected whole load appears as its own reason bucket', !!rejBucket);
 ok('rejected load adds its full batched quantity', near(Number(rejBucket.quantityM3) - beforeRejQty, REJECT_QTY));
 ok('rejected load valued at the order rate', near(Number(after.totalReturnCost) - beforeCost, REJECT_QTY * RATE)); // +5×4800 = 24000
+
+// ---- Concurrency (Tier-A A3): one quotation → at most one order, even on a
+// double-click. The quotation-row lock serializes concurrent converts. ----
+let cq = await api('POST', '/quotations', {
+  customerId: customer.id, siteId: site?.id, quotationDate: TODAY,
+  items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 6, ratePerM3: RATE }],
+});
+await api('POST', `/quotations/${cq.id}/submit`);
+cq = await api('POST', `/quotations/${cq.id}/approve`);
+const converts = await Promise.all([
+  rawPost(`/order-drafts/from-quotation/${cq.id}`, { plantId: plant.id, orderDate: TODAY }),
+  rawPost(`/order-drafts/from-quotation/${cq.id}`, { plantId: plant.id, orderDate: TODAY }),
+]);
+ok('exactly one of two concurrent quotation-converts succeeds', converts.filter(Boolean).length === 1);
+ok('the quotation ends up converted exactly once', (await api('GET', `/quotations/${cq.id}`)).status === 'converted');
 
 console.log(`\nRETURNED CONCRETE TEST: ${pass} passed ✓`);
 process.exit(0);

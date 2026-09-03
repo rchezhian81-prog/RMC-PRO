@@ -95,7 +95,12 @@ export class OrdersDraftService {
   fromQuotation(tenantId: string, quotationId: string, rawDto: Record<string, unknown>) {
     const dto = nullifyEmpty(rawDto);
     return this.db.runInTenant(tenantId, async (m) => {
-      const quotation = await m.getRepository(Quotation).findOne({ where: { id: quotationId } });
+      // Lock the quotation row so two concurrent converts serialize: the second
+      // blocks until the first commits, then re-reads status='converted' (set at
+      // the end of this tx) and is rejected. Without the lock a double-click reads
+      // 'approved' twice and creates duplicate orders, each carrying full value
+      // into credit exposure.
+      const quotation = await m.getRepository(Quotation).findOne({ where: { id: quotationId }, lock: { mode: 'pessimistic_write' } });
       if (!quotation) throw notFound();
       if (quotation.approvalStatus !== 'approved') {
         throw badReq('Only an approved quotation can be converted to an order draft');

@@ -115,5 +115,47 @@ ok('wastage report buckets the reason', !!reasonBucket && Number(reasonBucket.co
 const gradeBucket = (report.byGrade ?? []).find((b) => b.label === String(grade.gradeName));
 ok('wastage report buckets the grade', !!gradeBucket);
 
+// ---- Whole-load wastage: a rejected dispatch counts its full batched load ----
+// A load rejected on site (or a dispatch cancelled after batching) never reaches
+// a challan, but the concrete was produced — so the full batched quantity is
+// wasted, valued at the order rate, and bucketed as "Rejected load".
+async function confirmedDispatch(qty) {
+  let qq = await api('POST', '/quotations', {
+    customerId: customer.id, siteId: site?.id, quotationDate: TODAY,
+    items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: qty, ratePerM3: RATE }],
+  });
+  await api('POST', `/quotations/${qq.id}/submit`);
+  qq = await api('POST', `/quotations/${qq.id}/approve`);
+  let o = await api('POST', `/order-drafts/from-quotation/${qq.id}`, { plantId: plant.id, orderDate: TODAY });
+  o = await api('POST', `/orders/${o.id}/confirm`);
+  if (String(o.orderStatus) === 'credit_hold') {
+    const holds = await api('GET', '/credit-holds?status=pending');
+    const h = (Array.isArray(holds) ? holds : []).find((x) => String(x.orderId) === String(o.id));
+    if (h) await api('POST', `/credit-holds/${h.id}/approve`, { note: 'B3 reject test' });
+  }
+  const qu = await api('POST', `/batch-queue/from-order/${o.id}`);
+  const qid = (Array.isArray(qu) ? qu[0] : qu)?.id;
+  let t = await api('POST', `/batch-tickets/from-queue/${qid}`, { batchQuantityM3: qty, mixDesignId: mix.id });
+  await api('POST', `/batch-tickets/${t.id}/actuals`, {
+    materials: t.materials.map((mm) => ({ id: mm.id, actualQuantity: Number(mm.correctedTargetQuantity ?? mm.targetQuantity) })),
+  });
+  t = await api('POST', `/batch-tickets/${t.id}/confirm`, {});
+  return api('POST', `/dispatches/from-batch-ticket/${t.id}`, {});
+}
+
+const before = await api('GET', '/delivery-challans/report/wastage');
+const beforeRejQty = Number((before.byReason ?? []).find((b) => b.label === 'Rejected load')?.quantityM3 ?? 0);
+const beforeCost = Number(before.totalReturnCost);
+
+const REJECT_QTY = 5;
+const rejected = await confirmedDispatch(REJECT_QTY);
+await api('POST', `/dispatches/${rejected.id}/status`, { status: 'rejected' });
+
+const after = await api('GET', '/delivery-challans/report/wastage');
+const rejBucket = (after.byReason ?? []).find((b) => b.label === 'Rejected load');
+ok('rejected whole load appears as its own reason bucket', !!rejBucket);
+ok('rejected load adds its full batched quantity', near(Number(rejBucket.quantityM3) - beforeRejQty, REJECT_QTY));
+ok('rejected load valued at the order rate', near(Number(after.totalReturnCost) - beforeCost, REJECT_QTY * RATE)); // +5×4800 = 24000
+
 console.log(`\nRETURNED CONCRETE TEST: ${pass} passed ✓`);
 process.exit(0);

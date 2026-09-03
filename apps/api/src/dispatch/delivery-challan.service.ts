@@ -210,7 +210,7 @@ export class DeliveryChallanService {
       if (filters.to) { params.push(filters.to); where.push(`dispatch_time <= $${params.length}`); }
       if (filters.plantId) { params.push(filters.plantId); where.push(`plant_id = $${params.length}`); }
 
-      const rows: WastageRow[] = await m.query(
+      const returnRows: WastageRow[] = await m.query(
         `SELECT return_quantity_m3 AS "returnQuantityM3",
                 return_cost AS "returnCost",
                 return_reason AS "returnReason",
@@ -219,7 +219,31 @@ export class DeliveryChallanService {
           WHERE ${where.join(' AND ')}`,
         params,
       );
-      return wastageSummary(rows);
+
+      // Whole loads rejected on site or cancelled after batching never reach a
+      // challan, but the concrete was produced — so the full batched quantity is
+      // wasted. Count it here from the dispatch itself, valued at the order line's
+      // rate for the grade (the same basis a returned load is valued at), and
+      // bucketed by why it was lost.
+      const dParams: unknown[] = [];
+      const dWhere: string[] = [`d.dispatch_status IN ('rejected', 'cancelled')`, `d.quantity_m3 > 0`];
+      if (filters.from) { dParams.push(filters.from); dWhere.push(`COALESCE(d.dispatch_time, d.created_at) >= $${dParams.length}`); }
+      if (filters.to) { dParams.push(filters.to); dWhere.push(`COALESCE(d.dispatch_time, d.created_at) <= $${dParams.length}`); }
+      if (filters.plantId) { dParams.push(filters.plantId); dWhere.push(`d.plant_id = $${dParams.length}`); }
+      const rejectedRows: WastageRow[] = await m.query(
+        `SELECT d.quantity_m3 AS "returnQuantityM3",
+                ROUND(d.quantity_m3 * COALESCE(
+                  (SELECT oi.rate_per_m3 FROM order_items oi
+                    WHERE oi.order_id = d.order_id AND oi.grade_id = d.grade_id
+                    LIMIT 1), 0), 2) AS "returnCost",
+                CASE d.dispatch_status WHEN 'rejected' THEN 'Rejected load' ELSE 'Cancelled load' END AS "returnReason",
+                d.grade_label AS "gradeLabel"
+           FROM dispatches d
+          WHERE ${dWhere.join(' AND ')}`,
+        dParams,
+      );
+
+      return wastageSummary([...returnRows, ...rejectedRows]);
     });
   }
 

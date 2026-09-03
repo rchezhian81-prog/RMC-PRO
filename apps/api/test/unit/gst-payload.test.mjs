@@ -7,9 +7,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isGstin, stateCodeOf, ewayValidityDays, toPortalDate,
+  isGstin, stateCodeOf, ewayValidityDays, toPortalDate, toUqc,
   validateIrnPreflight, validateEwbPreflight, buildIrnRequest, buildEwbRequest,
 } from '../../dist/compliance/gst-payload.util.js';
+
+test('toUqc maps stored UOMs to valid NIC UQC codes', () => {
+  // Cubic metres: the concrete default 'm3' (and 'CUM') → 'CBM'.
+  assert.equal(toUqc('m3'), 'CBM');
+  assert.equal(toUqc('M3'), 'CBM');
+  assert.equal(toUqc('CUM'), 'CBM');
+  assert.equal(toUqc('cubic metre'), 'CBM');
+  // Materials.
+  assert.equal(toUqc('kg'), 'KGS');
+  assert.equal(toUqc('ton'), 'TON');
+  assert.equal(toUqc('bag'), 'BAG');
+  assert.equal(toUqc('ltr'), 'LTR');
+  // An already-valid UQC passes through; unknown/empty → the 'OTH' catch-all.
+  assert.equal(toUqc('NOS'), 'NOS');
+  assert.equal(toUqc('CBM'), 'CBM');
+  assert.equal(toUqc('widgets'), 'OTH');
+  assert.equal(toUqc(null), 'OTH');
+  assert.equal(toUqc(''), 'OTH');
+});
 import { FakeGstProvider } from '../../dist/compliance/fake.provider.js';
 import { DisabledGstProvider } from '../../dist/compliance/disabled.provider.js';
 

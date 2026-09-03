@@ -11,6 +11,38 @@ import type { EwbRequest, IrnRequest } from './gst.types';
  * the essential INV-01 v1.1 / EWB fields an RMC B2B dispatch needs.
  */
 
+/**
+ * Map a stored UOM to a valid NIC UQC (unit quantity code). The IRP / e-way
+ * portal validates `Unit` against a fixed UQC master, so a raw UOM like `m3`
+ * (the default on a concrete line) is rejected — cubic metres must be `CBM`.
+ * An already-valid UQC passes through unchanged; an unknown unit falls back to
+ * `OTH` (the portal's explicit catch-all) so a payload is never built with an
+ * invalid code. Pure, so it unit-tests in isolation.
+ */
+const NIC_UQC = new Set([
+  'BAG', 'BAL', 'BDL', 'BKL', 'BOU', 'BOX', 'BTL', 'BUN', 'CAN', 'CBM', 'CCM', 'CMS', 'CTN',
+  'DOZ', 'DRM', 'GGK', 'GMS', 'GRS', 'GYD', 'KGS', 'KLR', 'KME', 'LTR', 'MTR', 'MLT', 'MTS',
+  'NOS', 'PAC', 'PCS', 'PRS', 'QTL', 'ROL', 'SET', 'SQF', 'SQM', 'SQY', 'TBS', 'TGM', 'THD',
+  'TON', 'TUB', 'UGS', 'UNT', 'YDS', 'OTH',
+]);
+const UOM_TO_UQC: Record<string, string> = {
+  m3: 'CBM', 'm³': 'CBM', cbm: 'CBM', cum: 'CBM', cu: 'CBM', cubicmeter: 'CBM', cubicmetre: 'CBM',
+  kg: 'KGS', kgs: 'KGS', kilogram: 'KGS', kilograms: 'KGS',
+  ton: 'TON', tons: 'TON', tonne: 'TON', tonnes: 'TON', mt: 'TON', t: 'TON',
+  ltr: 'LTR', l: 'LTR', litre: 'LTR', liter: 'LTR', litres: 'LTR', liters: 'LTR',
+  bag: 'BAG', bags: 'BAG',
+  nos: 'NOS', no: 'NOS', number: 'NOS', unit: 'UNT', units: 'UNT', unt: 'UNT',
+  m2: 'SQM', 'm²': 'SQM', sqm: 'SQM', sft: 'SQF', sqft: 'SQF',
+  mtr: 'MTR', m: 'MTR', metre: 'MTR', meter: 'MTR', pcs: 'PCS', pc: 'PCS', piece: 'PCS', pieces: 'PCS',
+};
+export function toUqc(uom: string | null | undefined): string {
+  const raw = String(uom ?? '').trim();
+  if (!raw) return 'OTH';
+  if (NIC_UQC.has(raw.toUpperCase())) return raw.toUpperCase();
+  const key = raw.toLowerCase().replace(/[\s.]/g, '');
+  return UOM_TO_UQC[key] ?? 'OTH';
+}
+
 // ---- projections the execution service assembles from real rows ----
 
 export interface SellerParty {
@@ -311,7 +343,7 @@ function buildIrnItem(l: InvoiceLine): Record<string, unknown> {
     IsServc: l.isService ? 'Y' : 'N',
     HsnCd: l.hsn,
     Qty: qty,
-    Unit: l.unit ?? 'NOS',
+    Unit: toUqc(l.unit),
     UnitPrice: unitPrice,
     TotAmt: round2(qty * unitPrice), // gross (before discount)
     Discount: 0,
@@ -402,7 +434,7 @@ function buildEwbItem(l: InvoiceLine): Record<string, unknown> {
     productDesc: l.description ?? undefined,
     hsnCode: l.hsn ? Number(l.hsn) : undefined, // NIC EWB hsnCode is numeric
     quantity: round2(num(l.qty)),
-    qtyUnit: l.unit ?? 'NOS',
+    qtyUnit: toUqc(l.unit),
     taxableAmount: assess,
     sgstRate: inter ? 0 : round2(gstRate / 2),
     cgstRate: inter ? 0 : round2(gstRate / 2),

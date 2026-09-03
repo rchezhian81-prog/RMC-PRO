@@ -63,7 +63,7 @@ test('itemList maps each line with a numeric HSN and split rates (intra-state)',
   assert.equal(it.hsnCode, 38245010); // numeric
   assert.equal(typeof it.hsnCode, 'number');
   assert.equal(it.quantity, 50);
-  assert.equal(it.qtyUnit, 'CUM');
+  assert.equal(it.qtyUnit, 'CBM'); // 'CUM'/'m3' map to the NIC UQC for cubic metres
   assert.equal(it.taxableAmount, 250000);
   assert.equal(it.cgstRate, 9);
   assert.equal(it.sgstRate, 9);

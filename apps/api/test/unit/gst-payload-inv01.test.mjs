@@ -86,7 +86,7 @@ test('ItemList entry carries the full NIC-mandatory item shape', () => {
   assert.equal(it.IsServc, 'N'); // concrete is goods
   assert.equal(it.HsnCd, '38245010');
   assert.equal(it.Qty, 50);
-  assert.equal(it.Unit, 'CUM');
+  assert.equal(it.Unit, 'CBM'); // 'CUM'/'m3' map to the NIC UQC for cubic metres
   assert.equal(it.UnitPrice, 5000);
   assert.equal(it.TotAmt, 250000); // gross = qty × unitPrice
   assert.equal(it.Discount, 0);

@@ -147,6 +147,18 @@ const assess4 = await api('GET', `/orders/${o4.id}/credit-check`);
 ok('rate-contract credit requested amount is GST-inclusive', near(assess4.requestedAmount, 59000));
 ok('rate-contract credit requested amount is NOT the ex-GST value', Number(assess4.requestedAmount) > 50000);
 
+// Tier-B B5: a rate-contract item with a negative GST rate is rejected (mirrors
+// the quotation guard) — else it understates the order's GST-inclusive value and
+// the order can confirm on an understated exposure.
+let rcNegGst = false;
+try {
+  await api('POST', '/rate-contracts', {
+    customerId: customer.id, siteId: site?.id, validFrom: TODAY, validTo: TODAY,
+    items: [{ gradeId: grade.id, gradeLabel: gl, ratePerM3: 5000, gstRate: -18 }],
+  });
+} catch { rcNegGst = true; }
+ok('a rate-contract item with a negative GST rate is rejected', rcNegGst);
+
 // ---- A7: rate-contract conversion guards ----
 let rcUnmatched = false;
 try { await api('POST', `/order-drafts/from-rate-contract/${rc.id}`, { plantId: plant.id, orderDate: TODAY, lines: [{ gradeLabel: 'ZZ-NO-SUCH-GRADE', quantityM3: 5 }] }); } catch { rcUnmatched = true; }

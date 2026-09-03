@@ -110,6 +110,9 @@ export function billPaymentStatus(total: number, paid: number): 'unpaid' | 'part
 export function deriveGstSplit(taxAmount: number, interstate: boolean): { cgst: number; sgst: number; igst: number } {
   const tax = round2(Number(taxAmount) || 0);
   if (interstate) return { cgst: 0, sgst: 0, igst: tax };
-  const cgst = round2(tax / 2);
-  return { cgst, sgst: round2(tax - cgst), igst: 0 };
+  // GST requires CGST to equal SGST exactly (GSTR-2B/3B reconcile on equal
+  // halves), so both are the rounded half — not one half and "the remainder",
+  // which differ by a paise when the total tax has an odd number of paise.
+  const half = round2(tax / 2);
+  return { cgst: half, sgst: half, igst: 0 };
 }

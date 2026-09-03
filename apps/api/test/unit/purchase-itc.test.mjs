@@ -31,10 +31,11 @@ test('half-rupee tax splits cleanly', () => {
   assert.equal(s.sgst, 500.5);
 });
 
-test('odd-paise tax: the heads still sum to the tax exactly', () => {
+test('odd-paise tax: CGST equals SGST (GST requires equal halves)', () => {
   const s = deriveGstSplit(10.01, false);
-  assert.ok(Math.abs(s.cgst + s.sgst - 10.01) < 1e-9);
+  assert.equal(s.cgst, s.sgst); // equal halves are mandatory; the sum may differ by ≤1 paise
   assert.equal(s.igst, 0);
+  assert.ok(Math.abs(s.cgst + s.sgst - 10.01) <= 0.01);
 });
 
 test('zero tax splits to zero', () => {

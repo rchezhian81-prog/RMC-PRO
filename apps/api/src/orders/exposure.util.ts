@@ -131,6 +131,21 @@ export async function computeCustomerExposure(
   );
   const invoiceOutstanding = num(invoiceRows[0]?.total);
 
+  // A PENDING cheque allocated to invoices already reduced their outstanding_amount
+  // (creditInvoice runs at allocation time), so that money-in-transit leaks into
+  // exposure through invoiceOutstanding — bypassing the very pending-cheque
+  // exclusion applied to advances below. Add those allocations back until the
+  // cheque clears: a realised cheque is no longer 'pending', and a bounced one is
+  // 'reversed' with its outstanding already restored, so neither is added back.
+  const pendingAllocRows: Array<{ total: number | string | null }> = await m.query(
+    `SELECT COALESCE(SUM(pa.allocated_amount), 0)::float AS total
+       FROM payment_allocations pa
+       JOIN payments p ON p.id = pa.payment_id
+      WHERE p.customer_id = $1 AND p.status <> 'reversed' AND COALESCE(p.clearing_status, '') = 'pending'`,
+    [customerId],
+  );
+  const pendingChequeOutstanding = num(pendingAllocRows[0]?.total);
+
   // Unapplied advance credit — every non-reversed receipt's leftover. Auto-nets.
   // A PENDING cheque is money-in-transit, not cleared funds, so it must NOT free
   // up credit headroom until it clears (cheque bouncing is common) — exclude it.
@@ -142,5 +157,11 @@ export async function computeCustomerExposure(
   );
   const advanceCredit = num(advanceRows[0]?.total);
 
-  return assembleExposure({ openingBalance, unInvoicedOrderValue, invoiceOutstanding, advanceCredit, creditLimit });
+  return assembleExposure({
+    openingBalance,
+    unInvoicedOrderValue,
+    invoiceOutstanding: invoiceOutstanding + pendingChequeOutstanding,
+    advanceCredit,
+    creditLimit,
+  });
 }

@@ -288,6 +288,24 @@ await scenario('T6b a pending cheque advance does not net against exposure', asy
   must(near(exp.exposure, 0), `exposure must not net down for a pending cheque, got ${exp.exposure}`);
 });
 
+// T6c — a PENDING cheque ALLOCATED to an invoice must not free credit either.
+// The allocation reduces the invoice's outstanding, but exposure adds it back
+// until the cheque clears (Tier-B B3) — the allocation-path twin of T6b.
+await scenario('T6c a pending cheque allocated to an invoice does not free exposure', async () => {
+  const fx = await freshCustomer(0);
+  const o = await confirmReleased((await makeDraftOrder(fx)).id);
+  const { invoice, total } = await deliverAndIssue(fx, o);
+  const before = await exposureOf(fx.customer.id);
+  must(near(before.exposure, INCL_VAL), `invoice should create exposure of ${INCL_VAL}, got ${before.exposure}`);
+  await api('POST', '/receipts', {
+    customerId: fx.customer.id, amount: total, receiptDate: TODAY, paymentMode: 'cheque',
+    allocations: [{ invoiceId: invoice.id, amount: total }],
+  });
+  const after = await exposureOf(fx.customer.id);
+  must(near(after.invoiceOutstanding, INCL_VAL), `pending-cheque allocation must be added back to outstanding (${INCL_VAL}), got ${after.invoiceOutstanding}`);
+  must(near(after.exposure, INCL_VAL), `a pending cheque allocation must not free exposure — still ${INCL_VAL}, got ${after.exposure}`);
+});
+
 // ============================================================================
 // T7 — cancelling an order returns exposure to its pre-order value.
 // ============================================================================

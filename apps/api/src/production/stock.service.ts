@@ -151,6 +151,23 @@ export class StockService {
   }
 
   /**
+   * Serialize a check-then-apply on one material's balance for the current
+   * transaction. `balanceOf` + a negative-stock/availability decision + the
+   * later `applyDeltaWithin` are individually safe but not atomic together, so
+   * two concurrent decrements can each read the same balance, each pass the
+   * gate, and together drive stock negative past it. This takes a
+   * transaction-scoped Postgres advisory lock keyed on the resolved
+   * (plant, material) — it needs no existing balance row and releases on
+   * commit/rollback, so the second caller waits and then reads the updated
+   * balance. When locking several materials in one transaction, call this in a
+   * stable order (e.g. sorted materialId) to avoid deadlock.
+   */
+  async lockBalance(m: EntityManager, plantId: string | null, materialId: string): Promise<void> {
+    const resolved = await this.resolvePlant(m, plantId);
+    await m.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [resolved, materialId]);
+  }
+
+  /**
    * Apply a change to a material balance atomically. Uses a single
    * INSERT … ON CONFLICT keyed on the (tenant_id, plant_id, material_id) unique
    * index, so concurrent movements can never race into two rows or a duplicate.

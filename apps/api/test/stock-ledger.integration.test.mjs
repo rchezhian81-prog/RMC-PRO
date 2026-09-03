@@ -123,6 +123,21 @@ async function balanceRows() {
   ok('a within-stock decrease with no plant is applied, not sent to approval', decrease.pendingApproval === false);
   ok('the decrease posted against the real plant balance (40 - 10 = 30)', Number(decrease.balanceAfter) === 30);
 
+  // 3c) Concurrency (Tier-A A4): two decreases that INDIVIDUALLY fit (balance 30,
+  //     each -20) but TOGETHER exceed stock must not both apply. The advisory lock
+  //     in adjust() serializes them, so one posts (30→10) and the other is
+  //     re-evaluated against the lowered balance and routed to approval — stock is
+  //     never silently driven negative past the approval gate.
+  const [d1, d2] = await Promise.all([
+    adjSvc.adjust(TEST_TENANT_ID, { materialId: TEST_MATERIAL_ID, quantity: 20, direction: 'decrease' }, null),
+    adjSvc.adjust(TEST_TENANT_ID, { materialId: TEST_MATERIAL_ID, quantity: 20, direction: 'decrease' }, null),
+  ]);
+  const applied = [d1, d2].filter((r) => r.pendingApproval === false).length;
+  const queued = [d1, d2].filter((r) => r.pendingApproval === true).length;
+  ok('concurrent over-decrease: exactly one applies, one is queued for approval', applied === 1 && queued === 1);
+  const afterConc = await balanceRows();
+  ok('stock is never driven negative without approval (30 - 20 = 10)', Number(afterConc[0].current_quantity) === 10);
+
   // 4) The DB itself now refuses a null plant_id (defence in depth).
   let rejected = false;
   try {

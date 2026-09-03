@@ -157,6 +157,7 @@ export class BatchingIntegrationController {
 
 @Controller('stock')
 @RequireModule('inventory')
+@RequirePermissions('reports.view') // stock balances + ledger reads; setOpening keeps its route-level stock.adjust
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class StockController {
   constructor(private readonly service: StockService) {}
@@ -171,6 +172,7 @@ export class StockController {
 
 @Controller('production-reports')
 @RequireModule('production')
+@RequirePermissions('reports.view') // production summary/variance/reconciliation reports
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ProductionReportsController {
   constructor(private readonly service: ProductionReportsService) {}

@@ -204,7 +204,13 @@ export class OrdersService {
   confirm(tenantId: string, id: string, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Order);
-      const order = await repo.findOne({ where: { id } });
+      // Lock the order row so two concurrent confirms of THIS order serialize on
+      // it: the second blocks, then re-reads status='confirmed'/'credit_hold' and
+      // is rejected here. Without the lock both read 'draft' and the second
+      // re-stamps confirmedAt/confirmedBy, duplicates the status history, and can
+      // spuriously flip an already-confirmed order to credit_hold if a sibling
+      // order pushed exposure over the limit in between.
+      const order = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!order) throw notFound();
       if (order.orderStatus !== 'draft') {
         throw badReq(`Only a draft order can be confirmed (current: ${order.orderStatus})`);

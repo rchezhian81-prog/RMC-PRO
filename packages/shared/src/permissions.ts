@@ -129,6 +129,13 @@ export const PERMISSIONS = {
   // gate). Higher-trust than agents.manage — the person who signs off on a
   // prepared action, distinct from the person who tunes the substrate.
   AGENTS_APPROVE: 'agents.approve',
+  // Use the AI assistant surface (chat over the tenant's data, plain-language
+  // insights, message drafting, PO extraction). These call a paid LLM and read
+  // tenant operational data, so they are not open to every authenticated
+  // account — a device account (GPS/weighbridge) or a narrow custom role has no
+  // business spending model budget. Held by the owner/admin and the
+  // knowledge-worker roles by default; an owner can grant it to more roles.
+  AI_USE: 'ai.use',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -209,7 +216,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.EXPENSES_VIEW, P.EXPENSES_MANAGE,
     P.IMPORTS_VIEW, P.IMPORTS_RUN,
     P.DOCUMENT_CORRECTIONS_MANAGE,
-    P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
+    P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND, P.AI_USE,
   ],
 
   // Owns pricing: can approve what an executive drafts.
@@ -219,7 +226,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.QUOTATIONS_VIEW, P.QUOTATIONS_CREATE, P.QUOTATIONS_APPROVE, P.QUOTATION_DISCOUNT_APPROVE,
     P.RATE_CONTRACTS_VIEW, P.RATE_CONTRACTS_CREATE, P.RATE_CONTRACTS_APPROVE,
     P.ORDERS_VIEW, P.ORDERS_CREATE,
-    P.REPORTS_VIEW, P.WHATSAPP_SEND,
+    P.REPORTS_VIEW, P.WHATSAPP_SEND, P.AI_USE,
   ],
 
   // Drafts and follows up; cannot approve its own pricing.
@@ -228,7 +235,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.LEADS_VIEW, P.LEADS_MANAGE,
     P.QUOTATIONS_VIEW, P.QUOTATIONS_CREATE,
     P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW,
-    P.REPORTS_VIEW, P.WHATSAPP_SEND,
+    P.REPORTS_VIEW, P.WHATSAPP_SEND, P.AI_USE,
   ],
 
   [ROLE_KEYS.DISPATCH_MANAGER]: [
@@ -263,7 +270,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.FLEET_VIEW,
     P.EXPENSES_VIEW, P.EXPENSES_MANAGE, P.EXPENSES_POST,
     P.DOCUMENT_CORRECTIONS_MANAGE,
-    P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND,
+    P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND, P.AI_USE,
   ],
 
   [ROLE_KEYS.FLEET_MANAGER]: [

@@ -3,14 +3,21 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
+import { PermissionsGuard } from '../rbac/permissions.guard';
+import { RequirePermissions } from '../rbac/permissions.decorator';
 import { AnthropicService } from './anthropic.service';
 import { AssistantService, type ChatTurn } from './assistant.service';
 import { InsightsService } from './insights.service';
 import { DraftingService, type DraftKind } from './drafting.service';
 import { VisionService } from './vision.service';
 
+// The AI surface calls a paid LLM and reads this tenant's operational data, so
+// every route requires `ai.use` — it is not open to any authenticated account
+// (a GPS/weighbridge device account, a narrow custom role). The owner/admin and
+// the knowledge-worker roles hold it by default.
 @Controller('ai')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+@RequirePermissions('ai.use')
 export class AiController {
   constructor(
     private readonly ai: AnthropicService,

@@ -49,7 +49,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Overview',
     items: [
       { href: '/app/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={IS} /> },
-      { href: '/app/assistant', label: 'Assistant', icon: <Sparkles size={IS} />, ai: true },
+      { href: '/app/assistant', label: 'Assistant', icon: <Sparkles size={IS} />, ai: true, perm: 'ai.use' },
       // Ungated on purpose: everyone must be able to change their own password.
       { href: '/app/account', label: 'My Account', icon: <UserCog size={IS} /> },
     ],

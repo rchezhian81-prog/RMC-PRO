@@ -43,13 +43,19 @@ export class ErrorFilter implements ExceptionFilter {
     // A Postgres unique-violation arrives as a raw driver error; treat it as a
     // 409 (duplicate) rather than letting it fall through to a generic 500.
     const dup = uniqueViolation(exception);
+    // A value the caller sent that the column can't parse (a non-date in a date
+    // filter, a non-uuid plantId, an out-of-range number) also arrives raw; it's
+    // a bad request, not a server fault, so answer 400 instead of a generic 500.
+    const badInput = dup ? null : badInputViolation(exception);
     const status = dup
       ? HttpStatus.CONFLICT
-      : exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      : badInput
+        ? HttpStatus.BAD_REQUEST
+        : exception instanceof HttpException
+          ? exception.getStatus()
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const { code, message, fields } = dup ?? this.describe(exception, status);
+    const { code, message, fields } = dup ?? badInput ?? this.describe(exception, status);
 
     // Hand the code to the request logger (RequestContextMiddleware reads it off
     // res.locals when the response finishes), so the one log line for this
@@ -133,6 +139,23 @@ function uniqueViolation(exception: unknown): { code: string; message: string; f
   const pgCode = e?.driverError?.code ?? e?.code;
   if (pgCode !== '23505') return null;
   return { code: ERROR_CODES.DUPLICATE_RECORD, message: 'A record with the same code already exists.' };
+}
+
+/**
+ * Postgres data-exception SQLSTATEs raised when a value the CALLER supplied can't
+ * be parsed into the column/parameter type — a non-date in a `::date` filter
+ * (22007/22008), a non-uuid id (22P02, also bad int/numeric text), or a number
+ * out of range (22003). These reach the filter as a raw `QueryFailedError`, so
+ * without this a malformed query param becomes a generic 500 ("try again") and
+ * pages ops. It is a bad request: map it to a 400 the caller can act on. Mirrors
+ * `uniqueViolation` — the pg code is on the wrapped driver error or the error.
+ */
+const BAD_INPUT_PG_CODES = new Set(['22007', '22008', '22P02', '22003']);
+function badInputViolation(exception: unknown): { code: string; message: string; fields?: Record<string, string> } | null {
+  const e = exception as { code?: unknown; driverError?: { code?: unknown } };
+  const pgCode = e?.driverError?.code ?? e?.code;
+  if (typeof pgCode !== 'string' || !BAD_INPUT_PG_CODES.has(pgCode)) return null;
+  return { code: ERROR_CODES.VALIDATION_ERROR, message: 'One or more values are not in the expected format.' };
 }
 
 /** The code that best describes a refusal that did not name one itself. */

@@ -214,6 +214,19 @@ await j('PUT', `/roles/${adminRole.id}/permissions`, { permissionIds: [umPerm.id
 const adminCompany2 = (await j('GET', '/company', null, adminTok)).body?.data;
 ok('granting settings.manage reveals the bank account number', adminCompany2?.bankAccountNo === '5010012345678');
 
+// --- E1. Report endpoints answer 400 (not 500) on a malformed date/uuid param.
+// A non-date reaches the ::date cast and a non-uuid reaches a uuid column; both
+// used to surface as a generic 500. The global ErrorFilter now maps the Postgres
+// data-exception to a VALIDATION_ERROR. ---
+console.log('\n=== E1. report params: 400 not 500 on a bad date/uuid ===');
+// grade-margin filters in raw SQL ($1::date), so a non-date reaches the cast.
+const badDateReport = await j('GET', '/billing-reports/grade-margin?from=not-a-date', null, tok);
+ok('a malformed report date returns 400, not 500', badDateReport.status === 400);
+ok('the malformed-date report error is a VALIDATION_ERROR', badDateReport.body?.error?.code === 'VALIDATION_ERROR');
+// the wastage report filters by plant_id (a uuid column), so a non-uuid errors there.
+const badUuidReport = await j('GET', '/delivery-challans/report/wastage?plantId=not-a-uuid', null, tok);
+ok('a malformed plantId returns 400, not 500', badUuidReport.status === 400);
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

@@ -9,6 +9,19 @@ import type {
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 
+/**
+ * Server-owned columns a create/update payload may never set. `id`/`tenantId`
+ * decide identity and tenant ownership (a client-set `id` on create would make
+ * save() overwrite an existing row); the created/updated stamps and actor
+ * columns are set by the server, not the caller. Business fields are untouched.
+ */
+const SYSTEM_MANAGED_FIELDS = ['id', 'tenantId', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'] as const;
+function withoutSystemFields(dto: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...dto };
+  for (const k of SYSTEM_MANAGED_FIELDS) delete out[k];
+  return out;
+}
+
 export interface CrudOpts {
   orderBy?: string;
   required?: string[];
@@ -118,7 +131,11 @@ export class TenantCrudService<T extends ObjectLiteral> {
     this.validateWrite(dto);
     const saved = await this.db.runInTenant(tenantId, (m) => {
       const repo = m.getRepository(this.entity);
-      const entity = repo.create({ ...dto, tenantId } as unknown as DeepPartial<T>);
+      // Strip server-owned columns before create. A client-supplied `id` matching
+      // an existing row would make repo.save() UPDATE (overwrite) that row instead
+      // of inserting — a within-tenant row-overwrite via the create endpoint — and
+      // the created/updated timestamps and actor columns must not be forgeable.
+      const entity = repo.create({ ...withoutSystemFields(dto), tenantId } as unknown as DeepPartial<T>);
       return repo.save(entity);
     });
     await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_CREATE, saved, 'Created');
@@ -131,13 +148,13 @@ export class TenantCrudService<T extends ObjectLiteral> {
       const repo = m.getRepository(this.entity);
       const row = await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> });
       if (!row) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
-      const rest = { ...dto };
-      delete rest.tenantId;
-      delete rest.id;
+      // Same server-owned columns are dropped here: id/tenantId can't move the row
+      // to another tenant or key, and the created/updated stamps can't be forged.
+      const rest = withoutSystemFields(dto);
       await repo.update(id, rest as any);
       return (await repo.findOne({ where: { id } as unknown as FindOptionsWhere<T> })) as T;
     });
-    const changed = Object.keys(dto).filter((k) => k !== 'tenantId' && k !== 'id');
+    const changed = Object.keys(withoutSystemFields(dto));
     await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_UPDATE, result, 'Updated', { fields: changed });
     return result;
   }

@@ -227,6 +227,16 @@ ok('the malformed-date report error is a VALIDATION_ERROR', badDateReport.body?.
 const badUuidReport = await j('GET', '/delivery-challans/report/wastage?plantId=not-a-uuid', null, tok);
 ok('a malformed plantId returns 400, not 500', badUuidReport.status === 400);
 
+// --- C3b. A master create cannot set a system-managed column. A create carrying
+// an existing row's `id` used to make save() OVERWRITE that row; the id is now
+// stripped, so the server always inserts a fresh row with its own id. ---
+console.log('\n=== C3b. master create ignores server-owned fields (no id overwrite) ===');
+const c3a = (await j('POST', '/customers', { customerCode: `C3A-${Date.now()}`, customerName: 'C3 Original', creditLimit: 1000 }, tok)).body?.data;
+ok('baseline customer created', !!c3a?.id);
+const c3b = (await j('POST', '/customers', { id: c3a.id, customerCode: `C3B-${Date.now()}`, customerName: 'C3 New', creditLimit: 2000 }, tok)).body?.data;
+ok('a create ignores a client-supplied id (server assigns a fresh id)', !!c3b?.id && c3b.id !== c3a.id);
+ok('the id-collision create inserts a new row, it does not overwrite the first', c3b.customerName === 'C3 New');
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

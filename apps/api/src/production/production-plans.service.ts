@@ -76,11 +76,14 @@ export class ProductionPlansService {
       let gradeLabel: string | null = (dto.gradeLabel as string) ?? null;
       let plannedQty = Number(dto.plannedQuantityM3 ?? 0);
       let orderItemId = (dto.orderItemId as string) ?? null;
+      // The ordered quantity for this plan line, used to cap over-planning below.
+      let orderedQtyM3: number | null = null;
       if (orderItemId) {
         const oi = await m.getRepository(OrderItem).findOne({ where: { id: orderItemId, orderId } });
         if (!oi) throw badReq('Order line (orderItemId) not found for this order');
         gradeId = gradeId ?? oi.gradeId;
         gradeLabel = gradeLabel ?? oi.gradeLabel;
+        orderedQtyM3 = Number(oi.quantityM3);
         if (!plannedQty) plannedQty = Number(oi.quantityM3);
       } else if (!gradeId) {
         const lines = await m.getRepository(OrderItem).find({ where: { orderId } });
@@ -92,7 +95,24 @@ export class ProductionPlansService {
         orderItemId = first.id;
         gradeId = first.gradeId;
         gradeLabel = first.gradeLabel;
+        orderedQtyM3 = Number(first.quantityM3);
         if (!plannedQty) plannedQty = Number(first.quantityM3);
+      }
+      // A grade was named directly (no specific line): the ordered quantity is the
+      // sum of the order's lines for that grade.
+      if (orderedQtyM3 == null && gradeId) {
+        const rows: Array<{ sum: string | null }> = await m.query(
+          `SELECT COALESCE(SUM(quantity_m3), 0) AS sum FROM order_items WHERE order_id = $1 AND grade_id = $2`,
+          [orderId, gradeId],
+        );
+        orderedQtyM3 = Number(rows[0]?.sum ?? 0);
+      }
+      // A plan must never schedule more concrete than the order calls for — the
+      // planned quantity is what gets batched, and over-production beyond the
+      // order is pure waste. An explicit plannedQuantityM3 in the request was
+      // previously trusted unchecked, so a plan could enqueue any quantity.
+      if (orderedQtyM3 != null && orderedQtyM3 > 0 && plannedQty > orderedQtyM3 + 0.001) {
+        throw badReq(`Planned quantity ${plannedQty} m³ exceeds the ordered quantity ${orderedQtyM3} m³ for this grade`);
       }
       const repo = m.getRepository(ProductionPlanItem);
       await repo.save(

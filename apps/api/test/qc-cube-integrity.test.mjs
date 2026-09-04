@@ -66,5 +66,59 @@ const setC = await newSet();
 const assessed = await api('POST', `/qc/cube-sets/${setC.id}/results`, { results: [1, 2, 3].map((n) => result(n)) });
 ok('a valid 3-cube sample is accepted', assessed.acceptanceStatus === 'accepted');
 
+// ---- D3: a QC sample tied to a batch ticket must be for that ticket's grade ----
+// Recording, say, an M25 cube against an M40 batch would assess acceptance
+// against the wrong fck. Build a real confirmed M25 ticket, then prove a cube
+// set / slump test naming a DIFFERENT grade for that ticket is rejected, and the
+// matching grade is accepted.
+const lookup = async (path, field, value) => {
+  const list = await api('GET', `/${path}`);
+  return (Array.isArray(list) ? list : []).find((r) => String(r[field]) === value);
+};
+const grade = await lookup('concrete-grades', 'gradeCode', 'M25');
+const otherGrade = await lookup('concrete-grades', 'gradeCode', 'M30');
+const plant = await lookup('plants', 'plantCode', 'SRE-P1');
+const mix = await lookup('mix-designs', 'mixCode', 'M25-STD');
+const customer = await lookup('customers', 'customerCode', 'CUST-001');
+const site = await lookup('sites', 'siteCode', 'SITE-001');
+ok('D3 fixtures present (M25 + a second grade)', !!(grade && otherGrade && plant && mix && customer));
+
+let bq = await api('POST', '/quotations', {
+  customerId: customer.id, siteId: site?.id, quotationDate: TODAY,
+  items: [{ gradeId: grade.id, gradeLabel: grade.gradeName, estimatedQuantity: 6, ratePerM3: 4800 }],
+});
+await api('POST', `/quotations/${bq.id}/submit`);
+bq = await api('POST', `/quotations/${bq.id}/approve`);
+let bo = await api('POST', `/order-drafts/from-quotation/${bq.id}`, { plantId: plant.id, orderDate: TODAY });
+bo = await api('POST', `/orders/${bo.id}/confirm`);
+if (String(bo.orderStatus) === 'credit_hold') {
+  const holds = await api('GET', '/credit-holds?status=pending');
+  const h = (Array.isArray(holds) ? holds : []).find((x) => String(x.orderId) === String(bo.id));
+  if (h) await api('POST', `/credit-holds/${h.id}/approve`, { note: 'D3 test auto-release' });
+}
+const bqu = await api('POST', `/batch-queue/from-order/${bo.id}`);
+const bqid = (Array.isArray(bqu) ? bqu[0] : bqu)?.id;
+let bt = await api('POST', `/batch-tickets/from-queue/${bqid}`, { batchQuantityM3: 6, mixDesignId: mix.id });
+await api('POST', `/batch-tickets/${bt.id}/actuals`, {
+  materials: bt.materials.map((mm) => ({ id: mm.id, actualQuantity: Number(mm.correctedTargetQuantity ?? mm.targetQuantity) })),
+});
+bt = await api('POST', `/batch-tickets/${bt.id}/confirm`, {});
+ok('D3: confirmed M25 batch ticket built', bt.status === 'confirmed');
+
+let cubeMismatch = false, cubeMsg = '';
+try {
+  await api('POST', '/qc/cube-sets', { castDate: TODAY, batchTicketId: bt.id, gradeId: otherGrade.id, specimenCount: 3 });
+} catch (e) { cubeMismatch = true; cubeMsg = String(e.message || e); }
+ok('a cube set whose grade differs from its batch ticket is rejected', cubeMismatch && /does not match batch ticket/i.test(cubeMsg));
+
+const matchSet = await api('POST', '/qc/cube-sets', { castDate: TODAY, batchTicketId: bt.id, gradeId: grade.id, specimenCount: 3 });
+ok('a cube set with the matching grade is accepted', !!matchSet.id);
+
+let slumpMismatch = false;
+try {
+  await api('POST', '/qc/slump-tests', { batchTicketId: bt.id, gradeId: otherGrade.id, measuredSlumpMm: 100 });
+} catch { slumpMismatch = true; }
+ok('a slump test whose grade differs from its batch ticket is rejected', slumpMismatch);
+
 console.log(`\nQC CUBE INTEGRITY TEST: ${pass} passed ✓`);
 process.exit(0);

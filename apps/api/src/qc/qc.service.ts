@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { ConcreteGrade, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
+import { BatchTicket, ConcreteGrade, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { assessCubeSet } from './acceptance.util';
 
@@ -28,6 +28,23 @@ export class QcService {
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
   ) {}
+
+  /**
+   * A QC sample tied to a batch ticket must be for that ticket's grade. Recording,
+   * say, an M25 cube against an M40 batch would assess acceptance against the
+   * wrong characteristic strength (fck) — silently passing or failing the wrong
+   * concrete. When both a batch ticket and a grade are named, reject a mismatch.
+   * (No ticket named, or the ticket carries no grade → nothing to reconcile.)
+   */
+  private async assertGradeMatchesTicket(m: EntityManager, batchTicketId: string | null, gradeId: string | null) {
+    if (!batchTicketId || !gradeId) return;
+    const bt = await m.getRepository(BatchTicket).findOne({ where: { id: batchTicketId } });
+    if (bt && bt.gradeId && String(bt.gradeId) !== String(gradeId)) {
+      throw badReq(
+        `Grade does not match batch ticket ${bt.batchTicketNo} (grade ${bt.gradeLabel ?? bt.gradeId}).`,
+      );
+    }
+  }
 
   // ---- slump tests ----
 
@@ -80,6 +97,7 @@ export class QcService {
       // An inverted range (min > max) makes every value fail — reject it so a
       // typo doesn't silently mislabel good concrete as out-of-slump.
       if (min !== null && max !== null && min > max) throw badReq('Target min slump cannot exceed target max slump.');
+      await this.assertGradeMatchesTicket(m, str(dto.batchTicketId), str(dto.gradeId));
       const passed = (min === null || measured >= min) && (max === null || measured <= max);
       const repo = m.getRepository(QcSlumpTest);
       const row = await repo.save(
@@ -130,6 +148,7 @@ export class QcService {
         gradeLabel = gradeLabel ?? grade?.gradeName ?? grade?.gradeCode ?? null;
       }
       if (!(fck > 0)) throw badReq('Target strength (fck) is required — set it directly or pick a grade like M25');
+      await this.assertGradeMatchesTicket(m, str(dto.batchTicketId), gradeId);
 
       const setNo = await this.numbering.next(m, tenantId, 'qc_cube_set', 'CUBE-');
       const repo = m.getRepository(QcCubeSet);

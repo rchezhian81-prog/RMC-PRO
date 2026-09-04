@@ -90,6 +90,18 @@ export interface PushResult {
 }
 
 /**
+ * A push element the server can process without crashing: a real object that
+ * names its entity and carries a local id. entityName is required because it is
+ * written NOT NULL onto any conflict row; the rest is coerced defensively by
+ * applyPush. Anything else is reported as a per-record malformed outcome.
+ */
+function isValidPushRecord(r: unknown): r is PushRecord {
+  if (!r || typeof r !== 'object') return false;
+  const o = r as Record<string, unknown>;
+  return typeof o.entityName === 'string' && o.entityName.trim() !== '' && typeof o.localId === 'string';
+}
+
+/**
  * Offline sync (DEV-PLAN B14, Doc 8). Device registration, bootstrap snapshot,
  * cloud-issued number reservations, push (offline creates + optimistic-
  * concurrency conflict detection), pull (cloud changes since a token), and
@@ -213,6 +225,17 @@ export class SyncService {
       if (!device) throw notFound('Device not found');
       const results: PushResult[] = [];
       for (const r of records) {
+        // A malformed element (null, a non-object, or one missing entityName /
+        // localId) would otherwise null-deref or push a null entity_name into
+        // sync_conflicts — a 500 that fails the whole batch. Report it as a
+        // per-record outcome so one bad row can't take down a device's sync.
+        if (!isValidPushRecord(r)) {
+          const localId = r && typeof r === 'object' && typeof (r as { localId?: unknown }).localId === 'string'
+            ? (r as { localId: string }).localId
+            : '';
+          results.push({ localId, status: 'conflict', reason: 'malformed_record' });
+          continue;
+        }
         results.push(await this.applyPush(m, tenantId, device, r));
       }
       await m.getRepository(Device).update(deviceId, { lastSeenAt: new Date() });

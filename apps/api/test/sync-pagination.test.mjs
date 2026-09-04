@@ -120,6 +120,28 @@ async function apiPull(deviceId, since, token) {
   const after = await apiPull(engine.deviceId, engine.getMeta('sync_token'), token);
   ok('a drained cursor returns no more changes', after.counts.customers === 0 && after.hasMore === false);
 
+  // E3: a malformed push element (null, or an object missing entityName) must
+  // not 500 the whole batch — it comes back as a per-record malformed outcome,
+  // and a well-formed record in the same batch still applies.
+  const pushRes = await fetch(`${BASE}/api/v1/sync/push`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      deviceId: engine.deviceId,
+      records: [
+        null,
+        { localId: 'bad-1', operation: 'create' }, // no entityName
+        { entityName: 'delivery_challan', localId: 'good-1', operation: 'create', payload: { challanNo: `E3-${tag}`, quantityM3: 5 } },
+      ],
+    }),
+  });
+  ok('a batch with malformed records still succeeds (2xx, not 500)', pushRes.ok);
+  const pushBody = (await pushRes.json())?.data;
+  const byId = Object.fromEntries((pushBody?.results ?? []).map((r) => [r.localId, r]));
+  ok('the null record is reported malformed, not crashed', byId['']?.reason === 'malformed_record');
+  ok('the entityName-less record is reported malformed', byId['bad-1']?.reason === 'malformed_record');
+  ok('a valid record in the same batch still applies', byId['good-1']?.status === 'applied');
+
   engine.close();
   await owner.destroy();
   console.log(`\nSYNC PAGINATION TEST: ${pass} passed`);

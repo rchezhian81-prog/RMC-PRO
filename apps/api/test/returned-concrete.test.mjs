@@ -167,6 +167,26 @@ ok('rejected whole load appears as its own reason bucket', !!rejBucket);
 ok('rejected load adds its full batched quantity', near(Number(rejBucket.quantityM3) - beforeRejQty, REJECT_QTY));
 ok('rejected load valued at the order rate', near(Number(after.totalReturnCost) - beforeCost, REJECT_QTY * RATE)); // +5×4800 = 24000
 
+// ---- D1: a challan whose dispatch is rejected AFTER it was drafted cannot be
+// issued or delivered. Otherwise the load is billed (delivery register, as a
+// delivered challan) AND written off (wastage, as a rejected load) — the same
+// concrete counted twice. The operator must cancel the challan instead. ----
+const d1Dispatch = await confirmedDispatch(4);
+const d1Challan = await api('POST', `/delivery-challans/from-dispatch/${d1Dispatch.id}`, {});
+ok('challan drafted while its dispatch is still live', d1Challan.challanStatus === 'draft');
+// Load rejected on site after the challan was already drafted.
+await api('POST', `/dispatches/${d1Dispatch.id}/status`, { status: 'rejected' });
+ok('issuing a challan whose dispatch was rejected is blocked',
+  (await rawPost(`/delivery-challans/${d1Challan.id}/issue`)) === false);
+ok('delivering a challan whose dispatch was rejected is blocked',
+  (await rawPost(`/delivery-challans/${d1Challan.id}/deliver`, { receiverName: 'Site Engineer' })) === false);
+ok('the blocked challan stays draft (never enters the delivery register)',
+  (await api('GET', `/delivery-challans/${d1Challan.id}`)).challanStatus === 'draft');
+// The rejected load is counted once (wastage), not twice (wastage + delivered).
+const d1Reg = await api('GET', '/delivery-challans/report/delivery-register');
+ok('the rejected load never appears in the delivery register',
+  !(d1Reg.rows ?? []).some((r) => String(r.challanNo) === String(d1Challan.challanNo)));
+
 // ---- Concurrency (Tier-A A3): one quotation → at most one order, even on a
 // double-click. The quotation-row lock serializes concurrent converts. ----
 let cq = await api('POST', '/quotations', {

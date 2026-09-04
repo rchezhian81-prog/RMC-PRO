@@ -119,8 +119,35 @@ export class DeliveryChallanService {
     });
   }
 
+  /**
+   * A challan can only move forward while its dispatch is still live. If the load
+   * was rejected on site (or the dispatch cancelled) after the challan was
+   * drafted, issuing or delivering it would bill concrete that the wastage report
+   * already writes off as a rejected/cancelled load — the same load counted twice
+   * (delivered in the register AND wasted). Block it here; the operator cancels
+   * the challan instead. A challan with no dispatch (manual/ad-hoc) is unaffected.
+   */
+  private async assertDispatchLive(m: EntityManager, challan: DeliveryChallan) {
+    if (!challan.dispatchId) return;
+    const dispatch = await m.getRepository(Dispatch).findOne({ where: { id: challan.dispatchId } });
+    if (dispatch && ['rejected', 'cancelled'].includes(dispatch.dispatchStatus)) {
+      throw badReq(`Dispatch is ${dispatch.dispatchStatus} — cancel this challan instead of delivering it`);
+    }
+  }
+
   issue(tenantId: string, id: string, userId: string) {
-    return this.transition(tenantId, id, ['draft'], 'issued', userId);
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(DeliveryChallan);
+      const challan = await repo.findOne({ where: { id } });
+      if (!challan) throw notFound();
+      if (challan.challanStatus !== 'draft') {
+        throw badReq(`Cannot move challan from ${challan.challanStatus} to issued`);
+      }
+      await this.assertDispatchLive(m, challan);
+      await repo.update(id, { challanStatus: 'issued' });
+      await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, 'issued', userId, null);
+      return this.loadFull(m, id);
+    });
   }
 
   /**
@@ -137,6 +164,7 @@ export class DeliveryChallanService {
       if (challan.challanStatus !== 'issued') {
         throw badReq(`Cannot move challan from ${challan.challanStatus} to delivered`);
       }
+      await this.assertDispatchLive(m, challan);
 
       // Returned/short-load concrete. Prefer what the deliverer enters now (an
       // explicit 0 means "nothing came back"); when nothing is supplied, inherit

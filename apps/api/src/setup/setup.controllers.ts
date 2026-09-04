@@ -20,7 +20,7 @@ import {
 export class CompanyController {
   constructor(private readonly svc: CompanyService) {}
   @Get() get(@CurrentUser() u: AuthUser) {
-    return this.svc.get(u.tenantId as string);
+    return this.svc.get(u.tenantId as string, u.userId);
   }
   @Patch()
   @RequirePermissions('settings.manage')

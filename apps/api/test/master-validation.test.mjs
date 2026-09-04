@@ -190,6 +190,23 @@ await j('PUT', `/roles/${adminRole.id}/permissions`, { permissionIds: [umPerm.id
 const rvAllowed = await j('GET', '/billing-reports/outstanding', null, adminTok);
 ok('granting reports.view unblocks the receivables report', rvAllowed.status >= 200 && rvAllowed.status < 300);
 
+// --- C5. GET /company hides the bank account details from a user who cannot
+// manage settings. The profile stays open (name/GSTIN/address are needed all
+// over the app), but the account number / IFSC / branch are stripped. ---
+console.log('\n=== C5. bank details on GET /company are settings-manager only ===');
+await j('PATCH', '/company', { bankName: 'HDFC Bank', bankAccountNo: '5010012345678', bankIfsc: 'HDFC0001234', bankBranch: 'Salem' }, tok);
+const ownerCompany = (await j('GET', '/company', null, tok)).body?.data;
+ok('owner sees the bank account number and IFSC', ownerCompany?.bankAccountNo === '5010012345678' && ownerCompany?.bankIfsc === 'HDFC0001234');
+const adminCompany = (await j('GET', '/company', null, adminTok)).body?.data;
+ok('a user without settings.manage still sees the company name', !!adminCompany?.companyName);
+ok('...but not the bank account number', !adminCompany?.bankAccountNo);
+ok('...nor the IFSC', !adminCompany?.bankIfsc);
+const smPerm = catalog.find((p) => p.permissionKey === 'settings.manage');
+ok('the permission catalog exposes settings.manage', !!smPerm);
+await j('PUT', `/roles/${adminRole.id}/permissions`, { permissionIds: [umPerm.id, rvPerm.id, smPerm.id] }, tok);
+const adminCompany2 = (await j('GET', '/company', null, adminTok)).body?.data;
+ok('granting settings.manage reveals the bank account number', adminCompany2?.bankAccountNo === '5010012345678');
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

@@ -7,6 +7,7 @@ import {
 } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { loadUserAccess, isTenantOwner } from '../rbac/access';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { validateLogo } from './logo';
@@ -26,10 +27,22 @@ import {
 export class CompanyService {
   constructor(private readonly db: TenantDbService, private readonly audit: AuditService) {}
 
-  get(tenantId: string) {
+  async get(tenantId: string, userId: string) {
+    // The company profile (name, GSTIN, address, logo) is read all over the app,
+    // so the endpoint stays open to any tenant user. But the row also carries the
+    // bank account details that print on invoices — account number, IFSC, branch.
+    // Those are settings-manager territory; a general user (dispatch, production, a
+    // GPS/weighbridge device account) has no need to read them, so strip them
+    // unless the caller owns the tenant or can manage settings.
+    const access = await loadUserAccess(this.db, tenantId, userId);
+    const privileged = isTenantOwner(access) || access.permissions.includes('settings.manage');
     return this.db.runInTenant(tenantId, async (m) => {
       const rows = await m.getRepository(Company).find({ take: 1 });
-      return rows[0] ?? null;
+      const company = rows[0] ?? null;
+      if (company && !privileged) {
+        return { ...company, bankName: null, bankAccountNo: null, bankIfsc: null, bankBranch: null };
+      }
+      return company;
     });
   }
 

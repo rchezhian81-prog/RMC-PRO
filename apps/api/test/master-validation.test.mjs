@@ -10,7 +10,7 @@
  */
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { validateMasterFields, isValidGstin, isValidMobile, validateCompanyProfile, isValidPan, isValidEmail, validateSettingValue, SETTINGS_CATALOG } = require('@rmc/shared');
+const { validateMasterFields, isValidGstin, isValidMobile, validateCompanyProfile, isValidPan, isValidEmail, validateSettingValue, SETTINGS_CATALOG, isYmdDate } = require('@rmc/shared');
 
 let pass = 0;
 const ok = (name, cond) => { console.log((cond ? '  PASS ' : '  FAIL ') + name); if (!cond) throw new Error('FAIL: ' + name); pass++; };
@@ -47,6 +47,13 @@ ok('email "not-an-email" rejected', !isValidEmail('not-an-email'));
   ok('company bad phone flagged', !!e.phone);
 }
 ok('valid company profile has no errors', Object.keys(validateCompanyProfile({ gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F', pincode: '600001', email: 'ops@acme.co', phone: '9943602633' })).length === 0);
+
+// Date-param shape guard (E-tier: malformed dates must 400, not 500).
+ok('isYmdDate accepts a real date', isYmdDate('2026-09-04'));
+ok('isYmdDate rejects junk', !isYmdDate('not-a-date'));
+ok('isYmdDate rejects an impossible day', !isYmdDate('2026-02-30'));
+ok('isYmdDate rejects an out-of-range month', !isYmdDate('2026-13-01'));
+ok('isYmdDate rejects a non-string', !isYmdDate(20260904));
 
 // Settings catalogue: typed validation, catalogue-only.
 ok('settings catalogue is non-empty', Array.isArray(SETTINGS_CATALOG) && SETTINGS_CATALOG.length > 0);

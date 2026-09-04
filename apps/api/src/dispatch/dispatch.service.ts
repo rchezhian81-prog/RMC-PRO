@@ -9,6 +9,7 @@ import {
   Order,
   Vehicle,
 } from '../core/database/entities';
+import { isNonNegativeNumber } from '@rmc/shared';
 import { NumberingService } from '../sales/numbering.service';
 import { recordDeliveryHistory } from './delivery-history.util';
 import { buildCycleTimes } from './dispatch-cycle.util';
@@ -235,7 +236,21 @@ export class DispatchService {
       const stampField = STAMP[status];
       if (stampField) patch[stampField] = new Date();
       if (status === 'delayed' && dto.delayReason) patch.delayReason = dto.delayReason;
-      if (status === 'returning' && dto.returnQuantityM3 !== undefined) patch.returnQuantityM3 = String(dto.returnQuantityM3);
+      if (status === 'returning' && dto.returnQuantityM3 !== undefined) {
+        // A returned quantity feeds the wastage/return-billing valuation, so it
+        // must be a real non-negative number that can't exceed the load. Left
+        // unchecked, a non-numeric value hit the numeric column as a 500 and a
+        // negative value poisoned the wastage/return math downstream.
+        if (!isNonNegativeNumber(dto.returnQuantityM3)) {
+          throw badReq('returnQuantityM3 must be a non-negative number.');
+        }
+        const returnQty = Number(dto.returnQuantityM3);
+        const loaded = Number(dispatch.quantityM3) || 0;
+        if (loaded > 0 && returnQty > loaded) {
+          throw badReq(`Returned quantity ${returnQty} m³ cannot exceed the loaded quantity ${loaded} m³.`);
+        }
+        patch.returnQuantityM3 = String(returnQty);
+      }
       if (status === 'returning' && dto.returnReason) patch.returnReason = dto.returnReason;
       await repo.update(id, patch);
       await recordDeliveryHistory(m, tenantId, { dispatchId: id }, dispatch.dispatchStatus, status, userId, (dto.note as string) ?? null);

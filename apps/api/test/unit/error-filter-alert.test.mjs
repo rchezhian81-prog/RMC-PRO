@@ -84,6 +84,34 @@ for (const [name, exc, status, code] of cases) {
   });
 }
 
+// --- raw Postgres driver errors: bad caller input → 400, duplicate → 409 ---
+// These reach the filter as a QueryFailedError (pg code on driverError.code, or
+// on the error itself), not an HttpException. A value the caller can't have
+// meant (a non-date in a ::date filter, a non-uuid id, a numeric overflow) is a
+// 400, and a client error must NOT page ops.
+for (const [name, pgCode, onDriver] of [
+  ['a bad date (22007)', '22007', true],
+  ['a bad uuid/int text (22P02)', '22P02', true],
+  ['a numeric overflow (22003)', '22003', false],
+]) {
+  test(`envelope: ${name} → 400 VALIDATION_ERROR, no alert`, () => {
+    const alerter = spyAlerter();
+    const { host, res } = fakeHost();
+    const err = Object.assign(new Error('invalid input'), onDriver ? { driverError: { code: pgCode } } : { code: pgCode });
+    new ErrorFilter(alerter).catch(err, host);
+    assert.equal(res._status, 400);
+    assert.equal(res._json.error.code, 'VALIDATION_ERROR');
+    assert.equal(alerter.captured.length, 0);
+  });
+}
+
+test('envelope: a raw unique-violation (23505) still maps to 409', () => {
+  const { host, res } = fakeHost();
+  new ErrorFilter().catch(Object.assign(new Error('dup'), { code: '23505' }), host);
+  assert.equal(res._status, 409);
+  assert.equal(res._json.error.code, 'DUPLICATE_RECORD');
+});
+
 test('a thrown code + message is passed through untouched', () => {
   const { host, res } = fakeHost();
   new ErrorFilter().catch(

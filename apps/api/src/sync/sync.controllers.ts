@@ -52,7 +52,7 @@ export class SyncController {
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
-  @Get('summary') summary(@CurrentUser() u: AuthUser) { return this.service.summary(tid(u)); }
+  @Get('summary') summary(@CurrentUser() u: AuthUser) { return this.service.summary(tid(u), u.userId); }
   @Get('operations-funnel') funnel(@CurrentUser() u: AuthUser) { return this.service.operationsFunnel(tid(u)); }
 
   // Daily activity trend-lines (read-only). `days` clamps to 7–90 in the
@@ -62,7 +62,7 @@ export class DashboardController {
     @Query('days') days?: string,
     @Query('metrics') metrics?: string,
   ) {
-    return this.service.trends(tid(u), days ? Number(days) : 30, metrics ? metrics.split(',') : undefined);
+    return this.service.trends(tid(u), u.userId, days ? Number(days) : 30, metrics ? metrics.split(',') : undefined);
   }
 }
 

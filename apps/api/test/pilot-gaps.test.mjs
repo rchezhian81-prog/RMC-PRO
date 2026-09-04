@@ -123,6 +123,22 @@ try {
 } catch (e) { multiFailed = true; multiMsg = String(e.message || e); }
 ok('multi-line order without a specified line fails clearly (not silently)', multiFailed && /multiple lines/i.test(multiMsg));
 
+// ---- D2: a production-plan line cannot schedule more than the ordered qty ----
+// The planned quantity is what gets batched, so over-planning would produce (and
+// waste) concrete beyond what the order calls for. A single-line 6 m³ order:
+const qD2 = await approveQuotation([{ gradeId: grade.id, gradeLabel: gl, estimatedQuantity: 6, ratePerM3: 4800, gstRate: '18' }]);
+let oD2 = await api('POST', `/order-drafts/from-quotation/${qD2.id}`, { plantId: plant.id, orderDate: TODAY });
+oD2 = await confirmOrder(oD2.id);
+const planD2 = await api('POST', '/production-plans', { plantId: plant.id, planDate: TODAY, shift: 'day' });
+let overFailed = false, overMsg = '';
+try {
+  await api('POST', `/production-plans/${planD2.id}/items`, { orderId: oD2.id, plannedQuantityM3: 100 });
+} catch (e) { overFailed = true; overMsg = String(e.message || e); }
+ok('planning more than the ordered quantity is rejected', overFailed && /exceeds the ordered quantity/i.test(overMsg));
+// Planning up to the ordered quantity is still allowed.
+const planD2b = await api('POST', `/production-plans/${planD2.id}/items`, { orderId: oD2.id, plannedQuantityM3: 6 });
+ok('planning up to the ordered quantity is allowed', (planD2b.items || []).some((x) => String(x.orderId) === String(oD2.id)));
+
 // ---- BUG 2: credit exposure is GST-inclusive ----
 const q3 = await approveQuotation([{ gradeId: grade.id, gradeLabel: gl, estimatedQuantity: 10, ratePerM3: 5000, transportCharge: 0, gstRate: '18' }]);
 const o3 = await api('POST', `/order-drafts/from-quotation/${q3.id}`, { plantId: plant.id, orderDate: TODAY });

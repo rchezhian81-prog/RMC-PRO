@@ -94,9 +94,14 @@ export class GpsService {
     return this.db.runInTenant(tenantId, async (m: EntityManager) => {
       const dispatch = await m.getRepository(Dispatch).findOne({ where: { id: dispatchId } });
       if (!dispatch) throw notFound();
+      // A normal trip logs well under a thousand pings, but a stuck or misbehaving
+      // device could spam this one dispatch unbounded; cap the track read at a
+      // generous 5000 (oldest-first, so a real trip is never truncated) so one bad
+      // device can't turn a track fetch into an out-of-memory response.
       const pings = await m.getRepository(DispatchLocationPing).find({
         where: { dispatchId },
         order: { recordedAt: 'ASC', createdAt: 'ASC' },
+        take: 5000,
       });
       const summary = trackSummary(pings.map((p) => ({ latitude: p.latitude, longitude: p.longitude })));
       return { dispatchId, dispatchNo: dispatch.dispatchNo, status: dispatch.dispatchStatus, summary, pings };

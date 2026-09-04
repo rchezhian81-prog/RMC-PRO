@@ -370,7 +370,14 @@ export class SyncService {
   // ---- Conflicts --------------------------------------------------------
   listConflicts(tenantId: string, status?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(SyncConflict).find({ where: status ? { resolutionStatus: status } : {}, order: { createdAt: 'DESC' } }),
+      // sync_conflicts is append-only and grows with device sync activity; the
+      // screen shows the recent ones to resolve, so bound the read to the most
+      // recent 500 rather than loading the whole history into one response.
+      m.getRepository(SyncConflict).find({
+        where: status ? { resolutionStatus: status } : {},
+        order: { createdAt: 'DESC' },
+        take: 500,
+      }),
     );
   }
 

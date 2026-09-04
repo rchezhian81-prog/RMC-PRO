@@ -1,13 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { loadUserAccess, isTenantOwner } from '../rbac/access';
 
 /** Phase-1 cross-module dashboard KPIs + operations funnel (DEV-PLAN B15/F12). */
 @Injectable()
 export class DashboardService {
   constructor(private readonly db: TenantDbService) {}
 
-  summary(tenantId: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  /**
+   * The dashboard stays open to every tenant user (gating the whole thing is a
+   * blank front door), but its company-wide money figures — receivables and
+   * collections — are reporting data. Show them only to the owner or a holder of
+   * reports.view; everyone else still gets the operational dashboard.
+   */
+  private async canSeeFinancials(tenantId: string, userId: string): Promise<boolean> {
+    const access = await loadUserAccess(this.db, tenantId, userId);
+    return isTenantOwner(access) || access.permissions.includes('reports.view');
+  }
+
+  summary(tenantId: string, userId: string) {
+    return this.canSeeFinancials(tenantId, userId).then((canFinancials) =>
+    this.db.runInTenant(tenantId, async (m) => {
       const one = async (sql: string, params: unknown[] = []): Promise<number> => {
         const r = await m.query(sql, params);
         return Number(r[0]?.n ?? 0);
@@ -46,11 +59,18 @@ export class DashboardService {
         creditHoldsPending,
         production: { batchTicketsConfirmed: batchConfirmed },
         dispatch: { active: dispatchesActive, delivered: challansDelivered, uninvoiced: challansUninvoiced },
-        billing: { invoicesIssued, outstandingTotal, receiptsTotal },
+        // invoicesIssued is an operational count; the two money figures are
+        // reporting data, withheld (null, shape preserved) from a user who can't
+        // see reports.
+        billing: {
+          invoicesIssued,
+          outstandingTotal: canFinancials ? outstandingTotal : null,
+          receiptsTotal: canFinancials ? receiptsTotal : null,
+        },
         inventory: { lowStock, negativeStock },
         devices,
       };
-    });
+    }));
   }
 
   /** Order-to-cash funnel counts across modules. */
@@ -96,11 +116,14 @@ export class DashboardService {
   ];
   private static readonly TRENDS_DEFAULT = ['invoiced', 'collected', 'produced', 'dispatched'];
 
-  trends(tenantId: string, days = 30, metrics?: string[]) {
+  async trends(tenantId: string, userId: string, days = 30, metrics?: string[]) {
     const win = Math.min(90, Math.max(7, Math.floor(Number(days) || 30)));
     const wanted = new Set((metrics && metrics.length ? metrics : DashboardService.TRENDS_DEFAULT).map((k) => k.trim()));
     // Preserve catalogue order; ignore any unknown keys so a bad param can't error.
-    const defs = DashboardService.TRENDS.filter((d) => wanted.has(d.key));
+    // Money series (unit 'inr' — e.g. collections) are reporting data, dropped for
+    // a user who cannot see reports; the count series stay.
+    const canFinancials = await this.canSeeFinancials(tenantId, userId);
+    const defs = DashboardService.TRENDS.filter((d) => wanted.has(d.key) && (canFinancials || d.unit !== 'inr'));
     return this.db.runInTenant(tenantId, async (m) => {
       const [win_row] = await m.query(
         `SELECT to_char(current_date - ($1::int - 1), 'YYYY-MM-DD') AS from_d, to_char(current_date, 'YYYY-MM-DD') AS to_d`,

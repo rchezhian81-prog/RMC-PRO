@@ -237,6 +237,29 @@ const c3b = (await j('POST', '/customers', { id: c3a.id, customerCode: `C3B-${Da
 ok('a create ignores a client-supplied id (server assigns a fresh id)', !!c3b?.id && c3b.id !== c3a.id);
 ok('the id-collision create inserts a new row, it does not overwrite the first', c3b.customerName === 'C3 New');
 
+// --- C6. The dashboard stays open to every tenant user, but its company-wide
+// money figures (receivables, collections) are shown only to reports.view. A
+// fresh operational user (orders.view only, NO reports.view): ---
+console.log('\n=== C6. dashboard withholds company financials from a non-reports.view user ===');
+const opRole = (await j('POST', '/roles', { roleKey: 'qa_op_' + Date.now(), roleName: 'QA Op ' + Date.now() }, tok)).body?.data;
+const ovPerm = catalog.find((p) => p.permissionKey === 'orders.view');
+await j('PUT', `/roles/${opRole.id}/permissions`, { permissionIds: [ovPerm.id] }, tok);
+const opEmail = `qa-op-${Date.now()}@example.com`, opPw = 'Yankee7#Delta!9';
+await j('POST', '/users', { name: 'QA Op', email: opEmail, password: opPw, roleId: opRole.id }, tok);
+const opTok = (await j('POST', '/auth/login', { login: opEmail, password: opPw })).body?.data?.access_token;
+ok('an operational (no reports.view) user can log in', !!opTok);
+const opDash = (await j('GET', '/dashboard/summary', null, opTok)).body?.data;
+ok('the operational user still gets the dashboard (dispatch section present)', !!opDash?.dispatch);
+ok('the receivables total is withheld (null)', opDash?.billing?.outstandingTotal === null);
+ok('the collections total is withheld (null)', opDash?.billing?.receiptsTotal === null);
+const ownerDash = (await j('GET', '/dashboard/summary', null, tok)).body?.data;
+ok('the owner sees the receivables total', typeof ownerDash?.billing?.outstandingTotal === 'number');
+const opTrends = (await j('GET', '/dashboard/trends?metrics=invoiced,collected', null, opTok)).body?.data;
+ok('the money (collections) trend series is withheld from the operational user', !(opTrends?.series ?? []).some((s) => s.key === 'collected'));
+ok('the operational user still gets a count series (invoiced)', (opTrends?.series ?? []).some((s) => s.key === 'invoiced'));
+const ownerTrends = (await j('GET', '/dashboard/trends?metrics=invoiced,collected', null, tok)).body?.data;
+ok('the owner sees the collections trend series', (ownerTrends?.series ?? []).some((s) => s.key === 'collected'));
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

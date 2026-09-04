@@ -13,6 +13,7 @@ import {
   Site,
   Transporter,
 } from '../core/database/entities';
+import { isYmdDate } from '@rmc/shared';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import type { InvoicePdfData } from '../sales/pdf.service';
@@ -123,6 +124,12 @@ export class InvoiceService {
     if (!customerId) throw badReq('customerId required');
     const lines = Array.isArray(dto.lines) ? (dto.lines as Record<string, unknown>[]) : [];
     if (!lines.length) throw badReq('At least one challan line is required');
+    // Validate the dates up front: a malformed invoiceDate/dueDate would otherwise
+    // reach addDays()/toISOString() and throw a RangeError (a 500), or persist a
+    // junk date onto the invoice.
+    const badDate = (v: unknown) => v !== undefined && v !== null && v !== '' && !isYmdDate(v);
+    if (badDate(dto.invoiceDate)) throw badReq('invoiceDate must be a valid date (YYYY-MM-DD).');
+    if (badDate(dto.dueDate)) throw badReq('dueDate must be a valid date (YYYY-MM-DD).');
 
     return this.db.runInTenant(tenantId, async (m) => {
       const customer = await m.getRepository(Customer).findOne({ where: { id: customerId } });

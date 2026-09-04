@@ -31,6 +31,25 @@ export function isNonNegativeNumber(value: unknown): boolean {
   return Number.isFinite(n) && n >= 0;
 }
 
+/** A calendar date in strict YYYY-MM-DD form. */
+export const YMD_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * True for a real calendar date written as YYYY-MM-DD (e.g. "2026-09-04").
+ * Rejects junk ("abc"), impossible dates ("2026-02-30", "2026-13-01") and other
+ * shapes — so a bad date param is caught with a 400 before it reaches a
+ * `::date` SQL cast (a 500) or `new Date(...).toISOString()` (a RangeError 500).
+ */
+export function isYmdDate(value: unknown): boolean {
+  if (typeof value !== 'string' || !YMD_DATE_REGEX.test(value)) return false;
+  const y = Number(value.slice(0, 4));
+  const mth = Number(value.slice(5, 7));
+  const d = Number(value.slice(8, 10));
+  if (mth < 1 || mth > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, mth - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mth - 1 && dt.getUTCDate() === d;
+}
+
 /** Indian PIN code: exactly 6 digits, first digit 1–9 (0 never starts a PIN). */
 export const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
 

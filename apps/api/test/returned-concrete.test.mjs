@@ -187,6 +187,28 @@ const d1Reg = await api('GET', '/delivery-challans/report/delivery-register');
 ok('the rejected load never appears in the delivery register',
   !(d1Reg.rows ?? []).some((r) => String(r.challanNo) === String(d1Challan.challanNo)));
 
+// ---- E4: dispatch setStatus validates the returned quantity (400, not 500) ----
+// A returned quantity feeds the wastage/return-billing math, so a non-numeric or
+// negative value (previously stored raw → a 500 on the numeric column, or a
+// poisoned return) must be refused. Loaded → returning needs no prior transition.
+const e4Dispatch = await confirmedDispatch(6);
+ok('a non-numeric returnQuantityM3 is rejected',
+  (await rawPost(`/dispatches/${e4Dispatch.id}/status`, { status: 'returning', returnQuantityM3: 'abc' })) === false);
+ok('a negative returnQuantityM3 is rejected',
+  (await rawPost(`/dispatches/${e4Dispatch.id}/status`, { status: 'returning', returnQuantityM3: -3 })) === false);
+ok('a return exceeding the loaded quantity is rejected',
+  (await rawPost(`/dispatches/${e4Dispatch.id}/status`, { status: 'returning', returnQuantityM3: 999 })) === false);
+ok('a valid returnQuantityM3 is accepted',
+  (await rawPost(`/dispatches/${e4Dispatch.id}/status`, { status: 'returning', returnQuantityM3: 2 })) === true);
+
+// ---- E2: invoice fromChallans rejects a malformed date up front (400, not a
+// 500 RangeError from new Date(...).toISOString()). ----
+let e2msg = '';
+try {
+  await api('POST', '/invoices/from-challans', { customerId: customer.id, lines: [{ challanId: 'x' }], invoiceDate: 'not-a-date' });
+} catch (e) { e2msg = String(e.message || e); }
+ok('invoice fromChallans rejects a malformed invoiceDate with a clear 400', /invoiceDate must be a valid date/i.test(e2msg));
+
 // ---- Concurrency (Tier-A A3): one quotation → at most one order, even on a
 // double-click. The quotation-row lock serializes concurrent converts. ----
 let cq = await api('POST', '/quotations', {

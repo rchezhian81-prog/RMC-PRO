@@ -30,6 +30,25 @@ const STAMP: Record<string, keyof Dispatch> = {
 };
 
 /**
+ * Legal next statuses from each status (D5). The board advances along the trip
+ * chain waiting → loaded → left_plant → reached_site → pouring → completed; from
+ * any live leg it can also go to a side/exit state (delayed, returning, rejected,
+ * cancelled), and resume forward from `delayed`. This blocks the jumps that
+ * corrupt the cycle-time report — most importantly loaded → completed, which
+ * would stamp a pour-end with no pour-start — and any move backwards down the
+ * chain. completed / rejected / cancelled are terminal (guarded separately).
+ */
+const DISPATCH_TRANSITIONS: Record<string, readonly string[]> = {
+  waiting: ['loaded', 'left_plant', 'delayed', 'cancelled'],
+  loaded: ['left_plant', 'delayed', 'returning', 'rejected', 'cancelled'],
+  left_plant: ['reached_site', 'delayed', 'returning', 'rejected', 'cancelled'],
+  reached_site: ['pouring', 'delayed', 'returning', 'rejected', 'cancelled'],
+  pouring: ['completed', 'delayed', 'returning', 'rejected', 'cancelled'],
+  delayed: ['loaded', 'left_plant', 'reached_site', 'pouring', 'completed', 'returning', 'rejected', 'cancelled'],
+  returning: ['completed', 'delayed', 'rejected', 'cancelled'],
+};
+
+/**
  * Dispatch board (DEV-PLAN B10). Creates a dispatch from a CONFIRMED batch
  * ticket and moves it across the board, stamping the relevant timestamp and
  * recording delivery_status_history on each transition.
@@ -231,6 +250,11 @@ export class DispatchService {
       if (!dispatch) throw notFound();
       if (['completed', 'cancelled', 'rejected'].includes(dispatch.dispatchStatus)) {
         throw badReq(`Dispatch is ${dispatch.dispatchStatus} and cannot change`);
+      }
+      // Enforce the transition graph (D5). A no-op re-set to the current status is
+      // allowed (idempotent); every other move must be a legal edge.
+      if (status !== dispatch.dispatchStatus && !(DISPATCH_TRANSITIONS[dispatch.dispatchStatus] ?? []).includes(status)) {
+        throw badReq(`Cannot move a dispatch from ${dispatch.dispatchStatus} to ${status}`);
       }
       const patch: Record<string, unknown> = { dispatchStatus: status };
       const stampField = STAMP[status];

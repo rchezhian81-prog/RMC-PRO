@@ -94,6 +94,14 @@ await api('POST', `/batch-tickets/${ticket.id}/actuals`, {
 ticket = await api('POST', `/batch-tickets/${ticket.id}/confirm`, {});
 ok('batch ticket confirmed', ticket.status === 'confirmed');
 
+// ---- D4: a confirmed batch ticket is FINAL. Its stock was already consumed on
+// confirm, so it can't be cancelled/reopened by a status flip — undoing it is a
+// deliberate stock adjustment, not a silent reversal. ----
+ok('a confirmed batch ticket cannot be cancelled/reopened',
+  (await rawPost(`/batch-tickets/${ticket.id}/cancel`, {})) === false);
+ok('the ticket is still confirmed after the refused cancel',
+  (await api('GET', `/batch-tickets/${ticket.id}`)).status === 'confirmed');
+
 // ---- Dispatch → challan → issue ----
 const dispatch = await api('POST', `/dispatches/from-batch-ticket/${ticket.id}`, {});
 let challan = await api('POST', `/delivery-challans/from-dispatch/${dispatch.id}`, {});
@@ -208,6 +216,19 @@ try {
   await api('POST', '/invoices/from-challans', { customerId: customer.id, lines: [{ challanId: 'x' }], invoiceDate: 'not-a-date' });
 } catch (e) { e2msg = String(e.message || e); }
 ok('invoice fromChallans rejects a malformed invoiceDate with a clear 400', /invoiceDate must be a valid date/i.test(e2msg));
+
+// ---- D5: the dispatch board enforces a transition graph. loaded → completed
+// would stamp a pour-end with no pour-start (corrupting cycle times); only the
+// next chain step (or a side/exit state) is legal, and no move goes backward. ----
+const d5 = await confirmedDispatch(6);
+ok('a bogus forward jump (loaded → completed) is rejected',
+  (await rawPost(`/dispatches/${d5.id}/status`, { status: 'completed' })) === false);
+ok('the next chain step (loaded → left_plant) is accepted',
+  (await rawPost(`/dispatches/${d5.id}/status`, { status: 'left_plant' })) === true);
+ok('a backward move (left_plant → loaded) is rejected',
+  (await rawPost(`/dispatches/${d5.id}/status`, { status: 'loaded' })) === false);
+ok('a side-state (left_plant → delayed) is allowed',
+  (await rawPost(`/dispatches/${d5.id}/status`, { status: 'delayed' })) === true);
 
 // ---- Concurrency (Tier-A A3): one quotation → at most one order, even on a
 // double-click. The quotation-row lock serializes concurrent converts. ----

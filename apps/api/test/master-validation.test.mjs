@@ -260,6 +260,17 @@ ok('the operational user still gets a count series (invoiced)', (opTrends?.serie
 const ownerTrends = (await j('GET', '/dashboard/trends?metrics=invoiced,collected', null, tok)).body?.data;
 ok('the owner sees the collections trend series', (ownerTrends?.series ?? []).some((s) => s.key === 'collected'));
 
+// --- C2. The AI surface (paid LLM over tenant data) requires ai.use. The
+// operational user (orders.view only) is refused; granting ai.use opens it. ---
+console.log('\n=== C2. AI endpoints require ai.use ===');
+const aiBlocked = await j('GET', '/ai/status', null, opTok);
+ok('a user without ai.use is blocked from the AI surface (403)', aiBlocked.status === 403);
+const aiPerm = catalog.find((p) => p.permissionKey === 'ai.use');
+ok('the permission catalog exposes ai.use', !!aiPerm);
+await j('PUT', `/roles/${opRole.id}/permissions`, { permissionIds: [ovPerm.id, aiPerm.id] }, tok);
+const aiAllowed = await j('GET', '/ai/status', null, opTok);
+ok('granting ai.use opens the AI surface', aiAllowed.status >= 200 && aiAllowed.status < 300);
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

@@ -22,7 +22,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { DataSource } = require('typeorm');
 const { StockService } = require('../dist/production/stock.service.js');
-const { StockAdjustmentService } = require('../dist/inventory/stock-adjustment.service.js');
+const { StockAdjustmentService, NegativeStockService } = require('../dist/inventory/stock-adjustment.service.js');
 const { ENTITIES } = require('../dist/core/database/entity-list.js');
 
 const {
@@ -137,6 +137,30 @@ async function balanceRows() {
   ok('concurrent over-decrease: exactly one applies, one is queued for approval', applied === 1 && queued === 1);
   const afterConc = await balanceRows();
   ok('stock is never driven negative without approval (30 - 20 = 10)', Number(afterConc[0].current_quantity) === 10);
+
+  // 3d) Concurrency: two APPROVES of the same negative-stock request must post
+  //     the issue exactly once. Without a row lock both read approvalStatus
+  //     'pending', both call applyDeltaWithin (an atomic decrement), and stock is
+  //     driven negative by twice the approved quantity; the pessimistic_write lock
+  //     on the request row serializes them so the loser reads 'approved' and is
+  //     refused. (balance here is 10 after 3c.)
+  const negSvc = new NegativeStockService(db, svc, { record: async () => {} });
+  const pend = await adjSvc.adjust(
+    TEST_TENANT_ID,
+    { materialId: TEST_MATERIAL_ID, quantity: 20, direction: 'decrease' },
+    null,
+  );
+  ok('a decrease beyond stock raises a pending negative-stock request', pend.pendingApproval === true && !!pend.request?.id);
+  const balBeforeApprove = Number((await balanceRows())[0].current_quantity); // still 10 — raising a request applies nothing
+  const settled = await Promise.allSettled([
+    negSvc.approve(TEST_TENANT_ID, pend.request.id, null, 'first'),
+    negSvc.approve(TEST_TENANT_ID, pend.request.id, null, 'second'),
+  ]);
+  const approvedOk = settled.filter((r) => r.status === 'fulfilled').length;
+  const refused = settled.filter((r) => r.status === 'rejected').length;
+  ok('concurrent approve of one request: exactly one succeeds, one is refused', approvedOk === 1 && refused === 1);
+  const balAfterApprove = Number((await balanceRows())[0].current_quantity);
+  ok('the approved issue posts exactly once (10 - 20 = -10, not -30)', balAfterApprove === balBeforeApprove - 20);
 
   // 4) The DB itself now refuses a null plant_id (defence in depth).
   let rejected = false;

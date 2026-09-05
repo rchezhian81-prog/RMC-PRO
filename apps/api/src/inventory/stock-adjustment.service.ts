@@ -103,7 +103,13 @@ export class NegativeStockService {
   async approve(tenantId: string, id: string, userId: string, remarks?: string) {
     const { result, label, qty } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(NegativeStockRequest);
-      const req = await repo.findOne({ where: { id } });
+      // Lock the request row so the pending-state check below is not a TOCTOU:
+      // without it two concurrent approves both read 'pending' and both post the
+      // issue via applyDeltaWithin (an atomic decrement), driving stock negative
+      // by twice the approved quantity. The lock serializes them — the loser then
+      // reads 'approved' and is refused. Mirrors the pessimistic_write used on
+      // every sibling state transition (material-inward, batch-tickets, GRN).
+      const req = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!req) throw notFound();
       if (req.approvalStatus !== 'pending') throw badReq(`Request already ${req.approvalStatus}`);
       if (!req.materialId) throw badReq('Request has no material');

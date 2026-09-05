@@ -105,7 +105,10 @@ export function billPaymentStatus(total: number, paid: number): 'unpaid' | 'part
  * Split a bill's total GST into the heads an ITC register needs: CGST + SGST for
  * an intra-state purchase, or IGST for an inter-state one. Derived from the
  * stored tax amount and the supplier-vs-buyer state test, so no extra columns
- * are needed; SGST takes the rounding remainder so cgst + sgst === tax exactly.
+ * are needed. CGST and SGST are each the rounded half — GST requires the two to
+ * be equal (GSTR-2B/3B reconcile on equal halves) — so when the total tax has an
+ * odd number of paise their sum is the tax plus one paise: the accepted trade-off
+ * for exact-equal halves, not one half and "the remainder".
  */
 export function deriveGstSplit(taxAmount: number, interstate: boolean): { cgst: number; sgst: number; igst: number } {
   const tax = round2(Number(taxAmount) || 0);

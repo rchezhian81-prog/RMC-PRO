@@ -92,6 +92,11 @@ export class GrnService {
         // Default accepted to received when the QC hasn't rejected anything.
         const accepted = line.acceptedQuantity !== undefined ? num(line.acceptedQuantity) : received;
         if (accepted < 0 || accepted > received + 0.0005) throw badReq('Accepted quantity must be between 0 and received');
+        // The GRN rate is informational for stock (the ledger moves quantity, not
+        // value), but a bill auto-populated from this GRN copies the rate straight
+        // in — so a negative here seeds a negative-taxable payable. Refuse it.
+        const rate = num(line.rate);
+        if (rate < 0) throw badReq('Each line rate must be zero or more');
 
         // Cap the received quantity at the PO line's ordered amount (plus a
         // small over-delivery tolerance), counting what earlier posted GRNs and
@@ -128,7 +133,7 @@ export class GrnService {
             purchaseOrderItemId: (line.purchaseOrderItemId as string) || null,
             materialId, materialLabel, uom,
             receivedQuantity: String(received), acceptedQuantity: String(accepted),
-            rate: String(num(line.rate)), remarks: (line.remarks as string) ?? null,
+            rate: String(rate), remarks: (line.remarks as string) ?? null,
           }),
         );
       }

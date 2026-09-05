@@ -140,7 +140,10 @@ export class ReceiptService {
       for (const a of allocations) {
         const invoice = await invoiceRepo.findOne({ where: { id: a.invoiceId }, lock: { mode: 'pessimistic_write' } });
         if (invoice) {
-          const paid = round2(num(invoice.amountPaid) - num(a.allocatedAmount));
+          // Floor at 0 so a data anomaly (amountPaid already below this allocation)
+          // can't push outstanding above the invoice total on reversal — the
+          // vendor-payment reversal clamps the same way.
+          const paid = Math.max(0, round2(num(invoice.amountPaid) - num(a.allocatedAmount)));
           const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
           await invoiceRepo.update(invoice.id, {
             amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,

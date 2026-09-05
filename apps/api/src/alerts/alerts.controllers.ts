@@ -14,7 +14,7 @@ export class AlertsController {
   constructor(private readonly service: AlertsService) {}
 
   @Get() list(@CurrentUser() u: AuthUser) {
-    return this.service.list(tid(u));
+    return this.service.list(tid(u), u.userId);
   }
 }
 

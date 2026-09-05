@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { loadUserAccess, isTenantOwner } from '../rbac/access';
 import { fleetComplianceAlerts, type FleetDoc } from './fleet-compliance.util';
 import { fleetMaintenanceAlerts, type MaintenanceDueRow } from './fleet-maintenance.util';
 import { concreteSlaAlerts, CONCRETE_SLA_MINUTES, type OnRoadSlaRow } from './concrete-sla.util';
@@ -38,7 +39,22 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 export class AlertsService {
   constructor(private readonly db: TenantDbService) {}
 
-  async list(tenantId: string): Promise<{ alerts: Alert[]; generatedAt: string }> {
+  /**
+   * The money/credit alerts below — receivables aging, credit-limit exposure,
+   * and this month's invoiced revenue + total outstanding — are reporting data,
+   * shown only to the tenant owner or a holder of reports.view. This mirrors the
+   * dashboard financials gate (C6): everyone else still gets every operational
+   * alert (stock, fleet, QC, SLA, queue). A system caller with no userId — the
+   * digest worker, which pushes to the owner's ops channel — sees everything.
+   */
+  private async canSeeFinancials(tenantId: string, userId?: string): Promise<boolean> {
+    if (!userId) return true;
+    const access = await loadUserAccess(this.db, tenantId, userId);
+    return isTenantOwner(access) || access.permissions.includes('reports.view');
+  }
+
+  async list(tenantId: string, userId?: string): Promise<{ alerts: Alert[]; generatedAt: string }> {
+    const canFinancials = await this.canSeeFinancials(tenantId, userId);
     const alerts = await this.db.runInTenant(tenantId, async (m) => {
       const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> =>
         m.query(sql, params) as Promise<T[]>;
@@ -175,7 +191,7 @@ export class AlertsService {
 
       // ---- Money at risk -----------------------------------------------
       const over90 = num(r.over90_amount);
-      if (over90 > 0) {
+      if (canFinancials && over90 > 0) {
         out.push({
           key: 'receivables_over_90',
           severity: 'danger',
@@ -188,7 +204,7 @@ export class AlertsService {
       }
 
       const pastDue = num(r.past_due_amount);
-      if (pastDue > 0) {
+      if (canFinancials && pastDue > 0) {
         out.push({
           key: 'invoices_past_due',
           severity: 'warning',
@@ -203,7 +219,7 @@ export class AlertsService {
       // ---- Concrete on the road past its working life -------------------
       out.push(...concreteSlaAlerts(roadSla[0], CONCRETE_SLA_MINUTES));
 
-      if (overLimit.length) {
+      if (canFinancials && overLimit.length) {
         const worst = overLimit[0] as Record<string, unknown>;
         const excess = num(worst.outstanding) - num(worst.credit_limit);
         out.push({
@@ -339,19 +355,21 @@ export class AlertsService {
         });
       }
 
-      // ---- Always-on context ---------------------------------------------
-      out.push({
-        key: 'sales_this_month',
-        severity: 'info',
-        title: `${inr(mo.amount)} invoiced this month`,
-        detail:
-          num(mo.count) > 0
-            ? `Across ${plural(num(mo.count), 'issued invoice')}. Total receivable outstanding: ${inr(r.total_amount)}.`
-            : 'No invoices issued yet this month.',
-        href: '/app/billing/reports',
-        count: num(mo.count),
-        amount: num(mo.amount),
-      });
+      // ---- Always-on context (money figure — reports.view / owner only) ----
+      if (canFinancials) {
+        out.push({
+          key: 'sales_this_month',
+          severity: 'info',
+          title: `${inr(mo.amount)} invoiced this month`,
+          detail:
+            num(mo.count) > 0
+              ? `Across ${plural(num(mo.count), 'issued invoice')}. Total receivable outstanding: ${inr(r.total_amount)}.`
+              : 'No invoices issued yet this month.',
+          href: '/app/billing/reports',
+          count: num(mo.count),
+          amount: num(mo.amount),
+        });
+      }
 
       return out;
     });

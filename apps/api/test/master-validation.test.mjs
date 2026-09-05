@@ -271,6 +271,19 @@ await j('PUT', `/roles/${opRole.id}/permissions`, { permissionIds: [ovPerm.id, a
 const aiAllowed = await j('GET', '/ai/status', null, opTok);
 ok('granting ai.use opens the AI surface', aiAllowed.status >= 200 && aiAllowed.status < 300);
 
+// --- I#1. GET /alerts withholds the money/credit alerts from a non-reports.view
+// user (mirrors C6). The always-on "invoiced this month" alert is a money figure,
+// so the owner sees it; the operational user (orders.view + ai.use, still no
+// reports.view) sees none of the financial alert keys but still gets the endpoint
+// and any operational alerts. ---
+console.log('\n=== I#1. alerts withhold financial figures from a non-reports.view user ===');
+const FIN_ALERT_KEYS = ['receivables_over_90', 'invoices_past_due', 'credit_limit_breached', 'sales_this_month'];
+const ownerAlerts = (await j('GET', '/alerts', null, tok)).body?.data?.alerts ?? [];
+ok('the owner sees the month-revenue (financial) alert', ownerAlerts.some((a) => a.key === 'sales_this_month'));
+const opAlerts = (await j('GET', '/alerts', null, opTok)).body?.data?.alerts ?? [];
+ok('a non-reports.view user still gets the alerts endpoint', Array.isArray(opAlerts));
+ok('a non-reports.view user sees NO financial alerts', !opAlerts.some((a) => FIN_ALERT_KEYS.includes(a.key)));
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

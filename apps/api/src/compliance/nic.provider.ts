@@ -295,6 +295,13 @@ export class NicGstProvider implements GstComplianceProvider {
           ...(authToken ? { AuthToken: authToken } : {}),
         },
         body: JSON.stringify(body),
+        // Bound the call. Without a signal a stalled portal socket hangs on
+        // undici's ~300s default, and because the GST worker drains jobs serially
+        // behind an overlap guard, one hung call blocks IRN/e-way for EVERY tenant
+        // (and hangs the operator's inline execute). The abort is caught just below
+        // and mapped to the transient PORTAL_UNAVAILABLE the retry policy already
+        // backs off on. Budget is configurable via GST_IRP_TIMEOUT_MS (default 30s).
+        signal: AbortSignal.timeout(this.timeoutMs()),
       });
     } catch (e) {
       throw new GstProviderError('PORTAL_UNAVAILABLE', `portal unreachable: ${e instanceof Error ? e.message : String(e)}`);
@@ -310,6 +317,12 @@ export class NicGstProvider implements GstComplianceProvider {
   private maxRetries(): number {
     const n = Number(process.env.GST_IRP_MAX_RETRIES ?? 2);
     return Number.isFinite(n) && n >= 0 ? n : 2;
+  }
+
+  /** Per-request wall-clock budget for a portal call (ms). Default 30s. */
+  private timeoutMs(): number {
+    const n = Number(process.env.GST_IRP_TIMEOUT_MS ?? 30_000);
+    return Number.isFinite(n) && n > 0 ? n : 30_000;
   }
 
   private resolveTenantCreds(tenantId: string, gstin: string): Promise<{ username: string; password: string }> {

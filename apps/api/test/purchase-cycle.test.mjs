@@ -42,6 +42,17 @@ async function rawPost(path) {
   const data = await res.json().catch(() => null);
   return res.ok && data?.success === true;
 }
+// Like rawPost but carries a body and returns { ok, data } — for racing two
+// creates and inspecting each result (e.g. their 3-way match status).
+async function rawPostBody(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+    body: JSON.stringify(body),
+  });
+  const j = await res.json().catch(() => null);
+  return { ok: res.ok && j?.success === true, data: j?.data ?? null };
+}
 
 if (!LOGIN || !PASSWORD || !MATERIAL_ID) {
   console.log('(skipping purchase-cycle — LOGIN/RMC_PASSWORD/TEST_MATERIAL_ID not set)');
@@ -109,6 +120,17 @@ try {
   overReceiveBlocked = true;
 }
 ok('GRN over-receiving beyond the PO is blocked', overReceiveBlocked);
+
+// A GRN line with a negative rate is rejected — the rate copies into a bill
+// auto-populated from the GRN, so it must not seed a negative-taxable payable.
+let grnNegRateBlocked = false;
+try {
+  await api('POST', '/goods-receipts', {
+    plantId: PLANT_ID, receiptDate: new Date().toISOString().slice(0, 10),
+    lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, receivedQuantity: 1, acceptedQuantity: 1, rate: -500 }],
+  });
+} catch { grnNegRateBlocked = true; }
+ok('a GRN line with a negative rate is rejected', grnNegRateBlocked);
 
 // ---- C2. A row lock serializes concurrent posts (Tier-A A1/A2): only one wins,
 // stock moves exactly once. Uses an ad-hoc GRN (no PO) so the PO-line lock path is
@@ -199,6 +221,51 @@ ok('a second bill for the already-billed line fails the match', second.matchStat
 let secondApproveBlocked = false;
 try { await api('POST', `/vendor-bills/${second.id}/approve`); } catch { secondApproveBlocked = true; }
 ok('the double-billing bill cannot be approved without override', secondApproveBlocked);
+
+// ---- G2. Negative-rate guards (M#1): a vendor-bill line with a negative rate
+//          or a negative GST rate is rejected — either would understate or
+//          reverse the payable and distort the ITC it books. ----
+let billNegRateBlocked = false;
+try {
+  await api('POST', '/vendor-bills', {
+    supplierId: supplier.id, supplierBillNo: 'VINV-NEGRATE',
+    lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: 1, rate: -100, gstRate: 18 }],
+  });
+} catch { billNegRateBlocked = true; }
+ok('a vendor-bill line with a negative rate is rejected', billNegRateBlocked);
+let billNegGstBlocked = false;
+try {
+  await api('POST', '/vendor-bills', {
+    supplierId: supplier.id, supplierBillNo: 'VINV-NEGGST',
+    lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: 1, rate: 100, gstRate: -18 }],
+  });
+} catch { billNegGstBlocked = true; }
+ok('a vendor-bill line with a negative GST rate is rejected', billNegGstBlocked);
+
+// ---- G3. Concurrent double-billing (C#3): two bills created AT ONCE against the
+//          same fully-received PO line must not BOTH pass the 3-way match. The
+//          PO-line lock serializes them, so the loser reads the winner's billed
+//          quantity and matches over-tolerance; without the lock both read the
+//          same stale "billed so far" (0) and both match, doubling the payable. ----
+let po3 = await api('POST', '/purchase-orders', {
+  supplierId: supplier.id, plantId: PLANT_ID, orderDate: new Date().toISOString().slice(0, 10),
+  lines: [{ materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: QTY, rate: RATE, gstRate: 18 }],
+});
+po3 = await api('POST', `/purchase-orders/${po3.id}/issue`);
+const po3ItemId = po3.items[0].id;
+const g3 = await api('POST', '/goods-receipts', {
+  purchaseOrderId: po3.id, plantId: PLANT_ID,
+  lines: [{ purchaseOrderItemId: po3ItemId, materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, receivedQuantity: QTY, acceptedQuantity: QTY, rate: RATE }],
+});
+await api('POST', `/goods-receipts/${g3.id}/post`);
+const raceLine = { purchaseOrderItemId: po3ItemId, materialId: MATERIAL_ID, materialLabel: label, uom: material.uom, quantity: QTY, rate: RATE, gstRate: 18 };
+const [rb1, rb2] = await Promise.all([
+  rawPostBody('/vendor-bills', { supplierId: supplier.id, purchaseOrderId: po3.id, supplierBillNo: 'VRACE-1', lines: [raceLine] }),
+  rawPostBody('/vendor-bills', { supplierId: supplier.id, purchaseOrderId: po3.id, supplierBillNo: 'VRACE-2', lines: [raceLine] }),
+]);
+const matchedCount = [rb1, rb2].filter((r) => r.ok && r.data?.matchStatus === 'matched').length;
+ok('two bills created were both accepted', rb1.ok && rb2.ok);
+ok('concurrent bills on one PO line: exactly one passes the 3-way match', matchedCount === 1);
 
 // ---- H. Over-receipt re-check at POST (#8): two full-qty drafts both pass
 //         create (received still 0); once the first posts, the second is blocked

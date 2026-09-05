@@ -162,12 +162,25 @@ export class VendorBillService {
         const quantity = num(line.quantity);
         if (quantity <= 0) throw badReq('Each line needs a quantity greater than zero');
         const rate = num(line.rate);
+        // A negative rate reverses the payable (and the ITC it books) — a bill that
+        // should be payable can show settled, or a genuine payable is silently
+        // halved. The customer invoice path guards this (invoice.service) and so
+        // does material-inward; the AP side was the gap.
+        if (rate < 0) throw badReq('Each line rate must be zero or more');
         const poItemId = (line.purchaseOrderItemId as string) || null;
-        const poItem = poItemId ? await poItemRepo.findOne({ where: { id: poItemId } }) : null;
+        // Lock the PO line while this bill's 3-way match reads how much has already
+        // been billed against it. Without the lock two bills citing the same PO line
+        // each read the same stale "billed so far", each pass the match on their own,
+        // and goods received once are billed (and ITC-claimed) twice. Mirrors the
+        // pessimistic_write goods-receipt.post takes on the same rows for over-receipt.
+        const poItem = poItemId
+          ? await poItemRepo.findOne({ where: { id: poItemId }, lock: { mode: 'pessimistic_write' } })
+          : null;
         // Inherit the GST rate the PO agreed (cement 28%, diesel 0, fly-ash /
         // admixture 5–18%…) rather than a blanket 18%, unless the caller passed
         // an explicit rate on the line.
         const gstRate = line.gstRate !== undefined ? num(line.gstRate) : poItem ? num(poItem.gstRate) : 18;
+        if (gstRate < 0) throw badReq('Each line GST rate must be zero or more');
         const lineTaxable = round2(quantity * rate);
         const lineTax = round2((lineTaxable * gstRate) / 100);
         await itemRepo.save(

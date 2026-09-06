@@ -59,6 +59,7 @@ import { CustomerSupplierPan1720000054000 } from './migrations/1720000054000-Cus
 import { ConcurrencyUniqueIndexes1720000055000 } from './migrations/1720000055000-ConcurrencyUniqueIndexes';
 import { InvoiceChallanUniqueIndex1720000056000 } from './migrations/1720000056000-InvoiceChallanUniqueIndex';
 import { PerformanceIndexes1720000057000 } from './migrations/1720000057000-PerformanceIndexes';
+import { PaymentsReceiptDateIndex1720000058000 } from './migrations/1720000058000-PaymentsReceiptDateIndex';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -133,6 +134,7 @@ export const AppDataSource = new DataSource({
     ConcurrencyUniqueIndexes1720000055000,
     InvoiceChallanUniqueIndex1720000056000,
     PerformanceIndexes1720000057000,
+    PaymentsReceiptDateIndex1720000058000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

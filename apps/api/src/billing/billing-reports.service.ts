@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Company, Customer, Invoice, Payment, Supplier, VendorBill } from '../core/database/entities';
 import { round2, isInterstateSupply } from './tax.util';
@@ -181,8 +182,12 @@ export class BillingReportsService {
    */
   salesRegister(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const all = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' }, order: { invoiceDate: 'ASC' } });
-      const rows = all.filter((i) => (!from || (i.invoiceDate ?? '') >= from) && (!to || (i.invoiceDate ?? '') <= to));
+      // Date-bound in the DB rather than loading every issued invoice and
+      // filtering in JS. Same rows, same order (invoice_date ASC): the range
+      // comparison drops NULL invoice_date exactly as `(invoiceDate ?? '') >= from`
+      // did. The register returns the rows, so the b2b/b2c summary still reduces
+      // over them in memory — unchanged.
+      const rows = await this.issuedInvoicesInRange(m, from, to);
       const total = round2(rows.reduce((s, i) => s + num(i.totalAmount), 0));
       const taxable = round2(rows.reduce((s, i) => s + num(i.taxableAmount), 0));
       const bucket = (list: Invoice[]) => ({
@@ -198,15 +203,49 @@ export class BillingReportsService {
 
   /** GST summary (tax heads) over issued invoices, optionally date-bounded. */
   gstSummary(tenantId: string, from?: string, to?: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
-      const all = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } });
-      const rows = all.filter((i) => (!from || (i.invoiceDate ?? '') >= from) && (!to || (i.invoiceDate ?? '') <= to));
-      const sum = (f: (i: Invoice) => unknown) => round2(rows.reduce((s, i) => s + num(f(i)), 0));
-      return {
-        taxable: sum((i) => i.taxableAmount), cgst: sum((i) => i.cgstAmount), sgst: sum((i) => i.sgstAmount),
-        igst: sum((i) => i.igstAmount), cess: sum((i) => i.cessAmount), total: sum((i) => i.totalAmount),
-      };
-    });
+    return this.db.runInTenant(tenantId, (m) => this.invoiceTaxHeads(m, from, to));
+  }
+
+  /**
+   * Sum the invoice header tax heads for issued invoices in [from, to], in the
+   * database. Shared by gstSummary and the GSTR-3B output side — both previously
+   * loaded every issued invoice and reduced in JS. The date filter matches the
+   * old `(invoiceDate ?? '') >= from` test: a NULL invoice_date fails the range
+   * comparison and is excluded exactly as the empty-string coercion excluded it.
+   */
+  private async invoiceTaxHeads(m: EntityManager, from?: string, to?: string) {
+    const where = ["invoice_status = 'issued'"];
+    const params: unknown[] = [];
+    if (from) { params.push(from); where.push(`invoice_date >= $${params.length}`); }
+    if (to) { params.push(to); where.push(`invoice_date <= $${params.length}`); }
+    const [r] = await m.query(
+      `SELECT COALESCE(SUM(taxable_amount), 0)::float AS taxable,
+              COALESCE(SUM(cgst_amount), 0)::float    AS cgst,
+              COALESCE(SUM(sgst_amount), 0)::float    AS sgst,
+              COALESCE(SUM(igst_amount), 0)::float    AS igst,
+              COALESCE(SUM(cess_amount), 0)::float    AS cess,
+              COALESCE(SUM(total_amount), 0)::float   AS total
+         FROM invoices WHERE ${where.join(' AND ')}`,
+      params,
+    );
+    return {
+      taxable: round2(num(r.taxable)), cgst: round2(num(r.cgst)), sgst: round2(num(r.sgst)),
+      igst: round2(num(r.igst)), cess: round2(num(r.cess)), total: round2(num(r.total)),
+    };
+  }
+
+  /**
+   * Issued invoices in [from, to], ordered by invoice_date ASC — the row set the
+   * sales register and the Tally export return. Pushes the date filter into the
+   * query (was: load all issued invoices, then filter in JS). Same order as the
+   * old `find({ order: { invoiceDate: 'ASC' } })`; NULL invoice_date is dropped
+   * by the range comparison exactly as the empty-string coercion dropped it.
+   */
+  private issuedInvoicesInRange(m: EntityManager, from?: string, to?: string): Promise<Invoice[]> {
+    const qb = m.getRepository(Invoice).createQueryBuilder('i').where("i.invoiceStatus = :status", { status: 'issued' });
+    if (from) qb.andWhere('i.invoiceDate >= :from', { from });
+    if (to) qb.andWhere('i.invoiceDate <= :to', { to });
+    return qb.orderBy('i.invoiceDate', 'ASC').getMany();
   }
 
   /**
@@ -246,9 +285,14 @@ export class BillingReportsService {
 
   /** Receipts register, optionally bounded to [from, to] on the receipt date. */
   receiptsRegister(tenantId: string, from?: string, to?: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
-      const all = await m.getRepository(Payment).find({ order: { createdAt: 'DESC' } });
-      return all.filter((p) => (!from || (p.receiptDate ?? '') >= from) && (!to || (p.receiptDate ?? '') <= to));
+    return this.db.runInTenant(tenantId, (m) => {
+      // Date-bound in the DB (was: load all payments, filter in JS). Same order
+      // (created_at DESC) and same NULL-receipt_date exclusion as the old
+      // `(receiptDate ?? '') >= from` test.
+      const qb = m.getRepository(Payment).createQueryBuilder('p');
+      if (from) qb.andWhere('p.receiptDate >= :from', { from });
+      if (to) qb.andWhere('p.receiptDate <= :to', { to });
+      return qb.orderBy('p.createdAt', 'DESC').getMany();
     });
   }
 
@@ -289,8 +333,7 @@ export class BillingReportsService {
   /** Tally-ready CSV of issued invoices (Phase-1 file export — no live Tally API). */
   tallyExportCsv(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const invoices = (await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' }, order: { invoiceDate: 'ASC' } }))
-        .filter((i) => (!from || (i.invoiceDate ?? '') >= from) && (!to || (i.invoiceDate ?? '') <= to));
+      const invoices = await this.issuedInvoicesInRange(m, from, to);
       const customers = await m.getRepository(Customer).find();
       const nameOf = new Map(customers.map((c) => [c.id, c.customerName]));
       const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -316,20 +359,23 @@ export class BillingReportsService {
    */
   gstr3b(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const inPeriod = (d: string | null) => (!from || (d ?? '') >= from) && (!to || (d ?? '') <= to);
-
-      // Output tax — issued invoices, from the stored header tax heads.
-      const invoices = (await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } })).filter((i) => inPeriod(i.invoiceDate));
-      const oSum = (f: (i: Invoice) => unknown) => round2(invoices.reduce((s, i) => s + num(f(i)), 0));
-      const output = {
-        taxable: oSum((i) => i.taxableAmount), cgst: oSum((i) => i.cgstAmount), sgst: oSum((i) => i.sgstAmount),
-        igst: oSum((i) => i.igstAmount), cess: oSum((i) => i.cessAmount), total: oSum((i) => i.totalAmount),
-      };
+      // Output tax — issued invoices' stored header tax heads, summed in the DB
+      // (same query the GST summary uses; was: load all issued invoices + reduce).
+      const output = await this.invoiceTaxHeads(m, from, to);
 
       // Input tax credit — approved AND ITC-eligible bills only; blocked-credit
       // bills (Sec 17(5)) are excluded from the claimable ITC. Split derived from
-      // the supplier-vs-company state test.
-      const bills = (await m.getRepository(VendorBill).find({ where: { status: 'approved', itcEligible: true } })).filter((b) => inPeriod(b.billDate));
+      // the supplier-vs-company state test, so the per-bill loop stays; only the
+      // date filter moves into the query (was: load all such bills + JS filter),
+      // dropping NULL bill_date exactly as `(billDate ?? '') >= from` did.
+      const billsQb = m
+        .getRepository(VendorBill)
+        .createQueryBuilder('b')
+        .where('b.status = :status', { status: 'approved' })
+        .andWhere('b.itcEligible = true');
+      if (from) billsQb.andWhere('b.billDate >= :from', { from });
+      if (to) billsQb.andWhere('b.billDate <= :to', { to });
+      const bills = await billsQb.getMany();
       const suppliers = await m.getRepository(Supplier).find();
       const supOf = new Map(suppliers.map((s) => [s.id, s]));
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];

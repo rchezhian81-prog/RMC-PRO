@@ -81,8 +81,15 @@ export class ProductionPlansService {
       if (orderItemId) {
         const oi = await m.getRepository(OrderItem).findOne({ where: { id: orderItemId, orderId } });
         if (!oi) throw badReq('Order line (orderItemId) not found for this order');
-        gradeId = gradeId ?? oi.gradeId;
-        gradeLabel = gradeLabel ?? oi.gradeLabel;
+        // The order LINE is authoritative for the grade. A differing client
+        // gradeId used to win, so the plan line (and its queue row) linked the
+        // M25 line but carried M40: the M40 mix was batched and the load labelled
+        // M40 while invoicing and QC referenced the M25 line.
+        if (gradeId && oi.gradeId && String(gradeId) !== String(oi.gradeId)) {
+          throw badReq(`gradeId does not match the order line's grade (${oi.gradeLabel ?? oi.gradeId})`);
+        }
+        gradeId = oi.gradeId ?? gradeId;
+        gradeLabel = oi.gradeLabel ?? gradeLabel;
         orderedQtyM3 = Number(oi.quantityM3);
         if (!plannedQty) plannedQty = Number(oi.quantityM3);
       } else if (!gradeId) {
@@ -106,6 +113,10 @@ export class ProductionPlansService {
           [orderId, gradeId],
         );
         orderedQtyM3 = Number(rows[0]?.sum ?? 0);
+        // A grade that is not on the order has nothing to plan against. Read as
+        // "ordered 0", it used to skip the over-planning cap below, so unbounded
+        // volume could be queued against the order under a grade it never bought.
+        if (!(orderedQtyM3 > 0)) throw badReq('This grade is not on the order — nothing to plan for it');
       }
       // A plan must never schedule more concrete than the order calls for — the
       // planned quantity is what gets batched, and over-production beyond the

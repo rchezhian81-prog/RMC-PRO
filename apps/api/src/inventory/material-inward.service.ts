@@ -1,7 +1,7 @@
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Material, MaterialInward } from '../core/database/entities';
+import { Material, MaterialInward, WeighbridgeEntry } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from '../production/stock.service';
@@ -95,6 +95,20 @@ export class MaterialInwardService {
       if (!inward) throw notFound();
       if (inward.status === 'posted') throw badReq('Posted inward cannot be cancelled');
       await repo.update(id, { status: 'cancelled' });
+      // Release the weighbridge slip this draft came from so the truck can be
+      // converted again: 'matched' is terminal on the entry and the web hides
+      // "To inward" for it, so a cancelled draft left the slip stuck forever.
+      if (inward.weighbridgeEntryId) {
+        const [others] = await m.query(
+          `SELECT count(*)::int AS n FROM material_inwards WHERE weighbridge_entry_id = $1 AND status <> 'cancelled' AND id <> $2`,
+          [inward.weighbridgeEntryId, id],
+        );
+        if (Number(others?.n ?? 0) === 0) {
+          await m
+            .getRepository(WeighbridgeEntry)
+            .update({ id: inward.weighbridgeEntryId, status: 'matched' }, { status: 'completed' });
+        }
+      }
       return repo.findOne({ where: { id } });
     });
   }

@@ -104,6 +104,9 @@ const TESTS = [
   // Tenant provisioning / plan assignment / user create+update atomicity and
   // the per-tenant seat lock. Creates its own plan + tenant via the platform API.
   'test/provisioning-atomicity.test.mjs',
+  // Approved-document item locks, plan-line grade authority, GRN↔PO scoping,
+  // GPS latest-fix ordering, weighbridge slip release, cube-set fck/grade.
+  'test/integrity-guards.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

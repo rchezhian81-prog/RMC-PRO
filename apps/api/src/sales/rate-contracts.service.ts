@@ -110,6 +110,9 @@ export class RateContractsService {
     return this.db.runInTenant(tenantId, async (m) => {
       const contract = await m.getRepository(RateContract).findOne({ where: { id: rateContractId } });
       if (!contract) throw notFound();
+      // Items are the priced content of the contract: once approved they are as
+      // locked as the header (every from-rate-contract order prices from them).
+      if (contract.approvalStatus === 'approved') throw badReq('Approved rate contract is locked');
       const repo = m.getRepository(RateContractItem);
       await repo.save(repo.create({ ...this.pickItem(dto), tenantId, rateContractId }));
       return this.loadFull(m, rateContractId);
@@ -118,6 +121,9 @@ export class RateContractsService {
 
   updateItem(tenantId: string, rateContractId: string, itemId: string, dto: Record<string, unknown>) {
     return this.db.runInTenant(tenantId, async (m) => {
+      const contract = await m.getRepository(RateContract).findOne({ where: { id: rateContractId } });
+      if (!contract) throw notFound();
+      if (contract.approvalStatus === 'approved') throw badReq('Approved rate contract is locked');
       const repo = m.getRepository(RateContractItem);
       const item = await repo.findOne({ where: { id: itemId, rateContractId } });
       if (!item) throw notFound();
@@ -128,6 +134,9 @@ export class RateContractsService {
 
   deleteItem(tenantId: string, rateContractId: string, itemId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
+      const contract = await m.getRepository(RateContract).findOne({ where: { id: rateContractId } });
+      if (!contract) throw notFound();
+      if (contract.approvalStatus === 'approved') throw badReq('Approved rate contract is locked');
       const repo = m.getRepository(RateContractItem);
       const item = await repo.findOne({ where: { id: itemId, rateContractId } });
       if (!item) throw notFound();

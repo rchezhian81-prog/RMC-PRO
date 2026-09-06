@@ -141,14 +141,33 @@ export class QcService {
 
       let fck = num(dto.targetStrengthMpa);
       let gradeLabel = str(dto.gradeLabel);
-      const gradeId = str(dto.gradeId);
-      if (!fck && gradeId) {
+      let gradeId = str(dto.gradeId);
+      const batchTicketId = str(dto.batchTicketId);
+      // Derive the grade from the ticket when the caller names only the ticket,
+      // so the grade/ticket reconciliation below is never short-circuited.
+      if (!gradeId && batchTicketId) {
+        const bt = await m.getRepository(BatchTicket).findOne({ where: { id: batchTicketId } });
+        if (bt?.gradeId) {
+          gradeId = bt.gradeId;
+          gradeLabel = gradeLabel ?? bt.gradeLabel ?? null;
+        }
+      }
+      if (gradeId) {
         const grade = await m.getRepository(ConcreteGrade).findOne({ where: { id: gradeId } });
-        fck = fckFromGradeCode(grade?.gradeCode);
+        const gradeFck = fckFromGradeCode(grade?.gradeCode);
         gradeLabel = gradeLabel ?? grade?.gradeName ?? grade?.gradeCode ?? null;
+        // The grade code IS the characteristic strength (M25 → 25 N/mm²). A
+        // supplied fck that disagrees would assess the set against the wrong
+        // strength, so it is refused; a non-numeric code keeps the manual fck.
+        if (gradeFck > 0) {
+          if (fck && Math.abs(fck - gradeFck) > 0.001) {
+            throw badReq(`Target strength ${fck} N/mm² does not match grade ${grade?.gradeCode ?? gradeId} (fck ${gradeFck})`);
+          }
+          fck = gradeFck;
+        }
       }
       if (!(fck > 0)) throw badReq('Target strength (fck) is required — set it directly or pick a grade like M25');
-      await this.assertGradeMatchesTicket(m, str(dto.batchTicketId), gradeId);
+      await this.assertGradeMatchesTicket(m, batchTicketId, gradeId);
 
       const setNo = await this.numbering.next(m, tenantId, 'qc_cube_set', 'CUBE-');
       const repo = m.getRepository(QcCubeSet);

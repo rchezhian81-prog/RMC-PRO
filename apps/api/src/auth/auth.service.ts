@@ -33,7 +33,7 @@ export class AuthService {
       // however the email was stored before normalisation-on-write existed).
       m.getRepository(User).createQueryBuilder('u').where('LOWER(u.email) = LOWER(:login)', { login }).getOne(),
     );
-    if (!user || user.status !== 'active' || !bcrypt.compareSync(password, user.passwordHash)) {
+    if (!user || user.status !== 'active' || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException(INVALID);
     }
     // Credentials are good, so say plainly that it is the company account that
@@ -104,7 +104,7 @@ export class AuthService {
       m.getRepository(User).findOne({ where: { id: userId } }),
     );
     if (!user) throw new UnauthorizedException(INVALID);
-    if (!bcrypt.compareSync(currentPassword ?? '', user.passwordHash)) {
+    if (!(await bcrypt.compare(currentPassword ?? '', user.passwordHash))) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
         message: 'Your current password is not correct.',
@@ -112,7 +112,7 @@ export class AuthService {
     }
     const problem = passwordProblemMessage(newPassword ?? '');
     if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
-    if (bcrypt.compareSync(newPassword, user.passwordHash)) {
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
         message: 'The new password must be different from the current one.',
@@ -122,9 +122,10 @@ export class AuthService {
     // a password change signs out other (and any leaked) sessions. The caller
     // keeps its short-lived access token until it expires (<=15 min), then signs
     // in again: the standard "re-authenticate after a password change" behaviour.
+    const passwordHash = await bcrypt.hash(newPassword, 10);
     await this.db.runAsPlatform((m) =>
       m.getRepository(User).update(user.id, {
-        passwordHash: bcrypt.hashSync(newPassword, 10),
+        passwordHash,
         tokenVersion: (user.tokenVersion ?? 0) + 1,
       }),
     );

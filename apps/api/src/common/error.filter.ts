@@ -165,10 +165,19 @@ function badInputViolation(exception: unknown): { code: string; message: string;
  * ops as a 500. Mirrors `uniqueViolation`.
  */
 function fkViolation(exception: unknown): { code: string; message: string; fields?: Record<string, string> } | null {
-  const e = exception as { code?: unknown; driverError?: { code?: unknown } };
+  const e = exception as { code?: unknown; detail?: unknown; driverError?: { code?: unknown; detail?: unknown } };
   const pgCode = e?.driverError?.code ?? e?.code;
   if (pgCode !== '23503') return null;
-  return { code: ERROR_CODES.VALIDATION_ERROR, message: 'One or more values refer to a record that does not exist.' };
+  // The same SQLSTATE covers both directions: a child row naming a missing
+  // parent, and a parent being removed while children still point at it.
+  const detail = String(e?.driverError?.detail ?? e?.detail ?? '');
+  const stillReferenced = /still referenced/i.test(detail);
+  return {
+    code: ERROR_CODES.VALIDATION_ERROR,
+    message: stillReferenced
+      ? 'This record is still referenced by other records and cannot be removed.'
+      : 'One or more values refer to a record that does not exist.',
+  };
 }
 
 /** The code that best describes a refusal that did not name one itself. */

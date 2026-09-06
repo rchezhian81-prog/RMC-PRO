@@ -79,6 +79,17 @@ async function apiPull(deviceId, since, token) {
   const baseline = engine.getMeta('sync_token'); // ISO token captured at bootstrap
   ok('device bootstrapped with a sync token', !!baseline);
 
+  // Bootstrap must snapshot EVERY customer, not a 500-row cap: the token is the
+  // bootstrap instant, so anything the snapshot dropped would have updated_at <
+  // token and be skipped by the follow-up pull too — silently lost. Assert the
+  // local snapshot count equals the cloud's customer count (measured before the
+  // post-bootstrap seed below changes it).
+  const cloudCustomers = Number(
+    (await owner.query(`SELECT count(*)::int AS c FROM customers WHERE tenant_id = $1`, [TENANT]))[0].c,
+  );
+  const localCustomers = Number(engine.db.prepare(`SELECT count(*) c FROM ref_data WHERE entity='customers'`).get().c);
+  ok('bootstrap snapshots ALL customers (no cap) — local count matches the cloud', localCustomers === cloudCustomers && cloudCustomers >= 1);
+
   // Seed N > LIMIT customers AFTER the bootstrap token. The first LIMIT+1 share
   // one exact updated_at (a tie group bigger than a page); the rest are later.
   const N = LIMIT * 2 + 1;

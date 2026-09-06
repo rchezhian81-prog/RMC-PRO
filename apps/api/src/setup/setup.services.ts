@@ -276,6 +276,7 @@ export class UsersService {
     // Checked after the duplicate test, so retrying an email that already exists
     // does not report a seat problem the administrator cannot act on.
     await this.planLimits.assertCanAddUser(tenantId);
+    const passwordHash = await bcrypt.hash(password, 10);
     const user = await this.db.runInTenant(tenantId, (m) =>
       m.getRepository(User).save(
         m.getRepository(User).create({
@@ -283,7 +284,7 @@ export class UsersService {
           name,
           email,
           mobile: dto.mobile ? String(dto.mobile) : null,
-          passwordHash: bcrypt.hashSync(password, 10),
+          passwordHash,
           userType: 'tenant_user',
         }),
       ),
@@ -401,7 +402,7 @@ export class UsersService {
     if (dto.password !== undefined) {
       const problem = passwordProblemMessage(String(dto.password ?? ''));
       if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
-      passwordHash = bcrypt.hashSync(String(dto.password), 10);
+      passwordHash = await bcrypt.hash(String(dto.password), 10);
     }
 
     await this.db.runInTenant(tenantId, (m) =>

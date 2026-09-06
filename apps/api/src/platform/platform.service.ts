@@ -167,7 +167,7 @@ export class PlatformService {
     // The plan's seat count binds here too. A fresh tenant has none in use, so
     // this only ever bites when a tenant that is already full is given another.
     await this.planLimits.assertCanAddUser(tenantId);
-    const passwordHash = bcrypt.hashSync(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const created = await this.db.runInTenant(tenantId, async (m) => {
       // Covers tenants created before roles were provisioned at creation. It

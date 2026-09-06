@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager, ObjectLiteral, Repository } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
@@ -12,6 +12,15 @@ import {
   SyncConflict,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
+import {
+  assertDispatchLive,
+  assertNotInvoiced,
+  canTransition,
+  deliverChallan,
+  isChallanStatus,
+  type ChallanStatus,
+} from '../dispatch/challan-transition.util';
+import { recordDeliveryHistory } from '../dispatch/delivery-history.util';
 
 const notFound = (msg = 'Not found') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: msg });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -95,6 +104,22 @@ export interface PushResult {
  * written NOT NULL onto any conflict row; the rest is coerced defensively by
  * applyPush. Anything else is reported as a per-record malformed outcome.
  */
+/**
+ * Is the pushed payload the SAME document as the existing row, on the identity
+ * fields present in the payload? Absent fields are not compared (a retry may
+ * carry a subset), numerics compare by value ("6.000" == 6), blanks as null.
+ * Lifecycle fields (status, receiver) are deliberately not identity.
+ */
+function sameDocument(existing: Record<string, unknown>, p: Record<string, unknown>, fields: string[]): boolean {
+  const norm = (v: unknown): string | null => {
+    if (v === undefined || v === null || v === '') return null;
+    if (typeof v === 'number') return String(v);
+    const s = String(v).trim();
+    return /^-?\d+(\.\d+)?$/.test(s) ? String(Number(s)) : s;
+  };
+  return fields.every((f) => p[f] === undefined || norm(p[f]) === norm(existing[f]));
+}
+
 function isValidPushRecord(r: unknown): r is PushRecord {
   if (!r || typeof r !== 'object') return false;
   const o = r as Record<string, unknown>;
@@ -245,7 +270,23 @@ export class SyncService {
           results.push({ localId, status: 'conflict', reason: 'malformed_record' });
           continue;
         }
-        results.push(await this.applyPush(m, tenantId, device, r));
+        // Isolate each record in a savepoint. Without it one poisoned record
+        // (a malformed uuid, a duplicate, an FK miss) aborted the WHOLE batch
+        // with a 500, and the device retried the identical batch forever. Now
+        // just that record rolls back and is reported as a conflict; the rest of
+        // the batch — and the device's queue — keeps moving.
+        await m.query('SAVEPOINT sync_record');
+        try {
+          results.push(await this.applyPush(m, tenantId, device, r));
+          await m.query('RELEASE SAVEPOINT sync_record');
+        } catch (e) {
+          await m.query('ROLLBACK TO SAVEPOINT sync_record');
+          const code = (e as { code?: string })?.code;
+          const detail = e instanceof HttpException
+            ? ((e.getResponse() as { message?: string })?.message ?? e.message)
+            : (code ?? (e as Error)?.message ?? 'error');
+          results.push(await this.recordConflict(m, tenantId, device, r, null, `apply_failed: ${detail}`.slice(0, 200)));
+        }
       }
       await m.getRepository(Device).update(deviceId, { lastSeenAt: new Date() });
       return { results, applied: results.filter((x) => x.status === 'applied').length, conflicts: results.filter((x) => x.status === 'conflict').length };
@@ -256,15 +297,36 @@ export class SyncService {
     const p = r.payload ?? {};
     if (r.operation === 'create' && r.entityName === 'delivery_challan') {
       const repo = m.getRepository(DeliveryChallan);
-      const existing = await repo.findOne({ where: { challanNo: String(p.challanNo ?? '') } });
-      if (existing) return { localId: r.localId, status: 'applied', cloudId: existing.id }; // idempotent
+      const challanNo = String(p.challanNo ?? '').trim();
+      // A document with no number used to be saved as '' — and every later
+      // un-numbered push then collapsed into that one row as an "idempotent"
+      // hit. Refuse it as a per-record conflict instead.
+      if (!challanNo) return this.recordConflict(m, tenantId, device, r, null, 'missing_document_number');
+      // Only a live status may be created offline; 'cancelled' or an unknown
+      // string is refused (the shipped plant-app creates as 'delivered').
+      const status = p.challanStatus === undefined ? 'issued' : p.challanStatus;
+      if (!isChallanStatus(status) || status === 'cancelled') return this.recordConflict(m, tenantId, device, r, null, 'invalid_status');
+      const quantityM3 = Number(p.quantityM3);
+      if (!(quantityM3 > 0)) return this.recordConflict(m, tenantId, device, r, null, 'invalid_quantity');
+      const existing = await repo.findOne({ where: { challanNo } });
+      if (existing) {
+        // Idempotent retry of the SAME document → applied with the existing id.
+        // A DIFFERENT document under a reused number (another device, a reset
+        // reservation, a number re-issued after FY roll-over) is a conflict —
+        // it used to be silently discarded while the device showed it synced.
+        if (sameDocument(existing as unknown as Record<string, unknown>, p, ['gradeLabel', 'quantityM3', 'customerId', 'siteId', 'slump'])) {
+          return { localId: r.localId, status: 'applied', cloudId: existing.id };
+        }
+        return this.recordConflict(m, tenantId, device, r, existing, 'duplicate_number');
+      }
       const saved = await repo.save(
         repo.create({
-          tenantId, challanNo: String(p.challanNo ?? ''), plantId: device.plantId,
-          customerId: (p.customerId as string) ?? null, siteId: (p.siteId as string) ?? null,
-          gradeLabel: (p.gradeLabel as string) ?? null, quantityM3: String(p.quantityM3 ?? 0),
+          tenantId, challanNo, plantId: device.plantId,
+          // '' → null: an empty uuid string would otherwise abort the record (22P02).
+          customerId: (p.customerId as string) || null, siteId: (p.siteId as string) || null,
+          gradeLabel: (p.gradeLabel as string) ?? null, quantityM3: String(quantityM3),
           slump: (p.slump as string) ?? null, receiverName: (p.receiverName as string) ?? null,
-          challanStatus: (p.challanStatus as string) ?? 'issued', invoiceStatus: 'not_invoiced',
+          challanStatus: status, invoiceStatus: 'not_invoiced',
         }),
       );
       return { localId: r.localId, status: 'applied', cloudId: saved.id };
@@ -272,11 +334,18 @@ export class SyncService {
 
     if (r.operation === 'create' && r.entityName === 'batch_ticket') {
       const repo = m.getRepository(BatchTicket);
-      const existing = await repo.findOne({ where: { batchTicketNo: String(p.batchTicketNo ?? '') } });
-      if (existing) return { localId: r.localId, status: 'applied', cloudId: existing.id };
+      const batchTicketNo = String(p.batchTicketNo ?? '').trim();
+      if (!batchTicketNo) return this.recordConflict(m, tenantId, device, r, null, 'missing_document_number');
+      const existing = await repo.findOne({ where: { batchTicketNo } });
+      if (existing) {
+        if (sameDocument(existing as unknown as Record<string, unknown>, p, ['gradeLabel', 'batchQuantityM3'])) {
+          return { localId: r.localId, status: 'applied', cloudId: existing.id };
+        }
+        return this.recordConflict(m, tenantId, device, r, existing, 'duplicate_number');
+      }
       const saved = await repo.save(
         repo.create({
-          tenantId, batchTicketNo: String(p.batchTicketNo ?? ''), plantId: device.plantId,
+          tenantId, batchTicketNo, plantId: device.plantId,
           gradeLabel: (p.gradeLabel as string) ?? null, batchQuantityM3: String(p.batchQuantityM3 ?? 0),
           sourceType: 'local_db_import', status: 'confirmed', batchEndTime: new Date(),
         }),
@@ -286,19 +355,65 @@ export class SyncService {
 
     if (r.operation === 'update' && r.entityName === 'delivery_challan') {
       const repo = m.getRepository(DeliveryChallan);
-      const challan = r.cloudId ? await repo.findOne({ where: { id: r.cloudId } }) : null;
+      // Locked: the transition guards below must judge the settled row.
+      const challan = r.cloudId ? await repo.findOne({ where: { id: r.cloudId }, lock: { mode: 'pessimistic_write' } }) : null;
       if (!challan) return this.recordConflict(m, tenantId, device, r, null, 'record_missing_on_cloud');
       if (r.baseUpdatedAt && iso(challan.updatedAt) !== r.baseUpdatedAt) {
         return this.recordConflict(m, tenantId, device, r, challan, 'stale_update');
       }
-      await repo.update(challan.id, {
-        ...(p.receiverName !== undefined ? { receiverName: p.receiverName as string } : {}),
-        ...(p.challanStatus !== undefined ? { challanStatus: p.challanStatus as string } : {}),
-      });
+      const receiverName = p.receiverName !== undefined ? ((p.receiverName as string) ?? null) : undefined;
+      if (p.challanStatus !== undefined && p.challanStatus !== challan.challanStatus) {
+        // A status change is a state-machine TRANSITION, never a raw column
+        // write: it goes through the same whitelist and guards as the challan
+        // endpoints (draft→issued→delivered, draft/issued→cancelled; dispatch
+        // must be live; an invoiced challan is frozen). A refused move is a
+        // per-record conflict the supervisor can see, not a silent write or a 500.
+        if (!isChallanStatus(p.challanStatus)) return this.recordConflict(m, tenantId, device, r, challan, 'invalid_status');
+        if (!r.baseUpdatedAt) return this.recordConflict(m, tenantId, device, r, challan, 'missing_base_version');
+        try {
+          await this.changeChallanStatus(m, tenantId, challan, p.challanStatus, receiverName, `via offline sync (${device.deviceName})`);
+        } catch (e) {
+          if (e instanceof BadRequestException) {
+            const msg = (e.getResponse() as { message?: string })?.message ?? e.message;
+            return this.recordConflict(m, tenantId, device, r, challan, `guard_refused: ${msg}`.slice(0, 200));
+          }
+          throw e;
+        }
+        return { localId: r.localId, status: 'applied', cloudId: challan.id };
+      }
+      if (receiverName !== undefined) await repo.update(challan.id, { receiverName });
       return { localId: r.localId, status: 'applied', cloudId: challan.id };
     }
 
     return this.recordConflict(m, tenantId, device, r, null, 'unsupported_entity');
+  }
+
+  /**
+   * Move a challan to `to` through the shared state machine: whitelist, invoiced
+   * guard, dispatch-live guard, then the real transition (delivery runs the full
+   * return-capture / dispatch close-out). Throws BadRequestException on refusal;
+   * push turns that into a conflict row, conflict resolution surfaces it as 400.
+   */
+  private async changeChallanStatus(
+    m: EntityManager,
+    tenantId: string,
+    challan: DeliveryChallan,
+    to: ChallanStatus,
+    receiverName: string | null | undefined,
+    note: string,
+  ): Promise<void> {
+    if (!canTransition(challan.challanStatus, to)) throw badReq(`Cannot move challan from ${challan.challanStatus} to ${to}`);
+    await assertNotInvoiced(m, challan);
+    if (to !== 'cancelled') await assertDispatchLive(m, challan);
+    if (to === 'delivered') {
+      await deliverChallan(m, tenantId, challan, { receiverName: receiverName ?? challan.receiverName ?? undefined, note }, null);
+      return;
+    }
+    await m.getRepository(DeliveryChallan).update(challan.id, {
+      challanStatus: to,
+      ...(receiverName !== undefined ? { receiverName } : {}),
+    });
+    await recordDeliveryHistory(m, tenantId, { challanId: challan.id }, challan.challanStatus, to, null, note);
   }
 
   private async recordConflict(m: EntityManager, tenantId: string, device: Device, r: PushRecord, cloud: unknown, reason: string): Promise<PushResult> {
@@ -400,10 +515,19 @@ export class SyncService {
 
       if (resolution === 'keep_local' && conflict.entityName === 'delivery_challan' && conflict.cloudId) {
         const p = (conflict.localPayloadJson ?? {}) as Record<string, unknown>;
-        await m.getRepository(DeliveryChallan).update(conflict.cloudId, {
-          ...(p.receiverName !== undefined ? { receiverName: p.receiverName as string } : {}),
-          ...(p.challanStatus !== undefined ? { challanStatus: p.challanStatus as string } : {}),
-        });
+        const challanRepo = m.getRepository(DeliveryChallan);
+        const challan = await challanRepo.findOne({ where: { id: conflict.cloudId }, lock: { mode: 'pessimistic_write' } });
+        if (!challan) throw notFound('Challan not found');
+        const receiverName = p.receiverName !== undefined ? ((p.receiverName as string) ?? null) : undefined;
+        if (p.challanStatus !== undefined && p.challanStatus !== challan.challanStatus) {
+          // keep_local used to copy the device's status straight onto the row.
+          // It now goes through the same state machine and guards as the
+          // endpoints; a refused move is a 400 and the conflict stays pending.
+          if (!isChallanStatus(p.challanStatus)) throw badReq(`Unknown challan status ${String(p.challanStatus)}`);
+          await this.changeChallanStatus(m, tenantId, challan, p.challanStatus, receiverName, 'via sync conflict resolution (keep_local)');
+        } else if (receiverName !== undefined) {
+          await challanRepo.update(challan.id, { receiverName });
+        }
       }
       await repo.update(id, { resolutionStatus: resolution, resolvedBy: userId, resolvedAt: new Date() });
       return repo.findOne({ where: { id } });

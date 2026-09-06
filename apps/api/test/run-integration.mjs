@@ -88,6 +88,9 @@ const TESTS = [
   // lands: it self-skips unless AR_EXPOSURE_CORE=1, so it stays green in CI now
   // and the core PR flips the flag to turn T1–T10 on.
   'test/ar-exposure.test.mjs',
+  // Offline-sync state-machine guards, content-aware dedupe and per-record
+  // savepoints. Registers its own device; enables offline_sync itself.
+  'test/sync-guards.test.mjs',
   // Concurrency + authoritative-row checks on the money paths (receipts,
   // vendor payments, invoice/bill cancel). Seeds its own customer/supplier.
   'test/money-locks.test.mjs',

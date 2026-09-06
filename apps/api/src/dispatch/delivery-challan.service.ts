@@ -18,7 +18,8 @@ import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import type { ChallanPdfData } from '../sales/pdf.service';
 import { recordDeliveryHistory } from './delivery-history.util';
-import { returnCost, wastageSummary, type WastageRow } from './wastage.util';
+import { wastageSummary, type WastageRow } from './wastage.util';
+import { assertDispatchLive, assertNotInvoiced, assertTransition, deliverChallan } from './challan-transition.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Challan not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -105,45 +106,16 @@ export class DeliveryChallanService {
     });
   }
 
-  private transition(tenantId: string, id: string, from: string[], to: string, userId: string, patch: Record<string, unknown> = {}) {
-    return this.db.runInTenant(tenantId, async (m) => {
-      const repo = m.getRepository(DeliveryChallan);
-      const challan = await repo.findOne({ where: { id } });
-      if (!challan) throw notFound();
-      if (!from.includes(challan.challanStatus)) {
-        throw badReq(`Cannot move challan from ${challan.challanStatus} to ${to}`);
-      }
-      await repo.update(id, { challanStatus: to, ...patch });
-      await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, to, userId, (patch.note as string) ?? null);
-      return this.loadFull(m, id);
-    });
-  }
-
-  /**
-   * A challan can only move forward while its dispatch is still live. If the load
-   * was rejected on site (or the dispatch cancelled) after the challan was
-   * drafted, issuing or delivering it would bill concrete that the wastage report
-   * already writes off as a rejected/cancelled load — the same load counted twice
-   * (delivered in the register AND wasted). Block it here; the operator cancels
-   * the challan instead. A challan with no dispatch (manual/ad-hoc) is unaffected.
-   */
-  private async assertDispatchLive(m: EntityManager, challan: DeliveryChallan) {
-    if (!challan.dispatchId) return;
-    const dispatch = await m.getRepository(Dispatch).findOne({ where: { id: challan.dispatchId } });
-    if (dispatch && ['rejected', 'cancelled'].includes(dispatch.dispatchStatus)) {
-      throw badReq(`Dispatch is ${dispatch.dispatchStatus} — cancel this challan instead of delivering it`);
-    }
-  }
-
   issue(tenantId: string, id: string, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(DeliveryChallan);
-      const challan = await repo.findOne({ where: { id } });
+      // Locked: a concurrent deliver/cancel must not interleave with this
+      // read-then-write (the same state machine offline sync now goes through).
+      const challan = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!challan) throw notFound();
-      if (challan.challanStatus !== 'draft') {
-        throw badReq(`Cannot move challan from ${challan.challanStatus} to issued`);
-      }
-      await this.assertDispatchLive(m, challan);
+      assertTransition(challan.challanStatus, 'issued');
+      await assertNotInvoiced(m, challan);
+      await assertDispatchLive(m, challan);
       await repo.update(id, { challanStatus: 'issued' });
       await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, 'issued', userId, null);
       return this.loadFull(m, id);
@@ -159,68 +131,14 @@ export class DeliveryChallanService {
   markDelivered(tenantId: string, id: string, dto: Record<string, unknown>, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(DeliveryChallan);
-      const challan = await repo.findOne({ where: { id } });
+      const challan = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!challan) throw notFound();
-      if (challan.challanStatus !== 'issued') {
-        throw badReq(`Cannot move challan from ${challan.challanStatus} to delivered`);
-      }
-      await this.assertDispatchLive(m, challan);
-
-      // Returned/short-load concrete. Prefer what the deliverer enters now (an
-      // explicit 0 means "nothing came back"); when nothing is supplied, inherit
-      // what the dispatch board already recorded on the `returning` leg — that
-      // value was previously dropped, so a return captured upstream never reached
-      // billing and the customer was billed for concrete they sent back.
-      let returnQty = dto.returnQuantityM3 !== undefined ? Number(dto.returnQuantityM3) || 0 : NaN;
-      let returnReasonIn = dto.returnReason as string | undefined;
-      if (Number.isNaN(returnQty)) {
-        const dispatch = challan.dispatchId
-          ? await m.getRepository(Dispatch).findOne({ where: { id: challan.dispatchId } })
-          : null;
-        returnQty = Number(dispatch?.returnQuantityM3 ?? 0) || 0;
-        if (returnReasonIn === undefined) returnReasonIn = dispatch?.returnReason ?? undefined;
-      }
-      // A return can't exceed the load nor be negative — clamp so the delivery
-      // register and wastage report can't be driven negative by a bad value.
-      returnQty = Math.max(0, Math.min(returnQty, Number(challan.quantityM3) || 0));
-
-      let costPerM3 = dto.returnCostPerM3 !== undefined ? Number(dto.returnCostPerM3) || 0 : 0;
-      // Default the valuation to the order line's rate for this grade.
-      if (returnQty > 0 && !costPerM3 && challan.orderId) {
-        const orderItem = await m.getRepository(OrderItem).findOne({
-          where: challan.gradeId ? { orderId: challan.orderId, gradeId: challan.gradeId } : { orderId: challan.orderId },
-        });
-        costPerM3 = Number(orderItem?.ratePerM3 ?? 0) || 0;
-      }
-      const returnReason = returnQty > 0 ? (returnReasonIn ?? null) : null;
-      const cost = returnQty > 0 ? returnCost(returnQty, costPerM3) : 0;
-
-      await repo.update(id, {
-        challanStatus: 'delivered',
-        receiverName: (dto.receiverName as string) ?? null,
-        returnQuantityM3: String(returnQty),
-        returnReason,
-        returnCostPerM3: String(returnQty > 0 ? costPerM3 : 0),
-        returnCost: String(cost),
-      });
-      await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, 'delivered', userId, (dto.note as string) ?? null);
-
-      // Close the trip: a transit-mixer runs one load per dispatch, so a
-      // delivered challan means that dispatch is done. Without this the load
-      // lingers on the GPS live board and its cycle time never completes. Only
-      // advance a still-open dispatch (skip one already completed/cancelled/
-      // rejected) and stamp the pour-end time if the board never did.
-      if (challan.dispatchId) {
-        const dispatchRepo = m.getRepository(Dispatch);
-        const dispatch = await dispatchRepo.findOne({ where: { id: challan.dispatchId } });
-        if (dispatch && !['completed', 'cancelled', 'rejected'].includes(dispatch.dispatchStatus)) {
-          await dispatchRepo.update(dispatch.id, {
-            dispatchStatus: 'completed',
-            pourEndTime: dispatch.pourEndTime ?? new Date(),
-          });
-          await recordDeliveryHistory(m, tenantId, { dispatchId: dispatch.id }, dispatch.dispatchStatus, 'completed', userId, 'Auto-completed on challan delivery');
-        }
-      }
+      assertTransition(challan.challanStatus, 'delivered');
+      await assertNotInvoiced(m, challan);
+      await assertDispatchLive(m, challan);
+      // Return capture, valuation, history and dispatch close-out live in the
+      // shared util so offline sync delivers through exactly the same code.
+      await deliverChallan(m, tenantId, challan, dto, userId);
       return this.loadFull(m, id);
     });
   }
@@ -307,7 +225,19 @@ export class DeliveryChallanService {
   }
 
   cancel(tenantId: string, id: string, userId: string, reason?: string) {
-    return this.transition(tenantId, id, ['draft', 'issued'], 'cancelled', userId, { note: reason ?? null });
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(DeliveryChallan);
+      const challan = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!challan) throw notFound();
+      assertTransition(challan.challanStatus, 'cancelled');
+      // A billed challan cannot be cancelled underneath its invoice (the invoice
+      // is cancelled first, which releases the challan).
+      await assertNotInvoiced(m, challan);
+      // The reason lives in the history trail (the challan row has no note column).
+      await repo.update(id, { challanStatus: 'cancelled' });
+      await recordDeliveryHistory(m, tenantId, { challanId: id }, challan.challanStatus, 'cancelled', userId, reason ?? null);
+      return this.loadFull(m, id);
+    });
   }
 
   async pdfData(tenantId: string, id: string): Promise<{ data: ChallanPdfData; challan: DeliveryChallan }> {

@@ -59,20 +59,36 @@ export class CreditHoldService {
   ) {
     const { result, orderNo, orderId, amount } = await this.db.runInTenant(tenantId, async (m) => {
       const holdRepo = m.getRepository(CreditHoldRequest);
-      const hold = await holdRepo.findOne({ where: { id } });
+      const orderRepo = m.getRepository(Order);
+      // Peek (unlocked) only to learn the order, then lock ORDER → HOLD — the same
+      // order OrdersService.cancel takes (order row, then its pending holds), so
+      // the two paths serialize instead of deadlocking. The hold is re-read under
+      // lock and every check below runs against the locked rows.
+      const peek = await holdRepo.findOne({ where: { id } });
+      if (!peek) throw notFound();
+      const order = await orderRepo.findOne({ where: { id: peek.orderId }, lock: { mode: 'pessimistic_write' } });
+      if (!order) throw notFound();
+      const hold = await holdRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!hold) throw notFound();
       if (hold.status !== 'pending') throw badReq(`Request already ${hold.status}`);
+      // The order must still be waiting on this hold. A concurrent cancel (or an
+      // earlier reject that returned it to draft) was otherwise overwritten here:
+      // approving a cancelled order re-confirmed it, silently reviving a cancelled
+      // sale onto the dispatch board and into credit exposure.
+      if (order.orderStatus !== 'credit_hold') {
+        throw badReq(`Order ${order.orderNo} is ${order.orderStatus}, not on credit hold — the request cannot be decided`);
+      }
 
-      const orderRepo = m.getRepository(Order);
-      const order = await orderRepo.findOne({ where: { id: hold.orderId } });
-      if (!order) throw notFound();
-
-      await holdRepo.update(id, {
-        status: approve ? 'approved' : 'rejected',
-        decidedBy: userId,
-        decidedAt: new Date(),
-        decisionNote: note ?? null,
-      });
+      const res = await holdRepo.update(
+        { id, status: 'pending' },
+        {
+          status: approve ? 'approved' : 'rejected',
+          decidedBy: userId,
+          decidedAt: new Date(),
+          decisionNote: note ?? null,
+        },
+      );
+      if (!res.affected) throw badReq('Request was decided concurrently');
 
       if (approve) {
         await orderRepo.update(order.id, {
@@ -89,7 +105,9 @@ export class CreditHoldService {
         // their dues) and re-confirm, which re-runs the credit gate. Leaving it
         // in credit_hold made confirm() throw and the hold un-decidable, so the
         // order could only be cancelled.
-        await orderRepo.update(order.id, { orderStatus: 'draft', creditStatus: 'rejected' });
+        await orderRepo.update(order.id, {
+          orderStatus: 'draft', creditStatus: 'rejected', confirmedBy: null, confirmedAt: null,
+        });
         await recordHistory(m, tenantId, order.id, 'credit_hold', 'draft', 'credit_reject', userId, note ?? 'Credit hold rejected — order returned to draft');
       }
 

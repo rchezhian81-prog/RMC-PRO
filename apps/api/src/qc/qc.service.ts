@@ -171,7 +171,10 @@ export class QcService {
   recordCubeResults(tenantId: string, setId: string, dto: Record<string, unknown>) {
     return this.db.runInTenant(tenantId, async (m) => {
       const setRepo = m.getRepository(QcCubeSet);
-      const set = await setRepo.findOne({ where: { id: setId } });
+      // Lock the set: two result submissions at once both read the same existing
+      // rows, both pass the specimen cap and dedupe below, and together record
+      // more 28-day cubes than were cast — judging the batch on a padded sample.
+      const set = await setRepo.findOne({ where: { id: setId }, lock: { mode: 'pessimistic_write' } });
       if (!set) throw notFound('Cube set');
       // Once a set has a final verdict, appending more results and re-assessing
       // could flip a rejected set toward acceptance — the verdict is a record.

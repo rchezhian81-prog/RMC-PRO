@@ -246,7 +246,9 @@ export class DispatchService {
     if (!DISPATCH_STATUSES.includes(status)) throw badReq(`Invalid dispatch status ${status}`);
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Dispatch);
-      const dispatch = await repo.findOne({ where: { id } });
+      // Lock the dispatch: the challan deliver path auto-completes it and two
+      // board moves can race each other; every check below runs on the locked row.
+      const dispatch = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!dispatch) throw notFound();
       if (['completed', 'cancelled', 'rejected'].includes(dispatch.dispatchStatus)) {
         throw badReq(`Dispatch is ${dispatch.dispatchStatus} and cannot change`);
@@ -255,6 +257,18 @@ export class DispatchService {
       // allowed (idempotent); every other move must be a legal edge.
       if (status !== dispatch.dispatchStatus && !(DISPATCH_TRANSITIONS[dispatch.dispatchStatus] ?? []).includes(status)) {
         throw badReq(`Cannot move a dispatch from ${dispatch.dispatchStatus} to ${status}`);
+      }
+      // A load whose challan has been DELIVERED is concrete on site: it cannot be
+      // rejected or cancelled afterwards — that stranded a delivered, billable
+      // challan on a dead dispatch and dropped it from every board. The deliver
+      // path locks challan → dispatch; this path locks the dispatch then reads
+      // the challans, so the two serialize and each sees the other's outcome.
+      if (status === 'rejected' || status === 'cancelled') {
+        const [delivered] = await m.query(
+          `SELECT count(*)::int AS n FROM delivery_challans WHERE dispatch_id = $1 AND challan_status = 'delivered'`, [id]);
+        if (Number(delivered?.n ?? 0) > 0) {
+          throw badReq(`Dispatch ${dispatch.dispatchNo} has a delivered challan and cannot be ${status}`);
+        }
       }
       const patch: Record<string, unknown> = { dispatchStatus: status };
       const stampField = STAMP[status];
@@ -276,7 +290,8 @@ export class DispatchService {
         patch.returnQuantityM3 = String(returnQty);
       }
       if (status === 'returning' && dto.returnReason) patch.returnReason = dto.returnReason;
-      await repo.update(id, patch);
+      const res = await repo.update({ id, dispatchStatus: dispatch.dispatchStatus }, patch);
+      if (!res.affected) throw badReq('Dispatch changed concurrently — reload and retry');
       await recordDeliveryHistory(m, tenantId, { dispatchId: id }, dispatch.dispatchStatus, status, userId, (dto.note as string) ?? null);
       return this.loadFull(m, id);
     });

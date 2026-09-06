@@ -277,7 +277,10 @@ export class OrdersService {
   async cancel(tenantId: string, id: string, userId: string, reason?: string) {
     const { result, orderNo } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Order);
-      const order = await repo.findOne({ where: { id } });
+      // Lock the order (order → holds, the same order the credit-hold decision
+      // takes) so a cancel cannot interleave with an approve/confirm: both used
+      // to read the pre-state and the later UPDATE simply won.
+      const order = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!order) throw notFound();
       if (order.orderStatus === 'cancelled') throw badReq('Order is already cancelled');
       // Downstream guard: an order whose concrete has already been delivered must

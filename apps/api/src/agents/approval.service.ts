@@ -92,7 +92,13 @@ export class ApprovalService {
   ): Promise<AgentApprovalRequest> {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(AgentApprovalRequest);
-      const row = await repo.findOne({ where: { id, tenantId } });
+      // Lock the row and write the decision conditionally on it still being
+      // pending: two approvers deciding at once (or approve racing reject) must
+      // yield exactly one decision. Without this both read 'pending', both passed
+      // canDecide, and the second save silently overwrote the first — an
+      // approved GST action could be recorded as 'rejected' while its execution
+      // job was already queued (or the reverse).
+      const row = await repo.findOne({ where: { id, tenantId }, lock: { mode: 'pessimistic_write' } });
       if (!row) throw new NotFoundException({ code: 'NOT_FOUND', message: 'approval request not found' });
       if (!canDecide(row.status)) {
         throw new ConflictException({
@@ -100,11 +106,16 @@ export class ApprovalService {
           message: `request is already ${row.status}`,
         });
       }
-      row.status = decision;
-      row.decidedBy = decidedBy;
-      row.decidedAt = new Date();
-      row.decisionReason = reason ?? null;
-      return repo.save(row);
+      const res = await repo.update(
+        { id, tenantId, status: row.status },
+        { status: decision, decidedBy, decidedAt: new Date(), decisionReason: reason ?? null },
+      );
+      if (!res.affected) {
+        throw new ConflictException({ code: 'ALREADY_DECIDED', message: 'request was decided concurrently' });
+      }
+      const decided = await repo.findOne({ where: { id, tenantId } });
+      if (!decided) throw new NotFoundException({ code: 'NOT_FOUND', message: 'approval request not found' });
+      return decided;
     });
   }
 }

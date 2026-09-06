@@ -86,6 +86,12 @@ export class MixDesignsService {
 
   deleteMaterial(tenantId: string, id: string, materialRowId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
+      // Same lock as update/addMaterial: an approved recipe is a record — pulling
+      // a material out of it silently changed what every future batch of that
+      // grade weighs out, with no new version and no re-approval.
+      const design = await m.getRepository(MixDesign).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!design) throw notFound();
+      if (design.approvalStatus === 'approved') throw badReq('Approved mix design is locked');
       const repo = m.getRepository(MixDesignMaterial);
       const row = await repo.findOne({ where: { id: materialRowId, mixDesignId: id } });
       if (!row) throw notFound();
@@ -97,7 +103,7 @@ export class MixDesignsService {
   async approve(tenantId: string, id: string, userId: string) {
     const { result, label } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(MixDesign);
-      const design = await repo.findOne({ where: { id } });
+      const design = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!design) throw notFound();
       const rows = await m.getRepository(MixDesignMaterial).find({ where: { mixDesignId: id } });
       if (!rows.length) throw badReq('Add at least one material before approving');
@@ -131,8 +137,16 @@ export class MixDesignsService {
   async reject(tenantId: string, id: string, userId: string) {
     const { result, label } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(MixDesign);
-      const design = await repo.findOne({ where: { id } });
+      const design = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!design) throw notFound();
+      // Reject decides a PENDING approval. An approved design is the active
+      // recipe for its grade: flipping it to rejected in place left the grade
+      // with no approved version mid-production (and re-used the approvedBy/At
+      // stamps for the rejection). Supersede it with a new version instead.
+      if (design.approvalStatus === 'approved') {
+        throw badReq('An approved mix design cannot be rejected — create and approve a new version to supersede it');
+      }
+      if (design.approvalStatus === 'rejected') throw badReq('Mix design is already rejected');
       await repo.update(id, { approvalStatus: 'rejected', approvedBy: userId, approvedAt: new Date() });
       return { result: await this.loadFull(m, id), label: `${design.mixCode} v${design.versionNo}` };
     });

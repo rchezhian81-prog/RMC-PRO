@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { In } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { BatchTicket, BatchTicketMaterial, StockTransaction } from '../core/database/entities';
 import { buildPlanVsActual } from './plan-vs-actual.util';
@@ -53,25 +54,31 @@ export class ProductionReportsService {
       const tickets = await m
         .getRepository(BatchTicket)
         .find({ where: { status: 'confirmed', varianceExceeded: true }, order: { createdAt: 'DESC' } });
-      const withMaterials = [];
-      for (const t of tickets) {
-        const materials = await m
-          .getRepository(BatchTicketMaterial)
-          .find({ where: { batchTicketId: t.id, withinTolerance: false } });
-        withMaterials.push({
-          batchTicketNo: t.batchTicketNo,
-          gradeLabel: t.gradeLabel,
-          batchQuantityM3: t.batchQuantityM3,
-          breaches: materials.map((mm) => ({
-            material: mm.materialLabel,
-            target: mm.targetQuantity,
-            actual: mm.actualQuantity,
-            variancePercentage: mm.variancePercentage,
-            tolerancePercentage: mm.tolerancePercentage,
-          })),
-        });
+      if (!tickets.length) return [];
+      // One query for every breach material across all flagged tickets, then group
+      // in memory — instead of a find() per ticket (N+1). idx_batch_ticket_materials_ticket
+      // supports the IN lookup.
+      const materials = await m.getRepository(BatchTicketMaterial).find({
+        where: { batchTicketId: In(tickets.map((t) => t.id)), withinTolerance: false },
+      });
+      const byTicket = new Map<string, BatchTicketMaterial[]>();
+      for (const mm of materials) {
+        const list = byTicket.get(mm.batchTicketId) ?? [];
+        list.push(mm);
+        byTicket.set(mm.batchTicketId, list);
       }
-      return withMaterials;
+      return tickets.map((t) => ({
+        batchTicketNo: t.batchTicketNo,
+        gradeLabel: t.gradeLabel,
+        batchQuantityM3: t.batchQuantityM3,
+        breaches: (byTicket.get(t.id) ?? []).map((mm) => ({
+          material: mm.materialLabel,
+          target: mm.targetQuantity,
+          actual: mm.actualQuantity,
+          variancePercentage: mm.variancePercentage,
+          tolerancePercentage: mm.tolerancePercentage,
+        })),
+      }));
     });
   }
 

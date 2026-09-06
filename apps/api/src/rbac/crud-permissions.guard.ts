@@ -1,8 +1,8 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { TenantDbService } from '../core/database/tenant-db.service';
 import { CRUD_RESOURCE_KEY } from './crud-resource.decorator';
-import { isTenantOwner, loadUserAccess } from './access';
+import { isTenantOwner } from './access';
+import { UserAccessService } from './user-access.service';
 import type { AuthUser } from '../auth/auth-user';
 
 const ACTION_BY_METHOD: Record<string, string> = {
@@ -24,7 +24,7 @@ const ACTION_BY_METHOD: Record<string, string> = {
 export class CrudPermissionsGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly db: TenantDbService,
+    private readonly userAccess: UserAccessService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -43,7 +43,7 @@ export class CrudPermissionsGuard implements CanActivate {
     const action = ACTION_BY_METHOD[req.method] ?? 'edit';
     const required = `${resource}.${action}`;
 
-    const access = await loadUserAccess(this.db, user.tenantId, user.userId);
+    const access = await this.userAccess.get(user.tenantId, user.userId);
     if (isTenantOwner(access)) return true;
     if (!access.permissions.includes(required)) {
       throw new ForbiddenException({

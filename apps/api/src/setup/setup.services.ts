@@ -7,7 +7,8 @@ import {
 } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { loadUserAccess, isTenantOwner } from '../rbac/access';
+import { isTenantOwner } from '../rbac/access';
+import { UserAccessService } from '../rbac/user-access.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { validateLogo } from './logo';
@@ -25,7 +26,11 @@ import {
 /** Company profile — one row per tenant (Design Doc 6 §5.1). */
 @Injectable()
 export class CompanyService {
-  constructor(private readonly db: TenantDbService, private readonly audit: AuditService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly audit: AuditService,
+    private readonly userAccess: UserAccessService,
+  ) {}
 
   async get(tenantId: string, userId: string) {
     // The company profile (name, GSTIN, address, logo) is read all over the app,
@@ -34,7 +39,7 @@ export class CompanyService {
     // Those are settings-manager territory; a general user (dispatch, production, a
     // GPS/weighbridge device account) has no need to read them, so strip them
     // unless the caller owns the tenant or can manage settings.
-    const access = await loadUserAccess(this.db, tenantId, userId);
+    const access = await this.userAccess.get(tenantId, userId);
     const privileged = isTenantOwner(access) || access.permissions.includes('settings.manage');
     return this.db.runInTenant(tenantId, async (m) => {
       const rows = await m.getRepository(Company).find({ take: 1 });
@@ -212,6 +217,7 @@ export class UsersService {
     private readonly db: TenantDbService,
     private readonly planLimits: PlanLimitsService,
     private readonly audit: AuditService,
+    private readonly userAccess: UserAccessService,
   ) {}
 
   async list(tenantId: string) {
@@ -295,6 +301,9 @@ export class UsersService {
           .getRepository(UserRole)
           .save(m.getRepository(UserRole).create({ tenantId, userId: user.id, roleId: String(dto.roleId) })),
       );
+      // A brand-new user cannot have a cached entry, but drop it defensively so
+      // the cache never lags an assignment (matches the update path below).
+      this.userAccess.invalidateUser(tenantId, user.id);
     }
     await this.audit.record({
       tenantId,
@@ -435,6 +444,10 @@ export class UsersService {
           );
         }
       });
+      // The user's effective access just changed — drop their cached entry so
+      // the new role's permissions apply on the very next request, not after
+      // the TTL. (Password/status edits don't touch access, so only here.)
+      this.userAccess.invalidateUser(tenantId, id);
     }
 
     // One record per kind of change, so the trail reads as distinct events —
@@ -481,7 +494,11 @@ export class UsersService {
 /** Tenant-side role + permission management (Design Doc 6 §6.2–6.4). */
 @Injectable()
 export class RolesService {
-  constructor(private readonly db: TenantDbService, private readonly audit: AuditService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly audit: AuditService,
+    private readonly userAccess: UserAccessService,
+  ) {}
 
   list(tenantId: string) {
     return this.db.runInTenant(tenantId, (m) =>
@@ -551,6 +568,9 @@ export class RolesService {
       await m.getRepository(Role).delete(id);
       return role.roleName;
     });
+    // No user still holds this role (deletion is blocked while assigned), but
+    // clear the tenant so any cached access can never reference a gone role.
+    this.userAccess.invalidateTenant(tenantId);
     await this.audit.record({
       tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_DELETE,
       entityType: 'role', entityId: id, entityLabel: label,
@@ -594,6 +614,10 @@ export class RolesService {
       }
       return this.getPermissions(tenantId, roleId);
     });
+    // This role's permissions changed, which moves effective access for EVERY
+    // user who holds it — the cache doesn't index users by role, so clear the
+    // tenant. The change is then live on the next request, not after the TTL.
+    this.userAccess.invalidateTenant(tenantId);
     // A permission grant is the single most privilege-relevant tenant action —
     // it belongs in the trail (the count of permissions on the role after the set).
     await this.audit.record({

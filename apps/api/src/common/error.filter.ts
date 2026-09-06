@@ -46,7 +46,7 @@ export class ErrorFilter implements ExceptionFilter {
     // A value the caller sent that the column can't parse (a non-date in a date
     // filter, a non-uuid plantId, an out-of-range number) also arrives raw; it's
     // a bad request, not a server fault, so answer 400 instead of a generic 500.
-    const badInput = dup ? null : badInputViolation(exception);
+    const badInput = dup ? null : (badInputViolation(exception) ?? fkViolation(exception));
     const status = dup
       ? HttpStatus.CONFLICT
       : badInput
@@ -156,6 +156,19 @@ function badInputViolation(exception: unknown): { code: string; message: string;
   const pgCode = e?.driverError?.code ?? e?.code;
   if (typeof pgCode !== 'string' || !BAD_INPUT_PG_CODES.has(pgCode)) return null;
   return { code: ERROR_CODES.VALIDATION_ERROR, message: 'One or more values are not in the expected format.' };
+}
+
+/**
+ * A foreign-key violation (SQLSTATE 23503): the caller referenced a row that
+ * does not exist — or, under RLS, one it cannot see, such as another tenant's
+ * role or plan. That is a bad request, not a server fault, so it must not page
+ * ops as a 500. Mirrors `uniqueViolation`.
+ */
+function fkViolation(exception: unknown): { code: string; message: string; fields?: Record<string, string> } | null {
+  const e = exception as { code?: unknown; driverError?: { code?: unknown } };
+  const pgCode = e?.driverError?.code ?? e?.code;
+  if (pgCode !== '23503') return null;
+  return { code: ERROR_CODES.VALIDATION_ERROR, message: 'One or more values refer to a record that does not exist.' };
 }
 
 /** The code that best describes a refusal that did not name one itself. */

@@ -279,12 +279,28 @@ export class UsersService {
     }
     // A users.manage holder must not be able to mint a new Company Owner.
     await this.assertMayGrantOwnerRole(tenantId, String(dto.roleId ?? ''), actingUserId);
-    // Checked after the duplicate test, so retrying an email that already exists
-    // does not report a seat problem the administrator cannot act on.
-    await this.planLimits.assertCanAddUser(tenantId);
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(User).save(
+    const roleId = String(dto.roleId ?? '').trim();
+    // One transaction for the seat check, the user row and its role. Split
+    // across two transactions, a stale or foreign-tenant roleId left an ACTIVE
+    // user with no role (and no audit line) once the second transaction failed,
+    // and two creates racing for the last seat both passed a count taken
+    // outside any transaction. The advisory lock — transaction-scoped, keyed on
+    // the tenant — serializes seat accounting: the second create waits here and
+    // then counts the first one's committed row. Still checked after the
+    // duplicate test, so retrying an email that already exists does not report
+    // a seat problem the administrator cannot act on.
+    const user = await this.db.runInTenant(tenantId, async (m) => {
+      await m.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`users:${tenantId}`]);
+      await this.planLimits.assertCanAddUser(tenantId, m);
+      let role: Role | null = null;
+      if (roleId) {
+        // Resolved inside the tenant context: a deleted or another tenant's role
+        // is simply unknown here (RLS) instead of surfacing as an FK failure.
+        role = await m.getRepository(Role).findOne({ where: { id: roleId } });
+        if (!role) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
+      }
+      const saved = await m.getRepository(User).save(
         m.getRepository(User).create({
           tenantId,
           name,
@@ -293,18 +309,17 @@ export class UsersService {
           passwordHash,
           userType: 'tenant_user',
         }),
-      ),
-    );
-    if (dto.roleId) {
-      await this.db.runInTenant(tenantId, (m) =>
-        m
-          .getRepository(UserRole)
-          .save(m.getRepository(UserRole).create({ tenantId, userId: user.id, roleId: String(dto.roleId) })),
       );
-      // A brand-new user cannot have a cached entry, but drop it defensively so
-      // the cache never lags an assignment (matches the update path below).
-      this.userAccess.invalidateUser(tenantId, user.id);
-    }
+      if (role) {
+        await m
+          .getRepository(UserRole)
+          .save(m.getRepository(UserRole).create({ tenantId, userId: saved.id, roleId: role.id }));
+      }
+      return saved;
+    });
+    // A brand-new user cannot have a cached entry, but drop it defensively so
+    // the cache never lags an assignment (matches the update path below).
+    if (roleId) this.userAccess.invalidateUser(tenantId, user.id);
     await this.audit.record({
       tenantId,
       actorUserId: actingUserId ?? null,
@@ -403,9 +418,7 @@ export class UsersService {
     // Reactivating someone takes a seat back, so it is bounded by the plan the
     // same way creating one is. Only checked on the inactive → active edge; a
     // no-op update on an already-active user must not fail when seats are full.
-    if (dto.status !== undefined && String(dto.status) === 'active' && user.status !== 'active') {
-      await this.planLimits.assertCanAddUser(tenantId);
-    }
+    const reactivating = dto.status !== undefined && String(dto.status) === 'active' && user.status !== 'active';
 
     let passwordHash: string | undefined;
     if (dto.password !== undefined) {
@@ -414,36 +427,44 @@ export class UsersService {
       passwordHash = await bcrypt.hash(String(dto.password), 10);
     }
 
-    await this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(User).update(id, {
+    // Role change: a user holds one role here, so replace rather than append.
+    // An empty roleId clears the role, which leaves the user with no access —
+    // the honest way to suspend someone without deleting their history.
+    const roleIdIn = dto.roleId !== undefined ? String(dto.roleId ?? '').trim() : undefined;
+    let newRoleName: string | null = null;
+    // One transaction, with the role validated FIRST: the password/status update
+    // used to commit on its own and only then was 'Unknown role' thrown — the
+    // caller was told nothing changed while a password reset had already landed.
+    await this.db.runInTenant(tenantId, async (m) => {
+      if (roleIdIn) {
+        const role = await m.getRepository(Role).findOne({ where: { id: roleIdIn } });
+        if (!role) {
+          throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
+        }
+        newRoleName = role.roleName;
+      }
+      if (reactivating) {
+        // Same per-tenant seat lock as create(), so a reactivation racing a
+        // create cannot both take the last seat.
+        await m.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`users:${tenantId}`]);
+        await this.planLimits.assertCanAddUser(tenantId, m);
+      }
+      await m.getRepository(User).update(id, {
         ...(dto.name !== undefined ? { name: String(dto.name) } : {}),
         ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
         ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
         ...(passwordHash ? { passwordHash } : {}),
-      }),
-    );
-
-    // Role change: a user holds one role here, so replace rather than append.
-    // An empty roleId clears the role, which leaves the user with no access —
-    // the honest way to suspend someone without deleting their history.
-    let newRoleName: string | null = null;
-    if (dto.roleId !== undefined) {
-      const roleId = String(dto.roleId ?? '').trim();
-      await this.db.runInTenant(tenantId, async (m) => {
-        if (roleId) {
-          const role = await m.getRepository(Role).findOne({ where: { id: roleId } });
-          if (!role) {
-            throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
-          }
-          newRoleName = role.roleName;
-        }
+      });
+      if (roleIdIn !== undefined) {
         await m.getRepository(UserRole).delete({ userId: id });
-        if (roleId) {
+        if (roleIdIn) {
           await m.getRepository(UserRole).save(
-            m.getRepository(UserRole).create({ tenantId, userId: id, roleId }),
+            m.getRepository(UserRole).create({ tenantId, userId: id, roleId: roleIdIn }),
           );
         }
-      });
+      }
+    });
+    if (roleIdIn !== undefined) {
       // The user's effective access just changed — drop their cached entry so
       // the new role's permissions apply on the very next request, not after
       // the TTL. (Password/status edits don't touch access, so only here.)

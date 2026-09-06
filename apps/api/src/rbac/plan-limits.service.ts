@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Plant, SubscriptionPlan, Tenant, User } from '../core/database/entities';
 
@@ -70,9 +71,10 @@ export class PlanLimitsService {
    * the tenant's context (the id comes from the verified JWT) — same result,
    * now database-enforced, and it mirrors `countPlants` below.
    */
-  private countUsers(tenantId: string): Promise<number> {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(User).count({ where: { tenantId, status: 'active' } }),
+  private countUsers(tenantId: string, m?: EntityManager): Promise<number> {
+    if (m) return m.getRepository(User).count({ where: { tenantId, status: 'active' } });
+    return this.db.runInTenant(tenantId, (mm) =>
+      mm.getRepository(User).count({ where: { tenantId, status: 'active' } }),
     );
   }
 
@@ -103,10 +105,13 @@ export class PlanLimitsService {
    * person who hits this is an office administrator who cannot change the
    * subscription themselves.
    */
-  async assertCanAddUser(tenantId: string): Promise<void> {
+  async assertCanAddUser(tenantId: string, m?: EntityManager): Promise<void> {
     const { maxUsers, planName } = await this.limitsOf(tenantId);
     if (maxUsers === null) return;
-    const used = await this.countUsers(tenantId);
+    // With a manager the count runs INSIDE the caller's transaction (the user
+    // create/reactivate paths hold a per-tenant advisory lock there), so two
+    // requests for the last seat serialize instead of both passing.
+    const used = await this.countUsers(tenantId, m);
     if (used < maxUsers) return;
     throw new BadRequestException({
       code: 'PLAN_LIMIT_EXCEEDED',

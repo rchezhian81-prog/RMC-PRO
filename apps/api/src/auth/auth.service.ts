@@ -4,8 +4,8 @@ import * as bcrypt from 'bcryptjs';
 import { MODULE_KEYS, passwordProblemMessage } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Tenant, User } from '../core/database/entities';
-import { loadUserAccess } from '../rbac/access';
 import { TenantAccessService } from '../rbac/tenant-access.service';
+import { UserAccessService } from '../rbac/user-access.service';
 import { JWT_ACCESS_SECRET, JWT_REFRESH_SECRET } from './jwt-secrets';
 
 // Resolved once at startup; production refuses to boot on a default/weak secret.
@@ -22,6 +22,7 @@ export class AuthService {
     private readonly db: TenantDbService,
     private readonly jwt: JwtService,
     private readonly access: TenantAccessService,
+    private readonly userAccess: UserAccessService,
   ) {}
 
   async login(login: string, password: string) {
@@ -205,7 +206,7 @@ export class AuthService {
 
   private loadAccess(user: Pick<User, 'id' | 'tenantId'>): Promise<{ roleKeys: string[]; permissions: string[] }> {
     if (!user.tenantId) return Promise.resolve({ roleKeys: [], permissions: [] });
-    return loadUserAccess(this.db, user.tenantId, user.id);
+    return this.userAccess.get(user.tenantId, user.id);
   }
 
   private publicUser(user: User) {

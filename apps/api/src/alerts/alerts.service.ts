@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { loadUserAccess, isTenantOwner } from '../rbac/access';
+import { isTenantOwner } from '../rbac/access';
+import { UserAccessService } from '../rbac/user-access.service';
 import { fleetComplianceAlerts, type FleetDoc } from './fleet-compliance.util';
 import { fleetMaintenanceAlerts, type MaintenanceDueRow } from './fleet-maintenance.util';
 import { concreteSlaAlerts, CONCRETE_SLA_MINUTES, type OnRoadSlaRow } from './concrete-sla.util';
@@ -37,7 +38,10 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
  */
 @Injectable()
 export class AlertsService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly userAccess: UserAccessService,
+  ) {}
 
   /**
    * The money/credit alerts below — receivables aging, credit-limit exposure,
@@ -49,7 +53,7 @@ export class AlertsService {
    */
   private async canSeeFinancials(tenantId: string, userId?: string): Promise<boolean> {
     if (!userId) return true;
-    const access = await loadUserAccess(this.db, tenantId, userId);
+    const access = await this.userAccess.get(tenantId, userId);
     return isTenantOwner(access) || access.permissions.includes('reports.view');
   }
 

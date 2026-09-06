@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { loadUserAccess, isTenantOwner } from '../rbac/access';
+import { isTenantOwner } from '../rbac/access';
+import { UserAccessService } from '../rbac/user-access.service';
 
 /** Phase-1 cross-module dashboard KPIs + operations funnel (DEV-PLAN B15/F12). */
 @Injectable()
 export class DashboardService {
-  constructor(private readonly db: TenantDbService) {}
+  constructor(
+    private readonly db: TenantDbService,
+    private readonly userAccess: UserAccessService,
+  ) {}
 
   /**
    * The dashboard stays open to every tenant user (gating the whole thing is a
@@ -14,7 +18,7 @@ export class DashboardService {
    * reports.view; everyone else still gets the operational dashboard.
    */
   private async canSeeFinancials(tenantId: string, userId: string): Promise<boolean> {
-    const access = await loadUserAccess(this.db, tenantId, userId);
+    const access = await this.userAccess.get(tenantId, userId);
     return isTenantOwner(access) || access.permissions.includes('reports.view');
   }
 

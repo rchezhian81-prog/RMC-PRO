@@ -1,8 +1,8 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { TenantDbService } from '../core/database/tenant-db.service';
 import { PERMISSIONS_KEY, PERMISSIONS_ANY_KEY } from './permissions.decorator';
-import { isTenantOwner, loadUserAccess } from './access';
+import { isTenantOwner } from './access';
+import { UserAccessService } from './user-access.service';
 import type { AuthUser } from '../auth/auth-user';
 
 /**
@@ -13,7 +13,7 @@ import type { AuthUser } from '../auth/auth-user';
 export class PermissionsGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly db: TenantDbService,
+    private readonly userAccess: UserAccessService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -37,7 +37,7 @@ export class PermissionsGuard implements CanActivate {
     if (user.userType === 'super_admin') return true;
     if (!user.tenantId) throw new ForbiddenException({ code: 'PERMISSION_DENIED' });
 
-    const access = await loadUserAccess(this.db, user.tenantId, user.userId);
+    const access = await this.userAccess.get(user.tenantId, user.userId);
     if (isTenantOwner(access)) return true;
 
     const hasAll = required.every((r) => access.permissions.includes(r));

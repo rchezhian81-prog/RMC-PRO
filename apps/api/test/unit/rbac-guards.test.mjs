@@ -5,8 +5,9 @@
  * tenant, missing grant, suspended, module off), and ALLOW (has the grant).
  *
  * The guards are plain NestJS classes, so they are constructed directly with
- * fakes for the Reflector, TenantDbService, and TenantAccessService. No DB and
- * no HTTP — just the decision logic.
+ * fakes for the Reflector, TenantAccessService, and — for the permission guards
+ * — the real UserAccessService wrapping a fake DB (so the cache path is exercised
+ * too, not bypassed). No HTTP — just the decision logic.
  *
  * Imports the COMPILED output, so `pnpm --filter @rmc/api build` must run first.
  */
@@ -19,6 +20,7 @@ import { CrudPermissionsGuard } from '../../dist/rbac/crud-permissions.guard.js'
 import { SuperAdminGuard } from '../../dist/rbac/super-admin.guard.js';
 import { ModuleGuard } from '../../dist/rbac/module.guard.js';
 import { TenantGuard } from '../../dist/rbac/tenant.guard.js';
+import { UserAccessService } from '../../dist/rbac/user-access.service.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -60,6 +62,14 @@ function fakeAccessDb({ roles = [], perms = [] } = {}) {
   };
 }
 
+/**
+ * The real UserAccessService the permission guards now take, wrapping a fake DB.
+ * A fresh instance per call, so each test's cache starts empty.
+ */
+function fakeAccess(opts) {
+  return new UserAccessService(fakeAccessDb(opts));
+}
+
 /** Fake TenantAccessService for the module/tenant guards. */
 function fakeAccessSvc({ usable = true, blockCode = 'TENANT_SUSPENDED', enabled = true } = {}) {
   return {
@@ -84,21 +94,21 @@ async function rejectsForbidden(promise, code) {
 test('PermissionsGuard: an unguarded route (no required perms) is allowed without touching the DB', async () => {
   let touched = false;
   const db = { runInTenant: async () => { touched = true; return {}; } };
-  const guard = new PermissionsGuard(makeReflector([]), db);
+  const guard = new PermissionsGuard(makeReflector([]), new UserAccessService(db));
   const ok = await guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } }));
   assert.equal(ok, true);
   assert.equal(touched, false, 'no access load when nothing is required');
 });
 
 test('PermissionsGuard: no authenticated user is denied', async () => {
-  const guard = new PermissionsGuard(makeReflector(['sales.view']), fakeAccessDb());
+  const guard = new PermissionsGuard(makeReflector(['sales.view']), fakeAccess());
   await rejectsForbidden(guard.canActivate(makeCtx({ user: undefined })), 'PERMISSION_DENIED');
 });
 
 test('PermissionsGuard: super_admin bypasses without an access load', async () => {
   let touched = false;
   const db = { runInTenant: async () => { touched = true; return {}; } };
-  const guard = new PermissionsGuard(makeReflector(['sales.view']), db);
+  const guard = new PermissionsGuard(makeReflector(['sales.view']), new UserAccessService(db));
   const ok = await guard.canActivate(
     makeCtx({ user: { userId: 'sa', tenantId: null, userType: 'super_admin' } }),
   );
@@ -107,7 +117,7 @@ test('PermissionsGuard: super_admin bypasses without an access load', async () =
 });
 
 test('PermissionsGuard: a tenant user with no tenantId is denied', async () => {
-  const guard = new PermissionsGuard(makeReflector(['sales.view']), fakeAccessDb());
+  const guard = new PermissionsGuard(makeReflector(['sales.view']), fakeAccess());
   await rejectsForbidden(
     guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: null, userType: 'tenant' } })),
     'PERMISSION_DENIED',
@@ -115,8 +125,8 @@ test('PermissionsGuard: a tenant user with no tenantId is denied', async () => {
 });
 
 test('PermissionsGuard: the company owner bypasses the per-key check', async () => {
-  const db = fakeAccessDb({ roles: ['company_owner'], perms: [] });
-  const guard = new PermissionsGuard(makeReflector(['sales.approve_price']), db);
+  const access = fakeAccess({ roles: ['company_owner'], perms: [] });
+  const guard = new PermissionsGuard(makeReflector(['sales.approve_price']), access);
   const ok = await guard.canActivate(
     makeCtx({ user: { userId: 'owner', tenantId: 't', userType: 'tenant' } }),
   );
@@ -124,8 +134,8 @@ test('PermissionsGuard: the company owner bypasses the per-key check', async () 
 });
 
 test('PermissionsGuard: a user holding every required permission is allowed', async () => {
-  const db = fakeAccessDb({ roles: ['sales_manager'], perms: ['sales.view', 'sales.create'] });
-  const guard = new PermissionsGuard(makeReflector(['sales.view', 'sales.create']), db);
+  const access = fakeAccess({ roles: ['sales_manager'], perms: ['sales.view', 'sales.create'] });
+  const guard = new PermissionsGuard(makeReflector(['sales.view', 'sales.create']), access);
   const ok = await guard.canActivate(
     makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } }),
   );
@@ -133,8 +143,8 @@ test('PermissionsGuard: a user holding every required permission is allowed', as
 });
 
 test('PermissionsGuard: a user missing any one required permission is denied (all-of semantics)', async () => {
-  const db = fakeAccessDb({ roles: ['sales_executive'], perms: ['sales.view'] });
-  const guard = new PermissionsGuard(makeReflector(['sales.view', 'sales.create']), db);
+  const access = fakeAccess({ roles: ['sales_executive'], perms: ['sales.view'] });
+  const guard = new PermissionsGuard(makeReflector(['sales.view', 'sales.create']), access);
   await rejectsForbidden(
     guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } })),
     'PERMISSION_DENIED',
@@ -142,15 +152,15 @@ test('PermissionsGuard: a user missing any one required permission is denied (al
 });
 
 test('PermissionsGuard: any-of — a user holding ONE of the required-any permissions is allowed', async () => {
-  const db = fakeAccessDb({ roles: ['accounts'], perms: ['reports.view'] });
-  const guard = new PermissionsGuard(makeReflector(undefined, ['invoices.create', 'reports.view']), db);
+  const access = fakeAccess({ roles: ['accounts'], perms: ['reports.view'] });
+  const guard = new PermissionsGuard(makeReflector(undefined, ['invoices.create', 'reports.view']), access);
   const ok = await guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } }));
   assert.equal(ok, true, 'any-of is satisfied by holding at least one of the keys');
 });
 
 test('PermissionsGuard: any-of — a user holding NONE of the required-any permissions is denied', async () => {
-  const db = fakeAccessDb({ roles: ['store'], perms: ['stock.adjust'] });
-  const guard = new PermissionsGuard(makeReflector(undefined, ['invoices.create', 'reports.view']), db);
+  const access = fakeAccess({ roles: ['store'], perms: ['stock.adjust'] });
+  const guard = new PermissionsGuard(makeReflector(undefined, ['invoices.create', 'reports.view']), access);
   await rejectsForbidden(
     guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } })),
     'PERMISSION_DENIED',
@@ -160,7 +170,7 @@ test('PermissionsGuard: any-of — a user holding NONE of the required-any permi
 // ── CrudPermissionsGuard ─────────────────────────────────────────────────────
 
 test('CrudPermissionsGuard: a controller with no @CrudResource is not gated', async () => {
-  const guard = new CrudPermissionsGuard(makeReflector(undefined), fakeAccessDb());
+  const guard = new CrudPermissionsGuard(makeReflector(undefined), fakeAccess());
   const ok = await guard.canActivate(
     makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' }, method: 'DELETE' }),
   );
@@ -177,8 +187,8 @@ test('CrudPermissionsGuard: the HTTP method maps to the resource action key', as
     ['OPTIONS', 'materials.edit'], // unknown method falls back to the strictest write action
   ];
   for (const [method, requiredKey] of cases) {
-    const db = fakeAccessDb({ roles: ['store_staff'], perms: [requiredKey] });
-    const guard = new CrudPermissionsGuard(makeReflector('materials'), db);
+    const access = fakeAccess({ roles: ['store_staff'], perms: [requiredKey] });
+    const guard = new CrudPermissionsGuard(makeReflector('materials'), access);
     const ok = await guard.canActivate(
       makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' }, method }),
     );
@@ -187,8 +197,8 @@ test('CrudPermissionsGuard: the HTTP method maps to the resource action key', as
 });
 
 test('CrudPermissionsGuard: a view-only role is refused a delete', async () => {
-  const db = fakeAccessDb({ roles: ['store_staff'], perms: ['materials.view'] });
-  const guard = new CrudPermissionsGuard(makeReflector('materials'), db);
+  const access = fakeAccess({ roles: ['store_staff'], perms: ['materials.view'] });
+  const guard = new CrudPermissionsGuard(makeReflector('materials'), access);
   await rejectsForbidden(
     guard.canActivate(
       makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' }, method: 'DELETE' }),
@@ -198,7 +208,7 @@ test('CrudPermissionsGuard: a view-only role is refused a delete', async () => {
 });
 
 test('CrudPermissionsGuard: super_admin and the company owner both bypass', async () => {
-  const superGuard = new CrudPermissionsGuard(makeReflector('materials'), fakeAccessDb());
+  const superGuard = new CrudPermissionsGuard(makeReflector('materials'), fakeAccess());
   assert.equal(
     await superGuard.canActivate(
       makeCtx({ user: { userId: 'sa', tenantId: null, userType: 'super_admin' }, method: 'DELETE' }),
@@ -206,8 +216,8 @@ test('CrudPermissionsGuard: super_admin and the company owner both bypass', asyn
     true,
   );
 
-  const ownerDb = fakeAccessDb({ roles: ['company_owner'], perms: [] });
-  const ownerGuard = new CrudPermissionsGuard(makeReflector('materials'), ownerDb);
+  const ownerAccess = fakeAccess({ roles: ['company_owner'], perms: [] });
+  const ownerGuard = new CrudPermissionsGuard(makeReflector('materials'), ownerAccess);
   assert.equal(
     await ownerGuard.canActivate(
       makeCtx({ user: { userId: 'o', tenantId: 't', userType: 'tenant' }, method: 'DELETE' }),
@@ -217,7 +227,7 @@ test('CrudPermissionsGuard: super_admin and the company owner both bypass', asyn
 });
 
 test('CrudPermissionsGuard: a tenant user with no user / no tenantId is denied', async () => {
-  const guard = new CrudPermissionsGuard(makeReflector('materials'), fakeAccessDb());
+  const guard = new CrudPermissionsGuard(makeReflector('materials'), fakeAccess());
   await rejectsForbidden(
     guard.canActivate(makeCtx({ user: undefined, method: 'GET' })),
     'PERMISSION_DENIED',

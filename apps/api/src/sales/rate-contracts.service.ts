@@ -1,3 +1,4 @@
+import { assertSalesRefs } from './sales-refs.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -70,6 +71,7 @@ export class RateContractsService {
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items']) delete rest[k];
       assertWindow(rest.validFrom, rest.validTo);
+      await assertSalesRefs(m, rest);
       const contract = await repo.save(
         repo.create({
           ...rest,
@@ -101,6 +103,7 @@ export class RateContractsService {
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items']) delete rest[k];
       assertWindow(rest.validFrom ?? contract.validFrom, rest.validTo ?? contract.validTo);
+      await assertSalesRefs(m, rest, contract.customerId);
       await repo.update(id, rest as Record<string, unknown>);
       return this.loadFull(m, id);
     });

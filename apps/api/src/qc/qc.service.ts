@@ -1,7 +1,8 @@
+import { resolveOptionalRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { BatchTicket, ConcreteGrade, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
+import { BatchTicket, ConcreteGrade, Plant, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { assessCubeSet } from './acceptance.util';
 
@@ -97,6 +98,8 @@ export class QcService {
       // An inverted range (min > max) makes every value fail — reject it so a
       // typo doesn't silently mislabel good concrete as out-of-slump.
       if (min !== null && max !== null && min > max) throw badReq('Target min slump cannot exceed target max slump.');
+      await resolveOptionalRef(m, Plant, dto.plantId, 'Plant');
+      await resolveOptionalRef(m, ConcreteGrade, dto.gradeId, 'Grade');
       await this.assertGradeMatchesTicket(m, str(dto.batchTicketId), str(dto.gradeId));
       const passed = (min === null || measured >= min) && (max === null || measured <= max);
       const repo = m.getRepository(QcSlumpTest);
@@ -154,7 +157,8 @@ export class QcService {
       }
       if (gradeId) {
         const grade = await m.getRepository(ConcreteGrade).findOne({ where: { id: gradeId } });
-        const gradeFck = fckFromGradeCode(grade?.gradeCode);
+        if (!grade) throw badReq('Grade not found');
+        const gradeFck = fckFromGradeCode(grade.gradeCode);
         gradeLabel = gradeLabel ?? grade?.gradeName ?? grade?.gradeCode ?? null;
         // The grade code IS the characteristic strength (M25 → 25 N/mm²). A
         // supplied fck that disagrees would assess the set against the wrong
@@ -169,6 +173,7 @@ export class QcService {
       if (!(fck > 0)) throw badReq('Target strength (fck) is required — set it directly or pick a grade like M25');
       await this.assertGradeMatchesTicket(m, batchTicketId, gradeId);
 
+      await resolveOptionalRef(m, Plant, dto.plantId, 'Plant');
       const setNo = await this.numbering.next(m, tenantId, 'qc_cube_set', 'CUBE-');
       const repo = m.getRepository(QcCubeSet);
       const set = await repo.save(

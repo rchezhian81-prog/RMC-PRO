@@ -1,8 +1,9 @@
+import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Material, PurchaseOrder, PurchaseOrderItem, Supplier } from '../core/database/entities';
+import { Material, Plant, PurchaseOrder, PurchaseOrderItem, Supplier } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Purchase order not found' });
@@ -48,6 +49,7 @@ export class PurchaseOrderService {
     return this.db.runInTenant(tenantId, async (m) => {
       const supplier = await m.getRepository(Supplier).findOne({ where: { id: supplierId } });
       if (!supplier) throw badReq('Supplier not found');
+      if (dto.plantId) await resolveRef(m, Plant, dto.plantId, 'Plant');
 
       const poNo = await this.numbering.next(m, tenantId, 'purchase_order', 'PO-');
       const poRepo = m.getRepository(PurchaseOrder);

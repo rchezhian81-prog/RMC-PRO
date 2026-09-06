@@ -1,3 +1,4 @@
+import { resolveRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -5,8 +6,10 @@ import {
   GoodsReceipt,
   GoodsReceiptItem,
   Material,
+  Plant,
   PurchaseOrder,
   PurchaseOrderItem,
+  Supplier,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from '../production/stock.service';
@@ -65,13 +68,27 @@ export class GrnService {
         if (po.status === 'cancelled') throw badReq('Cannot receive against a cancelled purchase order');
       }
 
+      // Header references: with a PO named, its supplier and plant are
+      // authoritative (a differing value would file the receipt under another
+      // supplier or plant); without one, a supplied id must resolve inside the
+      // tenant — FK checks bypass RLS, so a foreign UUID used to be accepted.
+      const supplierIdIn = (dto.supplierId as string) || null;
+      const plantIdIn = (dto.plantId as string) || null;
+      if (po) {
+        if (supplierIdIn && po.supplierId && supplierIdIn !== po.supplierId) throw badReq('supplierId does not match the purchase order');
+        if (plantIdIn && po.plantId && plantIdIn !== po.plantId) throw badReq('plantId does not match the purchase order');
+      } else {
+        if (supplierIdIn) await resolveRef(m, Supplier, supplierIdIn, 'Supplier');
+        if (plantIdIn) await resolveRef(m, Plant, plantIdIn, 'Plant');
+      }
+
       const grnNo = await this.numbering.next(m, tenantId, 'goods_receipt', 'GRN-');
       const grnRepo = m.getRepository(GoodsReceipt);
       const grn = await grnRepo.save(
         grnRepo.create({
           tenantId, grnNo, purchaseOrderId,
-          supplierId: (dto.supplierId as string) ?? po?.supplierId ?? null,
-          plantId: (dto.plantId as string) ?? po?.plantId ?? null,
+          supplierId: supplierIdIn ?? po?.supplierId ?? null,
+          plantId: plantIdIn ?? po?.plantId ?? null,
           receiptDate: (dto.receiptDate as string) ?? null,
           vehicleNo: (dto.vehicleNo as string) ?? null,
           supplierChallanNo: (dto.supplierChallanNo as string) ?? null,

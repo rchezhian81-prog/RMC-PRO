@@ -107,6 +107,9 @@ const TESTS = [
   // Approved-document item locks, plan-line grade authority, GRN↔PO scoping,
   // GPS latest-fix ordering, weighbridge slip release, cube-set fck/grade.
   'test/integrity-guards.test.mjs',
+  // Reference ids must resolve INSIDE the tenant (FK checks bypass RLS): every
+  // create path refuses another tenant's / a stale UUID with a 400.
+  'test/tenant-refs.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

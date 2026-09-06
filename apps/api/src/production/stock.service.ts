@@ -95,7 +95,14 @@ export class StockService {
    * row, not the real plant-scoped balance, so a pre-check must resolve first.
    */
   async resolvePlant(m: EntityManager, plantId: string | null): Promise<string> {
-    if (plantId) return plantId;
+    if (plantId) {
+      // Verify, not just trust: FK checks bypass RLS, so another tenant's plant
+      // id used to create a balance row invisible to this tenant's plant lists
+      // yet summed into its valuation (and undeletable for the other tenant).
+      const plant = await m.getRepository(Plant).findOne({ where: { id: plantId } });
+      if (!plant) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Plant not found' });
+      return plant.id;
+    }
     const plants = await m.getRepository(Plant).find({ order: { createdAt: 'ASC' }, take: 2 });
     const [first] = plants;
     if (plants.length === 1 && first) return first.id;

@@ -8,6 +8,7 @@ import {
   Device,
   LocalNumberReservation,
   Order,
+  Site,
   StockBalance,
   SyncConflict,
 } from '../core/database/entities';
@@ -308,6 +309,15 @@ export class SyncService {
       if (!isChallanStatus(status) || status === 'cancelled') return this.recordConflict(m, tenantId, device, r, null, 'invalid_status');
       const quantityM3 = Number(p.quantityM3);
       if (!(quantityM3 > 0)) return this.recordConflict(m, tenantId, device, r, null, 'invalid_quantity');
+      // Customer / site ids from the device must resolve inside the tenant (FK
+      // checks bypass RLS, so a stale or foreign UUID would otherwise be stored
+      // and the challan could never be invoiced).
+      if (p.customerId && !(await m.getRepository(Customer).findOne({ where: { id: String(p.customerId) } }))) {
+        return this.recordConflict(m, tenantId, device, r, null, 'unknown_customer');
+      }
+      if (p.siteId && !(await m.getRepository(Site).findOne({ where: { id: String(p.siteId) } }))) {
+        return this.recordConflict(m, tenantId, device, r, null, 'unknown_site');
+      }
       const existing = await repo.findOne({ where: { challanNo } });
       if (existing) {
         // Idempotent retry of the SAME document → applied with the existing id.

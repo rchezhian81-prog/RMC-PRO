@@ -1,3 +1,4 @@
+import { resolveRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Material, NegativeStockRequest, StockTransaction } from '../core/database/entities';
@@ -52,7 +53,7 @@ export class StockAdjustmentService {
       // balance, each compute newBalance >= 0, and both apply — driving stock
       // negative past the approval the gate is meant to require.
       await this.stock.lockBalance(m, plantId, materialId);
-      const material = await m.getRepository(Material).findOne({ where: { id: materialId } });
+      const material = await resolveRef(m, Material, materialId, 'Material');
       const label = material?.materialName ?? null;
       const uom = material?.uom ?? null;
       const current = await this.stock.balanceOf(m, plantId, materialId);

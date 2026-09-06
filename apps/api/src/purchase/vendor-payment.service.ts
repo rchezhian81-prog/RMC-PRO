@@ -1,8 +1,9 @@
+import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { VendorBill, VendorPayment, VendorPaymentAllocation } from '../core/database/entities';
+import { Supplier, VendorBill, VendorPayment, VendorPaymentAllocation } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { billPaymentStatus } from './purchase.util';
@@ -48,6 +49,7 @@ export class VendorPaymentService {
     const allocations = Array.isArray(dto.allocations) ? (dto.allocations as Record<string, unknown>[]) : [];
 
     const { result, paymentNo, allocated } = await this.db.runInTenant(tenantId, async (m) => {
+      await resolveRef(m, Supplier, supplierId, 'Supplier');
       const paymentNoStr = await this.numbering.next(m, tenantId, 'purchase_payment', 'PAY-');
       const paymentRepo = m.getRepository(VendorPayment);
       const payment = await paymentRepo.save(

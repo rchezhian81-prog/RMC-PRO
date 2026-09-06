@@ -353,6 +353,22 @@ export class InvoiceService {
       // A write-off is a financial event on this invoice; cancelling would erase
       // it and silently make the challans billable again. Reverse it first.
       if (num(invoice.writtenOffAmount) > 0) throw badReq('Cannot cancel an invoice that has a write-off — reverse the write-off first');
+      // A GST filing queued or retrying for this invoice would, when it later
+      // ran, stamp a live IRN / e-way onto a cancelled row — two IRNs for one
+      // supply once the challans are re-billed. Refuse while one is mid-flight;
+      // dead-letter the rest here, in the same transaction as the cancel.
+      const [gstRunning] = await m.query(
+        `SELECT count(*)::int AS n FROM gst_execution_jobs WHERE invoice_id = $1 AND status = 'running'`,
+        [id],
+      );
+      if (Number(gstRunning?.n ?? 0) > 0) {
+        throw badReq('A GST filing is in progress for this invoice — wait for it to finish before cancelling');
+      }
+      await m.query(
+        `UPDATE gst_execution_jobs SET status = 'dead', last_error = 'invoice cancelled', updated_at = now()
+          WHERE invoice_id = $1 AND status IN ('queued', 'failed')`,
+        [id],
+      );
       // Revert the linked challans to not_invoiced AND drop the invoice_challans
       // links. Older builds reset the challan but left the link, so a cancel →
       // re-invoice cycle left a challan with two links (the stale one + the live

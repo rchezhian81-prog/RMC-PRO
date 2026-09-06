@@ -75,7 +75,18 @@ export class ImportService {
     for (const col of def.columns) {
       const raw = obj[col.key];
       if (raw === undefined || String(raw).trim() === '') continue;
-      dto[col.key] = col.type === 'number' ? Number(raw) : String(raw).trim();
+      if (col.type === 'number') {
+        // Strip thousands separators/whitespace ("5,200" → 5200), then require a
+        // finite number. `Number('5,200')` is NaN, and NaN passed every check
+        // downstream (`NaN >= 0` is TRUE in Postgres) and was persisted — the row
+        // reported success with a rate/threshold of NaN that poisoned stock
+        // value and margin sums and kept the low-stock alert firing.
+        const n = Number(String(raw).replace(/[\s,]/g, ''));
+        if (!Number.isFinite(n)) throw badReq(`${col.label}: "${String(raw).trim()}" is not a number`);
+        dto[col.key] = n;
+      } else {
+        dto[col.key] = String(raw).trim();
+      }
     }
     return dto;
   }
@@ -97,8 +108,8 @@ export class ImportService {
     const errors: Array<{ row: number; message: string }> = [];
     let successCount = 0;
     for (let i = 0; i < objects.length; i++) {
-      const dto = this.toDto(importer.def, objects[i] ?? {});
       try {
+        const dto = this.toDto(importer.def, objects[i] ?? {});
         await importer.create(tenantId, dto);
         successCount++;
       } catch (e) {

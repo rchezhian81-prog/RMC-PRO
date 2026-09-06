@@ -245,11 +245,13 @@ export class InvoiceService {
         // agreed line. An explicit 0 is respected (a genuinely free line stays
         // free, and an exempt line stays 0% — not silently bumped to the default).
         const hasRate = line.rate !== undefined && line.rate !== null && String(line.rate).trim() !== '';
-        const rate = hasRate ? num(line.rate) : agreed.rate;
+        // Rates are numeric(…,2) columns: round them here so the tax maths runs
+        // on exactly what is stored (52.755 in, 52.76 stored, 52.76 taxed).
+        const rate = round2(hasRate ? num(line.rate) : agreed.rate);
         if (rate < 0) throw badReq('Invoice line rate cannot be negative');
-        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : agreed.gstRate;
+        const gstRate = round2(line.gstRate !== undefined ? num(line.gstRate) : agreed.gstRate);
         if (gstRate < 0) throw badReq('Invoice line GST rate cannot be negative');
-        const cessRate = num(line.cessRate);
+        const cessRate = round2(num(line.cessRate));
         const t = computeLineTax(quantity, rate, gstRate, cessRate, isInterstate);
 
         await itemRepo.save(

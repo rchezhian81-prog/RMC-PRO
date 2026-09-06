@@ -1,6 +1,8 @@
 import { gstStateCode } from '../compliance/gst-payload.util';
 
-export const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
+import { round2 } from '../common/money.util';
+
+export { round2 };
 
 export interface LineTax {
   taxableAmount: number;

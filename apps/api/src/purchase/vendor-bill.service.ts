@@ -1,3 +1,4 @@
+import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -20,7 +21,6 @@ import { summariseMatch, deriveGstSplit, type MatchLineInput } from './purchase.
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Vendor bill not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 
 /**
  * Vendor bills (Plan D2) — the supplier's invoice, 3-way matched against the
@@ -162,7 +162,7 @@ export class VendorBillService {
       for (const line of lines) {
         const quantity = num(line.quantity);
         if (quantity <= 0) throw badReq('Each line needs a quantity greater than zero');
-        const rate = num(line.rate);
+        const rate = round2(num(line.rate));
         // A negative rate reverses the payable (and the ITC it books) — a bill that
         // should be payable can show settled, or a genuine payable is silently
         // halved. The customer invoice path guards this (invoice.service) and so
@@ -180,7 +180,7 @@ export class VendorBillService {
         // Inherit the GST rate the PO agreed (cement 28%, diesel 0, fly-ash /
         // admixture 5–18%…) rather than a blanket 18%, unless the caller passed
         // an explicit rate on the line.
-        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : poItem ? num(poItem.gstRate) : 18;
+        const gstRate = round2(line.gstRate !== undefined ? num(line.gstRate) : poItem ? num(poItem.gstRate) : 18);
         if (gstRate < 0) throw badReq('Each line GST rate must be zero or more');
         const lineTaxable = round2(quantity * rate);
         const lineTax = round2((lineTaxable * gstRate) / 100);

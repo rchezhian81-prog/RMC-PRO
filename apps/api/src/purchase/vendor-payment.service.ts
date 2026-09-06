@@ -1,3 +1,4 @@
+import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -9,7 +10,6 @@ import { billPaymentStatus } from './purchase.util';
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Vendor payment not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 
 /**
  * Vendor payments (Plan D2) — money paid to a supplier, allocated across their
@@ -43,7 +43,7 @@ export class VendorPaymentService {
   async create(tenantId: string, dto: Record<string, unknown>, userId: string) {
     const supplierId = String(dto.supplierId ?? '');
     if (!supplierId) throw badReq('supplierId required');
-    const amount = num(dto.amount);
+    const amount = round2(num(dto.amount));
     if (amount <= 0) throw badReq('amount must be greater than zero');
     const allocations = Array.isArray(dto.allocations) ? (dto.allocations as Record<string, unknown>[]) : [];
 
@@ -64,7 +64,7 @@ export class VendorPaymentService {
       const allocRepo = m.getRepository(VendorPaymentAllocation);
       let allocatedTotal = 0;
       for (const a of allocations) {
-        const amt = num(a.amount);
+        const amt = round2(num(a.amount));
         if (amt <= 0) continue;
         // Lock the bill row: two payments allocating to the same bill concurrently
         // would otherwise each read the same outstanding, both pass the check, and
@@ -188,7 +188,7 @@ export class VendorPaymentService {
       const allocRepo = m.getRepository(VendorPaymentAllocation);
       let appliedTotal = 0;
       for (const a of allocations) {
-        const amt = num(a.amount);
+        const amt = round2(num(a.amount));
         if (amt <= 0) continue;
         if (amt > available + 0.001) throw badReq(`Allocation ${amt} exceeds the unallocated amount ${available}`);
         const bill = await billRepo.findOne({ where: { id: String(a.billId ?? '') }, lock: { mode: 'pessimistic_write' } });

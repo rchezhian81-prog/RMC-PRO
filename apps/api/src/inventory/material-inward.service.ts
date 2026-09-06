@@ -1,3 +1,4 @@
+import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Material, MaterialInward } from '../core/database/entities';
@@ -44,7 +45,7 @@ export class MaterialInwardService {
       if (received <= 0) throw badReq('Received quantity must be greater than zero');
       const accepted = dto.quantityAccepted !== undefined ? num(dto.quantityAccepted) : received;
       if (accepted < 0 || accepted > received + 0.0005) throw badReq('Accepted quantity must be between 0 and received');
-      const rate = num(dto.rate);
+      const rate = round2(num(dto.rate));
       if (rate < 0) throw badReq('Rate cannot be negative');
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'inwardNo', 'status', 'amount']) delete rest[k];
@@ -55,7 +56,7 @@ export class MaterialInwardService {
           materialLabel: (dto.materialLabel as string) ?? material?.materialName ?? null,
           uom: (dto.uom as string) ?? material?.uom ?? null,
           quantityReceived: String(received), quantityAccepted: String(accepted),
-          rate: String(rate), amount: String(accepted * rate), status: 'draft',
+          rate: String(rate), amount: String(round2(accepted * rate)), status: 'draft',
         } as Record<string, unknown>),
       );
       return repo.findOne({ where: { id: inward.id } });

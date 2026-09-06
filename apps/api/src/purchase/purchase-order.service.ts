@@ -1,3 +1,4 @@
+import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -7,7 +8,6 @@ import { NumberingService } from '../sales/numbering.service';
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Purchase order not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 
 /**
  * Purchase orders (Plan D2). A PO commits to buying materials from a supplier at
@@ -68,8 +68,8 @@ export class PurchaseOrderService {
         const materialId = (line.materialId as string) || null;
         const quantity = num(line.quantity);
         if (quantity <= 0) throw badReq('Each line needs a quantity greater than zero');
-        const rate = num(line.rate);
-        const gstRate = line.gstRate !== undefined ? num(line.gstRate) : 18;
+        const rate = round2(num(line.rate));
+        const gstRate = round2(line.gstRate !== undefined ? num(line.gstRate) : 18);
         const lineTaxable = round2(quantity * rate);
         const lineTax = round2((lineTaxable * gstRate) / 100);
         let materialLabel: string | null = (line.materialLabel as string) ?? null;

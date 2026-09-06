@@ -1,3 +1,4 @@
+import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -16,7 +17,6 @@ import { allocationSummary, categorySummary } from './expenses.util';
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Expense voucher not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 const ALLOCATION_TYPES = new Set(['plant', 'vehicle', 'site', 'general']);
@@ -84,7 +84,10 @@ export class ExpenseVoucherService {
       const headRepo = m.getRepository(ExpenseHead);
       let total = 0;
       for (const line of lines) {
-        const amount = num(line.amount);
+        // Rounded once here and reused for the line AND the header total, so
+        // total_amount = SUM(lines) exactly (the header used to accumulate the
+        // unrounded input while the line stored the rounded one).
+        const amount = round2(num(line.amount));
         if (amount <= 0) throw badReq('Each line needs an amount greater than zero');
         const allocationType = String(line.allocationType ?? 'general');
         if (!ALLOCATION_TYPES.has(allocationType)) throw badReq('allocationType must be plant, vehicle, site or general');
@@ -106,7 +109,7 @@ export class ExpenseVoucherService {
           lineRepo.create({
             tenantId, expenseVoucherId: voucher.id, expenseHeadId, expenseHeadLabel,
             description: (line.description as string) ?? null,
-            amount: String(round2(amount)),
+            amount: String(amount),
             allocationType, allocationId, allocationLabel,
           }),
         );

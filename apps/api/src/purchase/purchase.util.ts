@@ -1,9 +1,10 @@
+import { round2 } from '../common/money.util';
+
 /**
  * Purchase / AP-lite helpers (Plan D2). Pure arithmetic — the 3-way match
  * (PO ↔ GRN ↔ bill), a purchase order's receipt roll-up, and a vendor bill's
  * payment status — kept DB-free so each is unit-testable in isolation.
  */
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 const round3 = (v: number): number => Math.round((Number(v) || 0) * 1000) / 1000;
 
 /**

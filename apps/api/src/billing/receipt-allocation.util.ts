@@ -1,9 +1,10 @@
+import { round2 } from '../common/money.util';
+
 /**
  * Receipt allocation (Plan C1) — greedily spread an amount across invoices, in
  * the given order, up to each invoice's outstanding. Used when applying a held
  * advance to later invoices. Pure so the arithmetic is unit-testable.
  */
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 
 export interface AllocatableInvoice {
   id: string;

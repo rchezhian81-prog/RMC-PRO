@@ -10,6 +10,7 @@ import {
   InvoiceItem,
   Order,
   OrderItem,
+  PaymentAllocation,
   Site,
   Transporter,
 } from '../core/database/entities';
@@ -20,6 +21,7 @@ import type { InvoicePdfData } from '../sales/pdf.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeLineTax, round2, isInterstateSupply } from './tax.util';
 import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy } from './return-billing.util';
+import { invoiceBalanceAfter } from './receipt-allocation.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -326,7 +328,10 @@ export class InvoiceService {
   async cancel(tenantId: string, id: string, userId: string, reason?: string) {
     const { result, invoiceNo, total } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Invoice);
-      const invoice = await repo.findOne({ where: { id } });
+      // Lock the invoice: the receipt paths lock it before crediting, so an
+      // unlocked read here could pass the "nothing paid" check on a stale
+      // snapshot and then commit the cancel on top of a just-committed allocation.
+      const invoice = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!invoice) throw notFound();
       if (invoice.invoiceStatus === 'cancelled') throw badReq('Invoice already cancelled');
       // A live IRN / e-way bill is filed with the government. Cancelling locally
@@ -340,6 +345,11 @@ export class InvoiceService {
         throw badReq('This invoice has a live e-way bill — cancel it on the portal before cancelling the invoice.');
       }
       if (num(invoice.amountPaid) > 0) throw badReq('Cannot cancel an invoice with receipts allocated');
+      // The allocation rows are the authoritative record — refuse on them too,
+      // so a drifted amount_paid can never let a receipted invoice be cancelled.
+      if ((await m.getRepository(PaymentAllocation).count({ where: { invoiceId: id } })) > 0) {
+        throw badReq('Cannot cancel an invoice with receipts allocated');
+      }
       // A write-off is a financial event on this invoice; cancelling would erase
       // it and silently make the challans billable again. Reverse it first.
       if (num(invoice.writtenOffAmount) > 0) throw badReq('Cannot cancel an invoice that has a write-off — reverse the write-off first');
@@ -383,7 +393,10 @@ export class InvoiceService {
     if (!(amount > 0)) throw badReq('Write-off amount must be greater than zero');
     const { result, invoiceNo, written } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Invoice);
-      const invoice = await repo.findOne({ where: { id } });
+      // Lock the invoice so the write-off is computed from the settled balance —
+      // a receipt committing between an unlocked read and this UPDATE would
+      // otherwise be overwritten (paid + written_off > total).
+      const invoice = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!invoice) throw notFound();
       if (invoice.invoiceStatus !== 'issued') throw badReq('Only an issued invoice can be written off');
       const outstanding = round2(num(invoice.outstandingAmount));
@@ -392,10 +405,13 @@ export class InvoiceService {
       if (amt > outstanding + 0.001) throw badReq(`Write-off ${amt} exceeds outstanding ${outstanding}`);
 
       const newWrittenOff = round2(num(invoice.writtenOffAmount) + amt);
-      const newOutstanding = round2(outstanding - amt);
-      const paid = num(invoice.amountPaid);
+      // Recompute from the locked row's authoritative figures (total − paid −
+      // written-off) rather than subtracting from the outstanding snapshot, so
+      // the result can never disagree with a receipt settled via the same helper.
+      const balance = invoiceBalanceAfter(invoice.totalAmount, invoice.amountPaid, newWrittenOff);
+      const newOutstanding = balance.outstanding;
       // Nothing left to collect → bad debt; else the paid figure still decides.
-      const paymentStatus = newOutstanding <= 0.001 ? 'written_off' : paid > 0.001 ? 'partially_paid' : 'unpaid';
+      const paymentStatus = newOutstanding <= 0.001 ? 'written_off' : balance.paymentStatus;
       await repo.update(id, {
         writtenOffAmount: String(newWrittenOff), outstandingAmount: String(newOutstanding), paymentStatus,
       });

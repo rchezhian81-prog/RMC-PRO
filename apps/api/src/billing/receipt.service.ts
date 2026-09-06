@@ -128,7 +128,10 @@ export class ReceiptService {
   async bounce(tenantId: string, id: string, userId: string, reason?: string) {
     const receiptNo = await this.db.runInTenant(tenantId, async (m) => {
       const paymentRepo = m.getRepository(Payment);
-      const payment = await paymentRepo.findOne({ where: { id } });
+      // Lock the receipt header first (before any invoice lock, in every path
+      // that touches it) so a concurrent apply cannot read the allocations we
+      // are about to unwind and leave a live allocation under a reversed receipt.
+      const payment = await paymentRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!payment) throw notFound();
       if (payment.status === 'reversed') throw badReq('Receipt is already reversed');
       // Only a cheque bounces (NSF). Guarding on status alone let a cash/UPI
@@ -166,13 +169,31 @@ export class ReceiptService {
     return this.get(tenantId, id);
   }
 
+  /** Total already allocated from a receipt, read from the allocation rows themselves. */
+  private async allocatedSum(m: EntityManager, paymentId: string): Promise<number> {
+    const [row] = (await m.query(
+      `SELECT COALESCE(SUM(allocated_amount), 0)::float AS s FROM payment_allocations WHERE payment_id = $1`,
+      [paymentId],
+    )) as Array<{ s: number | null }>;
+    return round2(num(row?.s));
+  }
+
   /** Apply a receipt's unallocated (advance) amount across the customer's oldest open invoices. */
   applyAdvance(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const payment = await m.getRepository(Payment).findOne({ where: { id } });
+      // Lock the receipt header before the invoices. Without this, two
+      // overlapping applies both read the full unallocated balance from a plain
+      // SELECT, each credits invoices with it, and the last header write hides
+      // the double allocation (allocations summing to 2x the receipt).
+      const payment = await m.getRepository(Payment).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!payment) throw notFound();
       if (payment.status === 'reversed') throw badReq('A reversed receipt cannot be applied');
-      const unallocated = num(payment.unallocatedAmount);
+      // What is already allocated comes from the allocation rows (the
+      // authoritative record), not the header's denormalised copy, so a drifted
+      // header can never hand out more than the receipt holds.
+      const amount = round2(num(payment.amount));
+      const alreadyAllocated = await this.allocatedSum(m, id);
+      const unallocated = round2(amount - alreadyAllocated);
       if (unallocated <= 0.001) throw badReq('Nothing left to apply on this receipt');
 
       const open: Invoice[] = await m.getRepository(Invoice).find({
@@ -193,10 +214,11 @@ export class ReceiptService {
         applied = round2(applied + l.amount);
       }
       if (applied <= 0) throw badReq('No open invoices to apply the advance to');
-      const newAllocated = round2(num(payment.allocatedAmount) + applied);
+      const newAllocated = round2(alreadyAllocated + applied);
+      if (newAllocated > amount + 0.001) throw badReq('Allocated more than the receipt amount');
       await m.getRepository(Payment).update(id, {
         allocatedAmount: String(newAllocated),
-        unallocatedAmount: String(round2(num(payment.amount) - newAllocated)),
+        unallocatedAmount: String(round2(amount - newAllocated)),
         isAdvance: newAllocated <= 0.001,
       });
       return this.loadFull(m, id);

@@ -47,7 +47,11 @@ export function assertTransition(from: string, to: ChallanStatus): void {
  */
 export async function assertDispatchLive(m: EntityManager, challan: DeliveryChallan): Promise<void> {
   if (!challan.dispatchId) return;
-  const dispatch = await m.getRepository(Dispatch).findOne({ where: { id: challan.dispatchId } });
+  // Locked (challan → dispatch): a concurrent board reject/cancel of the same
+  // load then waits for this delivery to commit and sees the delivered challan.
+  const dispatch = await m.getRepository(Dispatch).findOne({
+    where: { id: challan.dispatchId }, lock: { mode: 'pessimistic_write' },
+  });
   if (dispatch && ['rejected', 'cancelled'].includes(dispatch.dispatchStatus)) {
     throw badReq(`Dispatch is ${dispatch.dispatchStatus} — cancel this challan instead of delivering it`);
   }
@@ -131,7 +135,7 @@ export async function deliverChallan(
   // rejected) and stamp the pour-end time if the board never did.
   if (challan.dispatchId) {
     const dispatchRepo = m.getRepository(Dispatch);
-    const dispatch = await dispatchRepo.findOne({ where: { id: challan.dispatchId } });
+    const dispatch = await dispatchRepo.findOne({ where: { id: challan.dispatchId }, lock: { mode: 'pessimistic_write' } });
     if (dispatch && !['completed', 'cancelled', 'rejected'].includes(dispatch.dispatchStatus)) {
       await dispatchRepo.update(dispatch.id, {
         dispatchStatus: 'completed',

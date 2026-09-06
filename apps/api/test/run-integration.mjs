@@ -94,6 +94,10 @@ const TESTS = [
   // Concurrency + authoritative-row checks on the money paths (receipts,
   // vendor payments, invoice/bill cancel). Seeds its own customer/supplier.
   'test/money-locks.test.mjs',
+  // Lock/guard races on the state machines (approval decide, credit hold vs
+  // order cancel, dispatch reject vs challan deliver, batch queue cap, mix
+  // design lock, QC cube results). Seeds its own rows via the owner role.
+  'test/state-locks.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

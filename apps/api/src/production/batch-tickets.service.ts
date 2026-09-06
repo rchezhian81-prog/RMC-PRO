@@ -19,6 +19,7 @@ const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message
 const badReq = (message: string, extra?: unknown) =>
   new BadRequestException({ code: 'VALIDATION_ERROR', message, ...(extra ? { details: extra } : {}) });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
+const round3 = (v: number): number => Math.round(v * 1000) / 1000;
 
 /**
  * Manual batch ticket (Design Doc 6 §10.4/§10.5). Enforces an APPROVED mix
@@ -273,6 +274,28 @@ export class BatchTicketsService {
       if (!ticket) throw notFound();
       if (ticket.status !== 'draft') throw badReq(`Ticket already ${ticket.status}`);
 
+      // Re-apply the queue cap under lock. createFromQueue checks remaining =
+      // planned − produced when a ticket is DRAFTED, but two drafts against the
+      // same remaining both pass and both confirm, taking the line past planned —
+      // over-production against the plan/order. Lock the queue row (ticket →
+      // queue → stock balances, the only order any path takes) so confirms on a
+      // line serialize, and refuse if this ticket would overshoot. The locked
+      // row is reused to advance the queue below.
+      const queueRepo = m.getRepository(BatchQueueEntry);
+      const queue = ticket.batchQueueId
+        ? await queueRepo.findOne({ where: { id: ticket.batchQueueId }, lock: { mode: 'pessimistic_write' } })
+        : null;
+      if (queue) {
+        const planned = num(queue.plannedQuantityM3);
+        const produced = num(queue.producedQuantityM3);
+        const qty = num(ticket.batchQuantityM3);
+        if (planned > 0 && produced + qty > planned + 0.001) {
+          throw badReq(
+            `Confirming ${qty} m³ would take this queue line to ${round3(produced + qty)} m³ against ${planned} m³ planned (${round3(Math.max(planned - produced, 0))} m³ remaining).`,
+          );
+        }
+      }
+
       const matRepo = m.getRepository(BatchTicketMaterial);
       const materials = await matRepo.find({ where: { batchTicketId: ticketId } });
       if (!materials.length) throw badReq('Batch ticket has no materials');
@@ -348,18 +371,14 @@ export class BatchTicketsService {
         status: 'confirmed', batchEndTime: new Date(), varianceExceeded: breaches.length > 0,
       });
 
-      // Advance the queue.
-      if (ticket.batchQueueId) {
-        const queueRepo = m.getRepository(BatchQueueEntry);
-        const queue = await queueRepo.findOne({ where: { id: ticket.batchQueueId } });
-        if (queue) {
-          const produced = num(queue.producedQuantityM3) + num(ticket.batchQuantityM3);
-          const done = produced >= num(queue.plannedQuantityM3);
-          await queueRepo.update(queue.id, {
-            producedQuantityM3: String(produced),
-            queueStatus: done ? 'completed' : 'batching',
-          });
-        }
+      // Advance the queue (row locked above).
+      if (queue) {
+        const produced = num(queue.producedQuantityM3) + num(ticket.batchQuantityM3);
+        const done = produced >= num(queue.plannedQuantityM3);
+        await queueRepo.update(queue.id, {
+          producedQuantityM3: String(produced),
+          queueStatus: done ? 'completed' : 'batching',
+        });
       }
 
       return this.loadFull(m, ticketId);
@@ -369,12 +388,27 @@ export class BatchTicketsService {
   cancel(tenantId: string, ticketId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(BatchTicket);
-      const ticket = await repo.findOne({ where: { id: ticketId } });
+      const ticket = await repo.findOne({ where: { id: ticketId }, lock: { mode: 'pessimistic_write' } });
       if (!ticket) throw notFound();
-      if (ticket.status === 'confirmed') throw badReq('Confirmed ticket cannot be cancelled');
+      if (ticket.status !== 'draft') throw badReq(`Only a draft ticket can be cancelled — this one is ${ticket.status}`);
       await repo.update(ticketId, { status: 'cancelled' });
+      // Recompute the queue line instead of hard-resetting it to 'waiting':
+      // cancelling one draft must not un-complete a line that confirmed tickets
+      // already finished (the batcher would re-plan concrete already produced).
+      // A terminal line is left alone; otherwise it stays 'batching' while it
+      // has produced volume or other live tickets, and falls back to 'waiting'
+      // only when nothing is left on it.
       if (ticket.batchQueueId) {
-        await m.getRepository(BatchQueueEntry).update(ticket.batchQueueId, { queueStatus: 'waiting' });
+        const queueRepo = m.getRepository(BatchQueueEntry);
+        const queue = await queueRepo.findOne({ where: { id: ticket.batchQueueId }, lock: { mode: 'pessimistic_write' } });
+        if (queue && !['completed', 'cancelled'].includes(queue.queueStatus)) {
+          const [live] = await m.query(
+            `SELECT count(*)::int AS n FROM batch_tickets WHERE batch_queue_id = $1 AND status IN ('draft', 'confirmed') AND id <> $2`,
+            [queue.id, ticketId],
+          );
+          const active = num(queue.producedQuantityM3) > 0 || num(live?.n) > 0;
+          await queueRepo.update(queue.id, { queueStatus: active ? 'batching' : 'waiting' });
+        }
       }
       return this.loadFull(m, ticketId);
     });

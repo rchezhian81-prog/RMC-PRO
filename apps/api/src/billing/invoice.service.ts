@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
   Company,
@@ -73,25 +73,55 @@ export class InvoiceService {
       const where: Record<string, unknown> = { challanStatus: 'delivered', invoiceStatus: 'not_invoiced' };
       if (customerId) where.customerId = customerId;
       const challans = await m.getRepository(DeliveryChallan).find({ where, order: { createdAt: 'DESC' } });
+      if (challans.length === 0) return [];
+
       // Suggest the rate the customer already agreed to on the order, so the
       // clerk confirms it rather than re-typing (and mistyping) it. Also surface
       // the order's return-billing policy and the quantity that will actually be
       // billed, so the clerk sees the net (not gross) up front.
-      return Promise.all(
-        challans.map(async (c) => {
-          const order = c.orderId ? await m.getRepository(Order).findOne({ where: { id: c.orderId } }) : null;
-          const policy: ReturnBillingPolicy = isReturnBillingPolicy(order?.returnBillingPolicy) ? order!.returnBillingPolicy : 'net';
-          const billing = resolveReturnBilling(c.quantityM3, c.returnQuantityM3, policy, order?.returnFeePerM3);
-          return {
-            ...c,
-            suggestedRate: (await this.agreedLine(m, c.orderId, c.gradeId)).rate,
-            returnBillingPolicy: policy,
-            billedQuantityM3: billing.billedQuantity,
-            returnFee: billing.returnFee,
-          };
-        }),
-      );
+      //
+      // Batch-load the referenced orders and their items ONCE, rather than the
+      // two queries per challan (order lookup + order-items) the per-row map used
+      // to run. Same values as agreedLine()/the order lookup — just resolved from
+      // in-memory maps.
+      const orderIds = [...new Set(challans.map((c) => c.orderId).filter((id): id is string => !!id))];
+      const [orders, orderItems] = await Promise.all([
+        orderIds.length ? m.getRepository(Order).find({ where: { id: In(orderIds) } }) : Promise.resolve([]),
+        orderIds.length ? m.getRepository(OrderItem).find({ where: { orderId: In(orderIds) } }) : Promise.resolve([]),
+      ]);
+      const orderById = new Map(orders.map((o) => [o.id, o]));
+      const itemsByOrder = new Map<string, OrderItem[]>();
+      for (const it of orderItems) {
+        const arr = itemsByOrder.get(it.orderId);
+        if (arr) arr.push(it);
+        else itemsByOrder.set(it.orderId, [it]);
+      }
+
+      return challans.map((c) => {
+        const order = c.orderId ? orderById.get(c.orderId) ?? null : null;
+        const policy: ReturnBillingPolicy = isReturnBillingPolicy(order?.returnBillingPolicy) ? order!.returnBillingPolicy : 'net';
+        const billing = resolveReturnBilling(c.quantityM3, c.returnQuantityM3, policy, order?.returnFeePerM3);
+        return {
+          ...c,
+          suggestedRate: this.agreedRate(itemsByOrder.get(c.orderId ?? ''), c.gradeId),
+          returnBillingPolicy: policy,
+          billedQuantityM3: billing.billedQuantity,
+          returnFee: billing.returnFee,
+        };
+      });
     });
+  }
+
+  /**
+   * The all-in agreed rate per m³ from a pre-loaded set of an order's items —
+   * the batched counterpart of agreedLine().rate. Same selection (the line for
+   * this grade, else the first) and same charge sum; 0 when the order has no
+   * items or none was loaded (an ad-hoc challan with no order).
+   */
+  private agreedRate(items: OrderItem[] | undefined, gradeId: string | null): number {
+    const item = items?.find((i) => i.gradeId === gradeId) ?? items?.[0];
+    if (!item) return 0;
+    return round2(num(item.ratePerM3) + num(item.transportCharge) + num(item.pumpCharge) + num(item.waitingCharge));
   }
 
   /**

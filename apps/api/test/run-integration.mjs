@@ -88,6 +88,10 @@ const TESTS = [
   // lands: it self-skips unless AR_EXPOSURE_CORE=1, so it stays green in CI now
   // and the core PR flips the flag to turn T1–T10 on.
   'test/ar-exposure.test.mjs',
+  // Seeds an isolated customer + delivered/un-invoiced challans to prove the
+  // billable-challans batching; runs after the tenant-wide funnel/dashboard
+  // tests so its extra open challans don't perturb their counts.
+  'test/billable-challans.test.mjs',
   // Seeds far-future (2099) invoices/receipts/bills to prove the report date
   // pushdowns, so it must run after the tenant-wide aggregate reports above
   // (dashboard-trends etc.) — its rows sit outside every real report window.

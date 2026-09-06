@@ -148,16 +148,25 @@ export class SyncService {
       if (!device) throw notFound('Device not found');
       const token = new Date();
       await m.getRepository(Device).update(deviceId, { lastSeenAt: token, lastSyncToken: token });
-      const take = { take: 500 };
+      // Snapshot ALL customers and confirmed orders — no row cap. The token below
+      // is the bootstrap instant, so the follow-up pull delivers only changes AFTER
+      // it; a 500-row cap therefore permanently lost the customers/orders beyond it
+      // (their updated_at < token, so the keyset pull skipped them too) on any
+      // tenant with >500 of either. The other reference tables were already returned
+      // in full — these now match. Ordered for a deterministic response.
       const [customers, orders, grades, materials, mixDesigns, plants] = await Promise.all([
-        m.getRepository(Customer).find(take),
-        m.getRepository(Order).find({ where: { orderStatus: 'confirmed' }, ...take }),
+        m.getRepository(Customer).find({ order: { createdAt: 'ASC' } }),
+        m.getRepository(Order).find({ where: { orderStatus: 'confirmed' }, order: { createdAt: 'ASC' } }),
         m.query(`SELECT * FROM concrete_grades ORDER BY grade_code`),
         m.query(`SELECT * FROM materials ORDER BY material_code`),
         m.query(`SELECT * FROM mix_designs WHERE approval_status = 'approved'`),
         m.query(`SELECT * FROM plants ORDER BY plant_code`),
       ]);
       return {
+        // Token is the bootstrap instant; the device stores it and the follow-up
+        // pull delivers only what changed AFTER it. This stays a parseable ISO
+        // timestamp (the plant-app engine uses it as a local clock), and it is now
+        // correct because the snapshot above is complete.
         syncToken: token.toISOString(),
         reference: { customers, orders, grades, materials, mixDesigns, plants },
         counts: {

@@ -101,6 +101,9 @@ const TESTS = [
   // Paise-exact rounding at the money boundaries, CSV numeric rejection and
   // opening-balance resets as signed ledger deltas. Seeds its own rows.
   'test/money-rounding.test.mjs',
+  // Tenant provisioning / plan assignment / user create+update atomicity and
+  // the per-tenant seat lock. Creates its own plan + tenant via the platform API.
+  'test/provisioning-atomicity.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

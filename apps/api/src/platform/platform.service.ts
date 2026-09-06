@@ -72,26 +72,46 @@ export class PlatformService {
     if (await repo.findOne({ where: { tenantCode: dto.tenantCode } })) {
       throw new BadRequestException({ code: 'DUPLICATE_RECORD', message: 'Tenant code exists' });
     }
-    const tenant = await repo.save(
-      repo.create({
-        tenantCode: dto.tenantCode,
-        tenantName: dto.tenantName,
-        legalName: dto.legalName ?? null,
-        status: 'active',
-      }),
-    );
-    if (dto.planId) await this.assignPlan(tenant.id, dto.planId);
-    else await this.provisionDefaultModules(tenant.id);
-    // Roles at creation, not at the next deploy. Waiting for the seed meant a
-    // plant onboarded between deploys had only Owner and Admin, so its first
-    // staff logins had to be made Company Admins — handing a batching operator
-    // the billing, users and settings screens.
-    await this.db.runInTenant(tenant.id, async (m) => {
-      await provisionTenantRoles(m, tenant.id);
-      // A company-profile row so the Company screen can save and invoices have a
-      // plant state for GST — seeded with the tenant name, ready to complete.
-      await provisionTenantCompany(m, tenant.id, tenant.tenantName);
+    // Validate the plan BEFORE anything is written. A mistyped planId used to
+    // 404 only after the tenant row had committed, leaving an active tenant with
+    // no modules, roles or company — and the retry blocked by "Tenant code exists".
+    const plan = dto.planId
+      ? await this.ds.getRepository(SubscriptionPlan).findOne({ where: { id: dto.planId } })
+      : null;
+    if (dto.planId && !plan) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Plan not found' });
+    const moduleKeys: string[] = plan
+      ? (await this.ds.getRepository(PlanModule).find({ where: { planId: plan.id, isEnabled: true } })).map((pm) => pm.moduleKey)
+      : [...DEFAULT_TENANT_MODULES];
+    // One transaction for the tenant row and everything it must never exist
+    // without: its module entitlements (a tenant with no rows is unenforced by
+    // default), its roles — at creation, not at the next deploy: a plant
+    // onboarded between deploys used to have only Owner and Admin, so its first
+    // staff logins were made Company Admins, handing a batching operator the
+    // billing, users and settings screens — and a company-profile row so the
+    // Company screen can save and invoices have a plant state for GST. `tenants`
+    // carries no RLS; the rest is bound to the new tenant by setting the tenant
+    // context on this same connection, exactly as runInTenant does.
+    const tenant = await this.ds.transaction(async (m) => {
+      const tRepo = m.getRepository(Tenant);
+      const t = await tRepo.save(
+        tRepo.create({
+          tenantCode: dto.tenantCode,
+          tenantName: dto.tenantName,
+          legalName: dto.legalName ?? null,
+          status: 'active',
+          currentPlanId: plan?.id ?? null,
+        }),
+      );
+      await m.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [t.id]);
+      const tmRepo = m.getRepository(TenantModule);
+      if (moduleKeys.length) {
+        await tmRepo.save(moduleKeys.map((moduleKey) => tmRepo.create({ tenantId: t.id, moduleKey, isEnabled: true })));
+      }
+      await provisionTenantRoles(m, t.id);
+      await provisionTenantCompany(m, t.id, t.tenantName);
+      return t;
     });
+    this.access.invalidate(tenant.id);
     // Bringing a whole company into existence is a platform decision worth a
     // permanent record — written into the new tenant's own trail (append-only),
     // so its owners can see who provisioned them and when. Metadata only: no
@@ -107,23 +127,6 @@ export class PlatformService {
       details: { tenantCode: tenant.tenantCode, planId: dto.planId ?? null },
     });
     return this.getTenant(tenant.id);
-  }
-
-  /**
-   * Give a tenant the Phase-1 module set. Used when a tenant is created without
-   * a plan, so it never starts life with an empty `tenant_modules` table. Only
-   * ever writes when there is nothing there — it must not undo a super admin's
-   * deliberate choices.
-   */
-  private async provisionDefaultModules(tenantId: string): Promise<void> {
-    await this.db.runInTenant(tenantId, async (m) => {
-      const repo = m.getRepository(TenantModule);
-      if (await repo.findOne({ where: { tenantId } })) return;
-      await repo.save(
-        DEFAULT_TENANT_MODULES.map((moduleKey) => repo.create({ tenantId, moduleKey, isEnabled: true })),
-      );
-    });
-    this.access.invalidate(tenantId);
   }
 
   // ---- Tenant users (bootstrap the first login for a plant) ----
@@ -344,15 +347,19 @@ export class PlatformService {
     const plan = await this.ds.getRepository(SubscriptionPlan).findOne({ where: { id: planId } });
     if (!plan) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Plan not found' });
 
-    await tenantRepo.update(tenantId, { currentPlanId: planId });
     // Reset the tenant's modules to the plan's enabled modules. plan_modules has
     // no RLS; tenant_modules does, so its delete+insert run in the tenant's
     // context (the delete's USING clause and the insert's WITH CHECK both bind
     // to this tenant, a second guarantee the reset cannot touch another tenant).
+    // The tenants UPDATE rides in the SAME transaction, behind a row lock on the
+    // tenant: two concurrent assignments used to leave current_plan_id from one
+    // plan and the module rows from the other.
     const planMods = await this.ds
       .getRepository(PlanModule)
       .find({ where: { planId, isEnabled: true } });
     await this.db.runInTenant(tenantId, async (m) => {
+      await m.query(`SELECT id FROM tenants WHERE id = $1 FOR UPDATE`, [tenantId]);
+      await m.getRepository(Tenant).update(tenantId, { currentPlanId: planId });
       const tmRepo = m.getRepository(TenantModule);
       await tmRepo.delete({ tenantId });
       if (planMods.length) {
@@ -497,13 +504,18 @@ export class PlatformService {
         message: `Unknown modules: ${invalid.join(', ')}`,
       });
     }
-    const repo = this.ds.getRepository(PlanModule);
-    await repo.delete({ planId });
-    if (moduleKeys.length) {
-      await repo.save(
-        moduleKeys.map((k) => repo.create({ planId, moduleKey: k, isEnabled: true })),
-      );
-    }
+    // Duplicates collapse: ['sales','sales'] used to trip uq_plan_modules AFTER
+    // the delete had committed, leaving the plan with zero modules — and every
+    // later assign-plan then wiped that tenant's entitlements. Delete + insert
+    // are one transaction, so any failure leaves the previous set in place.
+    const keys = [...new Set(moduleKeys)];
+    await this.ds.transaction(async (m) => {
+      const repo = m.getRepository(PlanModule);
+      await repo.delete({ planId });
+      if (keys.length) {
+        await repo.save(keys.map((k) => repo.create({ planId, moduleKey: k, isEnabled: true })));
+      }
+    });
     return this.getPlan(planId);
   }
 

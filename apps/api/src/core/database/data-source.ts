@@ -61,6 +61,7 @@ import { InvoiceChallanUniqueIndex1720000056000 } from './migrations/17200000560
 import { PerformanceIndexes1720000057000 } from './migrations/1720000057000-PerformanceIndexes';
 import { PaymentsReceiptDateIndex1720000058000 } from './migrations/1720000058000-PaymentsReceiptDateIndex';
 import { StockTransactionsTypeIndex1720000059000 } from './migrations/1720000059000-StockTransactionsTypeIndex';
+import { PurchaseForeignKeys1720000060000 } from './migrations/1720000060000-PurchaseForeignKeys';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -137,6 +138,7 @@ export const AppDataSource = new DataSource({
     PerformanceIndexes1720000057000,
     PaymentsReceiptDateIndex1720000058000,
     StockTransactionsTypeIndex1720000059000,
+    PurchaseForeignKeys1720000060000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

@@ -110,6 +110,10 @@ const TESTS = [
   // Reference ids must resolve INSIDE the tenant (FK checks bypass RLS): every
   // create path refuses another tenant's / a stale UUID with a 400.
   'test/tenant-refs.test.mjs',
+  // Database backstop for the above: the purchase-table FKs exist, refuse
+  // dangling references and hard deletes at the SQL level, and the deploy
+  // preflight passes on the migrated schema.
+  'test/purchase-fks.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

@@ -106,6 +106,21 @@ export const FK_CONSTRAINTS: ForeignKeyConstraint[] = [
     refColumn: 'id',
     constraint: 'fk_vehicles_driver',
   },
+  // Purchase tables (PurchaseForeignKeys1720000060000): created without any
+  // REFERENCES, so a payable could name a supplier / material / PO line that
+  // does not exist. Same order as the migration.
+  { table: 'purchase_orders', column: 'supplier_id', refTable: 'suppliers', refColumn: 'id', constraint: 'fk_purchase_orders_supplier' },
+  { table: 'purchase_order_items', column: 'material_id', refTable: 'materials', refColumn: 'id', constraint: 'fk_purchase_order_items_material' },
+  { table: 'goods_receipts', column: 'supplier_id', refTable: 'suppliers', refColumn: 'id', constraint: 'fk_goods_receipts_supplier' },
+  { table: 'goods_receipt_items', column: 'purchase_order_item_id', refTable: 'purchase_order_items', refColumn: 'id', constraint: 'fk_goods_receipt_items_po_item' },
+  { table: 'goods_receipt_items', column: 'material_id', refTable: 'materials', refColumn: 'id', constraint: 'fk_goods_receipt_items_material' },
+  { table: 'vendor_bills', column: 'supplier_id', refTable: 'suppliers', refColumn: 'id', constraint: 'fk_vendor_bills_supplier' },
+  { table: 'vendor_bill_items', column: 'purchase_order_item_id', refTable: 'purchase_order_items', refColumn: 'id', constraint: 'fk_vendor_bill_items_po_item' },
+  { table: 'vendor_bill_items', column: 'material_id', refTable: 'materials', refColumn: 'id', constraint: 'fk_vendor_bill_items_material' },
+  { table: 'vendor_payments', column: 'supplier_id', refTable: 'suppliers', refColumn: 'id', constraint: 'fk_vendor_payments_supplier' },
+  // Base schema (Platform1720000001000): the tenant's plan pointer. Declared so
+  // the preflight covers every ALTER-added FK, not just the later ones.
+  { table: 'tenants', column: 'current_plan_id', refTable: 'subscription_plans', refColumn: 'id', constraint: 'fk_tenants_plan' },
 ];
 
 /**

@@ -33,9 +33,17 @@ function makeCtx({ user, method = 'GET' } = {}) {
   };
 }
 
-/** A Reflector stub that returns a fixed metadata value for the guard's key. */
-function makeReflector(value) {
-  return { getAllAndOverride: () => value };
+/**
+ * A Reflector stub. `value` is the all-of metadata (PERMISSIONS_KEY and whatever
+ * key a guard reads via getAllAndOverride); `anyValue` is the optional any-of set
+ * (PERMISSIONS_ANY_KEY). PermissionsGuard reads per-target with .get, so that is
+ * stubbed too — 'permissions_any' resolves to anyValue, everything else to value.
+ */
+function makeReflector(value, anyValue) {
+  return {
+    getAllAndOverride: () => value,
+    get: (key) => (key === 'permissions_any' ? anyValue : value),
+  };
 }
 
 /** Fake TenantDbService answering loadUserAccess's two queries. */
@@ -127,6 +135,22 @@ test('PermissionsGuard: a user holding every required permission is allowed', as
 test('PermissionsGuard: a user missing any one required permission is denied (all-of semantics)', async () => {
   const db = fakeAccessDb({ roles: ['sales_executive'], perms: ['sales.view'] });
   const guard = new PermissionsGuard(makeReflector(['sales.view', 'sales.create']), db);
+  await rejectsForbidden(
+    guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } })),
+    'PERMISSION_DENIED',
+  );
+});
+
+test('PermissionsGuard: any-of — a user holding ONE of the required-any permissions is allowed', async () => {
+  const db = fakeAccessDb({ roles: ['accounts'], perms: ['reports.view'] });
+  const guard = new PermissionsGuard(makeReflector(undefined, ['invoices.create', 'reports.view']), db);
+  const ok = await guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } }));
+  assert.equal(ok, true, 'any-of is satisfied by holding at least one of the keys');
+});
+
+test('PermissionsGuard: any-of — a user holding NONE of the required-any permissions is denied', async () => {
+  const db = fakeAccessDb({ roles: ['store'], perms: ['stock.adjust'] });
+  const guard = new PermissionsGuard(makeReflector(undefined, ['invoices.create', 'reports.view']), db);
   await rejectsForbidden(
     guard.canActivate(makeCtx({ user: { userId: 'u', tenantId: 't', userType: 'tenant' } })),
     'PERMISSION_DENIED',

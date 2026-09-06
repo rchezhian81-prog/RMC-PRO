@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
-import { RequirePermissions } from '../rbac/permissions.decorator';
+import { RequirePermissions, RequireAnyPermission } from '../rbac/permissions.decorator';
 import { InvoiceService } from './invoice.service';
 import { ReceiptService } from './receipt.service';
 import { BillingReportsService } from './billing-reports.service';
@@ -15,6 +15,12 @@ const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('invoices')
 @RequireModule('billing')
+// Reads (list / get / pdf / billable-challans) expose the AR ledger — every
+// invoice with amounts, GST and per-invoice outstanding — so they are no longer
+// open to any tenant user. Allow a holder of the billing write permission
+// (invoices.create) OR a reports viewer (reports.view); the owner bypasses. The
+// per-route write permissions below override this at the method level.
+@RequireAnyPermission('invoices.create', 'reports.view')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class InvoiceController {
   constructor(
@@ -57,6 +63,10 @@ export class InvoiceController {
 
 @Controller('receipts')
 @RequireModule('billing')
+// Receipt reads expose every payment with its allocations, so gate them like the
+// invoice reads: the receipts write-holder (receipts.create) OR a reports viewer
+// (reports.view), owner bypassing. Per-route write permissions override below.
+@RequireAnyPermission('receipts.create', 'reports.view')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ReceiptController {
   constructor(private readonly service: ReceiptService) {}

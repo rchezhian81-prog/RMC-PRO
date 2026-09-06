@@ -31,6 +31,17 @@ import {
   type SellerParty,
 } from './gst-payload.util';
 
+/**
+ * Rows affected by an UPDATE ... RETURNING through EntityManager.query. The
+ * postgres driver hands UPDATE/DELETE results back as [rows, rowCount]; be
+ * tolerant of the plain-rows shape too.
+ */
+function affectedRows(result: unknown): number {
+  if (!Array.isArray(result)) return 0;
+  if (result.length === 2 && Array.isArray(result[0]) && typeof result[1] === 'number') return result[1];
+  return result.length;
+}
+
 export type GstExecutionOutcome =
   | { status: 'skipped'; reason: string }
   | { status: 'already_generated'; reference: string }
@@ -40,10 +51,13 @@ export type GstExecutionOutcome =
   | { status: 'updated'; reference: string; detail: Record<string, unknown> }
   | { status: 'extended'; reference: string; detail: Record<string, unknown> }
   | { status: 'reconciled'; reference: string }
-  | { status: 'failed'; errors: string[] };
+  | { status: 'failed'; errors: string[] }
+  /** Non-retryable: the invoice is no longer in a state that may be filed (dead-letter, not backoff). */
+  | { status: 'refused'; errors: string[] };
 
 interface LoadedContext {
   invoiceId: string;
+  invoiceStatus: string;
   isEinvoice: boolean;
   header: InvoiceHeader;
   lines: InvoiceLine[];
@@ -67,6 +81,7 @@ interface CancelContext {
 interface EwayModifyContext {
   invoiceId: string;
   invoiceNo: string;
+  invoiceStatus: string;
   sellerGstin: string;
   sellerStateCode: string;
   sellerLocation: string;
@@ -192,6 +207,20 @@ export class GstExecutionService {
       return this.executeCancel(tenantId, appr, loaded.cancel, actorUserId);
     }
 
+    // Only an ISSUED invoice may be filed or modified on the portal. A cancelled
+    // (or draft) invoice with a queued/retrying job used to reach the IRP anyway
+    // and come back with a live IRN stamped on a cancelled row — two IRNs for one
+    // supply once the challans were re-billed. Refuse here, non-retryably: the
+    // invoice will not become issued again, so the job dead-letters instead of
+    // backing off. (Cancel kinds are exempt: cancelling an IRN on the portal is
+    // exactly what a locally-cancelled invoice with a live IRN needs.)
+    const invoiceStatus = loaded.kind === 'modify' ? loaded.modify.invoiceStatus : loaded.kind === 'generate' ? loaded.ctx.invoiceStatus : 'issued';
+    if (invoiceStatus !== 'issued') {
+      const errors = [`invoice is '${invoiceStatus}', not issued — nothing was filed`];
+      await this.record(tenantId, actorUserId, 'gst.execute.refused', invoiceId, appr, { stage: 'invoice_status', invoiceStatus, errors });
+      return { status: 'refused', errors };
+    }
+
     // In-place e-way modification (Part-B vehicle change / validity extension).
     if (loaded.kind === 'modify') {
       return this.executeEwayModify(tenantId, appr, loaded.modify, actorUserId);
@@ -214,7 +243,10 @@ export class GstExecutionService {
       return { status: 'failed', errors: pf.errors };
     }
 
-    // Phase 2 — transmit OUTSIDE any transaction.
+    // Phase 2 — transmit OUTSIDE any transaction. `committed` records a reference
+    // that has already been persisted, so a later (audit) failure can never
+    // downgrade a committed 'generated' back to 'failed'.
+    let committed: GstExecutionOutcome | null = null;
     try {
       const session = await this.provider.authenticate(tenantId, ctx.seller.gstin);
       if (ctx.isEinvoice) {
@@ -232,35 +264,51 @@ export class GstExecutionService {
           session,
           buildIrnRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer, { includeEwb }),
         );
-        await this.persistIrn(tenantId, ctx.invoiceId, res);
+        // The IRN and the e-way the IRP returned in the SAME response are persisted
+        // in ONE transaction, so a failure between them can no longer lose the
+        // e-way (which then blocked recovery via the already_generated short-cut).
+        const ewb = res.ewayBillNo
+          ? { res: { ewayBillNo: res.ewayBillNo, ewayBillDate: res.ewayBillDate ?? '', validUpto: res.validUpto ?? '' }, header: ctx.header }
+          : undefined;
+        if (!(await this.persistIrn(tenantId, ctx.invoiceId, res, ewb))) {
+          return this.unpersisted(tenantId, actorUserId, ctx.invoiceId, appr, 'IRN', res.irn);
+        }
+        committed = { status: 'generated', reference: res.irn, detail: { ackNo: res.ackNo, ackDate: res.ackDate, ewayBillNo: res.ewayBillNo } };
         await this.record(tenantId, actorUserId, 'gst.irn.generated', ctx.invoiceId, appr, { irn: res.irn, ackNo: res.ackNo });
-        // The IRP returned the e-way in the same response — persist it too.
         if (res.ewayBillNo) {
-          await this.persistEwb(
-            tenantId,
-            ctx.invoiceId,
-            { ewayBillNo: res.ewayBillNo, ewayBillDate: res.ewayBillDate ?? '', validUpto: res.validUpto ?? '' },
-            ctx.header,
-          );
           await this.record(tenantId, actorUserId, 'gst.eway.generated', ctx.invoiceId, appr, { ewayBillNo: res.ewayBillNo, via: 'irn' });
         }
-        return { status: 'generated', reference: res.irn, detail: { ackNo: res.ackNo, ackDate: res.ackDate, ewayBillNo: res.ewayBillNo } };
+        return committed;
       }
       const res = await this.provider.generateEwayBill(session, buildEwbRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer));
-      await this.persistEwb(tenantId, ctx.invoiceId, res, ctx.header);
+      if (!(await this.persistEwb(tenantId, ctx.invoiceId, res, ctx.header))) {
+        return this.unpersisted(tenantId, actorUserId, ctx.invoiceId, appr, 'e-way bill', res.ewayBillNo);
+      }
+      committed = { status: 'generated', reference: res.ewayBillNo, detail: { validUpto: res.validUpto } };
       await this.record(tenantId, actorUserId, 'gst.eway.generated', ctx.invoiceId, appr, { ewayBillNo: res.ewayBillNo });
-      return { status: 'generated', reference: res.ewayBillNo, detail: { validUpto: res.validUpto } };
+      return committed;
     } catch (e) {
+      // The reference is already on the invoice — only the post-commit audit
+      // failed. Never downgrade a committed 'generated' to 'failed' (a retry
+      // would then re-transmit and the challan PDF would print no reference).
+      if (committed) {
+        this.log.error(`GST post-commit audit failed for invoice ${ctx.invoiceId}: ${e instanceof Error ? e.message : String(e)}`);
+        return committed;
+      }
       // A duplicate is the portal's idempotency, not a failure — reconcile it.
       if (e instanceof GstProviderError && (e.code === 'DUPLICATE_IRN' || e.code === 'DUPLICATE_EWB')) {
         if (ctx.isEinvoice) {
           const d = e.detail as unknown as IrnResult;
-          await this.persistIrn(tenantId, ctx.invoiceId, d);
+          if (!(await this.persistIrn(tenantId, ctx.invoiceId, d))) {
+            return this.unpersisted(tenantId, actorUserId, ctx.invoiceId, appr, 'IRN', d.irn);
+          }
           await this.record(tenantId, actorUserId, 'gst.irn.reconciled', ctx.invoiceId, appr, { irn: d.irn });
           return { status: 'reconciled', reference: d.irn };
         }
         const d = e.detail as unknown as EwbResult;
-        await this.persistEwb(tenantId, ctx.invoiceId, d, ctx.header);
+        if (!(await this.persistEwb(tenantId, ctx.invoiceId, d, ctx.header))) {
+          return this.unpersisted(tenantId, actorUserId, ctx.invoiceId, appr, 'e-way bill', d.ewayBillNo);
+        }
         await this.record(tenantId, actorUserId, 'gst.eway.reconciled', ctx.invoiceId, appr, { ewayBillNo: d.ewayBillNo });
         return { status: 'reconciled', reference: d.ewayBillNo };
       }
@@ -278,7 +326,7 @@ export class GstExecutionService {
   private async loadContext(m: EntityManager, invoiceId: string, actionKind: string): Promise<LoadedContext> {
     const [inv] = await m.query(
       `SELECT id, invoice_no AS "invoiceNo", invoice_date AS "invoiceDate", customer_id AS "customerId",
-              place_of_supply AS "placeOfSupply", gstin,
+              invoice_status AS "invoiceStatus", place_of_supply AS "placeOfSupply", gstin,
               taxable_amount AS "taxable", cgst_amount AS "cgst", sgst_amount AS "sgst",
               igst_amount AS "igst", cess_amount AS "cess", round_off AS "roundOff", total_amount AS "total",
               distance_km AS "distanceKm", transport_mode AS "transportMode", vehicle_no AS "vehicleNo",
@@ -358,7 +406,7 @@ export class GstExecutionService {
       total: Number(r.total),
     }));
 
-    return { invoiceId, isEinvoice: actionKind === 'einvoice_irn', header, seller, buyer, lines };
+    return { invoiceId, invoiceStatus: inv.invoiceStatus ?? 'draft', isEinvoice: actionKind === 'einvoice_irn', header, seller, buyer, lines };
   }
 
   /** The lighter load a CANCEL needs: the existing reference, statuses, seller GSTIN. */
@@ -456,7 +504,7 @@ export class GstExecutionService {
   /** The context an in-place e-way modify needs: the reference, status, and dispatch details. */
   private async loadEwayModifyContext(m: EntityManager, invoiceId: string): Promise<EwayModifyContext> {
     const [inv] = await m.query(
-      `SELECT id, invoice_no AS "invoiceNo", eway_bill_no AS "ewayBillNo", eway_status AS "ewayStatus",
+      `SELECT id, invoice_no AS "invoiceNo", invoice_status AS "invoiceStatus", eway_bill_no AS "ewayBillNo", eway_status AS "ewayStatus",
               transport_mode AS "transportMode", vehicle_no AS "vehicleNo"
          FROM invoices WHERE id = $1`,
       [invoiceId],
@@ -467,6 +515,7 @@ export class GstExecutionService {
     return {
       invoiceId,
       invoiceNo: inv.invoiceNo,
+      invoiceStatus: inv.invoiceStatus ?? 'draft',
       sellerGstin: gstin,
       sellerStateCode: gstin ? stateCodeOf(gstin) : '',
       sellerLocation: company?.city ?? '',
@@ -565,25 +614,78 @@ export class GstExecutionService {
 
   // ---- persistence ----
 
-  private persistIrn(tenantId: string, invoiceId: string, res: IrnResult): Promise<unknown> {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.query(
-        `UPDATE invoices SET irn = $2, ack_number = $3, ack_date = $4, signed_qr_code = $5,
-                einvoice_status = 'generated', updated_at = now() WHERE id = $1`,
-        [invoiceId, res.irn, res.ackNo, res.ackDate, res.signedQrCode],
-      ),
+  /**
+   * Persist the IRN (and, when the IRP returned one in the same response, the
+   * e-way) in ONE transaction, and only onto an invoice that is still ISSUED.
+   * Returns false when no row qualified — the invoice was cancelled between load
+   * and persist — so the caller can report the orphaned portal reference instead
+   * of stamping it on a cancelled row. On the reconcile path the portal echoes
+   * the IRN with blank ack/QR: COALESCE(NULLIF(...)) keeps committed values.
+   */
+  private async persistIrn(
+    tenantId: string,
+    invoiceId: string,
+    res: IrnResult,
+    ewb?: { res: EwbResult; header: InvoiceHeader },
+  ): Promise<boolean> {
+    const rows = await this.db.runInTenant(tenantId, (m) =>
+      ewb
+        ? m.query(
+            `UPDATE invoices SET irn = coalesce(nullif($2, ''), irn), ack_number = coalesce(nullif($3, ''), ack_number),
+                    ack_date = coalesce(nullif($4, '')::timestamptz, ack_date), signed_qr_code = coalesce(nullif($5, ''), signed_qr_code),
+                    einvoice_status = 'generated',
+                    eway_bill_no = $6, eway_bill_date = $7, eway_valid_until = $8,
+                    distance_km = coalesce(distance_km, $9), transport_mode = coalesce(transport_mode, $10),
+                    vehicle_no = coalesce(vehicle_no, $11), eway_status = 'generated', updated_at = now()
+              WHERE id = $1 AND invoice_status = 'issued' RETURNING id`,
+            [invoiceId, res.irn, res.ackNo, res.ackDate, res.signedQrCode,
+             ewb.res.ewayBillNo, ewb.res.ewayBillDate, ewb.res.validUpto,
+             ewb.header.distanceKm ?? null, ewb.header.transportMode ?? null, ewb.header.vehicleNo ?? null],
+          )
+        : m.query(
+            `UPDATE invoices SET irn = coalesce(nullif($2, ''), irn), ack_number = coalesce(nullif($3, ''), ack_number),
+                    ack_date = coalesce(nullif($4, '')::timestamptz, ack_date), signed_qr_code = coalesce(nullif($5, ''), signed_qr_code),
+                    einvoice_status = 'generated', updated_at = now()
+              WHERE id = $1 AND invoice_status = 'issued' RETURNING id`,
+            [invoiceId, res.irn, res.ackNo, res.ackDate, res.signedQrCode],
+          ),
     );
+    return affectedRows(rows) > 0;
   }
 
-  private persistEwb(tenantId: string, invoiceId: string, res: EwbResult, header: InvoiceHeader): Promise<unknown> {
-    return this.db.runInTenant(tenantId, (m) =>
+  /** Persist an e-way bill onto an invoice that is still ISSUED; false when none qualified. */
+  private async persistEwb(tenantId: string, invoiceId: string, res: EwbResult, header: InvoiceHeader): Promise<boolean> {
+    const rows = await this.db.runInTenant(tenantId, (m) =>
       m.query(
         `UPDATE invoices SET eway_bill_no = $2, eway_bill_date = $3, eway_valid_until = $4,
                 distance_km = coalesce(distance_km, $5), transport_mode = coalesce(transport_mode, $6),
-                vehicle_no = coalesce(vehicle_no, $7), eway_status = 'generated', updated_at = now() WHERE id = $1`,
+                vehicle_no = coalesce(vehicle_no, $7), eway_status = 'generated', updated_at = now()
+          WHERE id = $1 AND invoice_status = 'issued' RETURNING id`,
         [invoiceId, res.ewayBillNo, res.ewayBillDate, res.validUpto, header.distanceKm ?? null, header.transportMode ?? null, header.vehicleNo ?? null],
       ),
     );
+    return affectedRows(rows) > 0;
+  }
+
+  /**
+   * The portal issued a reference but the invoice is no longer issued (cancelled
+   * between load and persist). Nothing is written to the cancelled row; the
+   * reference is recorded in the audit trail and raised as an ops alert so it is
+   * cancelled on the portal within its window. Non-retryable.
+   */
+  private async unpersisted(
+    tenantId: string,
+    actorUserId: string | null,
+    invoiceId: string,
+    appr: AgentApprovalRequest,
+    label: string,
+    reference: string,
+  ): Promise<GstExecutionOutcome> {
+    const message = `invoice is no longer issued — ${label} ${reference} was generated on the portal but NOT recorded; cancel it on the portal`;
+    this.log.error(`GST ${label} orphaned for invoice ${invoiceId}: ${reference}`);
+    await this.record(tenantId, actorUserId, 'gst.execute.unpersisted', invoiceId, appr, { label, reference, errors: [message] });
+    void this.alerter.captureOps({ key: 'gst_reference_unpersisted', message, tenantId, detail: { invoiceId, label, reference, approvalId: appr.id } });
+    return { status: 'refused', errors: [message] };
   }
 
   private setStatus(tenantId: string, invoiceId: string, isEinvoice: boolean, status: string): Promise<unknown> {

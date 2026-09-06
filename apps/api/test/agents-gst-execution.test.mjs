@@ -239,6 +239,46 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   const drain2 = await api('POST', '/agents/gst/jobs/drain');
   ok('a second drain re-runs nothing', (drain2.data?.processed ?? -1) === 0);
 
+  console.log('\n=== data-integrity I3: cancel kills the pending GST job; execution refuses a cancelled invoice ===');
+  const cInv = await seedInvoice();
+  const cRun = await api('POST', '/agents/automation/run', { compliance: 'einvoice', invoiceId: cInv.invId });
+  const cApprovalId = cRun.data?.outcome?.result?.prepared?.approvalId;
+  await api('POST', `/agents/approvals/${cApprovalId}/decide`, { decision: 'approved' }); // enqueued, NOT executed
+  const cancelRes = await api('POST', `/invoices/${cInv.invId}/cancel`, { reason: 'integrity test' });
+  ok('cancelling an invoice with a QUEUED GST job succeeds', cancelRes.status >= 200 && cancelRes.status < 300);
+  const [cJob] = await owner.query(`SELECT status, last_error FROM gst_execution_jobs WHERE approval_id=$1`, [cApprovalId]);
+  ok('the queued job is dead-lettered by the cancel (same transaction)', cJob?.status === 'dead' && /cancelled/i.test(cJob?.last_error ?? ''));
+  const cExec = await api('POST', `/agents/approvals/${cApprovalId}/execute`);
+  ok('executing the approval afterwards is REFUSED (invoice not issued) — nothing filed', cExec.data?.status === 'refused');
+  const [cRow] = await owner.query(`SELECT irn, einvoice_status, invoice_status FROM invoices WHERE id=$1`, [cInv.invId]);
+  ok('no IRN was stamped on the cancelled invoice', cRow.irn === null && cRow.invoice_status === 'cancelled' && cRow.einvoice_status !== 'generated');
+  const cDrain = await api('POST', '/agents/gst/jobs/drain');
+  ok('a drain does not resurrect the dead job', (cDrain.data?.processed ?? -1) === 0);
+
+  console.log('\n=== data-integrity I3: a DRAFT invoice cannot be prepared for filing ===');
+  const dInv = await seedInvoice();
+  await owner.query(`UPDATE invoices SET invoice_status='draft' WHERE id=$1`, [dInv.invId]);
+  const dRun = await api('POST', '/agents/automation/run', { compliance: 'einvoice', invoiceId: dInv.invId });
+  const [dApprovals] = await owner.query(`SELECT count(*)::int AS n FROM agent_approval_requests WHERE entity_id=$1`, [dInv.invId]);
+  ok('preparing an IRN for a draft invoice yields no approval request', !dRun.data?.outcome?.result?.prepared?.approvalId && dApprovals.n === 0);
+
+  console.log('\n=== data-integrity I21: a job stranded in running is reclaimed by the drain ===');
+  const sInv = await seedInvoice();
+  const sRun = await api('POST', '/agents/automation/run', { compliance: 'einvoice', invoiceId: sInv.invId });
+  const sApprovalId = sRun.data?.outcome?.result?.prepared?.approvalId;
+  await api('POST', `/agents/approvals/${sApprovalId}/decide`, { decision: 'approved' });
+  // Simulate a process that died mid portal call 20 minutes ago.
+  await owner.query(`UPDATE gst_execution_jobs SET status='running', updated_at = now() - interval '20 minutes' WHERE approval_id=$1`, [sApprovalId]);
+  const sDrain = await api('POST', '/agents/gst/jobs/drain');
+  ok('the drain re-claims the stale running job', (sDrain.data?.processed ?? 0) >= 1);
+  const [sJob] = await owner.query(`SELECT status FROM gst_execution_jobs WHERE approval_id=$1`, [sApprovalId]);
+  const [sRow] = await owner.query(`SELECT irn, einvoice_status FROM invoices WHERE id=$1`, [sInv.invId]);
+  ok('the re-claimed job completes and the IRN is generated', sJob?.status === 'done' && !!sRow.irn && sRow.einvoice_status === 'generated');
+  await owner.query(`UPDATE gst_execution_jobs SET status='running', updated_at = now() WHERE approval_id=$1`, [sApprovalId]);
+  const sDrain2 = await api('POST', '/agents/gst/jobs/drain');
+  ok('a FRESH running job is left alone (not re-claimed)', (sDrain2.data?.processed ?? -1) === 0);
+  await owner.query(`UPDATE gst_execution_jobs SET status='done' WHERE approval_id=$1`, [sApprovalId]);
+
   console.log('\n=== GST metrics exposed on /metrics ===');
   const ROOT = process.env.API_URL ?? `http://localhost:${process.env.API_PORT ?? 4000}`;
   const metricsRes = await fetch(`${ROOT}/metrics`, { headers: { Authorization: `Bearer ${process.env.METRICS_TOKEN}` } });

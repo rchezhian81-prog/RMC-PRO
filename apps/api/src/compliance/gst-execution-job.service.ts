@@ -24,11 +24,22 @@ const JOB_TERMINAL_DONE = new Set([
  *   - `failed` — a real failure (pre-flight / transport); the caller decides retry;
  *   - `queued` — nothing happened (`skipped`, provider off) → leave it to run later.
  */
-export function jobStatusForOutcome(status: string): 'done' | 'failed' | 'queued' {
+export function jobStatusForOutcome(status: string): 'done' | 'failed' | 'queued' | 'dead' {
   if (JOB_TERMINAL_DONE.has(status)) return 'done';
   if (status === 'failed') return 'failed';
+  // Refused = the invoice can no longer be filed (cancelled/draft). It will not
+  // become issued again, so retrying is pointless: dead-letter immediately.
+  if (status === 'refused') return 'dead';
   return 'queued';
 }
+
+/**
+ * A job left in 'running' longer than this is presumed stranded (the process
+ * died mid portal call, or finalize failed) and is re-claimed by the next drain.
+ * Far longer than any legitimate portal round-trip; re-running is safe because
+ * execute() is idempotent (already_generated / DUPLICATE_* reconciliation).
+ */
+export const STALE_RUNNING_MINUTES = 15;
 
 /** Exponential backoff (ms) before a failed job's next attempt: base·2^attempts, capped. */
 export function backoffMs(attempts: number, baseMs = 30_000, capMs = 3_600_000): number {
@@ -123,7 +134,7 @@ export class GstJobService {
         m.query(
           `UPDATE gst_execution_jobs
               SET status=$3, last_outcome=$4, last_error=$5,
-                  attempts = attempts + CASE WHEN $3 = 'failed' THEN 1 ELSE 0 END,
+                  attempts = attempts + CASE WHEN $3 IN ('failed','dead') THEN 1 ELSE 0 END,
                   updated_at = now()
             WHERE approval_id=$2 AND tenant_id=$1 AND status IN ('queued','running','failed')`,
           [tenantId, approvalId, target, outcome.status, outcomeError(outcome)],
@@ -136,16 +147,18 @@ export class GstJobService {
 
   /** Drain THIS tenant's due jobs now (operator trigger / worker fallback). */
   async drainForTenant(tenantId: string, limit = 20, actorUserId: string | null = null): Promise<{ processed: number; outcomes: string[] }> {
-    const due: Array<{ id: string }> = await this.db.runInTenant(tenantId, (m) =>
+    const due: Array<{ id: string; status: string }> = await this.db.runInTenant(tenantId, (m) =>
       m.query(
-        `SELECT id FROM gst_execution_jobs
-          WHERE tenant_id=$1 AND status='queued' AND next_run_at <= now()
+        `SELECT id, status FROM gst_execution_jobs
+          WHERE tenant_id=$1 AND ((status='queued' AND next_run_at <= now())
+             OR (status='running' AND updated_at < now() - ($3 || ' minutes')::interval))
           ORDER BY next_run_at ASC LIMIT $2`,
-        [tenantId, clampLimit(limit)],
+        [tenantId, clampLimit(limit), String(STALE_RUNNING_MINUTES)],
       ),
     );
     const outcomes: string[] = [];
     for (const row of due) {
+      if (row.status === 'running') this.reportReclaim(row.id, tenantId);
       const r = await this.claimAndRun(tenantId, row.id, actorUserId);
       if (r.claimed && r.outcome) outcomes.push(r.outcome.status);
     }
@@ -154,16 +167,18 @@ export class GstJobService {
 
   /** Cross-tenant drain for the background worker (runs as platform to find due jobs). */
   async drainOnce(limit = 20): Promise<{ processed: number }> {
-    const due: Array<{ id: string; tenantId: string }> = await this.db.runAsPlatform((m) =>
+    const due: Array<{ id: string; tenantId: string; status: string }> = await this.db.runAsPlatform((m) =>
       m.query(
-        `SELECT id, tenant_id AS "tenantId" FROM gst_execution_jobs
-          WHERE status='queued' AND next_run_at <= now()
+        `SELECT id, tenant_id AS "tenantId", status FROM gst_execution_jobs
+          WHERE (status='queued' AND next_run_at <= now())
+             OR (status='running' AND updated_at < now() - ($2 || ' minutes')::interval)
           ORDER BY next_run_at ASC LIMIT $1`,
-        [clampLimit(limit)],
+        [clampLimit(limit), String(STALE_RUNNING_MINUTES)],
       ),
     );
     let processed = 0;
     for (const row of due) {
+      if (row.status === 'running') this.reportReclaim(row.id, row.tenantId);
       const r = await this.claimAndRun(row.tenantId, row.id, null);
       if (r.claimed) processed++;
     }
@@ -179,9 +194,10 @@ export class GstJobService {
     const claimed = await this.db.runInTenant(tenantId, async (m) => {
       const rows = await m.query(
         `UPDATE gst_execution_jobs SET status='running', updated_at=now()
-          WHERE id=$1 AND tenant_id=$2 AND status='queued'
+          WHERE id=$1 AND tenant_id=$2
+            AND (status='queued' OR (status='running' AND updated_at < now() - ($3 || ' minutes')::interval))
         RETURNING approval_id AS "approvalId", attempts, max_attempts AS "maxAttempts", requested_by AS "requestedBy"`,
-        [jobId, tenantId],
+        [jobId, tenantId, String(STALE_RUNNING_MINUTES)],
       );
       return (rows?.[0] as ClaimedJob | undefined) ?? null;
     });
@@ -194,8 +210,21 @@ export class GstJobService {
       // A thrown error (not a normal failed outcome) is treated as a retryable failure.
       outcome = { status: 'failed', errors: [e instanceof Error ? e.message : String(e)] };
     }
-    await this.finalize(tenantId, jobId, claimed, outcome);
+    try {
+      await this.finalize(tenantId, jobId, claimed, outcome);
+    } catch (e) {
+      // The action ran but its state could not be written: the job stays
+      // 'running' and is re-claimed after STALE_RUNNING_MINUTES (execute is
+      // idempotent). Say so loudly rather than swallowing it.
+      this.log.error(`GST job ${jobId} finalize failed after outcome '${outcome.status}': ${e instanceof Error ? e.message : String(e)}`);
+    }
     return { claimed: true, outcome };
+  }
+
+  /** A job found stranded in 'running' is being re-claimed — make it visible. */
+  private reportReclaim(jobId: string, tenantId: string): void {
+    this.log.warn(`GST job ${jobId} (tenant ${tenantId}) was stranded in 'running' > ${STALE_RUNNING_MINUTES}m — re-claiming`);
+    this.countJob('reclaimed');
   }
 
   /** Write the job's terminal/retry state from the execution outcome. */
@@ -209,6 +238,19 @@ export class GstJobService {
         ),
       );
       this.countJob('done');
+      return;
+    }
+    if (target === 'dead') {
+      // Refused (invoice no longer issued): dead-letter at once, no backoff.
+      await this.db.runInTenant(tenantId, (m) =>
+        m.query(
+          `UPDATE gst_execution_jobs
+              SET status='dead', attempts=attempts+1, last_outcome=$2, last_error=$3, updated_at=now()
+            WHERE id=$1`,
+          [jobId, outcome.status, outcome.status === 'refused' ? outcome.errors.join('; ').slice(0, 500) : null],
+        ),
+      );
+      this.countJob('refused');
       return;
     }
     if (target === 'failed') {

@@ -21,6 +21,12 @@ async function loadInvoice(ctx: ToolContext): Promise<Record<string, unknown>> {
   if (!invoiceId || typeof invoiceId !== 'string') throw new Error('a compliance prepare requires an invoiceId');
   const [inv] = await ctx.manager.query(INVOICE_SELECT, [invoiceId]);
   if (!inv) throw new Error('invoice not found');
+  // Only an ISSUED invoice may be filed: a draft has not been billed and a
+  // cancelled one must never reach the portal. Refusing at prepare time keeps a
+  // dead-on-arrival approval out of the queue altogether.
+  if (inv.invoiceStatus !== 'issued') {
+    throw new Error(`invoice ${inv.invoiceNo} is ${inv.invoiceStatus} — only an issued invoice can be filed`);
+  }
   return inv;
 }
 

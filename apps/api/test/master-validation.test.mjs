@@ -284,6 +284,24 @@ const opAlerts = (await j('GET', '/alerts', null, opTok)).body?.data?.alerts ?? 
 ok('a non-reports.view user still gets the alerts endpoint', Array.isArray(opAlerts));
 ok('a non-reports.view user sees NO financial alerts', !opAlerts.some((a) => FIN_ALERT_KEYS.includes(a.key)));
 
+// --- I#2. Billing invoice/receipt READS require the billing write permission OR
+// reports.view (previously ungated — any tenant user could read the AR ledger,
+// every invoice/receipt with amounts). The operational user (orders.view +
+// ai.use) is blocked; granting reports.view (the OR branch) opens both. The
+// owner bypasses. ---
+console.log('\n=== I#2. billing reads require a billing/reports permission ===');
+const invBlocked = await j('GET', '/invoices', null, opTok);
+ok('a user without invoices.create/reports.view is blocked from /invoices (403)', invBlocked.status === 403);
+const rcptBlocked = await j('GET', '/receipts', null, opTok);
+ok('the same user is blocked from /receipts (403)', rcptBlocked.status === 403);
+const ownerInv = await j('GET', '/invoices', null, tok);
+ok('the owner still reads /invoices', ownerInv.status >= 200 && ownerInv.status < 300);
+await j('PUT', `/roles/${opRole.id}/permissions`, { permissionIds: [ovPerm.id, aiPerm.id, rvPerm.id] }, tok);
+const invAllowed = await j('GET', '/invoices', null, opTok);
+ok('granting reports.view opens /invoices for the same user', invAllowed.status >= 200 && invAllowed.status < 300);
+const rcptAllowed = await j('GET', '/receipts', null, opTok);
+ok('granting reports.view opens /receipts for the same user', rcptAllowed.status >= 200 && rcptAllowed.status < 300);
+
 // --- C3. Login is case-insensitive on email (Tier-2B: email normalisation) ---
 const upperLogin = await j('POST', '/auth/login', { login: LOGIN.toUpperCase(), password: PASSWORD });
 ok('login succeeds with a different-case email', !!upperLogin.body?.data?.access_token);

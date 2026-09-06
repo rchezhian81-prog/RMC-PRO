@@ -10,6 +10,7 @@ import {
   Supplier,
   VendorBill,
   VendorBillItem,
+  VendorPaymentAllocation,
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
@@ -237,14 +238,18 @@ export class VendorBillService {
   async approve(tenantId: string, id: string, userId: string, overrideMatch = false) {
     const { result, billNo, total, matchStatus, overridden } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(VendorBill);
-      const bill = await repo.findOne({ where: { id } });
+      // Lock the bill so approve cannot interleave with a cancel (or a payment
+      // allocation) and resurrect / overwrite a status committed in between.
+      const bill = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!bill) throw notFound();
       if (bill.status !== 'draft') throw badReq(`Vendor bill already ${bill.status}`);
       const failsMatch = bill.matchStatus === 'over_tolerance';
       if (failsMatch && !overrideMatch) {
         throw badReq('Vendor bill fails the 3-way match (quantity/price over tolerance). Resolve the mismatch or approve with override.');
       }
-      await repo.update(id, { status: 'approved' });
+      // Conditional on the status we validated — belt-and-braces under the lock.
+      const res = await repo.update({ id, status: 'draft' }, { status: 'approved' });
+      if (!res.affected) throw badReq('Vendor bill is no longer a draft');
       return { result: await this.loadFull(m, id), billNo: bill.billNo, total: bill.totalAmount, matchStatus: bill.matchStatus, overridden: failsMatch };
     });
     await this.audit.record({
@@ -260,11 +265,20 @@ export class VendorBillService {
   cancel(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(VendorBill);
-      const bill = await repo.findOne({ where: { id } });
+      // Lock the bill: payment allocation locks it before crediting, so an
+      // unlocked read here could pass the "nothing paid" check on a snapshot and
+      // then commit the cancel on top of a just-committed allocation.
+      const bill = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!bill) throw notFound();
       if (bill.status === 'cancelled') throw badReq('Vendor bill already cancelled');
       if (num(bill.paidAmount) > 0.001) throw badReq('Cannot cancel a bill with payments recorded');
-      await repo.update(id, { status: 'cancelled', paymentStatus: 'cancelled' });
+      // The allocation rows are the authoritative record — refuse on them too,
+      // so a drifted paid_amount can never let a paid bill be cancelled.
+      if ((await m.getRepository(VendorPaymentAllocation).count({ where: { vendorBillId: id } })) > 0) {
+        throw badReq('Cannot cancel a bill with payments recorded');
+      }
+      const res = await repo.update({ id, status: bill.status }, { status: 'cancelled', paymentStatus: 'cancelled' });
+      if (!res.affected) throw badReq('Vendor bill changed while cancelling — reload and retry');
       return this.loadFull(m, id);
     });
   }

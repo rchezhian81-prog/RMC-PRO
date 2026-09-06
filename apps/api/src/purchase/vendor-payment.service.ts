@@ -112,7 +112,10 @@ export class VendorPaymentService {
   async reverse(tenantId: string, id: string, userId: string, reason?: string) {
     const { result, paymentNo, amount } = await this.db.runInTenant(tenantId, async (m) => {
       const paymentRepo = m.getRepository(VendorPayment);
-      const payment = await paymentRepo.findOne({ where: { id } });
+      // Lock the payment header first (before any bill lock, in every path that
+      // touches it) so a concurrent apply-advance cannot read the allocations we
+      // are about to unwind and leave a live allocation under a reversed payment.
+      const payment = await paymentRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!payment) throw notFound();
       if (payment.status === 'reversed') throw badReq('Payment already reversed');
       if (payment.status !== 'posted') throw badReq(`Cannot reverse a ${payment.status} payment`);
@@ -146,6 +149,15 @@ export class VendorPaymentService {
     return result;
   }
 
+  /** Total already allocated from a payment, read from the allocation rows themselves. */
+  private async allocatedSum(m: EntityManager, vendorPaymentId: string): Promise<number> {
+    const [row] = (await m.query(
+      `SELECT COALESCE(SUM(allocated_amount), 0)::float AS s FROM vendor_payment_allocations WHERE vendor_payment_id = $1`,
+      [vendorPaymentId],
+    )) as Array<{ s: number | null }>;
+    return round2(num(row?.s));
+  }
+
   /**
    * Apply a posted payment's unallocated (advance) amount to approved bills — the
    * path that was missing, so an advance stayed stranded on the payment. Each
@@ -158,10 +170,18 @@ export class VendorPaymentService {
 
     const { result, paymentNo, applied } = await this.db.runInTenant(tenantId, async (m) => {
       const paymentRepo = m.getRepository(VendorPayment);
-      const payment = await paymentRepo.findOne({ where: { id } });
+      // Lock the payment header before the bills (same order as reverse), so two
+      // overlapping applies cannot both read the full unallocated balance and
+      // spend it twice — the second writer used to simply overwrite the header.
+      const payment = await paymentRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!payment) throw notFound();
       if (payment.status !== 'posted') throw badReq(`Cannot apply a ${payment.status} payment`);
-      let available = round2(num(payment.unallocatedAmount));
+      // What is already allocated comes from the allocation rows (authoritative),
+      // not the header's denormalised copy, so a drifted header can never hand
+      // out more than the payment holds.
+      const amount = round2(num(payment.amount));
+      const alreadyAllocated = await this.allocatedSum(m, id);
+      let available = round2(amount - alreadyAllocated);
       if (available <= 0.001) throw badReq('This payment has no unallocated amount to apply');
 
       const billRepo = m.getRepository(VendorBill);
@@ -186,9 +206,11 @@ export class VendorPaymentService {
         available = round2(available - amt);
         appliedTotal = round2(appliedTotal + amt);
       }
+      const newAllocated = round2(alreadyAllocated + appliedTotal);
+      if (newAllocated > amount + 0.001) throw badReq('Allocated more than the payment amount');
       await paymentRepo.update(id, {
-        allocatedAmount: String(round2(num(payment.allocatedAmount) + appliedTotal)),
-        unallocatedAmount: String(available),
+        allocatedAmount: String(newAllocated),
+        unallocatedAmount: String(round2(amount - newAllocated)),
       });
       return { result: await this.loadFull(m, id), paymentNo: payment.paymentNo, applied: appliedTotal };
     });

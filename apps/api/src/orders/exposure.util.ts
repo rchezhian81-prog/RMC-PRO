@@ -109,10 +109,16 @@ export async function computeCustomerExposure(
          - COALESCE(b.billed, 0))), 0)::float AS total
        FROM orders o
        LEFT JOIN (
+         -- Scope the billed aggregate to THIS customer's orders. Without the
+         -- orders join it summed every tenant order's issued invoice_items on
+         -- every call (a full invoice_items scan), then the outer join threw all
+         -- but this customer's away — so restricting here is identical (only
+         -- order_ids owned by $1 survive b ON b.order_id = o.id) but bounded.
          SELECT dc.order_id, SUM(ii.line_total) AS billed
            FROM invoice_items ii
            JOIN invoices i ON i.id = ii.invoice_id AND i.invoice_status = 'issued'
            JOIN delivery_challans dc ON dc.id = ii.challan_id
+           JOIN orders o2 ON o2.id = dc.order_id AND o2.customer_id = $1
           GROUP BY dc.order_id
        ) b ON b.order_id = o.id
       WHERE o.customer_id = $1

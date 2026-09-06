@@ -127,6 +127,11 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
     'bulkDensity',
     'waterAbsorptionPct',
     'defaultMoisturePct',
+    // Material thresholds/rate: a NaN or negative here poisons stock value,
+    // margin sums and the low-stock alert (see the CSV import path).
+    'standardRate',
+    'minimumStock',
+    'reorderLevel',
   ]) {
     if (dto[k] !== undefined && dto[k] !== null && dto[k] !== '' && !isNonNegativeNumber(dto[k])) {
       errors[k] = 'Enter a number of 0 or more.';

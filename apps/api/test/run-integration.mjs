@@ -98,6 +98,9 @@ const TESTS = [
   // order cancel, dispatch reject vs challan deliver, batch queue cap, mix
   // design lock, QC cube results). Seeds its own rows via the owner role.
   'test/state-locks.test.mjs',
+  // Paise-exact rounding at the money boundaries, CSV numeric rejection and
+  // opening-balance resets as signed ledger deltas. Seeds its own rows.
+  'test/money-rounding.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

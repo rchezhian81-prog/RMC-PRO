@@ -52,16 +52,31 @@ export class StockService {
     const plantIdIn = (dto.plantId as string) ?? null;
     const quantity = num(dto.quantity);
     if (!materialId) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'materialId required' });
+    if (!(Number(dto.quantity ?? 0) >= 0) || quantity < 0) {
+      throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'quantity must be a number of zero or more' });
+    }
     return this.db.runInTenant(tenantId, async (m) => {
       const plantId = await this.resolvePlant(m, plantIdIn);
       const material = await m.getRepository(Material).findOne({ where: { id: materialId } });
       const label = material?.materialName ?? null;
       const uom = material?.uom ?? null;
+      // Lock the balance and read what it was, so the ledger records the CHANGE.
+      // Writing the new absolute quantity as an inflow (opening 100, consume 30,
+      // re-set to 60 → ledger +100 −30 +60 = 130 against a balance of 60) made
+      // the movement report overstate receipts and booked a downward correction
+      // as a receipt. The first opening on an empty ledger is still 'opening';
+      // a reset over existing history is an 'adjustment' with a signed delta.
+      await this.lockBalance(m, plantId, materialId);
+      const prior = await this.balanceOf(m, plantId, materialId);
+      const priorTxns = await m.getRepository(StockTransaction).count({ where: { plantId, materialId } });
       const balanceAfter = await this.upsertBalance(m, tenantId, plantId, materialId, label, uom, quantity, true);
+      const delta = quantity - prior;
+      const isReset = priorTxns > 0 || prior !== 0;
       await this.writeTxn(m, tenantId, {
-        plantId, materialId, materialLabel: label, transactionType: 'opening',
-        inQuantity: quantity, outQuantity: 0, balanceAfter,
-        referenceType: 'opening', referenceId: null, remarks: 'Opening balance', createdBy: userId,
+        plantId, materialId, materialLabel: label, transactionType: isReset ? 'adjustment' : 'opening',
+        inQuantity: Math.max(0, delta), outQuantity: Math.max(0, -delta), balanceAfter,
+        referenceType: 'opening', referenceId: null,
+        remarks: isReset ? `Opening balance reset ${prior} → ${quantity}` : 'Opening balance', createdBy: userId,
       });
       return m.getRepository(StockBalance).findOne({ where: { plantId, materialId } });
     });

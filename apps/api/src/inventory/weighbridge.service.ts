@@ -1,3 +1,4 @@
+import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { leavesTerminal } from '../common/state-machine.util';
@@ -7,7 +8,6 @@ import { NumberingService } from '../sales/numbering.service';
 import { weighbridgeQuantity } from './weighbridge-uom.util';
 import type { WeighbridgePdfData } from '../sales/pdf.service';
 
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Weighbridge entry not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });

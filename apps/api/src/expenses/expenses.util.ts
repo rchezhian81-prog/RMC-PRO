@@ -1,3 +1,5 @@
+import { round2 } from '../common/money.util';
+
 /**
  * Expense-capture pure helpers (Plan D4). No NestJS/DB imports so each is
  * unit-testable in isolation (the .mjs tests import the compiled dist).
@@ -10,7 +12,6 @@
  *     (expense head or group), for a spend-by-head/group breakdown.
  */
 
-const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 const amt = (v: unknown): number => Number(v ?? 0) || 0;
 
 export interface AmountLine {

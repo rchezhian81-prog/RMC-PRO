@@ -44,7 +44,7 @@ export class ReceiptService {
   create(tenantId: string, dto: Record<string, unknown>) {
     const customerId = String(dto.customerId ?? '');
     if (!customerId) throw badReq('customerId required');
-    const amount = num(dto.amount);
+    const amount = round2(num(dto.amount));
     if (amount <= 0) throw badReq('amount must be greater than zero');
     const allocations = Array.isArray(dto.allocations) ? (dto.allocations as Record<string, unknown>[]) : [];
 
@@ -68,7 +68,7 @@ export class ReceiptService {
 
       let allocated = 0;
       for (const a of allocations) {
-        const amt = num(a.amount);
+        const amt = round2(num(a.amount));
         if (amt <= 0) continue;
         // Lock the invoice row: two receipts allocating to the same invoice
         // concurrently would otherwise both read a stale amountPaid and the

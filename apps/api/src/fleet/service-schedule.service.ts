@@ -50,7 +50,37 @@ export class ServiceScheduleService {
       const where: Record<string, unknown> = {};
       if (vehicleId) where.vehicleId = vehicleId;
       const rows = await m.getRepository(VehicleServiceSchedule).find({ where, order: { createdAt: 'DESC' } });
-      return Promise.all(rows.map((s) => this.annotate(m, s)));
+      if (!rows.length) return [];
+      // Resolve every vehicle's highest log odometer (fuel logs + maintenance jobs)
+      // in ONE query rather than a correlated per-row query — the previous code did
+      // Promise.all(rows.map(annotate)) which is both an N+1 AND unsafe (concurrent
+      // queries on the one transaction-scoped connection). The schedule's own
+      // last-service anchor is folded in per row below, exactly as currentOdometer().
+      const vehicleIds = [...new Set(rows.map((r) => r.vehicleId))];
+      const odoRows: Array<{ vehicle_id: string; odo: string | null }> = await m.query(
+        `SELECT v.id AS vehicle_id, GREATEST(
+                  COALESCE((SELECT max(odometer) FROM vehicle_fuel_logs f WHERE f.vehicle_id = v.id), 0),
+                  COALESCE((SELECT max(odometer) FROM vehicle_maintenance_jobs j WHERE j.vehicle_id = v.id), 0)
+                ) AS odo
+           FROM vehicles v WHERE v.id = ANY($1)`,
+        [vehicleIds],
+      );
+      const odoOf = new Map(odoRows.map((r) => [r.vehicle_id, numOrNull(r.odo) ?? 0]));
+      const today = todayIso();
+      return rows.map((s) => {
+        // Mirror currentOdometer(): GREATEST(vehicle log odometer, this schedule's
+        // anchor), then fall back to the anchor (or null) when nothing positive.
+        const anchor = numOrNull(s.lastServiceOdometer);
+        const combined = Math.max(odoOf.get(s.vehicleId) ?? 0, anchor ?? 0);
+        const currentOdometer = combined > 0 ? combined : anchor !== null ? anchor : null;
+        const dueState = serviceDueState({
+          nextDueOdometer: numOrNull(s.nextDueOdometer),
+          currentOdometer,
+          nextDueDate: s.nextDueDate,
+          today,
+        });
+        return { ...s, currentOdometer, dueState };
+      });
     });
   }
 

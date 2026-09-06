@@ -1,3 +1,4 @@
+import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -97,6 +98,7 @@ export class VendorBillService {
     if (!supplierId) throw badReq('supplierId required');
 
     return this.db.runInTenant(tenantId, async (m) => {
+      await resolveRef(m, Supplier, supplierId, 'Supplier');
       // Duplicate-invoice guard: the same supplier invoice number keyed twice is
       // the classic AP error — a double payable, paid twice, with the ITC claimed
       // twice. Block a second live bill for the same (supplier, supplier bill no);

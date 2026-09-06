@@ -1,7 +1,8 @@
+import { resolveOptionalRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { MixDesign, MixDesignMaterial } from '../core/database/entities';
+import { ConcreteGrade, Material, MixDesign, MixDesignMaterial } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { nullifyEmpty } from '../common/sanitize';
 
@@ -49,10 +50,15 @@ export class MixDesignsService {
       const repo = m.getRepository(MixDesign);
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'approvalStatus', 'approvedBy', 'approvedAt', 'materials']) delete rest[k];
+      // Grade and material ids resolve inside the tenant (FK checks bypass RLS): a
+      // foreign materialId made every batch of this recipe decrement a ghost
+      // balance while the real stock stayed overstated.
+      await resolveOptionalRef(m, ConcreteGrade, rest.gradeId, 'Grade');
       const design = await repo.save(repo.create({ ...rest, tenantId, approvalStatus: 'draft' } as Record<string, unknown>));
       if (Array.isArray(dto.materials)) {
         const matRepo = m.getRepository(MixDesignMaterial);
         for (const raw of dto.materials as Record<string, unknown>[]) {
+          await resolveOptionalRef(m, Material, raw.materialId, 'Material');
           await matRepo.save(matRepo.create({ ...this.pickMaterial(raw), tenantId, mixDesignId: design.id }));
         }
       }
@@ -68,6 +74,7 @@ export class MixDesignsService {
       if (design.approvalStatus === 'approved') throw badReq('Approved mix design is locked');
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId', 'approvalStatus', 'approvedBy', 'approvedAt', 'materials']) delete rest[k];
+      if ('gradeId' in rest) await resolveOptionalRef(m, ConcreteGrade, rest.gradeId, 'Grade');
       await repo.update(id, rest as Record<string, unknown>);
       return this.loadFull(m, id);
     });
@@ -78,6 +85,7 @@ export class MixDesignsService {
       const design = await m.getRepository(MixDesign).findOne({ where: { id } });
       if (!design) throw notFound();
       if (design.approvalStatus === 'approved') throw badReq('Approved mix design is locked');
+      await resolveOptionalRef(m, Material, dto.materialId, 'Material');
       const repo = m.getRepository(MixDesignMaterial);
       await repo.save(repo.create({ ...this.pickMaterial(dto), tenantId, mixDesignId: id }));
       return this.loadFull(m, id);

@@ -40,6 +40,7 @@ export class MaterialInwardService {
     if (!String(dto.materialId ?? '')) throw badReq('materialId required');
     return this.db.runInTenant(tenantId, async (m) => {
       const material = await m.getRepository(Material).findOne({ where: { id: String(dto.materialId) } });
+      if (!material) throw badReq('Material not found');
       const inwardNo = await this.numbering.next(m, tenantId, 'material_inward', 'INW-');
       const received = num(dto.quantityReceived);
       if (received <= 0) throw badReq('Received quantity must be greater than zero');

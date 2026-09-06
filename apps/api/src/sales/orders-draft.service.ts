@@ -87,7 +87,11 @@ export class OrdersDraftService {
   private async assertActiveCustomer(m: EntityManager, customerId: string | null): Promise<void> {
     if (!customerId) return;
     const c = await m.getRepository(Customer).findOne({ where: { id: customerId } });
-    if (c && c.status && String(c.status) !== 'active') {
+    // Resolved inside the tenant: FK checks bypass RLS, so a foreign or stale
+    // UUID used to pass here as "no customer" — the order was confirmed with zero
+    // credit gating and could never be invoiced (Customer not found).
+    if (!c) throw badReq('Customer not found');
+    if (c.status && String(c.status) !== 'active') {
       throw badReq(`${c.customerName ?? 'The customer'} is inactive — reactivate the customer before raising an order.`);
     }
   }

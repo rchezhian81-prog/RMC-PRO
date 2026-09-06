@@ -1,3 +1,4 @@
+import { assertSalesRefs } from './sales-refs.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -103,6 +104,7 @@ export class QuotationsService {
       delete rest.status;
       delete rest.items;
       assertValidity(rest.quotationDate, rest.validUntil);
+      await assertSalesRefs(m, rest);
       const quotation = await repo.save(
         repo.create({
           ...rest,
@@ -138,6 +140,7 @@ export class QuotationsService {
         delete rest[k];
       }
       assertValidity(rest.quotationDate ?? quotation.quotationDate, rest.validUntil ?? quotation.validUntil);
+      await assertSalesRefs(m, rest, quotation.customerId);
       await repo.update(id, rest as Record<string, unknown>);
       return this.loadFull(m, id);
     });

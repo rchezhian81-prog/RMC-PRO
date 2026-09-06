@@ -229,8 +229,13 @@ export class OrdersService {
       // mutating path — the read-only exposure callers (alerts, hold view) don't
       // lock. Released when the confirm transaction commits. Also re-check the
       // customer is still active (it may have been deactivated after drafting).
+      if (!order.customerId) throw badReq('Order has no customer — set the customer before confirming');
       const cust = await m.getRepository(Customer).findOne({ where: { id: order.customerId }, lock: { mode: 'pessimistic_write' } });
-      if (cust && cust.status && String(cust.status) !== 'active') {
+      // A customer that does not resolve in this tenant (FK checks bypass RLS)
+      // must not be confirmed against: the credit gate would run on a limit of 0
+      // with enforcement off, and the order could never be invoiced.
+      if (!cust) throw badReq('Customer not found');
+      if (cust.status && String(cust.status) !== 'active') {
         throw badReq(`${cust.customerName ?? 'The customer'} is inactive — reactivate the customer before confirming this order.`);
       }
 

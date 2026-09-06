@@ -1,3 +1,4 @@
+import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -66,6 +67,7 @@ export class ExpenseVoucherService {
     if (!lines.length) throw badReq('At least one line is required');
 
     return this.db.runInTenant(tenantId, async (m) => {
+      if (dto.plantId) await resolveRef(m, Plant, dto.plantId, 'Plant');
       const voucherNo = await this.numbering.next(m, tenantId, 'expense_voucher', 'EXP-');
       const voucherRepo = m.getRepository(ExpenseVoucher);
       const voucher = await voucherRepo.save(

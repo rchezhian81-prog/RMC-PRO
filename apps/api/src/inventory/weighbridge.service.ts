@@ -42,6 +42,7 @@ export class WeighbridgeService {
   create(tenantId: string, dto: Record<string, unknown>, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const material = dto.materialId ? await m.getRepository(Material).findOne({ where: { id: String(dto.materialId) } }) : null;
+      if (dto.materialId && !material) throw badReq('Material not found');
       const gross = num(dto.grossWeight);
       const tare = num(dto.tareWeight);
       const derived = gross - tare;

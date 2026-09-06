@@ -48,7 +48,8 @@ async function post(path, body) {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  let json = null; try { json = await res.json(); } catch {}
+  let json = null;
+  try { json = await res.json(); } catch { json = null; /* non-JSON body (e.g. empty 204) */ }
   return { status: res.status, ok: res.ok, data: json?.data, body: json };
 }
 

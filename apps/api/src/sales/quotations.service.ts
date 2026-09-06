@@ -98,6 +98,9 @@ export class QuotationsService {
       delete rest.quotationNo;
       delete rest.revisionNo;
       delete rest.approvalStatus;
+      // `status` (active/converted) is the conversion state — set only by the
+      // order path and by createRevision, never from the client body.
+      delete rest.status;
       delete rest.items;
       assertValidity(rest.quotationDate, rest.validUntil);
       const quotation = await repo.save(
@@ -131,7 +134,7 @@ export class QuotationsService {
         throw badReq('Approved quotation is locked; create a revision to change it');
       }
       const rest = nullifyEmpty(dto);
-      for (const k of ['id', 'tenantId', 'quotationNo', 'revisionNo', 'approvalStatus', 'items']) {
+      for (const k of ['id', 'tenantId', 'quotationNo', 'revisionNo', 'approvalStatus', 'status', 'items']) {
         delete rest[k];
       }
       assertValidity(rest.quotationDate ?? quotation.quotationDate, rest.validUntil ?? quotation.validUntil);
@@ -156,6 +159,11 @@ export class QuotationsService {
     return this.db.runInTenant(tenantId, async (m) => {
       const quotation = await m.getRepository(Quotation).findOne({ where: { id: quotationId } });
       if (!quotation) throw notFound();
+      // Items are the priced content of the quote: once approved they are as
+      // locked as the header (conversion copies their prices onto the order).
+      if (quotation.approvalStatus === 'approved') {
+        throw badReq('Approved quotation is locked; create a revision to change it');
+      }
       const repo = m.getRepository(QuotationItem);
       await repo.save(repo.create({ ...this.pickItem(dto), tenantId, quotationId }));
       return this.loadFull(m, quotationId);
@@ -164,6 +172,11 @@ export class QuotationsService {
 
   updateItem(tenantId: string, quotationId: string, itemId: string, dto: Record<string, unknown>) {
     return this.db.runInTenant(tenantId, async (m) => {
+      const quotation = await m.getRepository(Quotation).findOne({ where: { id: quotationId } });
+      if (!quotation) throw notFound();
+      if (quotation.approvalStatus === 'approved') {
+        throw badReq('Approved quotation is locked; create a revision to change it');
+      }
       const repo = m.getRepository(QuotationItem);
       const item = await repo.findOne({ where: { id: itemId, quotationId } });
       if (!item) throw notFound();
@@ -174,6 +187,11 @@ export class QuotationsService {
 
   deleteItem(tenantId: string, quotationId: string, itemId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
+      const quotation = await m.getRepository(Quotation).findOne({ where: { id: quotationId } });
+      if (!quotation) throw notFound();
+      if (quotation.approvalStatus === 'approved') {
+        throw badReq('Approved quotation is locked; create a revision to change it');
+      }
       const repo = m.getRepository(QuotationItem);
       const item = await repo.findOne({ where: { id: itemId, quotationId } });
       if (!item) throw notFound();
@@ -248,9 +266,14 @@ export class QuotationsService {
           snapshotJson: full as unknown,
         }),
       );
+      // A revision reopens the quotation for editing AND for conversion: the
+      // documented flow after a conversion is "revise to raise another", so a
+      // converted quotation returns to 'active' here (the client-side status
+      // write that used to be the workaround is no longer accepted).
       await m.getRepository(Quotation).update(id, {
         revisionNo: nextRev,
         approvalStatus: 'draft',
+        status: 'active',
       });
       return this.loadFull(m, id);
     });

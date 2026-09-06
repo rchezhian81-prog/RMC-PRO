@@ -104,20 +104,27 @@ export class GrnService {
         // more than was ordered.
         const poItemId = (line.purchaseOrderItemId as string) || null;
         if (poItemId) {
-          const poItem = await poItemRepo.findOne({ where: { id: poItemId } });
-          if (poItem) {
-            const soFar = (receivedThisGrn.get(poItemId) ?? 0) + received;
-            receivedThisGrn.set(poItemId, soFar);
-            const ordered = num(poItem.quantity);
-            const cap = ordered * (1 + OVER_RECEIPT_TOLERANCE);
-            if (ordered > 0 && num(poItem.receivedQuantity) + soFar > cap + 0.0005) {
-              const label = (line.materialLabel as string) || materialId || 'this material';
-              throw badReq(
-                `Received quantity exceeds the ordered amount for ${label} ` +
-                  `(ordered ${ordered}, already received ${num(poItem.receivedQuantity)}). ` +
-                  'Amend the purchase order to receive more.',
-              );
-            }
+          // The PO line must belong to THIS receipt's purchase order. Resolved by
+          // id alone, another PO's line (or a dangling id) was accepted: that PO's
+          // received_quantity was inflated on post, its genuine receipts were then
+          // blocked by the cap and it became uncancellable, and a bill against it
+          // passed the 3-way match for goods never received against it.
+          if (!purchaseOrderId) {
+            throw badReq('A line can only cite a purchase-order line when the receipt names its purchase order');
+          }
+          const poItem = await poItemRepo.findOne({ where: { id: poItemId, purchaseOrderId } });
+          if (!poItem) throw badReq('Purchase-order line not found on this purchase order');
+          const soFar = (receivedThisGrn.get(poItemId) ?? 0) + received;
+          receivedThisGrn.set(poItemId, soFar);
+          const ordered = num(poItem.quantity);
+          const cap = ordered * (1 + OVER_RECEIPT_TOLERANCE);
+          if (ordered > 0 && num(poItem.receivedQuantity) + soFar > cap + 0.0005) {
+            const label = (line.materialLabel as string) || materialId || 'this material';
+            throw badReq(
+              `Received quantity exceeds the ordered amount for ${label} ` +
+                `(ordered ${ordered}, already received ${num(poItem.receivedQuantity)}). ` +
+                'Amend the purchase order to receive more.',
+            );
           }
         }
         let materialLabel: string | null = (line.materialLabel as string) ?? null;
@@ -163,6 +170,17 @@ export class GrnService {
       // GRN. Lock the PO-line rows (pessimistic write) so two posts racing on the
       // same line serialize — the second sees the first's quantity and is blocked.
       if (grn.purchaseOrderId) {
+        // Re-check the PO at POST time (create checked it at draft time): a PO
+        // cancelled while this receipt sat in draft must not acquire received
+        // quantity — that made a cancelled PO billable. Locked, so a concurrent
+        // cancel waits for this post and then refuses on received > 0.
+        const po = await m
+          .getRepository(PurchaseOrder)
+          .findOne({ where: { id: grn.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+        if (!po) throw badReq('Purchase order not found');
+        if (po.status === 'cancelled' || po.status === 'closed') {
+          throw badReq(`Cannot post a receipt against a ${po.status} purchase order`);
+        }
         const poItemRepo = m.getRepository(PurchaseOrderItem);
         const perLine = new Map<string, number>();
         for (const it of items) {
@@ -170,8 +188,10 @@ export class GrnService {
           perLine.set(it.purchaseOrderItemId, (perLine.get(it.purchaseOrderItemId) ?? 0) + num(it.receivedQuantity));
         }
         for (const [poItemId, thisGrnQty] of perLine) {
-          const poItem = await poItemRepo.findOne({ where: { id: poItemId }, lock: { mode: 'pessimistic_write' } });
-          if (!poItem) continue;
+          const poItem = await poItemRepo.findOne({
+            where: { id: poItemId, purchaseOrderId: grn.purchaseOrderId }, lock: { mode: 'pessimistic_write' },
+          });
+          if (!poItem) throw badReq('A receipt line cites a purchase-order line that is not on this purchase order');
           const ordered = num(poItem.quantity);
           if (ordered <= 0) continue;
           const cap = ordered * (1 + OVER_RECEIPT_TOLERANCE);
@@ -208,10 +228,14 @@ export class GrnService {
   /** Add each received quantity to its PO line and recompute the PO's status. */
   private async rollUpPurchaseOrder(m: EntityManager, purchaseOrderId: string, grnItems: GoodsReceiptItem[]) {
     const poItemRepo = m.getRepository(PurchaseOrderItem);
+    // Nothing on this receipt cites a PO line → nothing to roll up, and the PO's
+    // status must not be recomputed from untouched lines (that wrote
+    // 'not_received' over an issued PO).
+    if (!grnItems.some((it) => it.purchaseOrderItemId)) return;
     for (const it of grnItems) {
       if (!it.purchaseOrderItemId) continue;
-      const poItem = await poItemRepo.findOne({ where: { id: it.purchaseOrderItemId } });
-      if (!poItem) continue;
+      const poItem = await poItemRepo.findOne({ where: { id: it.purchaseOrderItemId, purchaseOrderId } });
+      if (!poItem) throw badReq('A receipt line cites a purchase-order line that is not on this purchase order');
       const received = round3(num(poItem.receivedQuantity) + num(it.receivedQuantity));
       await poItemRepo.update(poItem.id, { receivedQuantity: String(received) });
     }

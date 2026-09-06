@@ -57,11 +57,17 @@ export class GpsService {
         }),
       );
 
-      await m.getRepository(Dispatch).update(dispatchId, {
-        lastLatitude: String(latitude), lastLongitude: String(longitude),
-        lastLocationAt: recordedAt,
-        lastSpeedKmph: speedKmph === null ? null : String(speedKmph),
-      });
+      // Only a fix at least as new as the current "latest" moves the dispatch's
+      // last-known position. Buffered fixes upload out of order (10:02 processed
+      // before 10:00), and the unconditional write left the live board showing
+      // the truck minutes behind — permanently, if that was the final batch
+      // before tracking closed. The ping row itself is always kept for the track.
+      await m.query(
+        `UPDATE dispatches
+            SET last_latitude = $2, last_longitude = $3, last_location_at = $4, last_speed_kmph = $5
+          WHERE id = $1 AND (last_location_at IS NULL OR last_location_at <= $4)`,
+        [dispatchId, String(latitude), String(longitude), recordedAt, speedKmph === null ? null : String(speedKmph)],
+      );
       return ping;
     });
   }

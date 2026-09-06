@@ -113,11 +113,20 @@ export class PurchaseOrderService {
   cancel(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(PurchaseOrder);
-      const po = await repo.findOne({ where: { id } });
+      // Locked: GRN post locks the PO too, so a cancel racing a post waits and
+      // then sees the received quantity (or the post sees the cancellation).
+      const po = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!po) throw notFound();
       if (po.status === 'cancelled') throw badReq('Purchase order already cancelled');
       const items = await m.getRepository(PurchaseOrderItem).find({ where: { purchaseOrderId: id } });
       if (items.some((i) => num(i.receivedQuantity) > 0.0005)) throw badReq('Cannot cancel a PO with goods already received');
+      // A draft receipt against this PO would otherwise post later onto a
+      // cancelled order (received quantity on a cancelled PO, then billable).
+      const [drafts] = await m.query(
+        `SELECT count(*)::int AS n FROM goods_receipts WHERE purchase_order_id = $1 AND status = 'draft'`, [id]);
+      if (Number(drafts?.n ?? 0) > 0) {
+        throw badReq('This purchase order has draft goods receipts — cancel or post them first');
+      }
       await repo.update(id, { status: 'cancelled' });
       return this.loadFull(m, id);
     });

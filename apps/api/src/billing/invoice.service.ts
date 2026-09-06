@@ -192,8 +192,9 @@ export class InvoiceService {
       for (const line of lines) {
         // Lock the challan row before the not_invoiced check: two concurrent
         // invoices citing the same challan would otherwise both see not_invoiced
-        // and bill it twice (duplicate revenue). The partial unique index on
-        // invoice_challans (Tier-1B) is the backstop.
+        // and bill it twice (duplicate revenue). The unique index
+        // uq_invoice_challans_challan (one link per challan; cancel() releases the
+        // link) is the cross-process backstop.
         const challan = await challanRepo.findOne({ where: { id: String(line.challanId ?? '') }, lock: { mode: 'pessimistic_write' } });
         if (!challan) throw badReq('Challan not found');
         if (challan.challanStatus !== 'delivered') throw badReq(`Challan ${challan.challanNo} is not delivered`);
@@ -312,10 +313,18 @@ export class InvoiceService {
       // A write-off is a financial event on this invoice; cancelling would erase
       // it and silently make the challans billable again. Reverse it first.
       if (num(invoice.writtenOffAmount) > 0) throw badReq('Cannot cancel an invoice that has a write-off — reverse the write-off first');
-      // Revert linked challans back to not_invoiced.
-      const links = await m.getRepository(InvoiceChallan).find({ where: { invoiceId: id } });
+      // Revert the linked challans to not_invoiced AND drop the invoice_challans
+      // links. Older builds reset the challan but left the link, so a cancel →
+      // re-invoice cycle left a challan with two links (the stale one + the live
+      // one): that collides with the uq_invoice_challans_challan index and makes
+      // "which invoice billed this challan?" (the challan-PDF EWB lookup)
+      // ambiguous. A cancelled invoice keeps its line items for the trail; only
+      // the challan links are released.
+      const linkRepo = m.getRepository(InvoiceChallan);
+      const links = await linkRepo.find({ where: { invoiceId: id } });
       const challanRepo = m.getRepository(DeliveryChallan);
       for (const l of links) await challanRepo.update(l.challanId, { invoiceStatus: 'not_invoiced' });
+      await linkRepo.delete({ invoiceId: id });
       await repo.update(id, { invoiceStatus: 'cancelled', paymentStatus: 'cancelled' });
       return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, total: invoice.totalAmount };
     });

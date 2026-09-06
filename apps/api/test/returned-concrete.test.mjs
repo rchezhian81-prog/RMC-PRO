@@ -133,6 +133,21 @@ ok('wastage report buckets the reason', !!reasonBucket && Number(reasonBucket.co
 const gradeBucket = (report.byGrade ?? []).find((b) => b.label === String(grade.gradeName));
 ok('wastage report buckets the grade', !!gradeBucket);
 
+// ---- C#4: invoice → cancel → re-invoice the SAME challan ----
+// The delivered challan above is not yet invoiced. Invoice it, cancel the invoice
+// (which must release the challan AND drop the invoice_challans link), then invoice
+// it again. With the uq_invoice_challans_challan index, a leftover link from the
+// cancelled invoice would collide on the second from-challans; cancel() deleting
+// the link keeps the cancel → re-invoice cycle working.
+const inv1 = await api('POST', '/invoices/from-challans', { customerId: customer.id, lines: [{ challanId: challan.id }], invoiceDate: TODAY });
+ok('the delivered challan can be invoiced', inv1.items.length >= 1);
+ok('the challan is now invoiced', (await api('GET', `/delivery-challans/${challan.id}`)).invoiceStatus === 'invoiced');
+const cancelled = await api('POST', `/invoices/${inv1.id}/cancel`, { reason: 'wrong customer' });
+ok('the invoice is cancelled', cancelled.invoiceStatus === 'cancelled');
+ok('cancelling releases the challan back to not_invoiced', (await api('GET', `/delivery-challans/${challan.id}`)).invoiceStatus === 'not_invoiced');
+const inv2 = await api('POST', '/invoices/from-challans', { customerId: customer.id, lines: [{ challanId: challan.id }], invoiceDate: TODAY });
+ok('the released challan can be re-invoiced (no stale-link collision)', inv2.items.length >= 1 && inv2.id !== inv1.id);
+
 // ---- Whole-load wastage: a rejected dispatch counts its full batched load ----
 // A load rejected on site (or a dispatch cancelled after batching) never reaches
 // a challan, but the concrete was produced — so the full batched quantity is

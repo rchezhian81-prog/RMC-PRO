@@ -22,6 +22,11 @@
 #     ./scripts/ops/redeploy.sh
 #     WEB_ONLY=1 ./scripts/ops/redeploy.sh   # skip api build + migrate (web/nginx only)
 #
+#  Guards (each refuses with the exact fix, override only deliberately):
+#     checkout behind its remote      -> ALLOW_BEHIND=1
+#     checkout not on main            -> ALLOW_BRANCH=1
+#     IMAGE_TAG sha != HEAD sha       -> ALLOW_TAG_MISMATCH=1
+#
 #  4 GB / no swap: the image builds (esp. web's `next build`) are the only
 #  memory-heavy steps. If one OOMs, nothing running is affected (builds are
 #  isolated) — retry, or build in CI and pull (see docs/deployment runbook).
@@ -62,6 +67,37 @@ if [ "${ALLOW_BEHIND:-0}" != "1" ] && git -C "$REPO_ROOT" rev-parse --abbrev-ref
   fi
   log "git: $BR @ ${LOCAL:0:7} is up to date with its remote ✓"
 fi
+
+# ---- Branch guard: production builds come from main ----
+# The freshness guard above is skipped when the branch has no upstream — which
+# is exactly the state of a single-branch clone sitting on an old feature
+# branch. That once rebuilt a months-old commit and reported success, because
+# `git checkout main` had nothing to switch to. Refuse anything but main unless
+# the operator says so explicitly.
+HEAD_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
+if [ "${ALLOW_BRANCH:-0}" != "1" ] && [ "$HEAD_BRANCH" != "main" ]; then
+  die "checkout is on '$HEAD_BRANCH' (@ $HEAD_SHA), not 'main' — production deploys build from main. Run:
+       git -C $REPO_ROOT fetch origin main:refs/remotes/origin/main
+       git -C $REPO_ROOT checkout -B main origin/main
+   then re-run this script. (Set ALLOW_BRANCH=1 for a deliberate branch deploy.)"
+fi
+
+# ---- Tag guard: IMAGE_TAG must name the commit being built ----
+# `docker compose build` tags the image with .env.production's IMAGE_TAG
+# whatever the checkout contains. A tag that names one commit while the code
+# is another (IMAGE_TAG=515f8b6 built from 606134c) makes rollback and
+# diagnosis lie. Enforced only when IMAGE_TAG looks like a commit sha; a
+# non-sha tag (latest, <sha>-uiv2) is left to the operator.
+IMAGE_TAG_CFG="$(getenv IMAGE_TAG)"
+if [ "${ALLOW_TAG_MISMATCH:-0}" != "1" ] && [ "$WEB_ONLY" != "1" ] \
+   && printf '%s' "$IMAGE_TAG_CFG" | grep -Eq '^[0-9a-f]{7,40}$' \
+   && [ "${IMAGE_TAG_CFG:0:7}" != "$HEAD_SHA" ]; then
+  die "IMAGE_TAG=$IMAGE_TAG_CFG in $ENV_FILE does not match the checkout ($HEAD_SHA). The built image would carry the wrong label. Run:
+       sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=$HEAD_SHA/' $ENV_FILE
+   then re-run this script. (Set ALLOW_TAG_MISMATCH=1 to build anyway.)"
+fi
+log "git: building $HEAD_BRANCH @ $HEAD_SHA as IMAGE_TAG=${IMAGE_TAG_CFG:-<unset>} ✓"
 
 # What we build/recreate. WEB_ONLY trims to a web+nginx-only change.
 if [ "$WEB_ONLY" = "1" ]; then BUILD_SVCS=(web); RECREATE_SVCS=(web nginx); else BUILD_SVCS=(api web); RECREATE_SVCS=(api web nginx); fi

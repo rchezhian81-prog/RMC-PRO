@@ -22,6 +22,10 @@ export default function ReceiptsPage() {
   const [exposure, setExposure] = useState<CustomerExposure | null>(null);
   const [alloc, setAlloc] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ amount: '', paymentMode: 'neft', receiptDate: '', bankReference: '' });
+  // A receipt is money-in: a double click or a retry after a lost response used
+  // to post the same instrument twice. The API now refuses a repeated bank
+  // reference (409); this stops the second submit from leaving the browser.
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -69,6 +73,8 @@ export default function ReceiptsPage() {
   }
 
   async function create() {
+    if (saving) return;
+    setSaving(true);
     setError(null);
     setMsg(null);
     const allocations = openInvoices
@@ -92,6 +98,8 @@ export default function ReceiptsPage() {
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -188,7 +196,7 @@ export default function ReceiptsPage() {
                   </tbody>
                 </Table>
                 <div style={{ marginTop: 14 }}>
-                  <Button onClick={create}>Record receipt</Button>
+                  <Button disabled={saving} onClick={create}>Record receipt</Button>
                 </div>
               </>
             ) : (
@@ -263,6 +271,22 @@ export default function ReceiptsPage() {
                           }
                         >
                           Bounce
+                        </Button>
+                      )}
+                      {!reversed && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            act(async () => {
+                              if (!(await confirm({ title: 'Reverse receipt', message: `Reverse receipt ${String(r.receiptNo)}? Every allocation is restored to its invoice and the receipt leaves the customer ledger. For a cheque returned by the bank use Bounce instead.`, confirmLabel: 'Reverse' }))) return;
+                              const reason = await prompt({ title: 'Reverse receipt', label: 'Reason (wrong invoice, wrong amount, duplicate…)', defaultValue: '' });
+                              if (reason === null) return;
+                              await receiptsApi.reverse(String(r.id), reason);
+                            }, `Receipt ${String(r.receiptNo)} reversed.`)
+                          }
+                        >
+                          Reverse
                         </Button>
                       )}
                       <Button

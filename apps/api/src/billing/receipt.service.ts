@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Customer, Invoice, Payment, PaymentAllocation } from '../core/database/entities';
@@ -49,17 +49,40 @@ export class ReceiptService {
     const allocations = Array.isArray(dto.allocations) ? (dto.allocations as Record<string, unknown>[]) : [];
 
     return this.db.runInTenant(tenantId, async (m) => {
-      const receiptNo = await this.numbering.next(m, tenantId, 'receipt', 'RCPT-');
       const invoiceRepo = m.getRepository(Invoice);
       const paymentRepo = m.getRepository(Payment);
 
       const mode = ((dto.paymentMode as string) ?? 'cash').toLowerCase();
+      // The instrument reference (UTR / cheque no) is the receipt's natural key.
+      // A lost response + retry used to post the SAME instrument twice: a fresh
+      // receipt number each time, the allocation guard only compares to the
+      // current outstanding, so amount_paid doubled and AR was understated. One
+      // live receipt per (customer, reference) for non-cash modes; blank is
+      // "no reference" (stored NULL, never compared). The partial unique index
+      // uq_payments_customer_bank_reference backstops this under concurrency.
+      const bankReference = String(dto.bankReference ?? '').trim() || null;
+      if (bankReference && mode !== 'cash') {
+        const [dup] = (await m.query(
+          `SELECT receipt_no FROM payments
+            WHERE customer_id = $1 AND lower(btrim(bank_reference)) = lower($2)
+              AND COALESCE(payment_mode, '') <> 'cash' AND status <> 'reversed'
+            LIMIT 1`,
+          [customerId, bankReference],
+        )) as Array<{ receipt_no: string }>;
+        if (dup) {
+          throw new ConflictException({
+            code: 'DUPLICATE_RECORD',
+            message: `Reference ${bankReference} is already recorded for this customer on receipt ${dup.receipt_no}. Reverse that receipt first if it was keyed wrongly.`,
+          });
+        }
+      }
+      const receiptNo = await this.numbering.next(m, tenantId, 'receipt', 'RCPT-');
       const payment = await paymentRepo.save(
         paymentRepo.create({
           tenantId, receiptNo, customerId,
           receiptDate: (dto.receiptDate as string) ?? null,
           paymentMode: (dto.paymentMode as string) ?? 'cash',
-          amount: String(amount), bankReference: (dto.bankReference as string) ?? null,
+          amount: String(amount), bankReference,
           remarks: (dto.remarks as string) ?? null, status: 'posted',
           // A cheque is money-in-transit until it clears; other modes are instant.
           clearingStatus: mode === 'cheque' ? 'pending' : 'cleared',
@@ -135,25 +158,12 @@ export class ReceiptService {
       if (!payment) throw notFound();
       if (payment.status === 'reversed') throw badReq('Receipt is already reversed');
       // Only a cheque bounces (NSF). Guarding on status alone let a cash/UPI
-      // receipt be "bounced", silently reversing every allocation.
-      if ((payment.paymentMode ?? '').toLowerCase() !== 'cheque') throw badReq('Only a cheque receipt can be bounced.');
-      const invoiceRepo = m.getRepository(Invoice);
-      const allocRepo = m.getRepository(PaymentAllocation);
-      const allocations = await allocRepo.find({ where: { paymentId: id } });
-      for (const a of allocations) {
-        const invoice = await invoiceRepo.findOne({ where: { id: a.invoiceId }, lock: { mode: 'pessimistic_write' } });
-        if (invoice) {
-          // Floor at 0 so a data anomaly (amountPaid already below this allocation)
-          // can't push outstanding above the invoice total on reversal — the
-          // vendor-payment reversal clamps the same way.
-          const paid = Math.max(0, round2(num(invoice.amountPaid) - num(a.allocatedAmount)));
-          const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
-          await invoiceRepo.update(invoice.id, {
-            amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,
-          });
-        }
-        await allocRepo.delete(a.id);
+      // receipt be "bounced", silently reversing every allocation. Any other
+      // correction is `reverse`, the general path.
+      if ((payment.paymentMode ?? '').toLowerCase() !== 'cheque') {
+        throw badReq('Only a cheque receipt can be bounced. Use reverse for a wrongly keyed receipt.');
       }
+      await this.unwindAllocations(m, id);
       await paymentRepo.update(id, {
         status: 'reversed', clearingStatus: 'bounced',
         allocatedAmount: '0', unallocatedAmount: payment.amount, isAdvance: false,
@@ -167,6 +177,67 @@ export class ReceiptService {
       details: { reason: reason ?? null },
     });
     return this.get(tenantId, id);
+  }
+
+  /**
+   * Reverse a posted receipt of ANY mode — the general correction path (a
+   * cheque that bounced at the bank keeps its own `bounce`). A NEFT/UPI/cash
+   * receipt keyed against the wrong invoice, wrong amount or twice previously
+   * had no way back: bounce was cheque-only, the invoice could not be cancelled
+   * while paid, a negative receipt was refused, and the customer's genuine
+   * receipt could not be allocated to an already-`paid` invoice — the statement,
+   * ageing and credit exposure were permanently wrong short of a DB edit.
+   * Mirrors VendorPaymentService.reverse: one transaction, receipt header locked
+   * first, every allocation unwound onto its (locked) invoice, allocations
+   * deleted, header `reversed` with the receipt number retained. Audited.
+   */
+  async reverse(tenantId: string, id: string, userId: string, reason?: string) {
+    const { receiptNo, amount } = await this.db.runInTenant(tenantId, async (m) => {
+      const paymentRepo = m.getRepository(Payment);
+      const payment = await paymentRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!payment) throw notFound();
+      if (payment.status === 'reversed') throw badReq('Receipt is already reversed');
+      if (payment.status !== 'posted') throw badReq(`Cannot reverse a ${payment.status} receipt`);
+      await this.unwindAllocations(m, id);
+      await paymentRepo.update(id, {
+        status: 'reversed',
+        allocatedAmount: '0', unallocatedAmount: payment.amount, isAdvance: false,
+        remarks: reason ? `Reversed: ${reason}` : payment.remarks,
+      });
+      return { receiptNo: payment.receiptNo, amount: num(payment.amount) };
+    });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.RECEIPT_REVERSE,
+      entityType: 'receipt', entityId: id, entityLabel: receiptNo,
+      summary: `Reversed receipt ${receiptNo} (₹${amount})${reason ? ` — ${reason}` : ''}`,
+      details: { amount, reason: reason ?? null },
+    });
+    return this.get(tenantId, id);
+  }
+
+  /**
+   * Unwind every allocation of a receipt onto its invoice (restore amount_paid /
+   * outstanding / payment_status) and delete the allocation rows. Caller holds
+   * the receipt header lock; each invoice is locked here before it is changed.
+   */
+  private async unwindAllocations(m: EntityManager, paymentId: string): Promise<void> {
+    const invoiceRepo = m.getRepository(Invoice);
+    const allocRepo = m.getRepository(PaymentAllocation);
+    const allocations = await allocRepo.find({ where: { paymentId } });
+    for (const a of allocations) {
+      const invoice = await invoiceRepo.findOne({ where: { id: a.invoiceId }, lock: { mode: 'pessimistic_write' } });
+      if (invoice) {
+        // Floor at 0 so a data anomaly (amountPaid already below this allocation)
+        // can't push outstanding above the invoice total on reversal — the
+        // vendor-payment reversal clamps the same way.
+        const paid = Math.max(0, round2(num(invoice.amountPaid) - num(a.allocatedAmount)));
+        const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
+        await invoiceRepo.update(invoice.id, {
+          amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,
+        });
+      }
+      await allocRepo.delete(a.id);
+    }
   }
 
   /** Total already allocated from a receipt, read from the allocation rows themselves. */

@@ -62,6 +62,7 @@ import { PerformanceIndexes1720000057000 } from './migrations/1720000057000-Perf
 import { PaymentsReceiptDateIndex1720000058000 } from './migrations/1720000058000-PaymentsReceiptDateIndex';
 import { StockTransactionsTypeIndex1720000059000 } from './migrations/1720000059000-StockTransactionsTypeIndex';
 import { PurchaseForeignKeys1720000060000 } from './migrations/1720000060000-PurchaseForeignKeys';
+import { PaymentsBankReferenceUnique1720000061000 } from './migrations/1720000061000-PaymentsBankReferenceUnique';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -139,6 +140,7 @@ export const AppDataSource = new DataSource({
     PaymentsReceiptDateIndex1720000058000,
     StockTransactionsTypeIndex1720000059000,
     PurchaseForeignKeys1720000060000,
+    PaymentsBankReferenceUnique1720000061000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

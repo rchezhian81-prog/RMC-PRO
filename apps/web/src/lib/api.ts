@@ -779,6 +779,7 @@ export const invoicesApi = {
   issue: (id: string) => post(`/invoices/${id}/issue`),
   cancel: (id: string, reason: string) => post(`/invoices/${id}/cancel`, { reason }),
   writeoff: (id: string, amount: number, reason: string) => post(`/invoices/${id}/writeoff`, { amount, reason }),
+  reverseWriteoff: (id: string, amount: number, reason: string) => post(`/invoices/${id}/writeoff/reverse`, { amount, reason }),
   share: (id: string, mobile: string) => post(`/invoices/${id}/share`, { mobile }),
   // e-way transport details (transporter, vehicle, mode, distance) — feed the e-way bill.
   setTransport: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/invoices/${id}/transport`, { method: 'PATCH', body: JSON.stringify(b) }),
@@ -921,6 +922,8 @@ export const purchaseApi = {
   grn: (id: string) => apiFetch<Row>(`/goods-receipts/${id}`),
   createGrn: (b: Record<string, unknown>) => post('/goods-receipts', b),
   postGrn: (id: string) => post(`/goods-receipts/${id}/post`),
+  cancelGrn: (id: string) => post(`/goods-receipts/${id}/cancel`),
+  reverseGrn: (id: string, reason: string) => post(`/goods-receipts/${id}/reverse`, { reason }),
   bills: (status?: string) => apiFetch<Row[]>(`/vendor-bills${status ? `?status=${status}` : ''}`),
   bill: (id: string) => apiFetch<Row>(`/vendor-bills/${id}`),
   createBill: (b: Record<string, unknown>) => post('/vendor-bills', b),

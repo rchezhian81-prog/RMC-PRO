@@ -52,6 +52,14 @@ export class GoodsReceiptController {
 
   @Post(':id/post') @RequirePermissions('grn.create')
   post(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.post(tid(u), id, u.userId); }
+
+  @Post(':id/cancel') @RequirePermissions('grn.create')
+  cancel(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.cancel(tid(u), id, u.userId); }
+
+  // Taking booked stock back out and rewinding the PO is an approver action —
+  // the same tier that approves the vendor bill built on this receipt.
+  @Post(':id/reverse') @RequirePermissions('vendor_bills.approve')
+  reverse(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.reverse(tid(u), id, u.userId, dto.reason as string); }
 }
 
 @Controller('vendor-bills')

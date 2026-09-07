@@ -186,6 +186,29 @@ export default function InvoiceDetail() {
               Write off
             </Button>
           )}
+          {status === 'issued' && Number(inv.writtenOffAmount) > 0 && getAccess().has('invoice_cancellation.approve') && (
+            <Button
+              variant="secondary"
+              onClick={() =>
+                run(async () => {
+                  const a = await prompt({
+                    title: 'Reverse write-off',
+                    message: 'Put part or all of the written-off amount back onto the outstanding balance (for example the customer paid after all). Cancelling an invoice requires its write-off to be fully reversed first.',
+                    label: 'Amount (₹)',
+                    defaultValue: String(inv.writtenOffAmount ?? ''),
+                  });
+                  if (a === null) return;
+                  const amount = Number(a);
+                  if (!(amount > 0)) throw new Error('Enter an amount greater than zero');
+                  const r = await prompt({ title: 'Reverse write-off', label: 'Reason', defaultValue: '' });
+                  if (r === null) return;
+                  await invoicesApi.reverseWriteoff(id, amount, r);
+                }, 'Write-off reversed')
+              }
+            >
+              Reverse write-off
+            </Button>
+          )}
         </div>
       </Card>
 

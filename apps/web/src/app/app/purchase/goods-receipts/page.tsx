@@ -19,7 +19,8 @@ type GrnLine = {
 };
 
 export default function GoodsReceiptsPage() {
-  const { confirm } = useConfirm();
+  const { confirm, prompt } = useConfirm();
+  const canReverse = getAccess().has('vendor_bills.approve');
   const canCreate = getAccess().has('grn.create');
   const [rows, setRows] = useState<Row[]>([]);
   const [openPos, setOpenPos] = useState<Row[]>([]);
@@ -105,6 +106,18 @@ export default function GoodsReceiptsPage() {
       setError(e instanceof Error ? e.message : 'Failed');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function act(fn: () => Promise<unknown>, okMsg: string) {
+    setError(null);
+    setMsg(null);
+    try {
+      await fn();
+      setMsg(okMsg);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
     }
   }
 
@@ -214,9 +227,41 @@ export default function GoodsReceiptsPage() {
                     <Td>{String(r.vehicleNo ?? '—')}</Td>
                     <Td><StatusBadge status={status} /></Td>
                     <Td style={{ textAlign: 'right' }}>
-                      {canCreate && status === 'draft' && (
-                        <Button variant="secondary" size="sm" onClick={() => postGrn(String(r.id), String(r.grnNo))}>Post to stock</Button>
-                      )}
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        {canCreate && status === 'draft' && (
+                          <Button variant="secondary" size="sm" onClick={() => postGrn(String(r.id), String(r.grnNo))}>Post to stock</Button>
+                        )}
+                        {canCreate && status === 'draft' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              act(async () => {
+                                if (!(await confirm({ title: 'Cancel goods receipt', message: `Cancel draft ${String(r.grnNo)}? Nothing was posted to stock.`, confirmLabel: 'Cancel receipt' }))) return;
+                                await purchaseApi.cancelGrn(String(r.id));
+                              }, `${String(r.grnNo)} cancelled.`)
+                            }
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        {canReverse && status === 'posted' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              act(async () => {
+                                if (!(await confirm({ title: 'Reverse goods receipt', message: `Reverse ${String(r.grnNo)}? The accepted quantities are taken back out of stock and the purchase order lines are rewound. A vendor bill on this receipt must be cancelled first.`, confirmLabel: 'Reverse' }))) return;
+                                const reason = await prompt({ title: 'Reverse goods receipt', label: 'Reason (short delivery, wrong PO, duplicate…)', defaultValue: '' });
+                                if (reason === null) return;
+                                await purchaseApi.reverseGrn(String(r.id), reason);
+                              }, `${String(r.grnNo)} reversed.`)
+                            }
+                          >
+                            Reverse
+                          </Button>
+                        )}
+                      </div>
                     </Td>
                   </tr>
                 );

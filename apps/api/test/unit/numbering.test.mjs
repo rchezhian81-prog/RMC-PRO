@@ -10,6 +10,8 @@ import {
   financialYearOf,
   formatSeriesNumber,
   applyYearlyReset,
+  fyToken,
+  rolloverSuffix,
 } from '../../dist/sales/numbering.util.js';
 
 // ---- financialYearOf ----
@@ -75,4 +77,42 @@ test('reset frequency defaults to yearly when unset', () => {
   const r = applyYearlyReset({ seriesFy: '2025-26', currentFy: '2026-27', currentNumber: 5 });
   assert.equal(r.didReset, true);
   assert.equal(r.currentNumber, 0);
+});
+
+// ── FY token + roll-over suffix (data-integrity item I6) ──────────────────────
+
+test('fyToken renders a financial year as /YY-YY', () => {
+  assert.equal(fyToken('2026-27'), '/26-27');
+  assert.equal(fyToken('2027-28'), '/27-28');
+  assert.equal(fyToken('2099-00'), '/99-00');
+});
+
+test('fyToken is empty for a missing or malformed FY', () => {
+  assert.equal(fyToken(null), '');
+  assert.equal(fyToken(undefined), '');
+  assert.equal(fyToken(''), '');
+  assert.equal(fyToken('2026'), '');
+  assert.equal(fyToken('FY26'), '');
+});
+
+test('rolloverSuffix appends the new FY token to a plain series on its first roll-over', () => {
+  assert.equal(rolloverSuffix(null, '2026-27', '2027-28'), '/27-28');
+  assert.equal(rolloverSuffix('', '2026-27', '2027-28'), '/27-28');
+});
+
+test('rolloverSuffix replaces the previous FY token so it never stacks', () => {
+  assert.equal(rolloverSuffix('/27-28', '2027-28', '2028-29'), '/28-29');
+  assert.equal(rolloverSuffix('/A/27-28', '2027-28', '2028-29'), '/A/28-29');
+});
+
+test('rolloverSuffix keeps a tenant-configured suffix and adds the token after it', () => {
+  assert.equal(rolloverSuffix('/CHN', '2026-27', '2027-28'), '/CHN/27-28');
+});
+
+test('the formatted number is distinct across two financial years', () => {
+  const y1 = formatSeriesNumber({ prefix: 'INV-', suffix: null, number: 1, paddingLength: 4 });
+  const y2 = formatSeriesNumber({ prefix: 'INV-', suffix: rolloverSuffix(null, '2026-27', '2027-28'), number: 1, paddingLength: 4 });
+  assert.equal(y1, 'INV-0001');
+  assert.equal(y2, 'INV-0001/27-28');
+  assert.notEqual(y1, y2);
 });

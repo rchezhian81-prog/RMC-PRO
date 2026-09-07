@@ -117,6 +117,10 @@ const TESTS = [
   // Receipt corrections: general reverse for any mode (I4) and the one-live-
   // receipt-per-bank-reference guard + index (I5). Seeds its own customers.
   'test/receipt-corrections.test.mjs',
+  // Order cancel with live downstream (I14): in-flight concrete blocks the
+  // cancel, harmless leftovers go with it, downstream creates refuse a
+  // cancelled order. Seeds its own orders.
+  'test/order-cancel-downstream.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

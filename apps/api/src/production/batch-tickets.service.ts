@@ -101,6 +101,10 @@ export class BatchTicketsService {
       if (queue.queueStatus === 'completed' || queue.queueStatus === 'cancelled') {
         throw badReq(`Queue entry is ${queue.queueStatus}`);
       }
+      if (queue.orderId) {
+        const [o] = await m.query(`SELECT order_status FROM orders WHERE id = $1`, [queue.orderId]);
+        if (o?.order_status === 'cancelled') throw badReq('The order behind this queue line is cancelled — nothing to batch');
+      }
 
       const remaining = num(queue.plannedQuantityM3) - num(queue.producedQuantityM3);
       const batchQty = dto.batchQuantityM3 !== undefined ? num(dto.batchQuantityM3) : remaining;

@@ -68,6 +68,10 @@ export class DeliveryChallanService {
       if (['cancelled', 'rejected'].includes(dispatch.dispatchStatus)) {
         throw badReq(`Dispatch is ${dispatch.dispatchStatus}`);
       }
+      if (dispatch.orderId) {
+        const [o] = await m.query(`SELECT order_status FROM orders WHERE id = $1`, [dispatch.orderId]);
+        if (o?.order_status === 'cancelled') throw badReq('The order behind this dispatch is cancelled — a challan cannot be issued for it');
+      }
       const existing = await m
         .getRepository(DeliveryChallan)
         .findOne({ where: { dispatchId } });

@@ -155,6 +155,7 @@ export const AUDIT_ACTIONS = {
   INVOICE_TRANSPORT: 'invoice.transport_update',
   INVOICE_WRITEOFF: 'invoice.writeoff',
   RECEIPT_BOUNCE: 'receipt.bounce',
+  RECEIPT_REVERSE: 'receipt.reverse',
   VENDOR_BILL_APPROVE: 'vendor_bill.approve',
   VENDOR_PAYMENT_RECORD: 'vendor_payment.record',
   VENDOR_PAYMENT_REVERSE: 'vendor_payment.reverse',

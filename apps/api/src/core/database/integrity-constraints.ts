@@ -187,6 +187,15 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: "supplier_bill_no IS NOT NULL AND status <> 'cancelled'",
     constraint: 'uq_vendor_bills_supplier_billno',
   },
+  {
+    // One live customer receipt per bank/instrument reference (I5) — a retried
+    // post of the same UTR/cheque doubled amount_paid. Non-cash, live rows only;
+    // case/whitespace-insensitive, matching the index expression.
+    table: 'payments',
+    columns: ['tenant_id', 'customer_id', 'lower(btrim(bank_reference))'],
+    predicate: "bank_reference IS NOT NULL AND COALESCE(payment_mode, '') <> 'cash' AND status <> 'reversed'",
+    constraint: 'uq_payments_customer_bank_reference',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

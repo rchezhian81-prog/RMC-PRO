@@ -86,6 +86,11 @@ export class ReceiptController {
   @Post(':id/apply') @RequirePermissions('receipts.create')
   apply(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.applyAdvance(tid(u), id); }
 
+  // Reversing money-in is an approver action, the same tier as cancelling an
+  // invoice — not the clerk's receipts.create.
+  @Post(':id/reverse') @RequirePermissions('invoice_cancellation.approve')
+  reverse(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.reverse(tid(u), id, u.userId, dto.reason as string); }
+
   @Post(':id/share') @RequirePermissions('whatsapp.send')
   share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }
 }

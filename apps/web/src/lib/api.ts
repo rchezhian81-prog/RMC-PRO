@@ -858,6 +858,7 @@ export const receiptsApi = {
   create: (b: Record<string, unknown>) => post('/receipts', b),
   realise: (id: string) => post(`/receipts/${id}/realise`),
   bounce: (id: string, reason: string) => post(`/receipts/${id}/bounce`, { reason }),
+  reverse: (id: string, reason: string) => post(`/receipts/${id}/reverse`, { reason }),
   apply: (id: string) => post(`/receipts/${id}/apply`),
   share: (id: string, mobile: string) => post(`/receipts/${id}/share`, { mobile }),
 };

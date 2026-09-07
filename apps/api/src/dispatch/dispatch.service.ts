@@ -219,6 +219,9 @@ export class DispatchService {
       let siteId: string | null = null;
       if (bt.orderId) {
         const order = await m.getRepository(Order).findOne({ where: { id: bt.orderId } });
+        // A cancelled order must not go on the road: the batch is dealt with
+        // through wastage/return, not delivered against a dead order.
+        if (order?.orderStatus === 'cancelled') throw badReq(`Order ${order.orderNo} is cancelled — this batch cannot be dispatched against it`);
         customerId = order?.customerId ?? null;
         siteId = order?.siteId ?? null;
       }

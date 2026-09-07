@@ -23,6 +23,11 @@ import { isReturnBillingPolicy } from '../billing/return-billing.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Order not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
+/** Rows touched by an UPDATE … RETURNING run through EntityManager.query (rows array, or [rows, count]). */
+function affectedRows(result: unknown): number {
+  if (Array.isArray(result)) return Array.isArray(result[0]) ? result[0].length : result.length;
+  return 0;
+}
 
 /**
  * Order lifecycle (DEV-PLAN B8): confirm a draft (with credit block at booking),
@@ -300,12 +305,40 @@ export class OrdersService {
       if (num(liveChallans?.n) > 0 || num(completedDispatch?.n) > 0) {
         throw badReq('This order has concrete already delivered (an issued/delivered challan or a completed dispatch) and cannot be cancelled. Cancel or bill the downstream first.');
       }
+      // Concrete in flight is perishable and already paid for in materials: it
+      // must be dealt with explicitly, never orphaned under a cancelled order. A
+      // confirmed ticket that was never dispatched, or a dispatch still on the
+      // road, blocks the cancel — deliver it, or reject the load as wastage,
+      // first. (A ticket whose dispatch was rejected/cancelled has been dealt
+      // with and no longer blocks.)
+      const [undispatched] = await m.query(
+        `SELECT count(*)::int AS n FROM batch_tickets bt
+          WHERE bt.order_id = $1 AND bt.status = 'confirmed'
+            AND NOT EXISTS (SELECT 1 FROM dispatches d WHERE d.batch_ticket_id = bt.id)`, [id]);
+      const [liveDispatch] = await m.query(
+        `SELECT count(*)::int AS n FROM dispatches
+          WHERE order_id = $1 AND dispatch_status NOT IN ('completed', 'cancelled', 'rejected')`, [id]);
+      if (num(undispatched?.n) > 0 || num(liveDispatch?.n) > 0) {
+        throw badReq('This order has concrete in flight (a confirmed batch not yet dispatched, or a dispatch on the road) and cannot be cancelled. Deliver the load, or reject it as wastage, first.');
+      }
       const from = order.orderStatus;
       await repo.update(id, { orderStatus: 'cancelled', cancelledReason: reason ?? null });
       await m
         .getRepository(CreditHoldRequest)
         .update({ orderId: id, status: 'pending' }, { status: 'cancelled', decidedBy: userId, decidedAt: new Date() });
-      await recordHistory(m, tenantId, id, from, 'cancelled', 'cancel', userId, reason ?? null);
+      // The harmless leftovers go with the order, in the same transaction: queue
+      // lines not yet batched, draft tickets and draft challans. They used to
+      // survive the cancel and stay batchable / issuable against a cancelled order.
+      const [q1] = await m.query(
+        `UPDATE batch_queue SET queue_status = 'cancelled' WHERE order_id = $1 AND queue_status NOT IN ('completed', 'cancelled') RETURNING id`, [id]);
+      const [q2] = await m.query(
+        `UPDATE batch_tickets SET status = 'cancelled' WHERE order_id = $1 AND status = 'draft' RETURNING id`, [id]);
+      const [q3] = await m.query(
+        `UPDATE delivery_challans SET challan_status = 'cancelled' WHERE order_id = $1 AND challan_status = 'draft' RETURNING id`, [id]);
+      const swept = { queueLines: affectedRows(q1), draftTickets: affectedRows(q2), draftChallans: affectedRows(q3) };
+      const note = [reason ?? null, `cancelled with the order: ${swept.queueLines} queue line(s), ${swept.draftTickets} draft ticket(s), ${swept.draftChallans} draft challan(s)`]
+        .filter(Boolean).join(' — ');
+      await recordHistory(m, tenantId, id, from, 'cancelled', 'cancel', userId, note);
       return { result: await this.loadFull(m, id), orderNo: order.orderNo, from };
     });
     await this.audit.record({

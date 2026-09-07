@@ -124,6 +124,8 @@ const TESTS = [
   // GRN draft cancel + posted reverse (I18) and invoice write-off reversal
   // (I33). Seeds its own supplier / PO / customer / invoice.
   'test/grn-writeoff-reversals.test.mjs',
+  // Material unit of measure is frozen once stock exists (I39).
+  'test/material-uom-lock.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

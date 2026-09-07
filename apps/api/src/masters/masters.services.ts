@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { validateMasterFields } from '@rmc/shared';
 import { AuditService } from '../audit/audit.service';
 import { TenantCrudService } from '../common/tenant-crud.service';
@@ -58,6 +58,39 @@ export class MaterialsService extends TenantCrudService<Material> {
   // material_type + specific gravity / bulk density / absorption / moisture.
   protected override validateWrite(dto: Record<string, unknown>): void {
     assertFields(validateMasterFields(dto));
+  }
+
+  /**
+   * The unit of measure is frozen once stock exists for the material (data-
+   * integrity item I39). Stock balances and the ledger carry quantities but no
+   * unit, and the weighbridge scales net kg by the LIVE material uom (MT → kg is
+   * 1000×): flipping cement from MT to kg after 160 MT exists booked the next
+   * 25 t truck as 25,000 into a balance labelled MT, and valuation multiplied a
+   * mixed-scale quantity by the rate with nothing in the ledger to reconstruct
+   * it. A re-base with a conversion factor is a feature, not a fix — until it
+   * exists, create a new material for the new unit.
+   */
+  override async update(tenantId: string, id: string, dto: Record<string, unknown>, userId?: string | null): Promise<Material> {
+    if (dto.uom !== undefined && dto.uom !== null) {
+      await this.db.runInTenant(tenantId, async (m) => {
+        const row = await m.getRepository(Material).findOne({ where: { id } });
+        const next = String(dto.uom).trim();
+        if (!row || !row.uom || next === row.uom) return;
+        const [refs] = (await m.query(
+          `SELECT (SELECT count(*) FROM stock_transactions WHERE material_id = $1)
+                + (SELECT count(*) FROM stock_balances WHERE material_id = $1)
+                + (SELECT count(*) FROM material_inwards WHERE material_id = $1) AS n`,
+          [id],
+        )) as Array<{ n: number | string }>;
+        if (Number(refs?.n ?? 0) > 0) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: `Unit of measure cannot be changed from ${row.uom} to ${next}: stock movements already exist for this material and the ledger has no unit marker to re-base them. Create a new material for the new unit instead.`,
+          });
+        }
+      });
+    }
+    return super.update(tenantId, id, dto, userId);
   }
 }
 

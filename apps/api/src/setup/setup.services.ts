@@ -206,6 +206,32 @@ export class NumberSeriesService extends TenantCrudService<NumberSeries> {
       labelField: 'documentType',
     }, audit);
   }
+
+  /**
+   * A series' identity (document type, plant, financial year) is fixed once it
+   * exists — moving it would re-key numbers already issued under it — and its
+   * counter may only move forward: lowering it re-issues numbers that are
+   * already on documents, which the unique index then rejects for every later
+   * allocation (the same outage the FY reset used to cause).
+   */
+  override async update(tenantId: string, id: string, dto: Record<string, unknown>, userId?: string | null): Promise<NumberSeries> {
+    const rest = { ...dto };
+    for (const k of ['documentType', 'plantId', 'financialYear']) delete rest[k];
+    if (rest.currentNumber !== undefined) {
+      const next = Number(rest.currentNumber);
+      if (!Number.isInteger(next) || next < 0) {
+        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'currentNumber must be a whole number of 0 or more' });
+      }
+      const row = await this.db.runInTenant(tenantId, (m) => m.getRepository(NumberSeries).findOne({ where: { id } }));
+      if (row && next < Number(row.currentNumber)) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: `The counter cannot move backwards (${row.currentNumber} → ${next}): numbers already issued would be issued again.`,
+        });
+      }
+    }
+    return super.update(tenantId, id, rest, userId);
+  }
 }
 
 /** Tenant-side user management (Design Doc 6 §6.1). `users` is RLS-scoped, so

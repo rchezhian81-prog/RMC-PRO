@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
-import { financialYearOf, formatSeriesNumber, applyYearlyReset } from './numbering.util';
+import { financialYearOf, formatSeriesNumber, rolloverSuffix } from './numbering.util';
 
 interface SeriesRow {
   id: string;
@@ -50,7 +50,27 @@ const defaultPrefixFor = (documentType: string): string => documentType.slice(0,
  */
 @Injectable()
 export class NumberingService {
-  /** Select (or provision) the series row FOR UPDATE and apply any FY roll-over. */
+  /**
+   * Select (or provision) the series row FOR UPDATE for the financial year the
+   * document is dated in.
+   *
+   * One row per (tenant, document type, plant, financial year). A yearly-reset
+   * series used to reset the SAME row to 0 when the FY changed, so the first
+   * allocation after 1 April produced INV-0001 again: the document table's
+   * unique index rejected it, the whole transaction (including the reset) rolled
+   * back, and every retry failed identically for every numbered document type.
+   * The offline reservation path committed the reset and handed devices last
+   * year's strings. Now the new FY gets its own row, numbered from 1 and carrying
+   * the FY token in its suffix (INV-0001/27-28), so no string can repeat.
+   *
+   *  - reset 'never', or a legacy row not yet stamped with an FY → that row is
+   *    used as-is (a legacy row adopts the current FY without resetting);
+   *  - a row already stamped with THIS FY → used;
+   *  - otherwise a new row for this FY is created from the latest previous row
+   *    (prefix, padding, reset frequency; suffix per rolloverSuffix). The
+   *    previous row is locked first so two callers at the FY boundary cannot
+   *    both create it (uq_number_series_key would reject the second anyway).
+   */
   private async resolveSeries(
     m: EntityManager,
     tenantId: string,
@@ -62,40 +82,62 @@ export class NumberingService {
     const currentFy = opts.financialYear ?? financialYearOf(opts.date ?? todayIso());
 
     const plantClause = plantId ? 'AND plant_id = $3' : 'AND plant_id IS NULL';
-    const selectParams = plantId ? [tenantId, documentType, plantId] : [tenantId, documentType];
-    const existing: SeriesRow[] = await m.query(
-      `SELECT id, prefix, suffix, current_number, padding_length, financial_year, reset_frequency
-         FROM number_series
-        WHERE tenant_id = $1 AND document_type = $2 AND is_active = true ${plantClause}
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE`,
-      selectParams,
-    );
+    const keyParams = plantId ? [tenantId, documentType, plantId] : [tenantId, documentType];
+    const fyParam = `$${keyParams.length + 1}`;
+    const cols = 'id, prefix, suffix, current_number, padding_length, financial_year, reset_frequency';
 
-    let series: SeriesRow | undefined = existing[0];
-    if (!series) {
-      const inserted: SeriesRow[] = await m.query(
-        `INSERT INTO number_series (tenant_id, document_type, plant_id, prefix, current_number, padding_length, financial_year)
-         VALUES ($1, $2, $3, $4, 0, 4, $5)
-         RETURNING id, prefix, suffix, current_number, padding_length, financial_year, reset_frequency`,
-        [tenantId, documentType, plantId, defaultPrefix, currentFy],
+    const pick = async (): Promise<SeriesRow | undefined> => {
+      const rows: SeriesRow[] = await m.query(
+        `SELECT ${cols} FROM number_series
+          WHERE tenant_id = $1 AND document_type = $2 AND is_active = true ${plantClause}
+            AND (financial_year = ${fyParam} OR financial_year IS NULL OR COALESCE(reset_frequency, 'yearly') <> 'yearly')
+          ORDER BY CASE WHEN financial_year = ${fyParam} THEN 0 ELSE 1 END, created_at ASC
+          LIMIT 1
+          FOR UPDATE`,
+        [...keyParams, currentFy],
       );
-      series = inserted[0];
+      return rows[0];
+    };
+
+    let series = await pick();
+    if (!series) {
+      // No row for this FY: lock the latest previous row (the template), then
+      // look again — a concurrent caller may have created the FY row meanwhile.
+      const previous: SeriesRow[] = await m.query(
+        `SELECT ${cols} FROM number_series
+          WHERE tenant_id = $1 AND document_type = $2 AND is_active = true ${plantClause}
+          ORDER BY financial_year DESC NULLS LAST, created_at DESC
+          LIMIT 1
+          FOR UPDATE`,
+        keyParams,
+      );
+      series = await pick();
+      if (!series) {
+        const template = previous[0];
+        const inserted: SeriesRow[] = await m.query(
+          `INSERT INTO number_series (tenant_id, document_type, plant_id, prefix, suffix, current_number, padding_length, financial_year, reset_frequency)
+           VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)
+           RETURNING ${cols}`,
+          [
+            tenantId, documentType, plantId,
+            template?.prefix ?? defaultPrefix,
+            template ? rolloverSuffix(template.suffix, template.financial_year, currentFy) : null,
+            Number(template?.padding_length) || 4,
+            currentFy,
+            template?.reset_frequency ?? 'yearly',
+          ],
+        );
+        series = inserted[0];
+      }
     }
     if (!series) throw new Error(`Failed to allocate number series for ${documentType}`);
 
-    const reset = applyYearlyReset({
-      resetFrequency: series.reset_frequency,
-      seriesFy: series.financial_year,
-      currentFy,
-      currentNumber: Number(series.current_number),
-    });
-    if (reset.didReset || reset.financialYear !== series.financial_year) {
-      await m.query(
-        `UPDATE number_series SET financial_year = $1, current_number = $2, updated_at = now() WHERE id = $3`,
-        [reset.financialYear, reset.currentNumber, series.id],
-      );
+    // A legacy yearly row with no FY stamped adopts the current FY, keeping its
+    // counter (an existing continuous series is not reset the first time this runs).
+    const yearly = (series.reset_frequency ?? 'yearly') === 'yearly';
+    if (yearly && !series.financial_year) {
+      await m.query(`UPDATE number_series SET financial_year = $1, updated_at = now() WHERE id = $2`, [currentFy, series.id]);
+      series = { ...series, financial_year: currentFy };
     }
 
     return {
@@ -103,8 +145,8 @@ export class NumberingService {
       prefix: series.prefix,
       suffix: series.suffix,
       paddingLength: Number(series.padding_length) || 4,
-      currentNumber: reset.currentNumber,
-      financialYear: reset.financialYear,
+      currentNumber: Number(series.current_number),
+      financialYear: series.financial_year,
     };
   }
 

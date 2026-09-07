@@ -239,6 +239,10 @@ export class SyncService {
       );
       return {
         ...reservation,
+        // The suffix (which carries the FY token after a roll-over) is part of
+        // the number: the device must format prefix + padded number + suffix
+        // exactly as the server would, or its challans collide with last FY's.
+        suffix: block.suffix,
         financialYear: block.financialYear,
         sampleFrom: block.numbers[0],
         sampleTo: block.numbers[block.numbers.length - 1],

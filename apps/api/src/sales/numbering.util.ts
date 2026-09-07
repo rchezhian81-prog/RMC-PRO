@@ -27,6 +27,36 @@ export interface FormatInput {
   paddingLength?: number | null;
 }
 
+/**
+ * The financial-year token carried in a document number, "/YY-YY" — the
+ * conventional Indian format (INV-0001/27-28). Empty for a malformed / absent FY.
+ */
+export function fyToken(financialYear: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(financialYear ?? ''));
+  if (!m) return '';
+  const [, start = '', end = ''] = m;
+  return `/${start.slice(2)}-${end}`;
+}
+
+/**
+ * The suffix a NEW financial-year series row inherits from the previous FY's
+ * row: the previous FY's token is replaced by the new one when present, else
+ * the new token is appended to whatever suffix the tenant configured. This is
+ * what keeps INV-0001 (FY 2026-27) and INV-0001/27-28 distinct: a yearly reset
+ * used to restart the SAME row at 0 and re-issue last year's strings.
+ */
+export function rolloverSuffix(
+  previousSuffix: string | null | undefined,
+  previousFy: string | null | undefined,
+  newFy: string,
+): string {
+  const prev = fyToken(previousFy);
+  const next = fyToken(newFy);
+  const base = previousSuffix ?? '';
+  if (prev && base.includes(prev)) return base.replace(prev, next);
+  return `${base}${next}`;
+}
+
 /** prefix + zero-padded number + suffix (padding defaults to 4). */
 export function formatSeriesNumber({ prefix, suffix, number, paddingLength }: FormatInput): string {
   const pad = Number(paddingLength) || 4;

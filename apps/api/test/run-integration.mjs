@@ -126,6 +126,11 @@ const TESTS = [
   'test/grn-writeoff-reversals.test.mjs',
   // Material unit of measure is frozen once stock exists (I39).
   'test/material-uom-lock.test.mjs',
+  // Financial-year roll-over numbering (I6): a new FY gets its own series row
+  // and FY-suffixed numbers; reservations carry the suffix; counters never
+  // move backwards. Rolls the tenant-wide `receipt` series, so it runs after
+  // every test that asserts a plain receipt number format.
+  'test/numbering-fy-rollover.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

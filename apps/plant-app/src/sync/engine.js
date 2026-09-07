@@ -12,6 +12,10 @@ export class SyncEngine {
   constructor({ dbPath = ':memory:', baseUrl, token } = {}) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec(SCHEMA);
+    // Column added after the first release (CREATE TABLE IF NOT EXISTS leaves an
+    // existing table alone): the reservation suffix that carries the FY token.
+    const reservationCols = this.db.prepare('PRAGMA table_info(reservations)').all().map((c) => c.name);
+    if (!reservationCols.includes('suffix')) this.db.exec('ALTER TABLE reservations ADD COLUMN suffix TEXT');
     this.baseUrl = baseUrl;
     this.token = token;
   }
@@ -50,8 +54,8 @@ export class SyncEngine {
   /** Reserve a block of offline document numbers from the cloud. */
   async reserve(documentType, count) {
     const r = await this.api('POST', '/sync/number-reservations', { deviceId: this.deviceId, documentType, count });
-    this.db.prepare('INSERT INTO reservations(id,document_type,prefix,padding_length,number_from,number_to,used_count,status) VALUES(?,?,?,?,?,?,0,?)')
-      .run(r.id, r.documentType, r.prefix ?? '', r.paddingLength, r.numberFrom, r.numberTo, r.status);
+    this.db.prepare('INSERT INTO reservations(id,document_type,prefix,suffix,padding_length,number_from,number_to,used_count,status) VALUES(?,?,?,?,?,?,?,0,?)')
+      .run(r.id, r.documentType, r.prefix ?? '', r.suffix ?? '', r.paddingLength, r.numberFrom, r.numberTo, r.status);
     return r;
   }
 
@@ -61,7 +65,10 @@ export class SyncEngine {
     if (!res) throw new Error(`No number reservation available for ${documentType}`);
     const next = res.number_from + res.used_count;
     this.db.prepare('UPDATE reservations SET used_count=used_count+1 WHERE id=?').run(res.id);
-    return `${res.prefix ?? ''}${String(next).padStart(res.padding_length, '0')}`;
+    // prefix + padded number + suffix, exactly as the server formats it. The
+    // suffix carries the financial-year token after a roll-over (DC-0001/27-28);
+    // dropping it made new-FY offline challans collide with last year's numbers.
+    return `${res.prefix ?? ''}${String(next).padStart(res.padding_length, '0')}${res.suffix ?? ''}`;
   }
 
   /** Create an offline delivery challan (queued for push). */

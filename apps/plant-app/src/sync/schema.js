@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   id TEXT PRIMARY KEY,
   document_type TEXT NOT NULL,
   prefix TEXT,
+  suffix TEXT,
   padding_length INTEGER NOT NULL DEFAULT 4,
   number_from INTEGER NOT NULL,
   number_to INTEGER NOT NULL,

@@ -73,9 +73,30 @@ Recreating nginx is a few-seconds blip, so run it when traffic is low.
 
 ```bash
 cd /opt/rmc
-git pull --ff-only origin claude/rmc-plant-saas-requirements-6df8ur
+git checkout main && git pull --ff-only origin main   # production deploys build from main
 ./scripts/ops/redeploy.sh
 ```
+
+If the clone was made as a single branch and has no `origin/main` yet (`git checkout main`
+says it cannot switch), point it at main once:
+
+```bash
+git fetch origin main:refs/remotes/origin/main
+git checkout -B main origin/main
+git remote set-branches --add origin main
+git branch --set-upstream-to=origin/main main
+```
+
+### `redeploy.sh` guards (each refuses with the exact fix; override only deliberately)
+
+| Guard | Refuses when | Override |
+|---|---|---|
+| Freshness | the checkout is behind its upstream (rebuilding stale code reports success) | `ALLOW_BEHIND=1` |
+| Branch | HEAD is not on `main` (a single-branch clone parked on an old feature branch once rebuilt a months-old commit; the freshness guard is skipped without an upstream) | `ALLOW_BRANCH=1` |
+| Tag | `IMAGE_TAG` in `.env.production` looks like a commit sha but differs from `git rev-parse --short=7 HEAD` (the built image would carry a label naming another commit) | `ALLOW_TAG_MISMATCH=1` |
+
+All three run before the compose config check, the DB snapshot and any build, so a refusal changes nothing on the box.
+
 
 If the health check fails it stops loudly with rollback guidance (previous image
 still present; pre-redeploy snapshot taken in step 0). On 4 GB/no-swap, the only

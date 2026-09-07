@@ -449,6 +449,48 @@ export class InvoiceService {
   }
 
   /**
+   * Reverse part or all of an invoice's write-off (data-integrity item I33).
+   * writeOff() was strictly additive and cancel() demanded "reverse the
+   * write-off first" with nothing to do it. Partial is the common correction
+   * (wrote off 1,200, the customer later paid 1,000). Same lock and the same
+   * balance helper as writeOff, so the result can never disagree with a
+   * receipt settled through it. Audited.
+   */
+  async reverseWriteOff(tenantId: string, id: string, userId: string, amount: number, reason?: string) {
+    if (!(amount > 0)) throw badReq('Reversal amount must be greater than zero');
+    const { result, invoiceNo, reversed } = await this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Invoice);
+      const invoice = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!invoice) throw notFound();
+      if (invoice.invoiceStatus !== 'issued') throw badReq('Only an issued invoice carries a write-off');
+      const writtenOff = round2(num(invoice.writtenOffAmount));
+      if (writtenOff <= 0.001) throw badReq('Invoice has no write-off to reverse');
+      const amt = round2(amount);
+      if (amt > writtenOff + 0.001) throw badReq(`Reversal ${amt} exceeds the written-off amount ${writtenOff}`);
+      const newWrittenOff = round2(writtenOff - amt);
+      const balance = invoiceBalanceAfter(invoice.totalAmount, invoice.amountPaid, newWrittenOff);
+      // Still nothing to collect AND some write-off remains → still bad debt;
+      // otherwise the paid figure decides again (paid / partially_paid / unpaid).
+      const paymentStatus = balance.outstanding <= 0.001 && newWrittenOff > 0.001 ? 'written_off' : balance.paymentStatus;
+      await repo.update(id, {
+        writtenOffAmount: String(newWrittenOff), outstandingAmount: String(balance.outstanding), paymentStatus,
+      });
+      return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, reversed: amt };
+    });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.INVOICE_WRITEOFF_REVERSE,
+      entityType: 'invoice',
+      entityId: id,
+      entityLabel: invoiceNo ?? null,
+      summary: `Reversed ₹${reversed} of the write-off on invoice ${invoiceNo ?? ''}${reason ? ` — ${reason}` : ''}`.trim(),
+      details: { amount: reversed, reason: reason ?? null },
+    });
+    return result;
+  }
+
+  /**
    * Set the e-way transport details on an invoice: link a transporter master
    * (or clear it), and/or set the vehicle number, transport mode and distance.
    * These feed the e-way bill — TransId/TransName come from the linked

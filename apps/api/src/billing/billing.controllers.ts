@@ -44,6 +44,9 @@ export class InvoiceController {
   @Post(':id/writeoff') @RequirePermissions('invoice_cancellation.approve')
   writeOff(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.writeOff(tid(u), id, u.userId, Number(dto.amount ?? 0), dto.reason as string); }
 
+  @Post(':id/writeoff/reverse') @RequirePermissions('invoice_cancellation.approve')
+  reverseWriteOff(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.reverseWriteOff(tid(u), id, u.userId, Number(dto.amount), dto.reason as string); }
+
   @Post(':id/share') @RequirePermissions('whatsapp.send')
   share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }
 

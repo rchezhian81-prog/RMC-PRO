@@ -159,6 +159,8 @@ export const AUDIT_ACTIONS = {
   VENDOR_BILL_APPROVE: 'vendor_bill.approve',
   VENDOR_PAYMENT_RECORD: 'vendor_payment.record',
   VENDOR_PAYMENT_REVERSE: 'vendor_payment.reverse',
+  GRN_REVERSE: 'goods_receipt.reverse',
+  INVOICE_WRITEOFF_REVERSE: 'invoice.writeoff_reverse',
   VEHICLE_MAINTENANCE_COMPLETE: 'vehicle_maintenance.complete',
   EXPENSE_VOUCHER_POST: 'expense_voucher.post',
   DOCUMENT_CORRECTION: 'document.correction',

@@ -14,6 +14,7 @@ import {
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from '../production/stock.service';
 import { poReceiptStatus } from './purchase.util';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Goods receipt not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -36,6 +37,7 @@ export class GrnService {
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
     private readonly stock: StockService,
+    private readonly audit: AuditService,
   ) {}
 
   list(tenantId: string, status?: string) {
@@ -242,8 +244,82 @@ export class GrnService {
     });
   }
 
-  /** Add each received quantity to its PO line and recompute the PO's status. */
-  private async rollUpPurchaseOrder(m: EntityManager, purchaseOrderId: string, grnItems: GoodsReceiptItem[]) {
+  /** Cancel a DRAFT receipt: nothing was posted, so nothing to unwind. */
+  cancel(tenantId: string, id: string, userId: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(GoodsReceipt);
+      const grn = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!grn) throw notFound();
+      if (grn.status !== 'draft') throw badReq(`Only a draft receipt can be cancelled — this one is ${grn.status}. A posted receipt is reversed instead.`);
+      await repo.update(id, { status: 'cancelled', remarks: grn.remarks ? `${grn.remarks} (cancelled)` : 'Cancelled' });
+      void userId;
+      return this.loadFull(m, id);
+    });
+  }
+
+  /**
+   * Reverse a POSTED receipt (data-integrity item I18): the stock it booked is
+   * taken back through the ledger (an `inward_reversal` movement, so the trail
+   * shows both legs), every PO line it advanced is wound back (clamped at 0)
+   * and the PO status recomputed, and the receipt is marked `reversed`.
+   * Previously a GRN posted for 22 t when 12 t arrived could only be patched by
+   * a stock adjustment: received_quantity stayed 22, the PO could never be
+   * closed correctly, the real second delivery was refused by the cap and a
+   * 22 t supplier bill passed the 3-way match.
+   *
+   * Refused while a live vendor bill cites this receipt (the bill's 3-way match
+   * was computed against it — cancel the bill first). If stock has since been
+   * consumed below the reversed quantity the balance goes negative — the
+   * reversal records a booking error, it does not invent stock — and shows in
+   * the negative-stock report like any other shortfall. Audited.
+   */
+  async reverse(tenantId: string, id: string, userId: string, reason?: string) {
+    const { grnNo, lines } = await this.db.runInTenant(tenantId, async (m) => {
+      const grnRepo = m.getRepository(GoodsReceipt);
+      const grn = await grnRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!grn) throw notFound();
+      if (grn.status === 'reversed') throw badReq('Receipt is already reversed');
+      if (grn.status !== 'posted') throw badReq(`Only a posted receipt can be reversed — this one is ${grn.status}`);
+      const [bills] = await m.query(
+        `SELECT count(*)::int AS n FROM vendor_bills WHERE goods_receipt_id = $1 AND status <> 'cancelled'`, [id]);
+      if (Number(bills?.n ?? 0) > 0) {
+        throw badReq('A vendor bill references this receipt — cancel the bill before reversing the receipt');
+      }
+      if (grn.purchaseOrderId) {
+        // Lock the PO (same order as post: GRN → PO → PO lines) so a concurrent
+        // post/cancel on the PO serializes with this reversal.
+        await m.getRepository(PurchaseOrder).findOne({ where: { id: grn.purchaseOrderId }, lock: { mode: 'pessimistic_write' } });
+      }
+      const items = await m.getRepository(GoodsReceiptItem).find({ where: { goodsReceiptId: id } });
+      for (const it of items) {
+        const accepted = num(it.acceptedQuantity);
+        if (it.materialId && accepted > 0) {
+          await this.stock.applyDeltaWithin(m, tenantId, {
+            plantId: grn.plantId, materialId: it.materialId, materialLabel: it.materialLabel, uom: it.uom,
+            delta: -accepted, txnType: 'inward_reversal',
+            referenceType: 'goods_receipt', referenceId: grn.id,
+            remarks: `GRN ${grn.grnNo} reversed${reason ? `: ${reason}` : ''}`, createdBy: userId,
+          });
+        }
+      }
+      if (grn.purchaseOrderId) await this.rollUpPurchaseOrder(m, grn.purchaseOrderId, items, -1);
+      await grnRepo.update(id, { status: 'reversed', remarks: reason ? `Reversed: ${reason}` : grn.remarks });
+      return { grnNo: grn.grnNo, lines: items.length };
+    });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.GRN_REVERSE,
+      entityType: 'goods_receipt', entityId: id, entityLabel: grnNo,
+      summary: `Reversed goods receipt ${grnNo} (${lines} line(s))${reason ? ` — ${reason}` : ''}`,
+      details: { lines, reason: reason ?? null },
+    });
+    return this.get(tenantId, id);
+  }
+
+  /**
+   * Add (sign +1) or take back (sign −1) each received quantity on its PO line
+   * and recompute the PO's status. Lines are locked; a reversal clamps at 0.
+   */
+  private async rollUpPurchaseOrder(m: EntityManager, purchaseOrderId: string, grnItems: GoodsReceiptItem[], sign: 1 | -1 = 1) {
     const poItemRepo = m.getRepository(PurchaseOrderItem);
     // Nothing on this receipt cites a PO line → nothing to roll up, and the PO's
     // status must not be recomputed from untouched lines (that wrote
@@ -251,9 +327,11 @@ export class GrnService {
     if (!grnItems.some((it) => it.purchaseOrderItemId)) return;
     for (const it of grnItems) {
       if (!it.purchaseOrderItemId) continue;
-      const poItem = await poItemRepo.findOne({ where: { id: it.purchaseOrderItemId, purchaseOrderId } });
+      const poItem = await poItemRepo.findOne({
+        where: { id: it.purchaseOrderItemId, purchaseOrderId }, lock: { mode: 'pessimistic_write' },
+      });
       if (!poItem) throw badReq('A receipt line cites a purchase-order line that is not on this purchase order');
-      const received = round3(num(poItem.receivedQuantity) + num(it.receivedQuantity));
+      const received = round3(Math.max(0, num(poItem.receivedQuantity) + sign * num(it.receivedQuantity)));
       await poItemRepo.update(poItem.id, { receivedQuantity: String(received) });
     }
     const poItems = await poItemRepo.find({ where: { purchaseOrderId } });

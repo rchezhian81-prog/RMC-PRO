@@ -19,6 +19,16 @@ const snippet = (text) => (text ? `"${String(text).replace(/\s+/g, ' ').trim().s
  */
 const PUSH_CHUNK = 100;
 
+/**
+ * Number-block top-up. `nextNumber` threw "No number reservation available" the
+ * moment a block ran out, and the device only ever reserved when a human
+ * remembered to — so a plant that went offline with 3 numbers left could not
+ * write its fourth challan until the link came back. The engine now tops up
+ * while it is demonstrably online (during a pull), keeping a floor in hand.
+ */
+const RESERVE_MIN = 20;
+const RESERVE_COUNT = 100;
+
 export class SyncEngine {
   constructor({ dbPath = ':memory:', baseUrl, token } = {}) {
     this.db = new DatabaseSync(dbPath);
@@ -117,7 +127,7 @@ export class SyncEngine {
   /** Reserve a block of offline document numbers from the cloud. */
   async reserve(documentType, count) {
     const r = await this.api('POST', '/sync/number-reservations', { deviceId: this.deviceId, documentType, count });
-    this.db.prepare('INSERT INTO reservations(id,document_type,prefix,suffix,padding_length,number_from,number_to,used_count,status) VALUES(?,?,?,?,?,?,?,0,?)')
+    this.db.prepare('INSERT INTO reservations(id,document_type,prefix,suffix,padding_length,number_from,number_to,used_count,status) VALUES(?,?,?,?,?,?,?,0,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status')
       .run(r.id, r.documentType, r.prefix ?? '', r.suffix ?? '', r.paddingLength, r.numberFrom, r.numberTo, r.status);
     return r;
   }
@@ -125,7 +135,11 @@ export class SyncEngine {
   /** Consume the next number from an active reservation (offline-safe). */
   nextNumber(documentType) {
     const res = this.db.prepare("SELECT * FROM reservations WHERE document_type=? AND status='active' AND used_count < (number_to-number_from+1) ORDER BY number_from ASC LIMIT 1").get(documentType);
-    if (!res) throw new Error(`No number reservation available for ${documentType}`);
+    if (!res) {
+      throw new Error(
+        `No ${documentType} numbers left on this device. Connect to the network and sync to draw a new block.`,
+      );
+    }
     const next = res.number_from + res.used_count;
     this.db.prepare('UPDATE reservations SET used_count=used_count+1 WHERE id=?').run(res.id);
     // prefix + padded number + suffix, exactly as the server formats it. The
@@ -150,6 +164,41 @@ export class SyncEngine {
    * own list and cannot be a source of failure.
    */
   localNow() { return new Date().toISOString(); }
+
+  /** Numbers still available on this device for a document type. */
+  remainingNumbers(documentType) {
+    const r = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(number_to - number_from + 1 - used_count), 0) AS n
+           FROM reservations WHERE document_type=? AND status='active'`,
+      )
+      .get(documentType);
+    return Number(r?.n ?? 0);
+  }
+
+  /**
+   * Draw a fresh block when one is running low. Called on every pull, which is
+   * the one moment the device is provably online, so the plant goes offline
+   * with a full block instead of discovering the shortage at the batching panel.
+   */
+  async topUpNumbers(documentTypes) {
+    const types = documentTypes?.length
+      ? documentTypes
+      : this.db.prepare('SELECT DISTINCT document_type d FROM reservations').all().map((r) => r.d);
+    const drawn = [];
+    for (const t of types) {
+      if (this.remainingNumbers(t) >= RESERVE_MIN) continue;
+      // One type failing (the cloud refusing, the link dropping mid-way) must
+      // not take down the sync that triggered it.
+      try {
+        await this.reserve(t, RESERVE_COUNT);
+        drawn.push(t);
+      } catch {
+        /* stay on what we have; the next pull tries again */
+      }
+    }
+    return drawn;
+  }
 
   /** Create an offline delivery challan (queued for push). */
   createOfflineChallan({ gradeLabel, quantityM3, slump, customerId, orderId, receiverName }) {
@@ -262,6 +311,17 @@ export class SyncEngine {
           for (const row of rows) this.mergeConflict(row);
           continue;
         }
+        // The cloud retires a block when it ages out or the financial year
+        // turns. Until now the device never heard, and kept issuing numbers
+        // from it — after a roll-over, last year's numbers into this year's
+        // books. nextNumber only draws from an ACTIVE block, so writing the
+        // status through is what actually stops it.
+        if (entity === 'reservations') {
+          for (const row of rows) {
+            this.db.prepare('UPDATE reservations SET status=? WHERE id=?').run(row.status ?? 'active', row.id);
+          }
+          continue;
+        }
         for (const row of rows) ins.run(entity, row.id, JSON.stringify(row), row.updatedAt ?? null);
       }
       for (const [k, v] of Object.entries(data.counts ?? {})) total[k] = (total[k] ?? 0) + v;
@@ -272,7 +332,10 @@ export class SyncEngine {
       this.setMeta('sync_token', data.syncToken);
       more = Boolean(data.hasMore) && data.syncToken !== prev;
     }
-    return { ...total, pages };
+    // Drained and provably online: this is the moment to refill a low block, so
+    // the plant goes offline with numbers in hand.
+    const reserved = await this.topUpNumbers();
+    return { ...total, pages, reserved };
   }
 
   /** Upsert one cloud conflict into the local list (insert, or refresh a known one). */

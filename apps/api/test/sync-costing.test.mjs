@@ -304,6 +304,56 @@ console.log('\n[O8] a rejected push, and its resolution, reach the device');
   ok(!(other.data.changes?.conflicts ?? []).some((c) => c.id === conflictId), "another device does not receive this device's conflicts");
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n[O12] a number block expires, and the device is told');
+{
+  const r = await post('/sync/number-reservations', { deviceId: D, documentType: 'delivery_challan', count: 10 });
+  ok(r.ok, `block reserved (${r.status} ${r.msg})`);
+  const row = await one(`SELECT id, financial_year, expires_at, status FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  ok(!!row.financial_year, `the block records its financial year (${row.financial_year})`);
+  ok(!!row.expires_at, 'and when it stops being usable (it used to be valid for ever)');
+  ok(new Date(row.expires_at) > new Date(), 'a fresh block is in date');
+
+  // Age it out and let the device's own sync sweep it.
+  await q(`UPDATE local_number_reservations SET expires_at = now() - interval '1 day' WHERE id = $1`, [r.data.id]);
+  const pull = await call('GET', `/sync/pull?deviceId=${D}`);
+  ok(pull.ok, `pull (${pull.status} ${pull.msg})`);
+  const swept = await one(`SELECT status FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  ok(swept.status === 'expired', `the stale block is retired on the device's own sync (${swept.status})`);
+  const delivered = (pull.data.changes?.reservations ?? []).find((x) => x.id === r.data.id);
+  ok(!!delivered, 'and the device is told about it on the same pull');
+  ok(delivered?.status === 'expired', `carrying the new status (${delivered?.status})`);
+
+  // A block from a previous financial year is retired even if it is in date:
+  // after 1 April it would print last year's numbers into this year's books.
+  const r2 = await post('/sync/number-reservations', { deviceId: D, documentType: 'delivery_challan', count: 10 });
+  await q(`UPDATE local_number_reservations SET financial_year = '2019-20' WHERE id = $1`, [r2.data.id]);
+  await call('GET', `/sync/pull?deviceId=${D}`);
+  const oldFy = await one(`SELECT status FROM local_number_reservations WHERE id = $1`, [r2.data.id]);
+  ok(oldFy.status === 'expired', `a block from a past financial year is retired (${oldFy.status})`);
+
+  // A block issued before this feature has no FY recorded; it must be judged by
+  // when it was created, not swept away by the upgrade.
+  const r3 = await post('/sync/number-reservations', { deviceId: D, documentType: 'delivery_challan', count: 10 });
+  await q(`UPDATE local_number_reservations SET financial_year = NULL, expires_at = NULL WHERE id = $1`, [r3.data.id]);
+  await call('GET', `/sync/pull?deviceId=${D}`);
+  const legacy = await one(`SELECT status FROM local_number_reservations WHERE id = $1`, [r3.data.id]);
+  ok(legacy.status === 'active', `a pre-upgrade block issued this year survives the upgrade (${legacy.status})`);
+}
+
+console.log('\n[O5b] a Plant Device role exists that is ONLY the sync plane');
+{
+  const device = await one(`SELECT id, role_name FROM roles WHERE tenant_id = $1 AND role_key = 'plant_device'`, [TENANT]);
+  ok(!!device, 'the tenant has a Plant Device role');
+  const perms = await one(
+    `SELECT COALESCE(array_agg(p.permission_key ORDER BY p.permission_key), '{}') AS keys
+       FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
+      WHERE rp.role_id = $1`,
+    [device?.id],
+  );
+  ok(perms.keys.length === 1 && perms.keys[0] === 'sync.manage', `it holds sync.manage and nothing else (${perms.keys.join(',')})`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 await owner.destroy();
 process.exit(failed ? 1 : 0);

@@ -64,6 +64,7 @@ import { StockTransactionsTypeIndex1720000059000 } from './migrations/1720000059
 import { PurchaseForeignKeys1720000060000 } from './migrations/1720000060000-PurchaseForeignKeys';
 import { PaymentsBankReferenceUnique1720000061000 } from './migrations/1720000061000-PaymentsBankReferenceUnique';
 import { TouchStockBalances1720000062000 } from './migrations/1720000062000-TouchStockBalances';
+import { ReservationExpiry1720000063000 } from './migrations/1720000063000-ReservationExpiry';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -143,6 +144,7 @@ export const AppDataSource = new DataSource({
     PurchaseForeignKeys1720000060000,
     PaymentsBankReferenceUnique1720000061000,
     TouchStockBalances1720000062000,
+  ReservationExpiry1720000063000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

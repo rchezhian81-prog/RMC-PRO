@@ -156,6 +156,7 @@ export const ROLE_KEYS = {
   ACCOUNTS_MANAGER: 'accounts_manager',
   FLEET_MANAGER: 'fleet_manager',
   AUDITOR: 'auditor',
+  PLANT_DEVICE: 'plant_device',
 } as const;
 
 export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
@@ -280,6 +281,21 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.REPORTS_VIEW,
   ],
 
+  /**
+   * The tablet at the plant, not a person.
+   *
+   * Every /sync route requires sync.manage, and no other seeded role holds it,
+   * so the plant app had to sign in as an Owner or Admin — a full-ERP account,
+   * with its password, sitting on a device in a batching shed that can be
+   * lost, stolen or walked off with. This role holds sync.manage and NOTHING
+   * else: it can register the device, bootstrap, reserve numbers, push and
+   * pull, and it cannot open the web app's screens, edit a master, raise an
+   * invoice or read the customer master outside its own plant's sync payload.
+   * Revoking the device (Devices & Sync) and disabling this user are then two
+   * independent locks on the same door.
+   */
+  [ROLE_KEYS.PLANT_DEVICE]: [P.SYNC_MANAGE],
+
   // Looks, never touches.
   [ROLE_KEYS.AUDITOR]: [
     ...VIEW_ONLY, P.REPORTS_EXPORT, P.AUDIT_LOGS_VIEW, P.AUDIT_LOGS_EXPORT,
@@ -300,4 +316,5 @@ export const ROLE_LABELS: Record<string, string> = {
   [ROLE_KEYS.ACCOUNTS_MANAGER]: 'Accounts Manager',
   [ROLE_KEYS.FLEET_MANAGER]: 'Fleet Manager',
   [ROLE_KEYS.AUDITOR]: 'Auditor',
+  [ROLE_KEYS.PLANT_DEVICE]: 'Plant Device (offline sync)',
 };

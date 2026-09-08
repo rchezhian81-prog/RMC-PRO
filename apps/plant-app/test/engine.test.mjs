@@ -205,6 +205,62 @@ test('a conflict raised by the cloud reaches a device that never saw the push re
   engine.close();
 });
 
+test('a low number block is topped up on the next pull', async () => {
+  const engine = newEngine();
+  let reserves = 0;
+  stubFetch((url, body) => {
+    if (url.includes('/sync/number-reservations')) {
+      reserves += 1;
+      return {
+        status: 200,
+        body: { data: { id: `res-${reserves}`, documentType: body.documentType, prefix: 'DC-', suffix: '', paddingLength: 4, numberFrom: 100 * reserves, numberTo: 100 * reserves + 99, status: 'active' } },
+      };
+    }
+    return { status: 200, body: { data: { syncToken: 'tok', hasMore: false, changes: {}, counts: {} } } };
+  });
+  await engine.reserve('delivery_challan', 5);
+  // Burn the block down to under the floor.
+  engine.db.prepare("UPDATE reservations SET number_to = number_from + 4, used_count = 3").run();
+  assert.equal(engine.remainingNumbers('delivery_challan'), 2, 'nearly out');
+
+  const res = await engine.pull();
+  assert.deepEqual(res.reserved, ['delivery_challan'], 'the pull drew a fresh block');
+  assert.ok(engine.remainingNumbers('delivery_challan') > 20, 'the plant goes offline with numbers in hand');
+
+  // A comfortable block is left alone.
+  const before = reserves;
+  await engine.pull();
+  assert.equal(reserves, before, 'no needless reservation while the block is healthy');
+  engine.close();
+});
+
+test('a block the cloud retired stops being used', async () => {
+  const engine = newEngine();
+  stubFetch((url, body) => (url.includes('/sync/number-reservations')
+    ? { status: 200, body: { data: { id: 'res-old', documentType: body.documentType, prefix: 'DC-', suffix: '/25-26', paddingLength: 4, numberFrom: 1, numberTo: 50, status: 'active' } } }
+    : { status: 200, body: { data: { syncToken: 'tok', hasMore: false, changes: {}, counts: {} } } }));
+  await engine.reserve('delivery_challan', 50);
+  assert.equal(engine.nextNumber('delivery_challan'), 'DC-0001/25-26');
+
+  // The financial year turned: the cloud expires the block and says so on pull.
+  // Suppress the top-up so the test sees the bare state after expiry.
+  stubFetch(() => ({
+    status: 200,
+    body: {
+      data: {
+        syncToken: 'tok-2', hasMore: false,
+        changes: { reservations: [{ id: 'res-old', status: 'expired' }] },
+        counts: {},
+      },
+    },
+  }));
+  await engine.pull().catch(() => {});
+  assert.equal(engine.remainingNumbers('delivery_challan'), 0, 'the retired block no longer counts');
+  const rows = engine.db.prepare("SELECT status FROM reservations WHERE id='res-old'").get();
+  assert.equal(rows.status, 'expired');
+  engine.close();
+});
+
 test('a long backlog is pushed in bounded chunks and fully settled', async () => {
   const engine = newEngine();
   for (let i = 0; i < 250; i += 1) {

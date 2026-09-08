@@ -34,6 +34,9 @@ export class LocalNumberReservation extends TenantScopedEntity {
   @Column({ name: 'number_to', type: 'int', default: 0 }) numberTo!: number;
   @Column({ name: 'used_count', type: 'int', default: 0 }) usedCount!: number;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
+  /** The FY the block's numbers belong to, and when it stops being usable. */
+  @Column({ name: 'financial_year', type: 'varchar', nullable: true }) financialYear!: string | null;
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true }) expiresAt!: Date | null;
 }
 
 /** Offline↔cloud conflict (Doc 6 §16.3). */

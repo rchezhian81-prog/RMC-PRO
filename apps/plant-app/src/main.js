@@ -31,6 +31,7 @@ ipcMain.handle('sync:batch', (_e, dto) => engine.createOfflineBatch(dto));
 ipcMain.handle('sync:push', () => engine.pushPending());
 ipcMain.handle('sync:pull', () => engine.pull());
 ipcMain.handle('sync:conflicts', (_e, status) => engine.conflicts(status));
+ipcMain.handle('sync:numbers', (_e, documentType) => engine.remainingNumbers(documentType));
 // The status line is what the operator glances at; a document the cloud has
 // refused is as important as one still queued, and until now nothing on the
 // tablet ever surfaced it.

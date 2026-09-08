@@ -1,13 +1,20 @@
 import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
-import type { EntityManager, ObjectLiteral, Repository } from 'typeorm';
+import type { EntityManager, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { In } from 'typeorm';
 import {
   BatchTicket,
+  BatchTicketMaterial,
+  ConcreteGrade,
   Customer,
   DeliveryChallan,
   Device,
   LocalNumberReservation,
+  Material,
+  MixDesign,
+  MixDesignMaterial,
   Order,
+  OrderItem,
   Plant,
   Site,
   StockBalance,
@@ -15,6 +22,8 @@ import {
 } from '../core/database/entities';
 import { resolveOptionalRef } from '../common/resolve-ref';
 import { NumberingService } from '../sales/numbering.service';
+import { StockService } from '../production/stock.service';
+import { applyMoistureCorrection, type MoistureInput } from '../production/moisture-correction.util';
 import {
   assertDispatchLive,
   assertNotInvoiced,
@@ -150,6 +159,7 @@ export class SyncService {
   constructor(
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
+    private readonly stock: StockService,
   ) {}
 
   // ---- Devices ----------------------------------------------------------
@@ -221,7 +231,6 @@ export class SyncService {
   bootstrap(tenantId: string, deviceId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const device = await this.activeDevice(m, deviceId);
-      void device;
       const token = new Date();
       await m.getRepository(Device).update(deviceId, { lastSeenAt: token, lastSyncToken: token });
       // Snapshot ALL customers and confirmed orders — no row cap. The token below
@@ -230,9 +239,29 @@ export class SyncService {
       // (their updated_at < token, so the keyset pull skipped them too) on any
       // tenant with >500 of either. The other reference tables were already returned
       // in full — these now match. Ordered for a deterministic response.
+      //
+      // Scoped to the device's own plant (see plantScope). A tablet at one plant
+      // used to receive the WHOLE tenant: every customer, every confirmed order
+      // and, on pull, every challan and stock balance of every other plant. One
+      // lost tablet handed over the group's entire order book. A device with no
+      // plant recorded keeps the tenant-wide view, so nothing in flight breaks.
+      const plantId = device.plantId;
+      const orderWhere = plantId
+        ? 'o.order_status = $1 AND (o.plant_id = $2 OR o.plant_id IS NULL)'
+        : 'o.order_status = $1';
+      const orderParams = plantId ? ['confirmed', plantId] : ['confirmed'];
       const [customers, orders, grades, materials, mixDesigns, plants] = await Promise.all([
-        m.getRepository(Customer).find({ order: { createdAt: 'ASC' } }),
-        m.getRepository(Order).find({ where: { orderStatus: 'confirmed' }, order: { createdAt: 'ASC' } }),
+        // The customers this plant can actually deliver to: the ones on the
+        // orders above. Without a plant the whole master is returned, as before.
+        plantId
+          ? m.query(
+              `SELECT c.* FROM customers c WHERE EXISTS (
+                 SELECT 1 FROM orders o WHERE o.customer_id = c.id AND ${orderWhere}
+               ) ORDER BY c.created_at ASC`,
+              orderParams,
+            )
+          : m.getRepository(Customer).find({ order: { createdAt: 'ASC' } }),
+        m.query(`SELECT o.* FROM orders o WHERE ${orderWhere} ORDER BY o.created_at ASC`, orderParams),
         m.query(`SELECT * FROM concrete_grades ORDER BY grade_code`),
         m.query(`SELECT * FROM materials ORDER BY material_code`),
         m.query(`SELECT * FROM mix_designs WHERE approval_status = 'approved'`),
@@ -240,9 +269,9 @@ export class SyncService {
       ]);
       return {
         // Token is the bootstrap instant; the device stores it and the follow-up
-        // pull delivers only what changed AFTER it. This stays a parseable ISO
-        // timestamp (the plant-app engine uses it as a local clock), and it is now
-        // correct because the snapshot above is complete.
+        // pull delivers only what changed AFTER it, and it is correct because the
+        // snapshot above is complete. (The plant app no longer reads this as a
+        // clock — pull replaces it with the opaque keyset cursor.)
         syncToken: token.toISOString(),
         reference: { customers, orders, grades, materials, mixDesigns, plants },
         counts: {
@@ -306,7 +335,7 @@ export class SyncService {
   }
 
   // ---- Push (offline → cloud) ------------------------------------------
-  push(tenantId: string, deviceId: string, records: PushRecord[]) {
+  push(tenantId: string, deviceId: string, records: PushRecord[], userId: string | null = null) {
     if (!Array.isArray(records)) throw badReq('records[] required');
     if (records.length > PUSH_LIMIT) {
       throw badReq(`Too many records in one push (${records.length}); send at most ${PUSH_LIMIT} per batch.`);
@@ -333,7 +362,7 @@ export class SyncService {
         // the batch — and the device's queue — keeps moving.
         await m.query('SAVEPOINT sync_record');
         try {
-          results.push(await this.applyPush(m, tenantId, device, r));
+          results.push(await this.applyPush(m, tenantId, device, r, userId));
           await m.query('RELEASE SAVEPOINT sync_record');
         } catch (e) {
           await m.query('ROLLBACK TO SAVEPOINT sync_record');
@@ -349,7 +378,127 @@ export class SyncService {
     });
   }
 
-  private async applyPush(m: EntityManager, tenantId: string, device: Device, r: PushRecord): Promise<PushResult> {
+  /**
+   * The grade id behind a device's grade LABEL — from the order's own lines
+   * first (that is the line the invoice will bill), else the grade master by
+   * code or name. Null when nothing matches; the label is still stored.
+   */
+  private async resolveGradeId(m: EntityManager, order: Order | null, gradeLabel: string | null): Promise<string | null> {
+    if (!gradeLabel) return order ? null : null;
+    if (order) {
+      const items = await m.getRepository(OrderItem).find({ where: { orderId: order.id } });
+      const line = items.find((i) => i.gradeLabel === gradeLabel);
+      if (line?.gradeId) return line.gradeId;
+    }
+    const grade = await m
+      .getRepository(ConcreteGrade)
+      .findOne({ where: [{ gradeCode: gradeLabel }, { gradeName: gradeLabel }] });
+    return grade?.id ?? null;
+  }
+
+  /**
+   * The recipe an offline batch was made to: the current approved, active mix
+   * for the grade behind the label. Deterministic (highest version, then most
+   * recent), the same selection the online batching screen makes.
+   */
+  private async resolveApprovedMix(m: EntityManager, gradeLabel: string | null): Promise<MixDesign | null> {
+    const gradeId = await this.resolveGradeId(m, null, gradeLabel);
+    if (!gradeId) return null;
+    return m.getRepository(MixDesign).findOne({
+      where: { gradeId, approvalStatus: 'approved', isActiveVersion: true },
+      order: { versionNo: 'DESC', createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Draw an offline batch's raw material out of stock, mirroring what the
+   * online confirm does: explode the approved mix by the batched volume, apply
+   * each material's moisture correction, write the ticket's material lines and
+   * post one ledger movement per material.
+   *
+   * Two deliberate differences from the online path, both because the concrete
+   * ALREADY EXISTS by the time this arrives:
+   *  - no availability gate. Online, a shortfall blocks the confirm so the
+   *    operator can adjust stock first; here refusing would only discard a real
+   *    production record. The balance is allowed to go negative, which is the
+   *    honest signal that the book and the silo disagree.
+   *  - the recipe is the cloud's current approved mix, not whatever the device
+   *    held. The device sends no material lines, and the theoretical draw is a
+   *    far better estimate than the zero we recorded before.
+   *
+   * Returns a note to stamp on the ticket when it could NOT be costed, so the
+   * gap is visible on the ticket instead of silently absent.
+   */
+  private async consumeForOfflineBatch(
+    m: EntityManager,
+    tenantId: string,
+    ticket: BatchTicket,
+    mix: MixDesign | null,
+    batchQty: number,
+    userId: string | null,
+  ): Promise<string | null> {
+    if (!(batchQty > 0)) return 'Pushed from a plant device with no batch quantity — no stock was consumed.';
+    if (!mix) {
+      return `Pushed from a plant device, but no approved mix design was found for ${ticket.gradeLabel ?? 'this grade'} — no stock was consumed. Approve a mix and adjust stock manually.`;
+    }
+    const mixMaterials = await m
+      .getRepository(MixDesignMaterial)
+      .find({ where: { mixDesignId: mix.id }, order: { sequenceNo: 'ASC' } });
+    if (!mixMaterials.length) {
+      return `Pushed from a plant device, but mix design ${mix.mixCode ?? mix.id} has no materials — no stock was consumed.`;
+    }
+
+    const matIds = [...new Set(mixMaterials.map((mm) => mm.materialId).filter((x): x is string => !!x))];
+    const propRows = matIds.length ? await m.getRepository(Material).find({ where: { id: In(matIds) } }) : [];
+    const props = new Map(propRows.map((x) => [x.id, x]));
+    const inputs: MoistureInput[] = mixMaterials.map((mm) => {
+      const prop = mm.materialId ? props.get(mm.materialId) : undefined;
+      return {
+        materialType: prop?.materialType ?? null,
+        targetSsd: Number(mm.targetQuantity ?? 0) * batchQty,
+        absorptionPct: Number(prop?.waterAbsorptionPct ?? 0),
+        moisturePct: Number(prop?.defaultMoisturePct ?? 0),
+      };
+    });
+    const { results } = applyMoistureCorrection(inputs);
+
+    const matRepo = m.getRepository(BatchTicketMaterial);
+    // Sorted, like the online confirm, so two pushes touching the same
+    // materials take the balance locks in one order and cannot deadlock.
+    const consume = new Map<string, { label: string | null; uom: string | null; qty: number }>();
+    for (let i = 0; i < mixMaterials.length; i++) {
+      const mm = mixMaterials[i]!;
+      const inp = inputs[i]!;
+      const res = results[i]!;
+      await matRepo.save(
+        matRepo.create({
+          tenantId, batchTicketId: ticket.id, materialId: mm.materialId, materialLabel: mm.materialLabel,
+          targetQuantity: String(inp.targetSsd), actualQuantity: String(res.correctedTarget),
+          varianceQuantity: '0', variancePercentage: '0', uom: mm.uom,
+          tolerancePercentage: mm.tolerancePercentage, withinTolerance: true,
+          materialType: inp.materialType,
+          waterAbsorptionPct: inp.absorptionPct ? String(inp.absorptionPct) : null,
+          measuredMoisturePct: inp.moisturePct ? String(inp.moisturePct) : null,
+          correctedTargetQuantity: String(res.correctedTarget),
+          freeWaterQuantity: String(res.freeWater),
+        }),
+      );
+      if (mm.materialId && res.correctedTarget > 0) {
+        const prev = consume.get(mm.materialId);
+        consume.set(mm.materialId, {
+          label: mm.materialLabel, uom: mm.uom,
+          qty: (prev?.qty ?? 0) + res.correctedTarget,
+        });
+      }
+    }
+    for (const materialId of [...consume.keys()].sort()) {
+      const c = consume.get(materialId)!;
+      await this.stock.consumeWithin(m, tenantId, ticket.plantId, materialId, c.label, c.uom, c.qty, ticket.id, userId);
+    }
+    return null;
+  }
+
+  private async applyPush(m: EntityManager, tenantId: string, device: Device, r: PushRecord, userId: string | null = null): Promise<PushResult> {
     const p = r.payload ?? {};
     if (r.operation === 'create' && r.entityName === 'delivery_challan') {
       const repo = m.getRepository(DeliveryChallan);
@@ -373,23 +522,48 @@ export class SyncService {
       if (p.siteId && !(await m.getRepository(Site).findOne({ where: { id: String(p.siteId) } }))) {
         return this.recordConflict(m, tenantId, device, r, null, 'unknown_site');
       }
+      // The order this load was dispatched against. An offline challan used to
+      // be stored with orderId null, and the invoice takes its rate from the
+      // ORDER's line (agreedLine returns 0 for a challan with no order) — so
+      // every offline delivery billed at ₹0 unless somebody noticed and typed
+      // the rate in by hand. Resolve it inside the tenant, like the customer.
+      let order: Order | null = null;
+      if (p.orderId) {
+        order = await m.getRepository(Order).findOne({ where: { id: String(p.orderId) } });
+        if (!order) return this.recordConflict(m, tenantId, device, r, null, 'unknown_order');
+        // Billing the load to one customer against another's order would put the
+        // wrong rate — and the wrong receivable — on the invoice.
+        if (p.customerId && order.customerId && order.customerId !== String(p.customerId)) {
+          return this.recordConflict(m, tenantId, device, r, order, 'customer_order_mismatch');
+        }
+      }
       const existing = await repo.findOne({ where: { challanNo } });
       if (existing) {
         // Idempotent retry of the SAME document → applied with the existing id.
         // A DIFFERENT document under a reused number (another device, a reset
         // reservation, a number re-issued after FY roll-over) is a conflict —
         // it used to be silently discarded while the device showed it synced.
-        if (sameDocument(existing as unknown as Record<string, unknown>, p, ['gradeLabel', 'quantityM3', 'customerId', 'siteId', 'slump'])) {
+        if (sameDocument(existing as unknown as Record<string, unknown>, p, ['gradeLabel', 'quantityM3', 'customerId', 'siteId', 'slump', 'orderId'])) {
           return { localId: r.localId, status: 'applied', cloudId: existing.id };
         }
         return this.recordConflict(m, tenantId, device, r, existing, 'duplicate_number');
       }
+      // The invoice picks the order line by gradeId (falling back to the first
+      // line), so a challan that names only a grade LABEL would bill at the
+      // first line's rate on a multi-grade order. Resolve the id: from the
+      // order's own lines when we have one, else from the grade master.
+      const gradeLabel = (p.gradeLabel as string) ?? null;
+      const gradeId = await this.resolveGradeId(m, order, gradeLabel);
       const saved = await repo.save(
         repo.create({
           tenantId, challanNo, plantId: device.plantId,
+          orderId: order?.id ?? null,
           // '' → null: an empty uuid string would otherwise abort the record (22P02).
-          customerId: (p.customerId as string) || null, siteId: (p.siteId as string) || null,
-          gradeLabel: (p.gradeLabel as string) ?? null, quantityM3: String(quantityM3),
+          // With an order and no customer on the record, bill the order's customer
+          // rather than leaving the challan unattributable.
+          customerId: (p.customerId as string) || order?.customerId || null,
+          siteId: (p.siteId as string) || order?.siteId || null,
+          gradeId, gradeLabel, quantityM3: String(quantityM3),
           slump: (p.slump as string) ?? null, receiverName: (p.receiverName as string) ?? null,
           challanStatus: status, invoiceStatus: 'not_invoiced',
         }),
@@ -408,13 +582,25 @@ export class SyncService {
         }
         return this.recordConflict(m, tenantId, device, r, existing, 'duplicate_number');
       }
+      const gradeLabel = (p.gradeLabel as string) ?? null;
+      const batchQty = Number(p.batchQuantityM3 ?? 0);
+      const mix = await this.resolveApprovedMix(m, gradeLabel);
       const saved = await repo.save(
         repo.create({
           tenantId, batchTicketNo, plantId: device.plantId,
-          gradeLabel: (p.gradeLabel as string) ?? null, batchQuantityM3: String(p.batchQuantityM3 ?? 0),
+          gradeId: mix?.gradeId ?? (await this.resolveGradeId(m, null, gradeLabel)),
+          gradeLabel, batchQuantityM3: String(batchQty),
+          mixDesignId: mix?.id ?? null,
           sourceType: 'local_db_import', status: 'confirmed', batchEndTime: new Date(),
+          operatorUserId: userId,
         }),
       );
+      // The concrete was physically made, so the raw material physically left
+      // the silo. This ticket used to be saved with no material lines and no
+      // ledger movement at all, so book stock drifted permanently upwards by
+      // every offline batch — invisibly, because nothing reconciles it.
+      const note = await this.consumeForOfflineBatch(m, tenantId, saved, mix, batchQty, userId);
+      if (note) await repo.update(saved.id, { notes: note });
       return { localId: r.localId, status: 'applied', cloudId: saved.id };
     }
 
@@ -504,16 +690,22 @@ export class SyncService {
    */
   pull(tenantId: string, deviceId: string, sinceToken?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      await this.activeDevice(m, deviceId);
+      const device = await this.activeDevice(m, deviceId);
       const cursors = decodeSince(sinceToken);
       const next: PullCursors = { ...cursors };
       let hasMore = false;
 
       // Sequential (not Promise.all) so the four reads share the one transaction
       // connection without overlapping queries.
+      // Same plant scope as the bootstrap: a device only pulls its own plant's
+      // documents. Rows with no plant stay visible (legacy and tenant-level
+      // records), and a device registered without a plant keeps the old
+      // tenant-wide view rather than suddenly going empty.
+      const plantId = device.plantId;
       const page = async <T extends ObjectLiteral & { id: string; updatedAt: Date }>(
         key: PullEntity,
         repo: Repository<T>,
+        scope?: (qb: SelectQueryBuilder<T>) => void,
       ): Promise<T[]> => {
         const cur = cursors[key];
         // Compare and order on the MILLISECOND-truncated timestamp, because that
@@ -524,9 +716,11 @@ export class SyncService {
         // device kept receiving the last row of each entity for ever, so "no
         // changes" never actually meant no changes. Truncating both sides makes
         // (ts, id) an exact total order again.
-        const rows = await repo
+        const qb = repo
           .createQueryBuilder('e')
-          .where("(date_trunc('milliseconds', e.updated_at), e.id) > (:ts::timestamptz, :id::uuid)", { ts: cur.ts, id: cur.id })
+          .where("(date_trunc('milliseconds', e.updated_at), e.id) > (:ts::timestamptz, :id::uuid)", { ts: cur.ts, id: cur.id });
+        scope?.(qb);
+        const rows = await qb
           .orderBy("date_trunc('milliseconds', e.updated_at)", 'ASC')
           .addOrderBy('e.id', 'ASC')
           .limit(PULL_LIMIT + 1) // one extra to detect that more remain
@@ -539,10 +733,39 @@ export class SyncService {
         return delivered;
       };
 
-      const orders = await page('orders', m.getRepository(Order));
-      const customers = await page('customers', m.getRepository(Customer));
-      const challans = await page('deliveryChallans', m.getRepository(DeliveryChallan));
-      const stock = await page('stockBalances', m.getRepository(StockBalance));
+      // Rows that carry a plant are filtered on it directly; a row with no plant
+      // stays visible (legacy and tenant-level records).
+      const byPlant = plantId
+        ? <T extends ObjectLiteral>(qb: SelectQueryBuilder<T>) =>
+            qb.andWhere('(e.plant_id = :plantId OR e.plant_id IS NULL)', { plantId })
+        : undefined;
+      const orders = await page('orders', m.getRepository(Order), byPlant);
+      // A customer carries no plant of its own — it is in scope when this plant
+      // has an order for it.
+      const customers = await page(
+        'customers',
+        m.getRepository(Customer),
+        plantId
+          ? (qb) =>
+              qb.andWhere(
+                'EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = e.id AND (o.plant_id = :plantId OR o.plant_id IS NULL))',
+                { plantId },
+              )
+          : undefined,
+      );
+      // ...and the customers of the orders just delivered, which that keyset
+      // cannot reach on its own: a long-standing customer who receives a NEW
+      // order has an updated_at far behind the cursor, so the device would show
+      // an order whose customer it has never been sent. Re-sending one it
+      // already holds is harmless — the device upserts by id.
+      const known = new Set(customers.map((c) => c.id));
+      const wanted = [...new Set(orders.map((o) => o.customerId).filter((id): id is string => !!id))]
+        .filter((id) => !known.has(id));
+      if (wanted.length) {
+        customers.push(...(await m.getRepository(Customer).find({ where: { id: In(wanted) } })));
+      }
+      const challans = await page('deliveryChallans', m.getRepository(DeliveryChallan), byPlant);
+      const stock = await page('stockBalances', m.getRepository(StockBalance), byPlant);
 
       const token = encodeCursors(next);
       // The authoritative cursor is the opaque token returned to (and stored by)

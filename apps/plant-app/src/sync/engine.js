@@ -152,10 +152,14 @@ export class SyncEngine {
   localNow() { return new Date().toISOString(); }
 
   /** Create an offline delivery challan (queued for push). */
-  createOfflineChallan({ gradeLabel, quantityM3, slump, customerId, receiverName }) {
+  createOfflineChallan({ gradeLabel, quantityM3, slump, customerId, orderId, receiverName }) {
     const localId = this.newLocalId('L-DC');
     const challanNo = this.nextNumber('delivery_challan');
-    const payload = { challanNo, gradeLabel, quantityM3, slump, customerId, receiverName, challanStatus: 'delivered' };
+    // orderId matters for money: the cloud bills a challan at ITS ORDER's agreed
+    // rate, and a challan pushed without one invoices at zero. The device has
+    // the confirmed orders from the bootstrap, so send the one this load was
+    // batched against.
+    const payload = { challanNo, gradeLabel, quantityM3, slump, customerId, orderId, receiverName, challanStatus: 'delivered' };
     this.db.prepare('INSERT INTO local_docs(local_id,entity_name,doc_no,payload_json,created_at) VALUES(?,?,?,?,?)')
       .run(localId, 'delivery_challan', challanNo, JSON.stringify(payload), this.localNow());
     this.db.prepare('INSERT INTO sync_queue(entity_name,local_id,operation,payload_json) VALUES(?,?,?,?)')

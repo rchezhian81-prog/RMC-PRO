@@ -11,4 +11,5 @@ contextBridge.exposeInMainWorld('rmc', {
   pull: () => ipcRenderer.invoke('sync:pull'),
   status: () => ipcRenderer.invoke('sync:status'),
   conflicts: (status) => ipcRenderer.invoke('sync:conflicts', status),
+  numbersLeft: (documentType) => ipcRenderer.invoke('sync:numbers', documentType),
 });

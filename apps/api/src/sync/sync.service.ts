@@ -22,6 +22,7 @@ import {
 } from '../core/database/entities';
 import { resolveOptionalRef } from '../common/resolve-ref';
 import { NumberingService } from '../sales/numbering.service';
+import { financialYearOf } from '../sales/numbering.util';
 import { StockService } from '../production/stock.service';
 import { applyMoistureCorrection, type MoistureInput } from '../production/moisture-correction.util';
 import {
@@ -54,7 +55,7 @@ const PULL_LIMIT = Math.max(1, Number(process.env.SYNC_PULL_LIMIT ?? 500));
  * the next pull, and one RESOLVED in the office arrives too, because resolving
  * it goes through repo.update and moves its updated_at.
  */
-const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances', 'conflicts'] as const;
+const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances', 'conflicts', 'reservations'] as const;
 
 /**
  * Records accepted in one push. The whole batch runs in ONE transaction (one
@@ -65,6 +66,13 @@ const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances
  * time; this refuses anything materially larger with an actionable message.
  */
 const PUSH_LIMIT = Math.max(1, Number(process.env.SYNC_PUSH_LIMIT ?? 200));
+
+/**
+ * How long a number block issued to a device stays usable. Long enough for a
+ * plant to run a normal offline stretch on one reservation, short enough that a
+ * decommissioned tablet's block does not sit "active" for ever.
+ */
+const RESERVATION_TTL_DAYS = Math.max(1, Number(process.env.SYNC_RESERVATION_TTL_DAYS ?? 30));
 type PullEntity = (typeof PULL_ENTITIES)[number];
 
 /**
@@ -315,11 +323,16 @@ export class SyncService {
       const block = await this.numbering.reserve(m, tenantId, documentType, count, { plantId: requestedPlantId });
 
       const repo = m.getRepository(LocalNumberReservation);
+      // Retire anything stale before issuing more, so a device topping up also
+      // sheds the block it should no longer be printing from.
+      await this.expireStaleReservations(m, deviceId);
+      const expiresAt = new Date(Date.now() + RESERVATION_TTL_DAYS * 86_400_000);
       const reservation = await repo.save(
         repo.create({
           tenantId, deviceId, plantId: reservationPlantId, documentType,
           prefix: block.prefix, paddingLength: block.paddingLength,
           numberFrom: block.numberFrom, numberTo: block.numberTo, usedCount: 0, status: 'active',
+          financialYear: block.financialYear, expiresAt,
         }),
       );
       return {
@@ -333,6 +346,53 @@ export class SyncService {
         sampleTo: block.numbers[block.numbers.length - 1],
       };
     });
+  }
+
+  /**
+   * Retire number blocks a device must stop printing from.
+   *
+   * A block died in one of two ways and neither was ever noticed. It aged out —
+   * a decommissioned or lost tablet held an "active" reservation for ever, so
+   * the office could not tell a live block from a dead one. Or the financial
+   * year turned: after a roll-over a device kept formatting from a block issued
+   * in the PREVIOUS year, carrying the previous year's suffix, and pushed
+   * documents numbered as last year's into this year's books.
+   *
+   * Expiring a block never re-issues its numbers — the series counter has long
+   * since moved past them. They are simply burned, which is the ordinary cost
+   * of handing numbers to an offline device and far cheaper than a duplicate.
+   *
+   * A pre-upgrade block has no financial year recorded; it is judged by the year
+   * it was created in, so the upgrade itself invalidates nothing already in a
+   * device's hands.
+   */
+  private async expireStaleReservations(m: EntityManager, deviceId?: string | null): Promise<number> {
+    const currentFy = financialYearOf(new Date().toISOString().slice(0, 10));
+    const params: unknown[] = [currentFy];
+    let scope = '';
+    if (deviceId) {
+      params.push(deviceId);
+      scope = ' AND device_id = $2';
+    }
+    const [, count] = (await m.query(
+      `UPDATE local_number_reservations
+          SET status = 'expired', updated_at = now()
+        WHERE status = 'active'${scope}
+          AND (
+            (expires_at IS NOT NULL AND expires_at < now())
+            OR COALESCE(
+                 financial_year,
+                 -- A pre-upgrade block records no FY, so derive it from when it
+                 -- was issued: −3 months maps April→January of the same year and
+                 -- January→October of the previous one, which is exactly the
+                 -- Indian FY start; +9 months gives the closing year's YY.
+                 to_char(created_at - interval '3 months', 'YYYY') || '-' ||
+                 to_char(created_at + interval '9 months', 'YY')
+               ) <> $1
+          )`,
+      params,
+    )) as [unknown, number];
+    return count ?? 0;
   }
 
   listReservations(tenantId: string, deviceId?: string) {
@@ -782,6 +842,14 @@ export class SyncService {
       // in the office with the plant still showing it as broken.
       const conflicts = await page('conflicts', m.getRepository(SyncConflict), (qb) =>
         qb.andWhere('e.device_id = :deviceId', { deviceId }));
+      // ...and this device's number blocks, so it learns that one has been
+      // retired. A device used to hold a block for ever: past the financial-year
+      // roll-over it kept printing last year's numbers, and a decommissioned
+      // tablet's block stayed "active" in the office's list with no way to tell.
+      // The sweep runs here, on the device's own sync, so it needs no cron.
+      await this.expireStaleReservations(m, deviceId);
+      const reservations = await page('reservations', m.getRepository(LocalNumberReservation), (qb) =>
+        qb.andWhere('e.device_id = :deviceId', { deviceId }));
 
       const token = encodeCursors(next);
       // The authoritative cursor is the opaque token returned to (and stored by)
@@ -793,13 +861,14 @@ export class SyncService {
       return {
         syncToken: token,
         hasMore,
-        changes: { orders, customers, deliveryChallans: challans, stockBalances: stock, conflicts },
+        changes: { orders, customers, deliveryChallans: challans, stockBalances: stock, conflicts, reservations },
         counts: {
           orders: orders.length,
           customers: customers.length,
           deliveryChallans: challans.length,
           stockBalances: stock.length,
           conflicts: conflicts.length,
+          reservations: reservations.length,
         },
       };
     });

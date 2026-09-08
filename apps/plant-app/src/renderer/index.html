@@ -145,6 +145,7 @@
       <h2>Sync</h2>
       <div class="stats">
         <div class="stat"><b id="stPending">–</b><span>Pending push</span></div>
+        <div class="stat"><b id="stConflicts">–</b><span>Refused by office</span></div>
         <div class="stat"><b id="stChallans">–</b><span>Local challans</span></div>
         <div class="stat"><b id="stBatches">–</b><span>Local batches</span></div>
       </div>
@@ -152,6 +153,7 @@
         <button class="btn-primary" onclick="doPush()">Push</button>
         <button class="btn-secondary" onclick="doPull()">Pull</button>
         <button class="btn-secondary" onclick="refresh()">Refresh status</button>
+        <button class="btn-secondary" onclick="showConflicts()">Refused documents</button>
       </div>
     </section>
 
@@ -179,6 +181,7 @@
       const pending = s.pendingPush ?? s.pending ?? s.outbox ?? s.queued;
       const challans = s.challans ?? s.localChallans ?? s.deliveryChallans;
       const batches = s.batches ?? s.localBatches;
+      if (s.conflicts !== undefined) document.getElementById('stConflicts').textContent = s.conflicts;
       if (pending !== undefined) document.getElementById('stPending').textContent = pending;
       if (challans !== undefined) document.getElementById('stChallans').textContent = challans;
       if (batches !== undefined) document.getElementById('stBatches').textContent = batches;
@@ -203,6 +206,17 @@
     async function doPush() { log(await window.rmc.push()); }
     async function doPull() { log(await window.rmc.pull()); }
     async function refresh() { log(await window.rmc.status()); }
+
+    /**
+     * Documents the office has refused. The cloud recorded every one of these
+     * and the plant was never told; they now arrive on the pull, so the
+     * operator can see WHICH of their documents did not land, and why.
+     */
+    async function showConflicts() {
+      const rows = await window.rmc.conflicts('pending');
+      if (!rows.length) { log('No refused documents — everything this device sent has been accepted.'); return; }
+      log(rows.map((c) => `${c.entity_name ?? 'document'} ${c.local_id ?? ''} — ${c.reason ?? 'refused'}`).join('\n'));
+    }
   </script>
 </body>
 </html>

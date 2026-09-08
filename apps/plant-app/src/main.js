@@ -30,7 +30,16 @@ ipcMain.handle('sync:challan', (_e, dto) => engine.createOfflineChallan(dto));
 ipcMain.handle('sync:batch', (_e, dto) => engine.createOfflineBatch(dto));
 ipcMain.handle('sync:push', () => engine.pushPending());
 ipcMain.handle('sync:pull', () => engine.pull());
-ipcMain.handle('sync:status', () => ({ pending: engine.pendingCount(), deviceId: engine.deviceId, token: engine.getMeta('sync_token') }));
+ipcMain.handle('sync:conflicts', (_e, status) => engine.conflicts(status));
+// The status line is what the operator glances at; a document the cloud has
+// refused is as important as one still queued, and until now nothing on the
+// tablet ever surfaced it.
+ipcMain.handle('sync:status', () => ({
+  pending: engine.pendingCount(),
+  conflicts: engine.unresolvedConflictCount(),
+  deviceId: engine.deviceId,
+  token: engine.getMeta('sync_token'),
+}));
 
 app?.whenReady?.().then(() => {
   createWindow();

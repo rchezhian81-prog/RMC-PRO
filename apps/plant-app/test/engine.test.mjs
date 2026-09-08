@@ -144,6 +144,67 @@ test('an offline challan can still be created after the first pull', async () =>
   engine.close();
 });
 
+test('a rejected push names the document, and the cloud resolution comes back', async () => {
+  const engine = newEngine();
+  engine.queueUpdate('delivery_challan', 'cloud-a', '2026-01-01T00:00:00.000Z', { receiverName: 'A' });
+  stubFetch((_url, body) => ({
+    status: 200,
+    body: {
+      data: {
+        results: body.records.map((r) => ({ localId: r.localId, status: 'conflict', conflictId: 'cf-9', reason: 'stale_update' })),
+        applied: 0,
+        conflicts: 1,
+      },
+    },
+  }));
+  await engine.pushPending();
+  const [row] = engine.conflicts();
+  assert.equal(row.entity_name, 'delivery_challan', 'the list says WHICH document was rejected (it used to be null)');
+  assert.equal(row.reason, 'stale_update');
+  assert.equal(engine.unresolvedConflictCount(), 1);
+
+  // The office resolves it; the next pull carries the new status through.
+  stubFetch(() => ({
+    status: 200,
+    body: {
+      data: {
+        syncToken: 'tok-2',
+        hasMore: false,
+        changes: {
+          conflicts: [{ id: 'cf-9', entityName: 'delivery_challan', localId: row.local_id, conflictReason: 'stale_update', resolutionStatus: 'keep_cloud' }],
+        },
+        counts: {},
+      },
+    },
+  }));
+  await engine.pull();
+  assert.equal(engine.conflicts()[0].resolution_status, 'keep_cloud', 'the resolution reaches the plant');
+  assert.equal(engine.unresolvedConflictCount(), 0, 'and the operator stops being shown a problem that is over');
+  assert.equal(engine.db.prepare('SELECT count(*) c FROM ref_data').get().c, 0, 'conflicts do not land in reference data');
+  engine.close();
+});
+
+test('a conflict raised by the cloud reaches a device that never saw the push result', async () => {
+  const engine = newEngine();
+  stubFetch(() => ({
+    status: 200,
+    body: {
+      data: {
+        syncToken: 'tok-1',
+        hasMore: false,
+        changes: {
+          conflicts: [{ id: 'cf-1', entityName: 'batch_ticket', localId: 'L-BT-1', conflictReason: 'duplicate_number', resolutionStatus: 'pending' }],
+        },
+        counts: {},
+      },
+    },
+  }));
+  await engine.pull();
+  assert.equal(engine.unresolvedConflictCount(), 1, 'the plant learns about it on the next sync');
+  assert.equal(engine.conflicts('pending')[0].reason, 'duplicate_number');
+  engine.close();
+});
+
 test('a long backlog is pushed in bounded chunks and fully settled', async () => {
   const engine = newEngine();
   for (let i = 0; i < 250; i += 1) {

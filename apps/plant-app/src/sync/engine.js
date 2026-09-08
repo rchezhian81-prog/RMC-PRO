@@ -214,14 +214,17 @@ export class SyncEngine {
         };
       });
       const res = await this.api('POST', '/sync/push', { deviceId: this.deviceId, records });
+      const byLocalId = new Map(records.map((rec) => [rec.localId, rec.entityName]));
       for (const r of res.results) {
         if (r.status === 'applied') {
           this.db.prepare("UPDATE sync_queue SET sync_status='synced', cloud_id=? WHERE local_id=?").run(r.cloudId ?? null, r.localId);
           this.db.prepare('UPDATE local_docs SET cloud_id=? WHERE local_id=?').run(r.cloudId ?? null, r.localId);
         } else {
-          this.db.prepare("UPDATE sync_queue SET sync_status='conflict', last_error=? WHERE local_id=?").run(r.reason ?? 'conflict', r.localId);
+            this.db.prepare("UPDATE sync_queue SET sync_status='conflict', last_error=? WHERE local_id=?").run(r.reason ?? 'conflict', r.localId);
+          // entity_name was stored as a literal null, so the operator's list
+          // could not even say WHICH kind of document was rejected.
           this.db.prepare('INSERT INTO conflicts(cloud_conflict_id,entity_name,local_id,reason) VALUES(?,?,?,?) ON CONFLICT(cloud_conflict_id) DO NOTHING')
-            .run(r.conflictId, null, r.localId, r.reason);
+            .run(r.conflictId, byLocalId.get(r.localId) ?? null, r.localId, r.reason);
         }
       }
       applied += res.applied;
@@ -250,6 +253,15 @@ export class SyncEngine {
       const since = this.getMeta('sync_token') ?? '';
       const data = await this.api('GET', `/sync/pull?deviceId=${this.deviceId}&since=${encodeURIComponent(since)}`);
       for (const [entity, rows] of Object.entries(data.changes)) {
+        // Conflicts are this device's own rejected pushes, not reference data:
+        // they belong in the conflicts table the operator's list reads. They
+        // arrive on the same cursor as the documents, so a conflict RAISED by
+        // the cloud shows up here, and one RESOLVED in the office updates the
+        // row instead of leaving the plant staring at a problem that is over.
+        if (entity === 'conflicts') {
+          for (const row of rows) this.mergeConflict(row);
+          continue;
+        }
         for (const row of rows) ins.run(entity, row.id, JSON.stringify(row), row.updatedAt ?? null);
       }
       for (const [k, v] of Object.entries(data.counts ?? {})) total[k] = (total[k] ?? 0) + v;
@@ -261,6 +273,39 @@ export class SyncEngine {
       more = Boolean(data.hasMore) && data.syncToken !== prev;
     }
     return { ...total, pages };
+  }
+
+  /** Upsert one cloud conflict into the local list (insert, or refresh a known one). */
+  mergeConflict(row) {
+    this.db
+      .prepare(
+        `INSERT INTO conflicts(cloud_conflict_id,entity_name,local_id,reason,resolution_status)
+         VALUES(?,?,?,?,?)
+         ON CONFLICT(cloud_conflict_id) DO UPDATE SET
+           entity_name=excluded.entity_name,
+           local_id=COALESCE(excluded.local_id, conflicts.local_id),
+           reason=excluded.reason,
+           resolution_status=excluded.resolution_status`,
+      )
+      .run(
+        row.id,
+        row.entityName ?? null,
+        row.localId ?? null,
+        row.conflictReason ?? null,
+        row.resolutionStatus ?? 'pending',
+      );
+  }
+
+  /** Conflicts for the operator to act on; pass a status to filter. */
+  conflicts(status) {
+    return status
+      ? this.db.prepare('SELECT * FROM conflicts WHERE resolution_status=? ORDER BY rowid').all(status)
+      : this.db.prepare('SELECT * FROM conflicts ORDER BY rowid').all();
+  }
+
+  /** How many of this device's documents the cloud is still refusing. */
+  unresolvedConflictCount() {
+    return this.db.prepare("SELECT count(*) c FROM conflicts WHERE resolution_status='pending'").get().c;
   }
 
   localDocs(entity) { return this.db.prepare('SELECT * FROM local_docs WHERE entity_name=? ORDER BY rowid').all(entity); }

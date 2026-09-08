@@ -46,8 +46,15 @@ const iso = (d: Date | null | undefined) => (d ? new Date(d).toISOString() : nul
  */
 const PULL_LIMIT = Math.max(1, Number(process.env.SYNC_PULL_LIMIT ?? 500));
 
-/** The entities a device pulls, in the response order. */
-const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances'] as const;
+/**
+ * The entities a device pulls, in the response order.
+ *
+ * `conflicts` rides the same keyset as the documents, which is what makes the
+ * round-trip work in both directions: a conflict RAISED by the cloud arrives on
+ * the next pull, and one RESOLVED in the office arrives too, because resolving
+ * it goes through repo.update and moves its updated_at.
+ */
+const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances', 'conflicts'] as const;
 
 /**
  * Records accepted in one push. The whole batch runs in ONE transaction (one
@@ -766,6 +773,15 @@ export class SyncService {
       }
       const challans = await page('deliveryChallans', m.getRepository(DeliveryChallan), byPlant);
       const stock = await page('stockBalances', m.getRepository(StockBalance), byPlant);
+      // This device's own conflicts. The cloud recorded every rejected push —
+      // a duplicate number, a stale update, an unknown order — and the operator
+      // who created the document was never told any of it: the push result named
+      // the conflict once, and after that the plant app had a conflicts table
+      // nothing ever refreshed. A document could sit "synced" on the tablet
+      // while the office looked at it as an unresolved problem, or be resolved
+      // in the office with the plant still showing it as broken.
+      const conflicts = await page('conflicts', m.getRepository(SyncConflict), (qb) =>
+        qb.andWhere('e.device_id = :deviceId', { deviceId }));
 
       const token = encodeCursors(next);
       // The authoritative cursor is the opaque token returned to (and stored by)
@@ -777,12 +793,13 @@ export class SyncService {
       return {
         syncToken: token,
         hasMore,
-        changes: { orders, customers, deliveryChallans: challans, stockBalances: stock },
+        changes: { orders, customers, deliveryChallans: challans, stockBalances: stock, conflicts },
         counts: {
           orders: orders.length,
           customers: customers.length,
           deliveryChallans: challans.length,
           stockBalances: stock.length,
+          conflicts: conflicts.length,
         },
       };
     });

@@ -256,6 +256,54 @@ console.log("\n[O9] a device sees its own plant, not the whole company");
   ok(seen.deliveryChallans.some((c) => c.challanNo === `SCH-${tag}-ORD`), "while this plant's own challan still arrives");
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n[O8] a rejected push, and its resolution, reach the device');
+{
+  // Push a challan under a number already used by a DIFFERENT document: the
+  // cloud refuses it and records a conflict the operator was never told about.
+  const dupNo = `SCH-${tag}-ORD`; // created earlier in this run, different payload
+  const dup = (await push([{
+    entityName: 'delivery_challan', localId: `L-${tag}-DUP`, operation: 'create',
+    payload: { challanNo: dupNo, gradeLabel: 'WHATEVER', quantityM3: 99, challanStatus: 'delivered' },
+  }])).data.results[0];
+  ok(dup.status === 'conflict' && dup.reason === 'duplicate_number', `the duplicate is refused (${dup.reason})`);
+  const conflictId = dup.conflictId;
+  ok(!!conflictId, 'the cloud recorded a conflict row');
+
+  // Drain a pull and look for it among the device's changes.
+  let token;
+  let seenConflicts = [];
+  let r = await call('GET', `/sync/pull?deviceId=${D}`);
+  for (let i = 0; i < 200 && r.ok; i++) {
+    seenConflicts.push(...(r.data.changes?.conflicts ?? []));
+    token = r.data.syncToken;
+    if (!r.data.hasMore) break;
+    r = await call('GET', `/sync/pull?deviceId=${D}&since=${encodeURIComponent(token)}`);
+  }
+  const mine = seenConflicts.find((c) => c.id === conflictId);
+  ok(!!mine, 'the conflict is delivered on the pull (the device used to never hear of it)');
+  ok(mine?.conflictReason === 'duplicate_number', `carrying its reason (${mine?.conflictReason})`);
+  ok(mine?.localId === `L-${tag}-DUP`, 'and the local id that ties it to the document on the tablet');
+  ok(mine?.resolutionStatus === 'pending', 'still pending');
+
+  const idle = await call('GET', `/sync/pull?deviceId=${D}&since=${encodeURIComponent(token)}`);
+  ok((idle.data.changes?.conflicts ?? []).length === 0, 'a drained cursor stops re-sending it');
+
+  // Resolve it in the office; the change must reach the plant on the next pull.
+  const res = await post(`/sync/conflicts/${conflictId}/resolve`, { resolution: 'keep_cloud' });
+  ok(res.ok, `resolved in the cloud (${res.status} ${res.msg})`);
+  const after = await call('GET', `/sync/pull?deviceId=${D}&since=${encodeURIComponent(token)}`);
+  const resolved = (after.data.changes?.conflicts ?? []).find((c) => c.id === conflictId);
+  ok(!!resolved, 'the resolution is delivered to the device');
+  ok(resolved?.resolutionStatus === 'keep_cloud', `with its new status (${resolved?.resolutionStatus})`);
+
+  // Another device's conflicts are not this device's business.
+  const dev2 = await post('/sync/devices/register', { deviceIdentifier: `SC2-${tag}`, deviceName: `Costing2 ${tag}`, plantId: PLANT });
+  const D2 = dev2.data?.id;
+  const other = await call('GET', `/sync/pull?deviceId=${D2}`);
+  ok(!(other.data.changes?.conflicts ?? []).some((c) => c.id === conflictId), "another device does not receive this device's conflicts");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 await owner.destroy();
 process.exit(failed ? 1 : 0);

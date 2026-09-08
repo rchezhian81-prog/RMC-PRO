@@ -8,10 +8,12 @@ import {
   Device,
   LocalNumberReservation,
   Order,
+  Plant,
   Site,
   StockBalance,
   SyncConflict,
 } from '../core/database/entities';
+import { resolveOptionalRef } from '../common/resolve-ref';
 import { NumberingService } from '../sales/numbering.service';
 import {
   assertDispatchLive,
@@ -146,6 +148,10 @@ export class SyncService {
     const name = String(dto.deviceName ?? '').trim();
     if (!identifier || !name) throw badReq('deviceIdentifier and deviceName are required');
     return this.db.runInTenant(tenantId, async (m) => {
+      // The device's plant is stamped on every challan it pushes, so it must
+      // resolve inside the tenant: FK checks bypass RLS, and another tenant's
+      // plant id would have been accepted and then written onto real documents.
+      await resolveOptionalRef(m, Plant, dto.plantId, 'Plant');
       const repo = m.getRepository(Device);
       const existing = await repo.findOne({ where: { deviceIdentifier: identifier } });
       if (existing) {
@@ -497,10 +503,18 @@ export class SyncService {
         repo: Repository<T>,
       ): Promise<T[]> => {
         const cur = cursors[key];
+        // Compare and order on the MILLISECOND-truncated timestamp, because that
+        // is the precision the cursor can carry: Postgres stores timestamptz to
+        // the microsecond, the driver hands us a JS Date (milliseconds), and the
+        // token is an ISO string. Comparing raw microseconds against a truncated
+        // cursor re-selects the boundary row on every later pull — a drained
+        // device kept receiving the last row of each entity for ever, so "no
+        // changes" never actually meant no changes. Truncating both sides makes
+        // (ts, id) an exact total order again.
         const rows = await repo
           .createQueryBuilder('e')
-          .where('(e.updated_at, e.id) > (:ts::timestamptz, :id::uuid)', { ts: cur.ts, id: cur.id })
-          .orderBy('e.updated_at', 'ASC')
+          .where("(date_trunc('milliseconds', e.updated_at), e.id) > (:ts::timestamptz, :id::uuid)", { ts: cur.ts, id: cur.id })
+          .orderBy("date_trunc('milliseconds', e.updated_at)", 'ASC')
           .addOrderBy('e.id', 'ASC')
           .limit(PULL_LIMIT + 1) // one extra to detect that more remain
           .getMany();

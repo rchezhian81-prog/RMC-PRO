@@ -94,6 +94,10 @@ const TESTS = [
   // device cannot bootstrap, reserve, push or pull. Creates its own tenant.
   'test/sync-access.test.mjs',
   'test/sync-guards.test.mjs',
+  // Cloud→device freshness: a stock-balance change and an order-cancel sweep
+  // must reach the next pull (both write raw SQL), and a device's plant must
+  // resolve in-tenant. Registers its own device.
+  'test/sync-freshness.test.mjs',
   // Concurrency + authoritative-row checks on the money paths (receipts,
   // vendor payments, invoice/bill cancel). Seeds its own customer/supplier.
   'test/money-locks.test.mjs',

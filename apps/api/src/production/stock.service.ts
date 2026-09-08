@@ -219,7 +219,13 @@ export class StockService {
          current_quantity = ${qtyExpr},
          uom              = COALESCE(stock_balances.uom, EXCLUDED.uom),
          material_label   = COALESCE(stock_balances.material_label, EXCLUDED.material_label),
-         last_updated_at  = now()
+         last_updated_at  = now(),
+         -- Raw SQL bypasses TypeORM's @UpdateDateColumn and the table has no
+         -- trigger, so without this updated_at kept the row's CREATION time for
+         -- ever. The offline pull cursor is (updated_at, id), so every balance
+         -- was delivered to a device exactly once and never again: a plant's
+         -- stock view froze at whatever it saw when the row first appeared.
+         updated_at       = now()
        RETURNING current_quantity`,
       [tenantId, plantId, materialId, materialLabel, uom, String(delta)],
     );

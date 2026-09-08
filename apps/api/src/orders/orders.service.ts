@@ -329,12 +329,15 @@ export class OrdersService {
       // The harmless leftovers go with the order, in the same transaction: queue
       // lines not yet batched, draft tickets and draft challans. They used to
       // survive the cancel and stay batchable / issuable against a cancelled order.
+      // Each sets updated_at explicitly: raw SQL bypasses @UpdateDateColumn, and
+      // delivery_challans is pulled by offline devices on an (updated_at, id)
+      // cursor — without it a challan cancelled here never reached the plant.
       const [q1] = await m.query(
-        `UPDATE batch_queue SET queue_status = 'cancelled' WHERE order_id = $1 AND queue_status NOT IN ('completed', 'cancelled') RETURNING id`, [id]);
+        `UPDATE batch_queue SET queue_status = 'cancelled', updated_at = now() WHERE order_id = $1 AND queue_status NOT IN ('completed', 'cancelled') RETURNING id`, [id]);
       const [q2] = await m.query(
-        `UPDATE batch_tickets SET status = 'cancelled' WHERE order_id = $1 AND status = 'draft' RETURNING id`, [id]);
+        `UPDATE batch_tickets SET status = 'cancelled', updated_at = now() WHERE order_id = $1 AND status = 'draft' RETURNING id`, [id]);
       const [q3] = await m.query(
-        `UPDATE delivery_challans SET challan_status = 'cancelled' WHERE order_id = $1 AND challan_status = 'draft' RETURNING id`, [id]);
+        `UPDATE delivery_challans SET challan_status = 'cancelled', updated_at = now() WHERE order_id = $1 AND challan_status = 'draft' RETURNING id`, [id]);
       const swept = { queueLines: affectedRows(q1), draftTickets: affectedRows(q2), draftChallans: affectedRows(q3) };
       const note = [reason ?? null, `cancelled with the order: ${swept.queueLines} queue line(s), ${swept.draftTickets} draft ticket(s), ${swept.draftChallans} draft challan(s)`]
         .filter(Boolean).join(' — ');

@@ -42,6 +42,9 @@ jobs:
       - name: Unit tests + coverage
         run: pnpm coverage
 
+      - name: Plant app sync-engine tests
+        run: pnpm --filter @rmc/plant-app test
+
   integration:
     name: integration tests
     runs-on: ubuntu-latest

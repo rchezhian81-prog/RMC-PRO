@@ -46,7 +46,7 @@ export class SyncController {
 
   @Post('push') @RequirePermissions('sync.manage')
   push(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.service.push(tid(u), String(dto.deviceId ?? ''), (dto.records as never[]) ?? []);
+    return this.service.push(tid(u), String(dto.deviceId ?? ''), (dto.records as never[]) ?? [], u.userId);
   }
 
   @Get('pull') pull(@CurrentUser() u: AuthUser, @Query('deviceId') deviceId: string, @Query('since') since?: string) { return this.service.pull(tid(u), deviceId, since); }

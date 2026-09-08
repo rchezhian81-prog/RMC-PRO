@@ -149,7 +149,14 @@ export class SyncService {
       const repo = m.getRepository(Device);
       const existing = await repo.findOne({ where: { deviceIdentifier: identifier } });
       if (existing) {
-        await repo.update(existing.id, { deviceName: name, status: 'active', lastSeenAt: new Date() });
+        // Re-registering must not un-revoke: a deactivated device could
+        // otherwise walk straight back in by registering its identifier again,
+        // which is exactly what an operator revokes it to prevent. Reactivation
+        // is a deliberate administrative action.
+        if (existing.status !== 'active') {
+          throw badReq(`Device ${existing.deviceName} is ${existing.status}. Reactivate it from Devices & Sync before registering again.`);
+        }
+        await repo.update(existing.id, { deviceName: name, lastSeenAt: new Date() });
         return repo.findOne({ where: { id: existing.id } });
       }
       return repo.save(
@@ -167,11 +174,38 @@ export class SyncService {
     return this.db.runInTenant(tenantId, (m) => m.getRepository(Device).find({ order: { createdAt: 'DESC' } }));
   }
 
+  /** Revoke (or restore) a device. Its documents and number blocks are kept. */
+  setDeviceStatus(tenantId: string, id: string, status: 'active' | 'inactive') {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Device);
+      const device = await repo.findOne({ where: { id } });
+      if (!device) throw notFound('Device not found');
+      await repo.update(id, { status });
+      return repo.findOne({ where: { id } });
+    });
+  }
+
+  /**
+   * Every device-plane call resolves its device HERE. `status` was written at
+   * registration and never read again, so a lost or decommissioned tablet kept
+   * bootstrapping the whole master data and pushing documents for as long as its
+   * token lived — there was no way to revoke it at all. (pull did not even look
+   * the device up: an unknown id quietly "succeeded" and updated nothing.)
+   */
+  private async activeDevice(m: EntityManager, deviceId: string): Promise<Device> {
+    const device = await m.getRepository(Device).findOne({ where: { id: deviceId } });
+    if (!device) throw notFound('Device not found');
+    if (device.status !== 'active') {
+      throw badReq(`Device ${device.deviceName} is ${device.status} — reactivate it before syncing`);
+    }
+    return device;
+  }
+
   // ---- Bootstrap --------------------------------------------------------
   bootstrap(tenantId: string, deviceId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const device = await m.getRepository(Device).findOne({ where: { id: deviceId } });
-      if (!device) throw notFound('Device not found');
+      const device = await this.activeDevice(m, deviceId);
+      void device;
       const token = new Date();
       await m.getRepository(Device).update(deviceId, { lastSeenAt: token, lastSyncToken: token });
       // Snapshot ALL customers and confirmed orders — no row cap. The token below
@@ -220,8 +254,7 @@ export class SyncService {
     return this.db.runInTenant(tenantId, async (m) => {
       let reservationPlantId = requestedPlantId;
       if (deviceId) {
-        const device = await m.getRepository(Device).findOne({ where: { id: deviceId } });
-        if (!device) throw notFound('Device not found');
+        const device = await this.activeDevice(m, deviceId);
         if (!reservationPlantId) reservationPlantId = device.plantId;
       }
 
@@ -260,8 +293,7 @@ export class SyncService {
   push(tenantId: string, deviceId: string, records: PushRecord[]) {
     if (!Array.isArray(records)) throw badReq('records[] required');
     return this.db.runInTenant(tenantId, async (m) => {
-      const device = await m.getRepository(Device).findOne({ where: { id: deviceId } });
-      if (!device) throw notFound('Device not found');
+      const device = await this.activeDevice(m, deviceId);
       const results: PushResult[] = [];
       for (const r of records) {
         // A malformed element (null, a non-object, or one missing entityName /
@@ -453,6 +485,7 @@ export class SyncService {
    */
   pull(tenantId: string, deviceId: string, sinceToken?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
+      await this.activeDevice(m, deviceId);
       const cursors = decodeSince(sinceToken);
       const next: PullCursors = { ...cursors };
       let hasMore = false;

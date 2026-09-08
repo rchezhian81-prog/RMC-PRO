@@ -90,6 +90,9 @@ const TESTS = [
   'test/ar-exposure.test.mjs',
   // Offline-sync state-machine guards, content-aware dedupe and per-record
   // savepoints. Registers its own device; enables offline_sync itself.
+  // Sync access control: every /sync route needs sync.manage, and a revoked
+  // device cannot bootstrap, reserve, push or pull. Creates its own tenant.
+  'test/sync-access.test.mjs',
   'test/sync-guards.test.mjs',
   // Concurrency + authoritative-row checks on the money paths (receipts,
   // vendor payments, invoice/bill cancel). Seeds its own customer/supplier.

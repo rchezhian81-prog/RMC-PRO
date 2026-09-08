@@ -1108,6 +1108,8 @@ export const syncApi = {
   devices: () => apiFetch<Row[]>('/sync/devices'),
   reservations: () => apiFetch<Row[]>('/sync/number-reservations'),
   conflicts: (status?: string) => apiFetch<Row[]>(`/sync/conflicts${status ? `?status=${status}` : ''}`),
+  deactivateDevice: (id: string) => post(`/sync/devices/${id}/deactivate`),
+  reactivateDevice: (id: string) => post(`/sync/devices/${id}/reactivate`),
   resolveConflict: (id: string, resolution: string) => post(`/sync/conflicts/${id}/resolve`, { resolution }),
 };
 

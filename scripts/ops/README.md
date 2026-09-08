@@ -229,6 +229,39 @@ instead for cron or CI.
 Without `LOGIN` it still runs every unauthenticated check and marks the rest as
 skipped, so it is safe to run with no credentials at hand.
 
+## Don't run it as the owner — use a dedicated Auditor account
+
+Every authenticated check here is a read, so this needs no owner rights. Give it
+its own account on the **Auditor** role, which holds the read permissions these
+checks need (`reports.view` for stock, `audit_logs.view` for the audit trail,
+`roles.view` for the separation-of-duties section) and no write permission at
+all. Reaching for the owner login instead means keeping the owner's password to
+hand for a smoke test — and resetting it when that password is lost.
+
+Set one up once, as the owner, in **Setup → Users**: add a user (for example
+`verify@yourcompany.com`), give it the Auditor role, and keep its password where
+ops can reach it. Then:
+
+```bash
+LOGIN='verify@yourcompany.com' bash scripts/ops/verify-app.sh
+```
+
+If the account already exists but cannot sign in — inactive, or the password is
+lost — fix it from the box without any login:
+
+```bash
+bash scripts/setup/recover-login.sh                          # what exists, and its status
+bash scripts/setup/recover-login.sh --activate verify@yourcompany.com
+bash scripts/setup/recover-login.sh --set-password verify@yourcompany.com
+```
+
+Assigning the role still needs an owner session (Setup → Users); the script
+recovers a login, it does not grant permissions.
+
+The `AI features` line reports as skipped on an Auditor account unless the role
+also holds `ai.use`. That check is optional either way — it reports AI's state
+rather than failing on it.
+
 ## What it covers
 
 | Section | Checks |

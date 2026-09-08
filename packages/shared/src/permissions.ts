@@ -15,6 +15,12 @@ export const PERMISSIONS = {
   // Settings / admin
   SETTINGS_MANAGE: 'settings.manage',
   USERS_MANAGE: 'users.manage',
+  /**
+   * Read the role list and the permission catalogue. Split out of roles.manage
+   * so a read-only account can audit who holds what without also being able to
+   * edit it — roles.manage still covers every mutation.
+   */
+  ROLES_VIEW: 'roles.view',
   ROLES_MANAGE: 'roles.manage',
   NUMBER_SERIES_MANAGE: 'number_series.manage',
   INTEGRATIONS_MANAGE: 'integrations.manage',
@@ -299,6 +305,10 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
   // Looks, never touches.
   [ROLE_KEYS.AUDITOR]: [
     ...VIEW_ONLY, P.REPORTS_EXPORT, P.AUDIT_LOGS_VIEW, P.AUDIT_LOGS_EXPORT,
+    // Reading who holds what is the core of an audit, and it is what lets the
+    // read-only verification account check separation of duties without an
+    // owner login.
+    P.ROLES_VIEW,
   ],
 };
 

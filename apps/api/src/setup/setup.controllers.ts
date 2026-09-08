@@ -3,7 +3,7 @@ import { BaseCrudController } from '../common/base-crud.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
-import { RequirePermissions } from '../rbac/permissions.decorator';
+import { RequirePermissions, RequireAnyPermission } from '../rbac/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { NumberSeries } from '../core/database/entities';
@@ -112,7 +112,11 @@ export class UsersController {
 @RequirePermissions('roles.manage')
 export class RolesController {
   constructor(private readonly svc: RolesService) {}
-  @Get() list(@CurrentUser() u: AuthUser) {
+  // Reads take roles.view OR roles.manage: an auditor (and the read-only
+  // verification account ops runs verify-app.sh with) can see who holds what
+  // without gaining the power to change it. Anyone who already had
+  // roles.manage is unaffected — every mutation below still requires it.
+  @Get() @RequireAnyPermission('roles.view', 'roles.manage') list(@CurrentUser() u: AuthUser) {
     return this.svc.list(u.tenantId as string);
   }
   @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
@@ -128,10 +132,10 @@ export class RolesController {
   @Delete(':id') remove(@CurrentUser() u: AuthUser, @Param('id') id: string) {
     return this.svc.remove(u.tenantId as string, id, u.userId);
   }
-  @Get('permissions-catalog') catalog() {
+  @Get('permissions-catalog') @RequireAnyPermission('roles.view', 'roles.manage') catalog() {
     return this.svc.permissionCatalog();
   }
-  @Get(':id/permissions') getPerms(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+  @Get(':id/permissions') @RequireAnyPermission('roles.view', 'roles.manage') getPerms(@CurrentUser() u: AuthUser, @Param('id') id: string) {
     return this.svc.getPermissions(u.tenantId as string, id);
   }
   @Put(':id/permissions') setPerms(

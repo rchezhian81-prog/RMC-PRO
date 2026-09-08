@@ -8,6 +8,17 @@ import { SCHEMA } from './schema.js';
  * push / pull / conflict resolution. Pure logic, no Electron dependency, so it
  * is fully unit-testable.
  */
+/** First line of a non-JSON body, short enough to put in an error message. */
+const snippet = (text) => (text ? `"${String(text).replace(/\s+/g, ' ').trim().slice(0, 120)}"` : '(empty body)');
+
+/**
+ * Records per push request. The server caps a batch (SYNC_PUSH_LIMIT, 200) —
+ * it applies the whole batch in ONE transaction, so an unbounded push from a
+ * device that was offline for a week meant a multi-megabyte body and a
+ * long-running write transaction on the cloud. This stays under that cap.
+ */
+const PUSH_CHUNK = 100;
+
 export class SyncEngine {
   constructor({ dbPath = ':memory:', baseUrl, token } = {}) {
     this.db = new DatabaseSync(dbPath);
@@ -24,14 +35,66 @@ export class SyncEngine {
   setMeta(key, value) { this.db.prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value)); }
   getMeta(key) { return this.db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value ?? null; }
 
+  /**
+   * A local id that is unique for the life of the install.
+   *
+   * `Date.now()` alone repeats inside a millisecond and the old
+   * `count(*) FROM local_docs` suffix repeats as soon as a row is removed, so
+   * two documents could share an id. local_docs.local_id is a PRIMARY KEY (the
+   * second insert throws and the document is lost), and sync_queue.local_id is
+   * NOT unique — pushPending settles each cloud result with `WHERE local_id=?`,
+   * so one result would settle BOTH rows: a rejected update silently marked
+   * synced, its change dropped, and no conflict for the operator to see. The
+   * counter lives in `meta`, so it survives restarts and never repeats.
+   */
+  newLocalId(prefix) {
+    const next = Number(this.getMeta('local_id_seq') ?? 0) + 1;
+    this.setMeta('local_id_seq', next);
+    return `${prefix}-${Date.now()}-${next}`;
+  }
+
+  /**
+   * One cloud call. Every sync operation goes through here, so this is where a
+   * failure has to be made legible: the plant is behind site wifi and a
+   * home-grade router, and the operator sees nothing but what this throws.
+   */
   async api(method, path, body) {
-    const res = await fetch(`${this.baseUrl}/api/v1${path}`, {
-      method,
-      headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${JSON.stringify(json)}`);
+    let res;
+    try {
+      res = await fetch(`${this.baseUrl}/api/v1${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (e) {
+      // fetch REJECTS on DNS/TCP/TLS failure — the everyday case at a plant
+      // whose link is down. Left alone it surfaces as a bare TypeError
+      // ("fetch failed"), which reads like a bug in the app rather than "no
+      // connection"; the queue is durable, so this is a wait, not an error.
+      const err = new Error(`Cannot reach the cloud (${method} ${path}): ${e?.cause?.code ?? e?.message ?? 'network error'}`);
+      err.offline = true;
+      throw err;
+    }
+    // A 502/504 from nginx, a captive-portal login page or an idle proxy
+    // returns HTML, not JSON. res.json() then threw a SyntaxError ("Unexpected
+    // token '<'") BEFORE the !res.ok check, so the status was lost and the
+    // operator was shown a parse error for a gateway simply being down.
+    const text = await res.text().catch(() => '');
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    if (!res.ok) {
+      const err = new Error(`${method} ${path} -> ${res.status} ${json ? JSON.stringify(json.message ?? json) : snippet(text)}`);
+      err.status = res.status;
+      err.body = json ?? text;
+      throw err;
+    }
+    // A 200 that is not the envelope (a proxy interstitial, a truncated body)
+    // used to return undefined and fail much later, far from the cause.
+    if (!json || typeof json !== 'object' || !('data' in json)) {
+      const err = new Error(`${method} ${path} -> ${res.status} but the body is not a sync response: ${snippet(text)}`);
+      err.status = res.status;
+      throw err;
+    }
     return json.data;
   }
 
@@ -71,13 +134,30 @@ export class SyncEngine {
     return `${res.prefix ?? ''}${String(next).padStart(res.padding_length, '0')}${res.suffix ?? ''}`;
   }
 
+  /**
+   * When an offline document was created, in the device's own clock.
+   *
+   * This used to be `new Date(Number(meta._clock) || Date.parse(meta.sync_token))`
+   * — the last server instant, because a plant tablet's clock may be wrong.
+   * That contract held only while sync_token was an ISO timestamp: bootstrap
+   * still returns one, but pull now returns the opaque keyset cursor (base64
+   * JSON), so from the FIRST pull onwards Date.parse gave NaN and
+   * `new Date(NaN).toISOString()` threw "RangeError: Invalid time value" —
+   * creating an offline challan, the whole point of the app, crashed on every
+   * synced device. Nothing sets `_clock`. The device clock is the only clock
+   * that exists while the link is down, and the cloud stamps its own
+   * created_at when the document is pushed, so this value is for the operator's
+   * own list and cannot be a source of failure.
+   */
+  localNow() { return new Date().toISOString(); }
+
   /** Create an offline delivery challan (queued for push). */
   createOfflineChallan({ gradeLabel, quantityM3, slump, customerId, receiverName }) {
-    const localId = `L-DC-${Date.now()}-${Math.floor(this.db.prepare('SELECT count(*) c FROM local_docs').get().c)}`;
+    const localId = this.newLocalId('L-DC');
     const challanNo = this.nextNumber('delivery_challan');
     const payload = { challanNo, gradeLabel, quantityM3, slump, customerId, receiverName, challanStatus: 'delivered' };
     this.db.prepare('INSERT INTO local_docs(local_id,entity_name,doc_no,payload_json,created_at) VALUES(?,?,?,?,?)')
-      .run(localId, 'delivery_challan', challanNo, JSON.stringify(payload), new Date(Number(this.getMeta('_clock') ?? 0) || Date.parse(this.getMeta('sync_token'))).toISOString());
+      .run(localId, 'delivery_challan', challanNo, JSON.stringify(payload), this.localNow());
     this.db.prepare('INSERT INTO sync_queue(entity_name,local_id,operation,payload_json) VALUES(?,?,?,?)')
       .run('delivery_challan', localId, 'create', JSON.stringify(payload));
     return { localId, challanNo };
@@ -85,11 +165,11 @@ export class SyncEngine {
 
   /** Create an offline batch ticket (queued for push). */
   createOfflineBatch({ gradeLabel, batchQuantityM3 }) {
-    const localId = `L-BT-${Date.now()}-${Math.floor(this.db.prepare('SELECT count(*) c FROM local_docs').get().c)}`;
+    const localId = this.newLocalId('L-BT');
     const batchTicketNo = this.nextNumber('batch_ticket');
     const payload = { batchTicketNo, gradeLabel, batchQuantityM3 };
-    this.db.prepare('INSERT INTO local_docs(local_id,entity_name,doc_no,payload_json) VALUES(?,?,?,?)')
-      .run(localId, 'batch_ticket', batchTicketNo, JSON.stringify(payload));
+    this.db.prepare('INSERT INTO local_docs(local_id,entity_name,doc_no,payload_json,created_at) VALUES(?,?,?,?,?)')
+      .run(localId, 'batch_ticket', batchTicketNo, JSON.stringify(payload), this.localNow());
     this.db.prepare('INSERT INTO sync_queue(entity_name,local_id,operation,payload_json) VALUES(?,?,?,?)')
       .run('batch_ticket', localId, 'create', JSON.stringify(payload));
     return { localId, batchTicketNo };
@@ -97,7 +177,7 @@ export class SyncEngine {
 
   /** Queue an update to a cloud record (carries base version for conflict check). */
   queueUpdate(entityName, cloudId, baseUpdatedAt, patch) {
-    const localId = `L-UPD-${Date.now()}`;
+    const localId = this.newLocalId('L-UPD');
     this.db.prepare('INSERT INTO sync_queue(entity_name,local_id,operation,payload_json,cloud_id) VALUES(?,?,?,?,?)')
       .run(entityName, localId, 'update', JSON.stringify({ ...patch, __baseUpdatedAt: baseUpdatedAt, __cloudId: cloudId }), cloudId);
     return { localId };
@@ -105,29 +185,46 @@ export class SyncEngine {
 
   pendingCount() { return this.db.prepare("SELECT count(*) c FROM sync_queue WHERE sync_status='pending'").get().c; }
 
-  /** Push all pending queue records; apply cloud results (synced / conflict). */
+  /**
+   * Push all pending queue records; apply cloud results (synced / conflict).
+   *
+   * Sent in chunks of PUSH_CHUNK. A plant offline over a long weekend
+   * accumulates hundreds of documents, and one request carrying all of them is
+   * a body the site link may not survive and a single cloud transaction held
+   * open for its whole duration — and if it fails, NOTHING settles and the
+   * device retries the same oversized batch for ever. Each chunk settles on
+   * its own, so a link that drops mid-push keeps the work already accepted.
+   */
   async pushPending() {
     const pending = this.db.prepare("SELECT * FROM sync_queue WHERE sync_status='pending' ORDER BY id ASC").all();
-    if (!pending.length) return { applied: 0, conflicts: 0 };
-    const records = pending.map((q) => {
-      const p = JSON.parse(q.payload_json);
-      return {
-        entityName: q.entity_name, localId: q.local_id, operation: q.operation,
-        payload: p, cloudId: q.cloud_id ?? p.__cloudId, baseUpdatedAt: p.__baseUpdatedAt,
-      };
-    });
-    const res = await this.api('POST', '/sync/push', { deviceId: this.deviceId, records });
-    for (const r of res.results) {
-      if (r.status === 'applied') {
-        this.db.prepare("UPDATE sync_queue SET sync_status='synced', cloud_id=? WHERE local_id=?").run(r.cloudId ?? null, r.localId);
-        this.db.prepare('UPDATE local_docs SET cloud_id=? WHERE local_id=?').run(r.cloudId ?? null, r.localId);
-      } else {
-        this.db.prepare("UPDATE sync_queue SET sync_status='conflict', last_error=? WHERE local_id=?").run(r.reason ?? 'conflict', r.localId);
-        this.db.prepare('INSERT INTO conflicts(cloud_conflict_id,entity_name,local_id,reason) VALUES(?,?,?,?) ON CONFLICT(cloud_conflict_id) DO NOTHING')
-          .run(r.conflictId, null, r.localId, r.reason);
+    if (!pending.length) return { applied: 0, conflicts: 0, batches: 0 };
+    let applied = 0;
+    let conflicts = 0;
+    let batches = 0;
+    for (let i = 0; i < pending.length; i += PUSH_CHUNK) {
+      const records = pending.slice(i, i + PUSH_CHUNK).map((q) => {
+        const p = JSON.parse(q.payload_json);
+        return {
+          entityName: q.entity_name, localId: q.local_id, operation: q.operation,
+          payload: p, cloudId: q.cloud_id ?? p.__cloudId, baseUpdatedAt: p.__baseUpdatedAt,
+        };
+      });
+      const res = await this.api('POST', '/sync/push', { deviceId: this.deviceId, records });
+      for (const r of res.results) {
+        if (r.status === 'applied') {
+          this.db.prepare("UPDATE sync_queue SET sync_status='synced', cloud_id=? WHERE local_id=?").run(r.cloudId ?? null, r.localId);
+          this.db.prepare('UPDATE local_docs SET cloud_id=? WHERE local_id=?').run(r.cloudId ?? null, r.localId);
+        } else {
+          this.db.prepare("UPDATE sync_queue SET sync_status='conflict', last_error=? WHERE local_id=?").run(r.reason ?? 'conflict', r.localId);
+          this.db.prepare('INSERT INTO conflicts(cloud_conflict_id,entity_name,local_id,reason) VALUES(?,?,?,?) ON CONFLICT(cloud_conflict_id) DO NOTHING')
+            .run(r.conflictId, null, r.localId, r.reason);
+        }
       }
+      applied += res.applied;
+      conflicts += res.conflicts;
+      batches += 1;
     }
-    return { applied: res.applied, conflicts: res.conflicts };
+    return { applied, conflicts, batches };
   }
 
   /**

@@ -9,7 +9,7 @@
     "start": "electron .",
     "sync:selftest": "node --experimental-sqlite src/sync/selftest.js",
     "typecheck": "echo \"(plant-app: plain JS, no typecheck)\" && exit 0",
-    "test": "echo \"(plant-app: see sync engine harness)\" && exit 0"
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "electron": "^31.0.0"

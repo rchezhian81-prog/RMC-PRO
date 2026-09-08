@@ -39,6 +39,16 @@ const PULL_LIMIT = Math.max(1, Number(process.env.SYNC_PULL_LIMIT ?? 500));
 
 /** The entities a device pulls, in the response order. */
 const PULL_ENTITIES = ['orders', 'customers', 'deliveryChallans', 'stockBalances'] as const;
+
+/**
+ * Records accepted in one push. The whole batch runs in ONE transaction (one
+ * savepoint per record inside it), so an unbounded batch from a device that
+ * was offline for a week held a write transaction open for as long as it took
+ * to apply every document — blocking the numbering locks the online plant
+ * needs — on a request body of unbounded size. The plant app sends 100 at a
+ * time; this refuses anything materially larger with an actionable message.
+ */
+const PUSH_LIMIT = Math.max(1, Number(process.env.SYNC_PUSH_LIMIT ?? 200));
 type PullEntity = (typeof PULL_ENTITIES)[number];
 
 /**
@@ -298,6 +308,9 @@ export class SyncService {
   // ---- Push (offline → cloud) ------------------------------------------
   push(tenantId: string, deviceId: string, records: PushRecord[]) {
     if (!Array.isArray(records)) throw badReq('records[] required');
+    if (records.length > PUSH_LIMIT) {
+      throw badReq(`Too many records in one push (${records.length}); send at most ${PUSH_LIMIT} per batch.`);
+    }
     return this.db.runInTenant(tenantId, async (m) => {
       const device = await this.activeDevice(m, deviceId);
       const results: PushResult[] = [];

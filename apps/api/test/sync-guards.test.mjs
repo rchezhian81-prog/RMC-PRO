@@ -131,6 +131,18 @@ async function post(path, body, token = TOKEN) {
   const p2 = await one(`SELECT count(*)::int AS n FROM delivery_challans WHERE challan_no = $1`, [P2]);
   ok('only the good record was persisted', p1.n === 0 && p2.n === 1);
 
+  // ---- an oversized batch is refused, not applied half-way ----
+  // The whole batch runs in one transaction, so a device that was offline for a
+  // week could hold a cloud write transaction open for its entire length.
+  const OVER = `SGO-${tag}`;
+  const huge = Array.from({ length: 501 }, (_, i) => cr({ challanNo: `${OVER}-${i}`, quantityM3: 5 }));
+  const over = await push(huge);
+  ok('a batch over the cap is refused with 400', over.status === 400 && over.data === undefined);
+  const overRows = await one(`SELECT count(*)::int AS n FROM delivery_challans WHERE challan_no LIKE $1`, [`${OVER}-%`]);
+  ok('nothing from the refused batch was written', overRows.n === 0);
+  const under = await push([cr({ challanNo: `${OVER}-ok`, quantityM3: 5 })]);
+  ok('a batch within the cap still applies', under.ok && under.data.results[0].status === 'applied');
+
   // ---- keep_local resolution goes through the same guards ----
   const res1 = await post(`/sync/conflicts/${r3b.conflictId}/resolve`, { resolution: 'keep_local' });
   const cf = await one(`SELECT resolution_status AS s FROM sync_conflicts WHERE id = $1`, [r3b.conflictId]);

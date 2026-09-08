@@ -13,6 +13,13 @@ const tid = (u: AuthUser) => u.tenantId as string;
 
 @Controller('sync')
 @RequireModule('offline_sync')
+// Every sync route is device-plane or device-administration: the bootstrap and
+// pull payloads carry the whole customer master, confirmed orders and approved
+// mix designs, and the device/conflict lists expose the fleet. PermissionsGuard
+// allows a route that declares nothing, so without this class-level gate any
+// authenticated user of a tenant with offline sync on could read all of it —
+// including roles deliberately without customers.view (a batching operator).
+@RequirePermissions('sync.manage')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class SyncController {
   constructor(private readonly service: SyncService) {}
@@ -21,6 +28,14 @@ export class SyncController {
   register(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.registerDevice(tid(u), dto, u.userId); }
 
   @Get('devices') devices(@CurrentUser() u: AuthUser) { return this.service.listDevices(tid(u)); }
+
+  // Revoke a lost or decommissioned device: it keeps its history and its issued
+  // number blocks, but can no longer bootstrap, reserve, push or pull.
+  @Post('devices/:id/deactivate') @RequirePermissions('sync.manage')
+  deactivate(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.setDeviceStatus(tid(u), id, 'inactive'); }
+
+  @Post('devices/:id/reactivate') @RequirePermissions('sync.manage')
+  reactivate(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.setDeviceStatus(tid(u), id, 'active'); }
 
   @Get('bootstrap') bootstrap(@CurrentUser() u: AuthUser, @Query('deviceId') deviceId: string) { return this.service.bootstrap(tid(u), deviceId); }
 

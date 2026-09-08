@@ -7,6 +7,8 @@ import { Table, Th, Td } from '../../../components/ui/Table';
 import { StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
+import { getAccess } from '../../../lib/session';
+import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
 const dt = (v: unknown) => (v ? String(v).slice(0, 19).replace('T', ' ') : '—');
 
@@ -17,6 +19,10 @@ export default function DevicesSyncPage() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Every /sync route now requires sync.manage — without it the reads 403, so
+  // say that plainly instead of rendering a raw error.
+  const canManage = getAccess().has('sync.manage');
+  const { confirm } = useConfirm();
 
   const reload = useCallback(async () => {
     const [d, r, c] = await Promise.all([syncApi.devices(), syncApi.reservations(), syncApi.conflicts()]);
@@ -25,10 +31,28 @@ export default function DevicesSyncPage() {
     setConflicts(c);
   }, []);
   useEffect(() => {
+    if (!canManage) { setLoaded(true); return; }
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, [reload]);
+  }, [reload, canManage]);
+
+  async function setDevice(id: string, name: string, active: boolean) {
+    setError(null);
+    setMsg(null);
+    try {
+      if (!active && !(await confirm({
+        title: 'Revoke device',
+        message: `Revoke ${name}? It keeps its documents and number blocks but can no longer bootstrap, reserve numbers, push or pull. Registering it again will not restore it — use Reactivate.`,
+        confirmLabel: 'Revoke',
+      }))) return;
+      await (active ? syncApi.reactivateDevice(id) : syncApi.deactivateDevice(id));
+      setMsg(`${name} ${active ? 'reactivated' : 'revoked'}.`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed');
+    }
+  }
 
   async function resolve(id: string, resolution: string) {
     setError(null);
@@ -48,6 +72,9 @@ export default function DevicesSyncPage() {
         <h1 style={{ fontSize: 24, margin: '0 0 4px' }}>Devices &amp; Sync</h1>
         <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>Registered plant devices, cloud-issued number reservations, and offline↔cloud conflicts.</p>
       </div>
+      {!canManage && (
+        <ErrorState message="Devices & Sync needs the sync.manage permission — ask an administrator to grant it or to manage devices for you." />
+      )}
       {error && <ErrorState message={error} />}
       {msg && (
         <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13, margin: 0 }}>
@@ -57,7 +84,7 @@ export default function DevicesSyncPage() {
 
       <Card title="Devices" padded={false}>
         {!loaded ? (
-          <TableSkeleton cols={5} />
+          <TableSkeleton cols={6} />
         ) : devices.length ? (
           <Table>
             <thead>
@@ -67,6 +94,7 @@ export default function DevicesSyncPage() {
                 <Th>Identifier</Th>
                 <Th>Status</Th>
                 <Th>Last sync</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
@@ -77,6 +105,15 @@ export default function DevicesSyncPage() {
                   <Td>{String(d.deviceIdentifier ?? '')}</Td>
                   <Td><StatusBadge status={String(d.status ?? '')} /></Td>
                   <Td>{dt(d.lastSyncToken)}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setDevice(String(d.id), String(d.deviceName ?? 'device'), String(d.status) !== 'active')}
+                    >
+                      {String(d.status) === 'active' ? 'Revoke' : 'Reactivate'}
+                    </Button>
+                  </Td>
                 </tr>
               ))}
             </tbody>

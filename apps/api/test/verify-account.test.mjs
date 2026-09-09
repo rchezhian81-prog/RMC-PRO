@@ -110,5 +110,28 @@ console.log('\n[writes] reading roles does NOT confer the power to change them')
   ok(ownerRename.ok, `and rename it (${ownerRename.status} ${ownerRename.msg})`);
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n[PL1] one account per email, judged the way login judges it');
+{
+  // Login compares LOWER(email) while the column's UNIQUE is case-sensitive, so
+  // two rows could both answer the login query — and since email is global and
+  // names no tenant, the row picked could belong to a different company.
+  const mixed = `Mixed-${tag}@verifyacct.test`;
+  const made = await call('POST', '/users', { name: 'Mixed Case', email: mixed, password: PW, roleId: auditor?.id }, ot);
+  ok(made.ok, `a mixed-case address is accepted (${made.status} ${made.msg})`);
+  ok(made.data?.email === mixed.toLowerCase(), `and stored lower-cased (${made.data?.email})`);
+
+  // The same address in another casing is the same account, and is refused.
+  const again = await call('POST', '/users', { name: 'Same Person', email: mixed.toUpperCase(), password: PW, roleId: auditor?.id }, ot);
+  ok(!again.ok, `the same address in another casing is refused (${again.status}: ${again.msg})`);
+
+  // Either casing signs in, and reaches the one account.
+  const lower = await login(mixed.toLowerCase(), PW);
+  const upper = await login(mixed.toUpperCase(), PW);
+  ok(!!lower && !!upper, 'either casing signs in');
+  const me = await call('GET', '/auth/me', undefined, upper);
+  ok(me.data?.user?.email === mixed.toLowerCase(), `and lands on the one account (${me.data?.user?.email})`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

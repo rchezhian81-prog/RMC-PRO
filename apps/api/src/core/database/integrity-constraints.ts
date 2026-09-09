@@ -227,6 +227,15 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: 'controller_id IS NOT NULL AND controller_batch_ref IS NOT NULL',
     constraint: 'uq_batch_tickets_controller_ref',
   },
+  {
+    // Login compares LOWER(email) but the column's UNIQUE is case-sensitive, so
+    // two rows could both answer it — and email is global, so the row picked
+    // could belong to another company entirely.
+    table: 'users',
+    columns: ['lower(email)'],
+    predicate: 'TRUE',
+    constraint: 'uq_users_email_lower',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

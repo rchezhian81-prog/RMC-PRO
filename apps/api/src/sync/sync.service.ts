@@ -450,6 +450,40 @@ export class SyncService {
    * first (that is the line the invoice will bill), else the grade master by
    * code or name. Null when nothing matches; the label is still stored.
    */
+  /**
+   * Record that a device has consumed a number out of one of its blocks.
+   *
+   * used_count was written as 0 at issue and never touched again, so the cloud
+   * could not answer the one question the Devices screen exists to answer: how
+   * much of this block is spent, and is the device about to run dry? (The
+   * device tracks its own count in SQLite, which is no help when the tablet is
+   * the thing you are worried about.) The document number is parsed back to its
+   * numeric part and matched to a block of the same type for this device; a
+   * number from outside any block — a hand-typed one, or one from an expired
+   * block — simply matches nothing.
+   *
+   * Best-effort by design: this is bookkeeping, and it must never fail a push
+   * that has already applied.
+   */
+  private async noteNumberUsed(m: EntityManager, deviceId: string, documentType: string, documentNo: string): Promise<void> {
+    const digits = documentNo.match(/(\d+)/);
+    if (!digits) return;
+    const n = Number(digits[1]);
+    if (!Number.isFinite(n)) return;
+    try {
+      await m.query(
+        `UPDATE local_number_reservations
+            SET used_count = LEAST(number_to - number_from + 1, GREATEST(used_count, $4 - number_from + 1)),
+                updated_at = now()
+          WHERE device_id = $1 AND document_type = $2 AND status = $3
+            AND $4 BETWEEN number_from AND number_to`,
+        [deviceId, documentType, 'active', n],
+      );
+    } catch {
+      /* bookkeeping only — never fail an applied push over it */
+    }
+  }
+
   private async resolveGradeId(m: EntityManager, order: Order | null, gradeLabel: string | null): Promise<string | null> {
     if (!gradeLabel) return order ? null : null;
     if (order) {
@@ -635,6 +669,7 @@ export class SyncService {
           challanStatus: status, invoiceStatus: 'not_invoiced',
         }),
       );
+      await this.noteNumberUsed(m, device.id, 'delivery_challan', challanNo);
       return { localId: r.localId, status: 'applied', cloudId: saved.id };
     }
 
@@ -668,6 +703,7 @@ export class SyncService {
       // every offline batch — invisibly, because nothing reconciles it.
       const note = await this.consumeForOfflineBatch(m, tenantId, saved, mix, batchQty, userId);
       if (note) await repo.update(saved.id, { notes: note });
+      await this.noteNumberUsed(m, device.id, 'batch_ticket', batchTicketNo);
       return { localId: r.localId, status: 'applied', cloudId: saved.id };
     }
 

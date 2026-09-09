@@ -354,6 +354,48 @@ console.log('\n[O5b] a Plant Device role exists that is ONLY the sync plane');
   ok(perms.keys.length === 1 && perms.keys[0] === 'sync.manage', `it holds sync.manage and nothing else (${perms.keys.join(',')})`);
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n[I38] the cloud learns how much of a block a device has spent');
+{
+  const r = await post('/sync/number-reservations', { deviceId: D, documentType: 'delivery_challan', count: 20 });
+  ok(r.ok, `block reserved (${r.status} ${r.msg})`);
+  // The suffix is not stored on the cloud row — it comes from the series at
+  // reserve time and rides the response, which is what the device formats with.
+  const block = await one(`SELECT id, prefix, padding_length, number_from, used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  const suffix = r.data.suffix ?? '';
+  ok(Number(block.used_count) === 0, `starts unspent (${block.used_count})`);
+
+  // Push a challan numbered from inside the block, exactly as the device formats it.
+  const first = Number(block.number_from);
+  const challanNo = `${block.prefix ?? ''}${String(first).padStart(Number(block.padding_length), '0')}${suffix}`;
+  const push1 = (await push([{
+    entityName: 'delivery_challan', localId: `L-${tag}-N1`, operation: 'create',
+    payload: { challanNo, gradeLabel: 'M25', quantityM3: 5, challanStatus: 'delivered' },
+  }])).data.results[0];
+  ok(push1.status === 'applied', `a challan from the block is applied (${push1.status} ${push1.reason ?? ''})`);
+  const after1 = await one(`SELECT used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  ok(Number(after1.used_count) === 1, `the block records one number spent (${after1.used_count}) — it used to stay 0 for ever`);
+
+  // A number further into the block moves the count to that position, not by one.
+  const fifth = first + 4;
+  const challanNo5 = `${block.prefix ?? ''}${String(fifth).padStart(Number(block.padding_length), '0')}${suffix}`;
+  await push([{
+    entityName: 'delivery_challan', localId: `L-${tag}-N5`, operation: 'create',
+    payload: { challanNo: challanNo5, gradeLabel: 'M25', quantityM3: 5, challanStatus: 'delivered' },
+  }]);
+  const after5 = await one(`SELECT used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  ok(Number(after5.used_count) === 5, `and tracks how far into the block the device has reached (${after5.used_count})`);
+
+  // A hand-typed number from outside every block matches nothing and is harmless.
+  const outside = (await push([{
+    entityName: 'delivery_challan', localId: `L-${tag}-NX`, operation: 'create',
+    payload: { challanNo: `MANUAL-${tag}`, gradeLabel: 'M25', quantityM3: 5, challanStatus: 'delivered' },
+  }])).data.results[0];
+  ok(outside.status === 'applied', 'a number from outside any block still applies');
+  const afterX = await one(`SELECT used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  ok(Number(afterX.used_count) === 5, `and changes no block's count (${afterX.used_count})`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 await owner.destroy();
 process.exit(failed ? 1 : 0);

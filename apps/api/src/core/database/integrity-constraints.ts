@@ -204,6 +204,29 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: "bank_reference IS NOT NULL AND COALESCE(payment_mode, '') <> 'cash' AND status <> 'reversed'",
     constraint: 'uq_vendor_payments_supplier_bank_reference',
   },
+  {
+    // I35 — every reader treats the company as a singleton per tenant.
+    table: 'companies',
+    columns: ['tenant_id'],
+    // Unconditional uniqueness: the predicate lands in a WHERE, so say TRUE.
+    predicate: 'TRUE',
+    constraint: 'uq_companies_tenant',
+  },
+  {
+    // I36 — the plant code is what operators type and imports match on.
+    table: 'plants',
+    columns: ['tenant_id', 'plant_code'],
+    predicate: 'TRUE',
+    constraint: 'uq_plants_tenant_code',
+  },
+  {
+    // I30 — one batch ticket per controller batch reference: a re-run ingest
+    // used to create a second ticket for the same physical batch.
+    table: 'batch_tickets',
+    columns: ['tenant_id', 'controller_id', 'controller_batch_ref'],
+    predicate: 'controller_id IS NOT NULL AND controller_batch_ref IS NOT NULL',
+    constraint: 'uq_batch_tickets_controller_ref',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
+import { MoreThan } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Vehicle, VehicleFuelLog } from '../core/database/entities';
 import { fuelEfficiency, summariseFuel, type FuelSummaryRow } from './fleet.util';
@@ -81,7 +82,36 @@ export class FuelLogService {
           remarks: (dto.remarks as string) ?? null,
         }),
       );
+      // A fill entered out of order (a paper slip keyed days later) computes its
+      // own span correctly, but the entry ABOVE it was closed against the tank
+      // that is now two fills back — so its distance covers this one's too and
+      // the vehicle's mileage double-counts. Re-close that entry against its
+      // new predecessor, which is the row just saved.
+      if (isTankFull) await this.recloseFollowing(m, vehicleId, odometer);
       return saved;
+    });
+  }
+
+  /**
+   * Recompute the first full-tank entry ABOVE `odometer` for this vehicle, whose
+   * span a newly inserted fill has just shortened. Only that one entry can be
+   * affected: every later entry still closes against its own predecessor.
+   */
+  private async recloseFollowing(m: EntityManager, vehicleId: string, odometer: number): Promise<void> {
+    const repo = m.getRepository(VehicleFuelLog);
+    const next = await repo.findOne({
+      where: { vehicleId, isTankFull: true, odometer: MoreThan(String(odometer)) },
+      order: { odometer: 'ASC' },
+    });
+    if (!next) return;
+    const eff = fuelEfficiency({
+      prevOdometer: odometer,
+      currOdometer: Number(next.odometer),
+      litres: Number(next.quantityLitres),
+    });
+    await repo.update(next.id, {
+      distanceKm: eff ? String(eff.distanceKm) : null,
+      kmPerLitre: eff ? String(eff.kmPerLitre) : null,
     });
   }
 

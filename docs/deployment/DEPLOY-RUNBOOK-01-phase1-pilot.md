@@ -121,7 +121,9 @@ with nginx last. Reload nginx after TLS is in place.
 - Postgres/Redis/MinIO NOT reachable from the public internet.
 - CORS: a request with `Origin: https://app.<DOMAIN>` (or `admin.`) is allowed; a foreign origin is not.
 - Super-admin login; create a pilot tenant + plan; tenant isolation spot-check.
-- Order-to-cash happy path (quotation → … → receipt); offline plant-app sync; dashboards.
+- Order-to-cash happy path (quotation → … → receipt); dashboards. (Offline plant-app
+  sync is exercised by the automated suites only — the app itself is dormant by
+  decision; see `apps/plant-app/README.md`.)
 
 ## 7. Rollback (see plan §11)
 - App: redeploy the previous `IMAGE_TAG` (`docker compose ... up -d`).

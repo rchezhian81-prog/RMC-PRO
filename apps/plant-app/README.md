@@ -1,4 +1,31 @@
-# RMC Plant App (offline-first)
+# RMC Plant App (offline-first) — DORMANT BY DECISION
+
+> **Status: shelved, not abandoned.** No device has ever been registered against
+> production (`SELECT count(*) FROM devices` = 0), the pilot plant runs on the web
+> app over a reliable link, and there is no packaging path — this app runs from a
+> dev checkout only. Rather than leave it half-alive, it is explicitly dormant.
+>
+> **What that means in practice:**
+> - Nobody is expected to install or use it. It is not packaged, not signed, and
+>   has no update mechanism.
+> - The code is **maintained, not rotting**: its 13 sync-engine tests run in CI on
+>   every push (`pnpm --filter @rmc/plant-app test`), so the day it is revived it
+>   starts from a known-good state rather than an archaeology exercise.
+> - **The cloud half is live and stays live.** The `/sync/*` API, device
+>   registration and revocation, number reservations with expiry, the conflict
+>   round-trip and plant-scoped pull are all built, hardened and covered by the
+>   integration suite. Nothing here needs redoing to switch the app back on.
+>
+> **To revive it**, in order: add a packaging step (electron-builder or Forge) for
+> the target tablet's OS, decide an update path, register one device against a
+> real plant, and pilot it with a single operator before a second. The offline
+> design notes below are current and were re-verified during the offline-sync
+> hardening pass.
+>
+> **Why it was shelved rather than deleted:** the reason it is unused is that this
+> pilot's plant has connectivity, not that the design is wrong. A plant on a bad
+> link is a normal thing in this industry, and when one arrives the server side is
+> already waiting for it.
 
 Standalone **Electron** desktop app for the plant office PC (Design Doc 7 §Plant App,
 Doc 8 offline sync). Works offline-first: challan / batch entry happens against a

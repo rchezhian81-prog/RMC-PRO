@@ -1,6 +1,6 @@
 # 🏗️ RMC Pro — Plant SaaS
 
-A multi-tenant SaaS platform (with an offline-capable standalone plant app) for Ready Mix Concrete plant operations.
+A multi-tenant SaaS platform for Ready Mix Concrete plant operations. (An offline-capable standalone plant app exists but is currently dormant by decision — see `apps/plant-app/README.md`.)
 
 > **Status:** Development Stage — Phase 1. Requirement and Design stages are complete and signed off (see `docs/`). This repository is the monorepo skeleton; modules are built per the Phase-1 sprint plan.
 
@@ -23,7 +23,8 @@ Next.js (web) · NestJS (API) · PostgreSQL · Redis · SQLite (plant app, offli
 apps/
   api/         NestJS backend (REST + WebSocket)
   web/         Next.js web portal (tenant + super admin)
-  plant-app/   Electron standalone plant app (added in Sprint 10)
+  plant-app/   Electron standalone plant app (Sprint 10) — DORMANT: see its README;
+               the cloud /sync/* API it talks to is live and maintained
 packages/
   shared/      shared TS types, enums, error codes, permission keys
 docker/        local infra (Postgres + Redis + MinIO)

@@ -203,11 +203,14 @@ export class InvoiceService {
         if (days > 0) dueDate = addDays(invoiceDate, days);
       }
 
-      const invoiceNo = await this.numbering.next(m, tenantId, 'invoice', 'INV-');
+      // No number yet: it is taken when the invoice is ISSUED. Numbering here
+      // meant every abandoned draft burned one, leaving gaps in a series GSTR-1
+      // expects to be consecutive — and nothing reclaims a number once the
+      // counter has moved past it.
       const invoiceRepo = m.getRepository(Invoice);
       const invoice = await invoiceRepo.save(
         invoiceRepo.create({
-          tenantId, invoiceNo,
+          tenantId, invoiceNo: null,
           invoiceDate,
           dueDate,
           customerId, siteId: siteId ?? null,
@@ -328,8 +331,13 @@ export class InvoiceService {
       if (missingHsn.length) {
         throw badReq(`Every line needs an HSN/SAC before issuing (${missingHsn.length} missing) — it is required on the GST invoice and the e-invoice.`);
       }
-      await repo.update(id, { invoiceStatus: 'issued' });
-      return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, total: invoice.totalAmount };
+      // Draw the number now, under the same lock that settles the status, so
+      // the series only ever advances for an invoice that is actually issued.
+      // An invoice created before this change already carries one; keep it, so
+      // nothing in flight is renumbered.
+      const invoiceNo = invoice.invoiceNo ?? (await this.numbering.next(m, tenantId, 'invoice', 'INV-'));
+      await repo.update(id, { invoiceStatus: 'issued', invoiceNo });
+      return { result: await this.loadFull(m, id), invoiceNo, total: invoice.totalAmount };
     });
     // B4: issuing is the moment a GST document and a receivable come into
     // existence. Cancels, write-offs and reversals were all audited; the
@@ -603,7 +611,10 @@ export class InvoiceService {
         bankBranch: company?.bankBranch ?? null,
         logoMime: company?.logoMime ?? null,
         logoData: company?.logoData ?? null,
-        invoiceNo: full.invoiceNo, invoiceDate: full.invoiceDate, dueDate: full.dueDate,
+        // A draft has no number until it is issued; say so on the document
+        // rather than printing an empty field or a null.
+        invoiceNo: full.invoiceNo ?? 'DRAFT',
+        invoiceDate: full.invoiceDate, dueDate: full.dueDate,
         invoiceStatus: full.invoiceStatus,
         customerName: customer?.customerName ?? 'Customer', customerGstin: full.gstin,
         placeOfSupply: full.placeOfSupply, isInterstate: full.isInterstate,
@@ -628,6 +639,9 @@ export class InvoiceService {
     return this.db.runInTenant(tenantId, async (m) => {
       const invoice = await m.getRepository(Invoice).findOne({ where: { id } });
       if (!invoice) throw notFound();
+      // A draft carries no number now, and sending a customer "Invoice null" —
+      // or a bill that has not been raised at all — is not a thing to do.
+      if (!invoice.invoiceNo) throw badReq('Issue the invoice before sharing it — a draft has no invoice number yet.');
       const customer = invoice.customerId ? await m.getRepository(Customer).findOne({ where: { id: invoice.customerId } }) : null;
       const mobile = (dto.mobile as string) ?? customer?.mobile ?? null;
       const message = (dto.message as string) ??

@@ -117,7 +117,8 @@ export default function InvoiceDetail() {
       </div>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: 24, margin: 0 }}>{String(inv.invoiceNo)}</h1>
+          {/* Unnumbered until issued — String(null) would read "null" here. */}
+          <h1 style={{ fontSize: 24, margin: 0 }}>{inv.invoiceNo ? String(inv.invoiceNo) : 'Draft invoice'}</h1>
           <StatusBadge status={status} />
           <StatusBadge status={String(inv.paymentStatus)} />
         </div>

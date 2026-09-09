@@ -299,11 +299,21 @@ async function main() {
   summary.push(`tenant modules: ${await provisionTenantModules(m)}`);
 
   // 4. One platform Super Admin — only if configured and not already present.
-  const email = process.env.SUPERADMIN_EMAIL?.trim();
+  // Lower-cased on write, like every other user-creating path: login matches on
+  // LOWER(email), so a mixed-case address here would sit in the table as a row
+  // only a case-insensitive lookup can find. The idempotency check below was
+  // also case-SENSITIVE, so flipping SUPERADMIN_EMAIL's casing between deploys
+  // ('Admin@…' → 'admin@…') created a SECOND super admin instead of finding the
+  // existing one — two rows that both answer the login query.
+  const email = process.env.SUPERADMIN_EMAIL?.trim().toLowerCase();
   if (!email) {
     summary.push('super admin: skipped (SUPERADMIN_EMAIL not set)');
   } else {
-    const existing = await m.findOne(User, { where: { email } });
+    const existing = await m
+      .getRepository(User)
+      .createQueryBuilder('u')
+      .where('LOWER(u.email) = :email', { email })
+      .getOne();
     if (existing) {
       summary.push(`super admin: '${email}' already exists — unchanged`);
     } else {

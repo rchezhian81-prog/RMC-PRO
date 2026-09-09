@@ -68,6 +68,7 @@ import { ReservationExpiry1720000063000 } from './migrations/1720000063000-Reser
 import { InvoiceNumberAtIssue1720000064000 } from './migrations/1720000064000-InvoiceNumberAtIssue';
 import { VendorPaymentReferenceUnique1720000065000 } from './migrations/1720000065000-VendorPaymentReferenceUnique';
 import { BacklogUniqueness1720000066000 } from './migrations/1720000066000-BacklogUniqueness';
+import { UserEmailCaseInsensitive1720000067000 } from './migrations/1720000067000-UserEmailCaseInsensitive';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -151,6 +152,7 @@ export const AppDataSource = new DataSource({
   InvoiceNumberAtIssue1720000064000,
   VendorPaymentReferenceUnique1720000065000,
   BacklogUniqueness1720000066000,
+  UserEmailCaseInsensitive1720000067000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

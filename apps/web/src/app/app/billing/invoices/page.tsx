@@ -179,7 +179,13 @@ export default function InvoicesPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <Td style={{ fontWeight: 600 }}>{String(r.invoiceNo ?? '')}</Td>
+                  {/* A draft has no number until it is issued (it no longer
+                      burns one), so label the cell instead of leaving it blank. */}
+                  <Td style={{ fontWeight: 600 }}>
+                    {r.invoiceNo
+                      ? String(r.invoiceNo)
+                      : <span style={{ color: 'var(--mn-text-muted)', fontWeight: 500 }}>Draft</span>}
+                  </Td>
                   <Td>{String(r.invoiceDate ?? '—')}</Td>
                   <Td numeric>₹{money(r.taxableAmount)}</Td>
                   <Td numeric>₹{money(r.totalAmount)}</Td>

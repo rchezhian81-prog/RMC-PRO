@@ -15,7 +15,8 @@ import { TenantScopedEntity } from './base.entity';
 @Entity('invoices')
 @Unique('uq_invoices_no', ['tenantId', 'invoiceNo'])
 export class Invoice extends TenantScopedEntity {
-  @Column({ name: 'invoice_no', type: 'varchar' }) invoiceNo!: string;
+  /** Null until the invoice is issued — a draft does not consume a number. */
+  @Column({ name: 'invoice_no', type: 'varchar', nullable: true }) invoiceNo!: string | null;
   @Column({ name: 'invoice_date', type: 'date', nullable: true }) invoiceDate!: string | null;
   @Column({ name: 'due_date', type: 'date', nullable: true }) dueDate!: string | null;
   @Column({ name: 'plant_id', type: 'uuid', nullable: true }) plantId!: string | null;

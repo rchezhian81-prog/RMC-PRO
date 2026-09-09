@@ -44,7 +44,23 @@ export default function OutstandingPage() {
           <StatCard label="61–90 days" value={money(totals.b61_90)} tone="warning" />
           <StatCard label="90+ days" value={money(totals.b90)} tone={Number(totals.b90) > 0 ? 'danger' : 'neutral'} />
           <StatCard label="Total outstanding" value={money(totals.total)} tone="info" />
+          {/* A cheque credits its invoices the day it is keyed, so the
+              outstanding above already treats it as collected. This says how
+              much of that is still in transit and could still bounce. */}
+          {Number(totals.unclearedCheques ?? 0) > 0 && (
+            <StatCard
+              label="Uncleared cheques"
+              value={money(totals.unclearedCheques)}
+              tone="warning"
+            />
+          )}
         </div>
+      )}
+      {totals && Number(totals.unclearedCheques ?? 0) > 0 && (
+        <p style={{ marginTop: -8, marginBottom: 18, color: 'var(--mn-text-muted)', fontSize: 13 }}>
+          {money(totals.unclearedCheques)} of the collections behind these figures is cheques that
+          have not cleared yet — already deducted from outstanding, and still able to bounce.
+        </p>
       )}
 
       <Card

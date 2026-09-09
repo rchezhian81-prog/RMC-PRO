@@ -205,6 +205,89 @@ console.log('\n[B3] a malformed report date is a 400, not a 500');
   ok(empty.ok, `an empty ?from= means unbounded rather than a cast error (${empty.status})`);
 }
 
+// ---------------------------------------------------------------------------
+console.log('\n[B5] an invoice number is taken at issue, not at draft');
+{
+  const inv = await draftInvoice(await newChallan('D'));
+  ok(inv.ok, `draft created (${inv.status} ${inv.msg})`);
+  const draft = await one(`SELECT invoice_no, invoice_status FROM invoices WHERE id = $1`, [inv.data?.id]);
+  ok(draft.invoice_no === null, `a draft carries no number (${draft.invoice_no}) — it used to burn one`);
+
+  // Two drafts can coexist unnumbered: uq_invoices_no counts NULLs as distinct.
+  const inv2 = await draftInvoice(await newChallan('E'));
+  ok(inv2.ok, `a second draft is fine alongside it (${inv2.status} ${inv2.msg})`);
+
+  // The abandoned one must not consume a number: issue the second and check the
+  // series did not skip.
+  const before = await one(`SELECT current_number FROM number_series WHERE document_type = 'invoice' ORDER BY updated_at DESC LIMIT 1`);
+  const issued = await post(`/invoices/${inv2.data?.id}/issue`);
+  ok(issued.ok, `issuing draws the number (${issued.status} ${issued.msg})`);
+  ok(!!issued.data?.invoiceNo, `the issued invoice has one (${issued.data?.invoiceNo})`);
+  const after = await one(`SELECT current_number FROM number_series WHERE document_type = 'invoice' ORDER BY updated_at DESC LIMIT 1`);
+  ok(Number(after.current_number) === Number(before.current_number) + 1, `the counter moved exactly once (${before.current_number} → ${after.current_number})`);
+
+  // The abandoned draft still holds no number, so nothing was lost to it.
+  const stillDraft = await one(`SELECT invoice_no FROM invoices WHERE id = $1`, [inv.data?.id]);
+  ok(stillDraft.invoice_no === null, 'the abandoned draft consumed nothing');
+
+  // A draft cannot be sent to a customer as an invoice.
+  const shared = await post(`/invoices/${inv.data?.id}/share`, { mobile: '9000000000' });
+  ok(shared.status === 400 && /Issue the invoice/.test(shared.msg), `sharing a draft is refused (${shared.status})`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n[B6] uncleared cheques are visible on the AR report');
+{
+  const inv = await draftInvoice(await newChallan('F'));
+  const id = inv.data?.id;
+  await post(`/invoices/${id}/issue`);
+  const total = Number((await one(`SELECT total_amount::float AS t FROM invoices WHERE id = $1`, [id])).t);
+
+  const chq = await post('/receipts', {
+    customerId, amount: total, paymentMode: 'cheque', bankReference: `ARQ-${tag}`,
+    allocations: [{ invoiceId: id, amount: total }],
+  });
+  ok(chq.ok, `an uncleared cheque pays the invoice in full (${chq.status} ${chq.msg})`);
+  const paid = await one(`SELECT outstanding_amount::float AS o, payment_status FROM invoices WHERE id = $1`, [id]);
+  ok(paid.o === 0, `the invoice reads settled, as it always did (${paid.o}/${paid.payment_status})`);
+
+  const ar = await call('GET', '/billing-reports/outstanding');
+  ok(ar.ok, `AR report (${ar.status})`);
+  ok(Number(ar.data?.totals?.unclearedCheques) >= total, `the totals now disclose the uncleared cheque (${ar.data?.totals?.unclearedCheques})`);
+
+  // Once it clears, it stops being disclosed as in-transit.
+  const realised = await post(`/receipts/${chq.data?.id}/realise`);
+  ok(realised.ok, `cheque realised (${realised.status})`);
+  const ar2 = await call('GET', '/billing-reports/outstanding');
+  ok(Number(ar2.data?.totals?.unclearedCheques) === Number(ar.data?.totals?.unclearedCheques) - total,
+    `and drops out once cleared (${ar2.data?.totals?.unclearedCheques})`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n[B7] cancelled invoices are declared on the GST summary');
+{
+  const inv = await draftInvoice(await newChallan('G'));
+  const id = inv.data?.id;
+  const issued = await post(`/invoices/${id}/issue`);
+  const no = issued.data?.invoiceNo;
+  ok(!!no, `invoice issued as ${no}`);
+  const cancelled = await post(`/invoices/${id}/cancel`, { reason: `voided ${tag}` });
+  ok(cancelled.ok, `cancelled (${cancelled.status} ${cancelled.msg})`);
+
+  const gst = await call('GET', '/billing-reports/gst-summary');
+  ok(gst.ok, `GST summary (${gst.status})`);
+  const listed = (gst.data?.cancelled?.invoices ?? []).find((x) => x.invoiceNo === no);
+  ok(!!listed, `the cancelled number is declared (${no}) — it used to vanish while staying consumed`);
+  ok(gst.data?.cancelled?.count >= 1, `with a count (${gst.data?.cancelled?.count})`);
+  ok(Number(gst.data?.cancelled?.voidedValue) > 0, `and the voided value for reconciliation (${gst.data?.cancelled?.voidedValue})`);
+  // It must not have leaked into the liability.
+  const taxable = Number(gst.data?.taxable ?? 0);
+  const issuedOnly = await one(
+    `SELECT COALESCE(SUM(taxable_amount),0)::float AS t FROM invoices WHERE invoice_status = 'issued'`,
+  );
+  ok(Math.abs(taxable - Number(issuedOnly.t)) < 0.01, `the taxable total still counts issued invoices only (${taxable})`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 await owner.destroy();
 process.exit(failed ? 1 : 0);

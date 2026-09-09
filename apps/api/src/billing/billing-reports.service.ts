@@ -130,6 +130,7 @@ export class BillingReportsService {
     return this.db.runInTenant(tenantId, async (m) => {
       const invoices = await m.getRepository(Invoice).find({ where: { invoiceStatus: 'issued' } });
       const customers = await m.getRepository(Customer).find();
+      const { byCustomer: unclearedOf, total: unclearedTotal } = await this.unclearedChequeAllocations(m);
       // Contact details ride along so the UI can send a reminder without a second lookup.
       const infoOf = new Map(customers.map((c) => [c.id, c]));
       const byCustomer = new Map<
@@ -169,10 +170,41 @@ export class BillingReportsService {
           .map(async ([id, row]) => ({
             ...row,
             exposure: id && id !== 'unknown' ? (await computeCustomerExposure(m, id)).exposure : row.total,
+            unclearedCheques: unclearedOf.get(id) ?? 0,
           })),
       );
-      return { rows, totals };
+      return { rows, totals: { ...totals, unclearedCheques: unclearedTotal } };
     });
+  }
+
+  /**
+   * Money already credited to invoices from cheques that have NOT cleared.
+   *
+   * A cheque credits its invoices the moment it is keyed (creditInvoice runs at
+   * allocation time), which is how the trade works and how a Tally book posts
+   * it — but it means this report's `total` counts money that is still in
+   * transit as collected, with nothing to say so. Credit exposure already adds
+   * these allocations back when it decides headroom (exposure.util); the AR
+   * report now shows the same figure instead of hiding it, per customer and in
+   * the totals, so an outstanding of 0 against ₹2L of uncleared cheques reads
+   * for what it is.
+   */
+  private async unclearedChequeAllocations(m: EntityManager): Promise<{ byCustomer: Map<string, number>; total: number }> {
+    const rows: Array<{ customer_id: string | null; total: number | string | null }> = await m.query(
+      `SELECT p.customer_id, COALESCE(SUM(pa.allocated_amount), 0)::float AS total
+         FROM payment_allocations pa
+         JOIN payments p ON p.id = pa.payment_id
+        WHERE p.status <> 'reversed' AND COALESCE(p.clearing_status, '') = 'pending'
+        GROUP BY p.customer_id`,
+    );
+    const byCustomer = new Map<string, number>();
+    let total = 0;
+    for (const r of rows) {
+      const v = round2(num(r.total));
+      if (r.customer_id) byCustomer.set(r.customer_id, v);
+      total = round2(total + v);
+    }
+    return { byCustomer, total };
   }
 
   /**
@@ -203,7 +235,38 @@ export class BillingReportsService {
 
   /** GST summary (tax heads) over issued invoices, optionally date-bounded. */
   gstSummary(tenantId: string, from?: string, to?: string) {
-    return this.db.runInTenant(tenantId, (m) => this.invoiceTaxHeads(m, from, to));
+    return this.db.runInTenant(tenantId, async (m) => ({
+      ...(await this.invoiceTaxHeads(m, from, to)),
+      // Cancelled invoices carry no tax and are rightly outside the totals, but
+      // they were invisible here — while their numbers stayed consumed. That
+      // left a gap in the series with nothing in the return to explain it, and
+      // GSTR-1 wants cancelled invoices declared rather than simply missing.
+      // They are listed separately so the numbers reconcile without touching
+      // the liability above.
+      cancelled: await this.cancelledInvoices(m, from, to),
+    }));
+  }
+
+  /** Cancelled invoices in [from, to] — the numbers that were used and voided. */
+  private async cancelledInvoices(m: EntityManager, from?: string, to?: string) {
+    const where = ["invoice_status = 'cancelled'", 'invoice_no IS NOT NULL'];
+    const params: unknown[] = [];
+    if (from) { params.push(from); where.push(`invoice_date >= $${params.length}`); }
+    if (to) { params.push(to); where.push(`invoice_date <= $${params.length}`); }
+    const rows: Array<{ invoiceNo: string; invoiceDate: string | null; total: number | string | null }> =
+      await m.query(
+        `SELECT invoice_no AS "invoiceNo", invoice_date AS "invoiceDate", total_amount::float AS total
+           FROM invoices WHERE ${where.join(' AND ')}
+          ORDER BY invoice_no`,
+        params,
+      );
+    return {
+      count: rows.length,
+      // The value the invoice would have carried, for reconciliation only — it
+      // is NOT part of the tax above.
+      voidedValue: round2(rows.reduce((t, r) => t + num(r.total), 0)),
+      invoices: rows.map((r) => ({ invoiceNo: r.invoiceNo, invoiceDate: r.invoiceDate, totalAmount: round2(num(r.total)) })),
+    };
   }
 
   /**
@@ -317,7 +380,9 @@ export class BillingReportsService {
       const txns: StatementTxn[] = [
         ...invoices.map((i) => ({
           date: i.invoiceDate, sortKey: sk(i.invoiceDate, i.createdAt), type: 'invoice' as const,
-          ref: i.invoiceNo, particulars: `Invoice ${i.invoiceNo}`, debit: num(i.totalAmount), credit: 0,
+          // Only issued invoices reach a statement and issuing always assigns a
+          // number, so this coalesce is belt-and-braces for a legacy row.
+          ref: i.invoiceNo ?? '', particulars: `Invoice ${i.invoiceNo ?? ''}`.trim(), debit: num(i.totalAmount), credit: 0,
         })),
         ...payments.filter((p) => p.status !== 'reversed').map((p) => ({
           date: p.receiptDate, sortKey: sk(p.receiptDate, p.createdAt), type: 'receipt' as const,

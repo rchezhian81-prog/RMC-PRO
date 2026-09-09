@@ -196,6 +196,14 @@ export const UNIQUE_CONSTRAINTS: UniqueConstraint[] = [
     predicate: "bank_reference IS NOT NULL AND COALESCE(payment_mode, '') <> 'cash' AND status <> 'reversed'",
     constraint: 'uq_payments_customer_bank_reference',
   },
+  {
+    // The money-OUT twin: one live vendor payment per instrument reference. A
+    // retried post of the same UTR paid a supplier's bill twice in the books.
+    table: 'vendor_payments',
+    columns: ['tenant_id', 'supplier_id', 'lower(btrim(bank_reference))'],
+    predicate: "bank_reference IS NOT NULL AND COALESCE(payment_mode, '') <> 'cash' AND status <> 'reversed'",
+    constraint: 'uq_vendor_payments_supplier_bank_reference',
+  },
 ];
 
 /** `WHERE` predicate that is TRUE for a row violating the non-negativity rule. */

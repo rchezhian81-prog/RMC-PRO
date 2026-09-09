@@ -66,6 +66,7 @@ import { PaymentsBankReferenceUnique1720000061000 } from './migrations/172000006
 import { TouchStockBalances1720000062000 } from './migrations/1720000062000-TouchStockBalances';
 import { ReservationExpiry1720000063000 } from './migrations/1720000063000-ReservationExpiry';
 import { InvoiceNumberAtIssue1720000064000 } from './migrations/1720000064000-InvoiceNumberAtIssue';
+import { VendorPaymentReferenceUnique1720000065000 } from './migrations/1720000065000-VendorPaymentReferenceUnique';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -147,6 +148,7 @@ export const AppDataSource = new DataSource({
     TouchStockBalances1720000062000,
   ReservationExpiry1720000063000,
   InvoiceNumberAtIssue1720000064000,
+  VendorPaymentReferenceUnique1720000065000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

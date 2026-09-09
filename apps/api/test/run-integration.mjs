@@ -58,6 +58,7 @@ const TESTS = [
   'test/rls-isolation.test.mjs',
   'test/order-to-cash.test.mjs',
   'test/purchase-cycle.test.mjs',
+  'test/purchase-guards.test.mjs',
   'test/weighbridge-hardware.test.mjs',
   'test/batching-integration.test.mjs',
   'test/pilot-gaps.test.mjs',

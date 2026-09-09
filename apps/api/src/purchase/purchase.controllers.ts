@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { isYmdDate } from '@rmc/shared';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -12,6 +13,33 @@ import { VendorPaymentService } from './vendor-payment.service';
 import { PurchaseReportsService } from './purchase-reports.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
+
+/**
+ * Validate and normalise a report's date bounds — the purchase twin of the
+ * guard on the billing reports. `from` / `to` went straight from the query
+ * string into `$1::date`, so `?from=garbage` reached Postgres as an invalid
+ * cast and surfaced as a 500 rather than a 400 naming the bad value; an empty
+ * `?from=` did the same.
+ */
+function dateRange(from?: string, to?: string): [string | undefined, string | undefined] {
+  const clean = (label: string, v?: string): string | undefined => {
+    const t = (v ?? '').trim();
+    if (!t) return undefined;
+    if (!isYmdDate(t)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: `${label} must be a date in YYYY-MM-DD form (received "${t.slice(0, 40)}").`,
+      });
+    }
+    return t;
+  };
+  const f = clean('from', from);
+  const t = clean('to', to);
+  if (f && t && f > t) {
+    throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `from (${f}) is after to (${t}).` });
+  }
+  return [f, t];
+}
 
 @Controller('purchase-orders')
 @RequireModule('purchase')
@@ -121,7 +149,7 @@ export class PurchaseReportsController {
 
   @Get('itc-register') @RequirePermissions('purchase.view')
   itc(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.bills.itcRegister(tid(u), from, to);
+    return this.bills.itcRegister(tid(u), ...dateRange(from, to));
   }
 
   @Get('payables-aging') @RequirePermissions('purchase.view')
@@ -136,11 +164,11 @@ export class PurchaseReportsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.reports.vendorLedger(tid(u), supplierId ?? '', from, to);
+    return this.reports.vendorLedger(tid(u), supplierId ?? '', ...dateRange(from, to));
   }
 
   @Get('purchase-register') @RequirePermissions('purchase.view')
   purchaseRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.reports.purchaseRegister(tid(u), from, to);
+    return this.reports.purchaseRegister(tid(u), ...dateRange(from, to));
   }
 }

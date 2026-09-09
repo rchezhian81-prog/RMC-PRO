@@ -121,6 +121,36 @@ console.log('\n[I16] production plan line: the order line owns the grade');
   ok(good.ok, `a plain line plan succeeds (${good.status} ${good.msg})`);
   const li = await one(`SELECT grade_id FROM production_plan_items WHERE production_plan_id = $1`, [P]);
   ok(li?.grade_id === M25, 'the plan line carries the order line\'s grade');
+
+  // ── D1-D4: a finished plan is a record, not a live worksheet ──
+  // A queued line cannot simply be deleted — batch_queue FKs to it, and the
+  // load is already on the floor.
+  const enq = await post(`/production-plans/${P}/enqueue`);
+  ok(enq.ok, `plan enqueued (${enq.status} ${enq.msg})`);
+  const lineId = (await one(`SELECT id FROM production_plan_items WHERE production_plan_id = $1`, [P]))?.id;
+  const delQueued = await del(`/production-plans/${P}/items/${lineId}`);
+  ok(delQueued.status === 400 && /already queued/i.test(delQueued.msg),
+    `deleting a queued line is refused with a reason, not an FK 500 (${delQueued.status}: ${delQueued.msg})`);
+
+  // Cancelling the plan must actually end it.
+  const cancelled = await post(`/production-plans/${P}/status`, { status: 'cancelled' });
+  ok(cancelled.ok, `plan cancelled (${cancelled.status} ${cancelled.msg})`);
+  const queuedBefore = await one(`SELECT count(*)::int AS n FROM batch_queue WHERE production_plan_item_id = $1`, [lineId]);
+
+  const reEnqueue = await post(`/production-plans/${P}/enqueue`);
+  ok(reEnqueue.status === 400 && /cannot be queued/i.test(reEnqueue.msg),
+    `a cancelled plan cannot be enqueued (${reEnqueue.status}: ${reEnqueue.msg})`);
+  const planAfter = await one(`SELECT status FROM production_plans WHERE id = $1`, [P]);
+  ok(planAfter.status === 'cancelled', `and stays cancelled — enqueue used to write in_progress straight past the guard (${planAfter.status})`);
+  const queuedAfter = await one(`SELECT count(*)::int AS n FROM batch_queue WHERE production_plan_item_id = $1`, [lineId]);
+  ok(queuedAfter.n === queuedBefore.n, `with no new loads queued (${queuedBefore.n} → ${queuedAfter.n})`);
+
+  const addAfter = await post(`/production-plans/${P}/items`, { orderId: O, orderItemId: OI, plannedQuantityM3: 1 });
+  ok(addAfter.status === 400 && /cannot take new lines/i.test(addAfter.msg),
+    `a cancelled plan takes no new lines (${addAfter.status})`);
+  const delAfter = await del(`/production-plans/${P}/items/${lineId}`);
+  ok(delAfter.status === 400 && /cannot have lines removed/i.test(delAfter.msg),
+    `nor loses existing ones (${delAfter.status})`);
 }
 
 // ───────────────────────── I17 / I31 — GRN ↔ PO scoping and PO status re-check ─────────────────────────

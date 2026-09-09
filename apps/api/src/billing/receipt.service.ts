@@ -41,7 +41,29 @@ export class ReceiptService {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
   }
 
-  create(tenantId: string, dto: Record<string, unknown>) {
+  async create(tenantId: string, dto: Record<string, unknown>, userId: string | null = null) {
+    const created = await this.createWithin(tenantId, dto);
+    // Bounces and reversals were audited; recording the money in the first
+    // place was not, so "who keyed this receipt" had no answer.
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.RECEIPT_CREATE,
+      entityType: 'receipt',
+      entityId: String((created as { id?: string })?.id ?? ''),
+      entityLabel: String((created as { receiptNo?: string })?.receiptNo ?? ''),
+      summary: `Recorded receipt ${(created as { receiptNo?: string })?.receiptNo ?? ''} (₹${round2(num(dto.amount))}) via ${String(dto.paymentMode ?? 'cash')}`.trim(),
+      details: {
+        amount: round2(num(dto.amount)),
+        paymentMode: dto.paymentMode ?? 'cash',
+        bankReference: String(dto.bankReference ?? '').trim() || null,
+        allocations: Array.isArray(dto.allocations) ? dto.allocations.length : 0,
+      },
+    });
+    return created;
+  }
+
+  private createWithin(tenantId: string, dto: Record<string, unknown>) {
     const customerId = String(dto.customerId ?? '');
     if (!customerId) throw badReq('customerId required');
     const amount = round2(num(dto.amount));
@@ -136,8 +158,17 @@ export class ReceiptService {
   /** Mark a pending cheque realised (cleared by the bank). */
   realise(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const payment = await m.getRepository(Payment).findOne({ where: { id } });
+      // Lock the header first, like every other path that touches a receipt:
+      // this read was unlocked, so a bounce or reverse committing in between
+      // left the row 'reversed' with a 'realised' cheque on it.
+      const payment = await m.getRepository(Payment).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!payment) throw notFound();
+      // reverse() does not touch clearing_status, so a reversed cheque kept
+      // clearing_status='pending' and passed the check below — a reversed
+      // receipt could be marked realised. Credit exposure reasons that "a
+      // realised cheque is no longer pending" (exposure.util), so this state is
+      // one query change away from freeing credit against money that came back.
+      if (payment.status !== 'posted') throw badReq(`Cannot realise a ${payment.status} receipt`);
       if (payment.clearingStatus !== 'pending') throw badReq('Only a pending cheque can be marked realised');
       await m.getRepository(Payment).update(id, { clearingStatus: 'realised' });
       return this.loadFull(m, id);

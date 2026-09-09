@@ -308,10 +308,16 @@ export class InvoiceService {
     });
   }
 
-  issue(tenantId: string, id: string) {
-    return this.db.runInTenant(tenantId, async (m) => {
+  async issue(tenantId: string, id: string, userId: string | null = null) {
+    const { result, invoiceNo, total } = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Invoice);
-      const invoice = await repo.findOne({ where: { id } });
+      // Lock the invoice, as cancel/writeOff/reverseWriteOff do. Reading it
+      // unlocked let this interleave with a cancel: issue reads 'draft', the
+      // cancel commits (status cancelled, challan links deleted, challans back
+      // to not_invoiced), and then this UPDATE flips the row to 'issued' — an
+      // issued GST invoice with no challans behind it, carrying the cancel's
+      // paymentStatus, while the same deliveries are billable all over again.
+      const invoice = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!invoice) throw notFound();
       if (invoice.invoiceStatus !== 'draft') throw badReq(`Invoice already ${invoice.invoiceStatus}`);
       // HSN/SAC is mandatory on a GST tax invoice and is a hard requirement of the
@@ -323,8 +329,22 @@ export class InvoiceService {
         throw badReq(`Every line needs an HSN/SAC before issuing (${missingHsn.length} missing) — it is required on the GST invoice and the e-invoice.`);
       }
       await repo.update(id, { invoiceStatus: 'issued' });
-      return this.loadFull(m, id);
+      return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, total: invoice.totalAmount };
     });
+    // B4: issuing is the moment a GST document and a receivable come into
+    // existence. Cancels, write-offs and reversals were all audited; the
+    // origination was not, so "who raised this invoice" had no answer.
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: AUDIT_ACTIONS.INVOICE_ISSUE,
+      entityType: 'invoice',
+      entityId: id,
+      entityLabel: invoiceNo ?? null,
+      summary: `Issued invoice ${invoiceNo ?? ''} (₹${total ?? 0})`.trim(),
+      details: { totalAmount: total },
+    });
+    return result;
   }
 
   async cancel(tenantId: string, id: string, userId: string, reason?: string) {

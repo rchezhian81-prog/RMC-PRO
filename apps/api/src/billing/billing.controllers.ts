@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
+import { isYmdDate } from '@rmc/shared';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -12,6 +13,35 @@ import { BillingReportsService } from './billing-reports.service';
 import { PdfService } from '../sales/pdf.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
+
+/**
+ * Validate and normalise a report's date bounds.
+ *
+ * `from` / `to` came straight off the query string into `$1::date`, so
+ * `?from=garbage` reached Postgres as an invalid cast and surfaced as a 500
+ * ("invalid input syntax for type date") instead of a 400 naming the bad value.
+ * An empty `?from=` did the same. Both are judged here, in the same YYYY-MM-DD
+ * shape the invoice paths already require, and an empty one means unbounded.
+ */
+function dateRange(from?: string, to?: string): [string | undefined, string | undefined] {
+  const clean = (label: string, v?: string): string | undefined => {
+    const t = (v ?? '').trim();
+    if (!t) return undefined;
+    if (!isYmdDate(t)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: `${label} must be a date in YYYY-MM-DD form (received "${t.slice(0, 40)}").`,
+      });
+    }
+    return t;
+  };
+  const f = clean('from', from);
+  const t = clean('to', to);
+  if (f && t && f > t) {
+    throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `from (${f}) is after to (${t}).` });
+  }
+  return [f, t];
+}
 
 @Controller('invoices')
 @RequireModule('billing')
@@ -36,7 +66,7 @@ export class InvoiceController {
   fromChallans(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.fromChallans(tid(u), dto); }
 
   @Post(':id/issue') @RequirePermissions('invoices.create')
-  issue(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.issue(tid(u), id); }
+  issue(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.issue(tid(u), id, u.userId); }
 
   @Post(':id/cancel') @RequirePermissions('invoice_cancellation.approve')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.cancel(tid(u), id, u.userId, dto.reason as string); }
@@ -78,7 +108,7 @@ export class ReceiptController {
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post() @RequirePermissions('receipts.create')
-  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
+  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto, u.userId); }
 
   @Post(':id/realise') @RequirePermissions('receipts.create')
   realise(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.realise(tid(u), id); }
@@ -109,20 +139,20 @@ export class BillingReportsController {
   constructor(private readonly service: BillingReportsService) {}
 
   @Get('outstanding') outstanding(@CurrentUser() u: AuthUser) { return this.service.outstanding(tid(u)); }
-  @Get('sales-register') sales(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesRegister(tid(u), from, to); }
-  @Get('gst-summary') gst(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstSummary(tid(u), from, to); }
-  @Get('hsn-summary') hsn(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.hsnSummary(tid(u), from, to); }
-  @Get('receipts-register') receipts(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.receiptsRegister(tid(u), from, to); }
-  @Get('customer-statement') statement(@CurrentUser() u: AuthUser, @Query('customerId') customerId?: string, @Query('from') from?: string, @Query('to') to?: string) { return this.service.customerStatement(tid(u), customerId ?? '', from, to); }
-  @Get('gstr-3b') gstr3b(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstr3b(tid(u), from, to); }
-  @Get('day-book') dayBook(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cashBankDayBook(tid(u), from, to); }
-  @Get('sales-mis') salesMis(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesMis(tid(u), from, to); }
-  @Get('grade-margin') gradeMargin(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gradeMargin(tid(u), from, to); }
-  @Get('collection-efficiency') collectionEfficiency(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.collectionEfficiency(tid(u), from, to); }
+  @Get('sales-register') sales(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesRegister(tid(u), ...dateRange(from, to)); }
+  @Get('gst-summary') gst(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstSummary(tid(u), ...dateRange(from, to)); }
+  @Get('hsn-summary') hsn(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.hsnSummary(tid(u), ...dateRange(from, to)); }
+  @Get('receipts-register') receipts(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.receiptsRegister(tid(u), ...dateRange(from, to)); }
+  @Get('customer-statement') statement(@CurrentUser() u: AuthUser, @Query('customerId') customerId?: string, @Query('from') from?: string, @Query('to') to?: string) { return this.service.customerStatement(tid(u), customerId ?? '', ...dateRange(from, to)); }
+  @Get('gstr-3b') gstr3b(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstr3b(tid(u), ...dateRange(from, to)); }
+  @Get('day-book') dayBook(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cashBankDayBook(tid(u), ...dateRange(from, to)); }
+  @Get('sales-mis') salesMis(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesMis(tid(u), ...dateRange(from, to)); }
+  @Get('grade-margin') gradeMargin(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gradeMargin(tid(u), ...dateRange(from, to)); }
+  @Get('collection-efficiency') collectionEfficiency(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.collectionEfficiency(tid(u), ...dateRange(from, to)); }
 
   @Get('tally-export') @RequirePermissions('tally_export.generate')
   async tally(@CurrentUser() u: AuthUser, @Res() res: Response, @Query('from') from?: string, @Query('to') to?: string) {
-    const { csv } = await this.service.tallyExportCsv(tid(u), from, to);
+    const { csv } = await this.service.tallyExportCsv(tid(u), ...dateRange(from, to));
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="tally-sales-export.csv"');
     res.end(csv);

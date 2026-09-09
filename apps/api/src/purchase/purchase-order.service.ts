@@ -103,10 +103,18 @@ export class PurchaseOrderService {
   issue(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(PurchaseOrder);
-      const po = await repo.findOne({ where: { id } });
+      // Locked, like cancel below and like VendorBillService.approve: this read
+      // was unlocked, so a cancel could commit between it and the UPDATE and be
+      // overwritten — a purchase order somebody deliberately cancelled came back
+      // as 'issued', which a goods receipt will happily receive against and a
+      // bill will happily be raised for.
+      const po = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!po) throw notFound();
       if (po.status !== 'draft') throw badReq(`Purchase order already ${po.status}`);
-      await repo.update(id, { status: 'issued' });
+      // Conditional on the status we just validated — belt-and-braces under the
+      // lock, the same shape the vendor-bill paths use.
+      const res = await repo.update({ id, status: 'draft' }, { status: 'issued' });
+      if (!res.affected) throw badReq('Purchase order is no longer a draft');
       return this.loadFull(m, id);
     });
   }

@@ -1,6 +1,6 @@
 import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Supplier, VendorBill, VendorPayment, VendorPaymentAllocation } from '../core/database/entities';
@@ -50,6 +50,33 @@ export class VendorPaymentService {
 
     const { result, paymentNo, allocated } = await this.db.runInTenant(tenantId, async (m) => {
       await resolveRef(m, Supplier, supplierId, 'Supplier');
+      // The instrument reference (UTR / cheque no) is the payment's natural key,
+      // exactly as it is for a customer receipt. That side refuses a duplicate
+      // (I5) after a lost response + retry doubled a receipt; this side never
+      // did, so the same retry paid a supplier's bill twice — a fresh payment
+      // number each time, allocated again against the bill's CURRENT
+      // outstanding, with payables understated by the whole amount. One live
+      // payment per (supplier, reference) for non-cash modes; blank is "no
+      // reference" (stored NULL, never compared). The partial unique index
+      // uq_vendor_payments_supplier_bank_reference backstops this under
+      // concurrency.
+      const mode = ((dto.paymentMode as string) ?? 'neft').toLowerCase();
+      const bankReference = String(dto.bankReference ?? '').trim() || null;
+      if (bankReference && mode !== 'cash') {
+        const [dup] = (await m.query(
+          `SELECT payment_no FROM vendor_payments
+            WHERE supplier_id = $1 AND lower(btrim(bank_reference)) = lower($2)
+              AND COALESCE(payment_mode, '') <> 'cash' AND status <> 'reversed'
+            LIMIT 1`,
+          [supplierId, bankReference],
+        )) as Array<{ payment_no: string }>;
+        if (dup) {
+          throw new ConflictException({
+            code: 'DUPLICATE_RECORD',
+            message: `Reference ${bankReference} is already recorded for this supplier on payment ${dup.payment_no}. Reverse that payment first if it was keyed wrongly.`,
+          });
+        }
+      }
       const paymentNoStr = await this.numbering.next(m, tenantId, 'purchase_payment', 'PAY-');
       const paymentRepo = m.getRepository(VendorPayment);
       const payment = await paymentRepo.save(
@@ -57,7 +84,7 @@ export class VendorPaymentService {
           tenantId, paymentNo: paymentNoStr, supplierId,
           paymentDate: (dto.paymentDate as string) ?? null,
           paymentMode: (dto.paymentMode as string) ?? 'neft',
-          amount: String(amount), bankReference: (dto.bankReference as string) ?? null,
+          amount: String(amount), bankReference,
           remarks: (dto.remarks as string) ?? null, status: 'posted',
         }),
       );

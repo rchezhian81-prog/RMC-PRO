@@ -12,6 +12,9 @@ import {
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
 
+/** A plan in one of these is a record of what happened, not a live worksheet. */
+const TERMINAL_PLAN_STATUSES: readonly string[] = ['completed', 'cancelled'];
+
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Plan not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 
@@ -60,6 +63,10 @@ export class ProductionPlansService {
     return this.db.runInTenant(tenantId, async (m) => {
       const plan = await m.getRepository(ProductionPlan).findOne({ where: { id: planId } });
       if (!plan) throw notFound();
+      // A finished or abandoned plan is a record, not a worksheet.
+      if (TERMINAL_PLAN_STATUSES.includes(plan.status)) {
+        throw badReq(`A ${plan.status} production plan cannot take new lines`);
+      }
       const orderId = String(dto.orderId ?? '');
       if (!orderId) throw badReq('orderId required');
       const order = await m.getRepository(Order).findOne({ where: { id: orderId } });
@@ -140,9 +147,25 @@ export class ProductionPlansService {
 
   deleteItem(tenantId: string, planId: string, itemId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
+      const plan = await m.getRepository(ProductionPlan).findOne({ where: { id: planId } });
+      if (!plan) throw notFound();
+      if (TERMINAL_PLAN_STATUSES.includes(plan.status)) {
+        throw badReq(`A ${plan.status} production plan cannot have lines removed`);
+      }
       const repo = m.getRepository(ProductionPlanItem);
       const item = await repo.findOne({ where: { id: itemId, productionPlanId: planId } });
       if (!item) throw notFound();
+      // batch_queue.production_plan_item_id REFERENCES production_plan_items(id)
+      // with no ON DELETE, so deleting a line that has already been queued raised
+      // a raw FK violation (23503) — a 500 that told the operator nothing. The
+      // load is on the floor: cancel the queue line first.
+      const [queued] = (await m.query(
+        `SELECT count(*)::int AS n FROM batch_queue WHERE production_plan_item_id = $1 AND queue_status <> 'cancelled'`,
+        [itemId],
+      )) as Array<{ n: number }>;
+      if (Number(queued?.n ?? 0) > 0) {
+        throw badReq('This line is already queued for batching — cancel the queue entry before removing the line.');
+      }
       await repo.delete(itemId);
       return this.loadFull(m, planId);
     });
@@ -153,12 +176,15 @@ export class ProductionPlansService {
     if (!allowed.includes(status)) throw badReq(`Invalid status ${status}`);
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(ProductionPlan);
-      const plan = await repo.findOne({ where: { id } });
+      // Locked, so the terminal-state check judges the settled row: an unlocked
+      // read let a cancel and an enqueue interleave, and whichever wrote last won.
+      const plan = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!plan) throw notFound();
       if (leavesTerminal(plan.status, status, ['completed', 'cancelled'])) {
         throw badReq(`A ${plan.status} production plan cannot change status`);
       }
-      await repo.update(id, { status });
+      const res = await repo.update({ id, status: plan.status }, { status });
+      if (!res.affected) throw badReq('Production plan changed while updating — reload and retry');
       return this.loadFull(m, id);
     });
   }
@@ -166,8 +192,16 @@ export class ProductionPlansService {
   /** Push all planned items to the batch queue (one waiting load each). */
   enqueue(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const plan = await m.getRepository(ProductionPlan).findOne({ where: { id } });
+      // Locked and status-checked. enqueue looked at no status at all and then
+      // wrote `in_progress` directly, which walked straight around the terminal
+      // guard setStatus enforces: a CANCELLED or COMPLETED plan could be
+      // enqueued, pushing its lines onto the batch queue as live loads and
+      // bringing the plan back to life. No race needed — cancel, then enqueue.
+      const plan = await m.getRepository(ProductionPlan).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!plan) throw notFound();
+      if (TERMINAL_PLAN_STATUSES.includes(plan.status)) {
+        throw badReq(`A ${plan.status} production plan cannot be queued for batching`);
+      }
       const items = await m.getRepository(ProductionPlanItem).find({ where: { productionPlanId: id } });
       const queueRepo = m.getRepository(BatchQueueEntry);
       const itemRepo = m.getRepository(ProductionPlanItem);

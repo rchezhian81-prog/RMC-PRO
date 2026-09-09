@@ -85,7 +85,16 @@ rclone lsd b2:
 ```
 
 After that, `pg-backup.sh` uploads each `.dump` + `.sha256` to B2 and **reads it
-back** to confirm it landed (it doesn't just trust a zero exit code). Do **not**
+back** to confirm it landed (it doesn't just trust a zero exit code).
+
+The bucket must **already exist**: `rclone copy` would otherwise *create* a
+mistyped one, upload into it, and the read-back would pass against that same
+typo — backups silently diverted to a bucket nobody monitors. So the script
+probes the bucket read-only first (`rclone lsf`) and, if it is missing or
+unreachable, **refuses the copy and alerts** rather than letting rclone conjure
+it. The local dump is always kept. If you see
+`off-box bucket … does not exist or is unreachable`, check `RMC_OFFBOX_RCLONE`
+for a typo and confirm the bucket with `rclone lsd b2:`. Do **not**
 rely on the same disk/VM as the database. An `scp` to a separate host is an
 alternative — set `RMC_OFFBOX_SCP` and leave `RMC_OFFBOX_RCLONE` unset.
 

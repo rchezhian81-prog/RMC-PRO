@@ -25,6 +25,9 @@ umask 077   # backups are readable only by their owner
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.production}"
 COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"
+# Off-box target helpers (bucket-root derivation + read-only existence probe).
+# shellcheck source=scripts/backup/lib-offbox.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-offbox.sh"
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups/postgres}"
 PG_SERVICE="${PG_SERVICE:-postgres}"
 # GFS retention (counts):
@@ -117,6 +120,12 @@ offbox_alert() {  # $1 = message; POST to the webhook if one is configured
 if [ -n "$RMC_OFFBOX_RCLONE" ]; then
   if ! command -v rclone >/dev/null 2>&1; then
     offbox_alert "rclone not installed but RMC_OFFBOX_RCLONE is set (local dump kept)"
+  elif ! offbox_target_has_bucket "$RMC_OFFBOX_RCLONE"; then
+    offbox_alert "RMC_OFFBOX_RCLONE='$RMC_OFFBOX_RCLONE' names no bucket (expected remote:bucket) (local dump kept)"
+  elif ! offbox_bucket_exists "$RMC_OFFBOX_RCLONE"; then
+    # `rclone copy` would CREATE a mistyped bucket and the read-back below would
+    # then pass against it — backups silently diverted somewhere unmonitored.
+    offbox_alert "off-box bucket $(offbox_bucket_root "$RMC_OFFBOX_RCLONE") does not exist or is unreachable; refusing to let rclone create it (check the name, or create the bucket) (local dump kept)"
   elif rclone copy "$OUT" "$RMC_OFFBOX_RCLONE" && rclone copy "$OUT.sha256" "$RMC_OFFBOX_RCLONE"; then
     # Read back: confirm the dump actually landed at the destination, don't just
     # trust a zero exit. A silent partial upload is exactly what bites in a DR.

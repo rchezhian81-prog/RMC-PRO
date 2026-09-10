@@ -70,6 +70,7 @@ const TESTS = [
   'test/numbering-corrections.test.mjs',
   'test/gps-tracking.test.mjs',
   'test/qc-cube-integrity.test.mjs',
+  'test/qc-weighbridge-guards.test.mjs',
   'test/cookie-auth.test.mjs',
   'test/observability.test.mjs',
   'test/dashboard-trends.test.mjs',

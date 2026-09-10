@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Socket } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { WeighbridgeIndicator } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
@@ -10,6 +11,7 @@ import {
   type IndicatorReading,
   type WeightUnit,
 } from './weighbridge-indicator.util';
+import { classifyAddress, isRoutableAddress, isValidPort, privateIndicatorsAllowed } from './indicator-host.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Weighbridge indicator not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -64,17 +66,29 @@ export class WeighbridgeIndicatorService {
     });
   }
 
+  /**
+   * The rules a stored indicator must satisfy. update() applies them to the
+   * MERGED row, not just the patch: it used to spread the DTO straight into
+   * repo.update, so an indicator could be switched to `tcp` with no host/port —
+   * or to a connectionType create() would have rejected outright.
+   */
+  private assertValidConfig(cfg: Record<string, unknown>): { name: string; connectionType: string } {
+    const name = String(cfg.name ?? '').trim();
+    if (!name) throw badReq('Indicator name is required');
+    const connectionType = String(cfg.connectionType ?? 'simulated');
+    if (!['simulated', 'tcp', 'serial'].includes(connectionType)) {
+      throw badReq(`Invalid connectionType ${connectionType}`);
+    }
+    if (connectionType === 'tcp') {
+      if (!cfg.host || !cfg.port) throw badReq('A TCP indicator needs a host and port');
+      if (!isValidPort(cfg.port)) throw badReq('Indicator port must be between 1 and 65535');
+    }
+    return { name, connectionType };
+  }
+
   create(tenantId: string, dto: Record<string, unknown>) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const name = String(dto.name ?? '').trim();
-      if (!name) throw badReq('Indicator name is required');
-      const connectionType = String(dto.connectionType ?? 'simulated');
-      if (!['simulated', 'tcp', 'serial'].includes(connectionType)) {
-        throw badReq(`Invalid connectionType ${connectionType}`);
-      }
-      if (connectionType === 'tcp' && (!dto.host || !dto.port)) {
-        throw badReq('A TCP indicator needs a host and port');
-      }
+      const { name, connectionType } = this.assertValidConfig(dto);
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId']) delete rest[k];
       const repo = m.getRepository(WeighbridgeIndicator);
@@ -90,6 +104,7 @@ export class WeighbridgeIndicatorService {
       if (!row) throw notFound();
       const rest = nullifyEmpty(dto);
       for (const k of ['id', 'tenantId']) delete rest[k];
+      this.assertValidConfig({ ...(row as unknown as Record<string, unknown>), ...rest });
       await repo.update(id, rest);
       return repo.findOne({ where: { id } });
     });
@@ -119,7 +134,7 @@ export class WeighbridgeIndicatorService {
         const nominal = device.simulatedWeightKg != null ? Number(device.simulatedWeightKg) : DEFAULT_SIMULATED_KG;
         reading = pickStableReading(simulateIndicatorBurst(nominal, unit));
       } else if (device.connectionType === 'tcp') {
-        reading = parseIndicatorFrame(await this.readTcpFrame(device.host, device.port));
+        reading = parseIndicatorFrame(await this.readTcpFrame(device.host, device.port));  // guarded below
       } else {
         throw badReq('Serial indicators are read by the plant-side agent — post the raw frames to this endpoint');
       }
@@ -144,25 +159,62 @@ export class WeighbridgeIndicatorService {
    * Real hardware path — guarded by a short timeout and never reached in CI
    * (no TCP indicator is configured for the test tenant).
    */
-  private readTcpFrame(host: string | null, port: number | null): Promise<string> {
+  private async readTcpFrame(host: string | null, port: number | null): Promise<string> {
     if (!host || !port) throw badReq('TCP indicator is missing host/port');
+    if (!isValidPort(port)) throw badReq('Indicator port must be between 1 and 65535');
+    const target = await this.resolveIndicatorAddress(host);
     return new Promise<string>((resolve, reject) => {
       const socket = new Socket();
       let buffer = '';
       const done = (err: Error | null, frame?: string) => {
         socket.destroy();
-        if (err) reject(badReq(`Weighbridge indicator unreachable at ${host}:${port} (${err.message})`));
+        // One message for every failure mode. Reporting the underlying errno told
+        // a caller ECONNREFUSED from ETIMEDOUT — i.e. open port from filtered —
+        // which is precisely the port-scan signal the address guard exists to deny.
+        if (err) reject(badReq(`Weighbridge indicator did not respond at ${host}:${port}`));
         else resolve(frame ?? '');
       };
       socket.setTimeout(2000);
-      socket.on('timeout', () => done(new Error('timeout')));
-      socket.on('error', (e) => done(e));
+      socket.on('timeout', () => done(new Error('unreachable')));
+      socket.on('error', () => done(new Error('unreachable')));
       socket.on('data', (chunk) => {
         buffer += chunk.toString('latin1');
+        // A peer that never sends a newline would otherwise buffer without bound.
+        if (buffer.length > 8192) return done(new Error('unreachable'));
         const line = buffer.split(/[\r\n]+/).find((l) => l.trim().length > 0);
         if (line) done(null, line);
       });
-      socket.connect(port, host);
+      // Dial the address we just vetted, not the name: re-resolving here would
+      // let a second DNS answer swap in a blocked address (DNS rebinding).
+      socket.connect(port, target);
     });
+  }
+
+  /**
+   * Resolve an indicator hostname and refuse anything that is not publicly
+   * routable, so the device registry cannot be used to reach the API host's own
+   * services, the cloud metadata endpoint, or the rest of the private network.
+   */
+  private async resolveIndicatorAddress(host: string): Promise<string> {
+    let addresses: { address: string }[];
+    try {
+      addresses = await lookup(host, { all: true });
+    } catch {
+      throw badReq(`Weighbridge indicator host ${host} could not be resolved`);
+    }
+    const first = addresses[0];
+    if (!first) throw badReq(`Weighbridge indicator host ${host} could not be resolved`);
+    if (!privateIndicatorsAllowed()) {
+      // EVERY answer must be routable — a name that resolves to both a public and
+      // a private address must not be usable to reach the private one.
+      const blocked = addresses.find((a) => !isRoutableAddress(a.address));
+      if (blocked) {
+        throw badReq(
+          `Weighbridge indicator host ${host} resolves to a ${classifyAddress(blocked.address)} address, which cannot be used. ` +
+            'Use a publicly reachable indicator, or read a plant-network device through the local agent.',
+        );
+      }
+    }
+    return first.address;
   }
 }

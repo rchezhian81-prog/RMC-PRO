@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { dateRange } from '../common/date-range.util';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -17,12 +18,12 @@ export class QcController {
 
   @Get('cube-register') @RequirePermissions('qc.view')
   cubeRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.service.cubeRegister(tid(u), from, to);
+    return this.service.cubeRegister(tid(u), ...dateRange(from, to));
   }
 
   @Get('slump-register') @RequirePermissions('qc.view')
   slumpRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.service.slumpRegister(tid(u), from, to);
+    return this.service.slumpRegister(tid(u), ...dateRange(from, to));
   }
 
   @Get('slump-tests') @RequirePermissions('qc.view')

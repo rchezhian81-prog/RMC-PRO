@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import { isYmdDate } from '@rmc/shared';
+import { dateRange } from '../common/date-range.util';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -13,35 +13,6 @@ import { BillingReportsService } from './billing-reports.service';
 import { PdfService } from '../sales/pdf.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
-
-/**
- * Validate and normalise a report's date bounds.
- *
- * `from` / `to` came straight off the query string into `$1::date`, so
- * `?from=garbage` reached Postgres as an invalid cast and surfaced as a 500
- * ("invalid input syntax for type date") instead of a 400 naming the bad value.
- * An empty `?from=` did the same. Both are judged here, in the same YYYY-MM-DD
- * shape the invoice paths already require, and an empty one means unbounded.
- */
-function dateRange(from?: string, to?: string): [string | undefined, string | undefined] {
-  const clean = (label: string, v?: string): string | undefined => {
-    const t = (v ?? '').trim();
-    if (!t) return undefined;
-    if (!isYmdDate(t)) {
-      throw new BadRequestException({
-        code: 'VALIDATION_ERROR',
-        message: `${label} must be a date in YYYY-MM-DD form (received "${t.slice(0, 40)}").`,
-      });
-    }
-    return t;
-  };
-  const f = clean('from', from);
-  const t = clean('to', to);
-  if (f && t && f > t) {
-    throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `from (${f}) is after to (${t}).` });
-  }
-  return [f, t];
-}
 
 @Controller('invoices')
 @RequireModule('billing')

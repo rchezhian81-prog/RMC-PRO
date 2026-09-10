@@ -92,9 +92,16 @@ export class MaterialInwardService {
   cancel(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(MaterialInward);
-      const inward = await repo.findOne({ where: { id } });
+      // Lock, exactly as post() does. Without it cancel read the pre-post MVCC
+      // snapshot, saw 'draft', passed the guard below, and its UPDATE then waited
+      // on post()'s row lock and landed AFTER the post committed — leaving the
+      // inward cancelled with its quantity already added to stock, so the ledger
+      // and the document disagreed permanently. FOR UPDATE re-reads the row after
+      // the wait, so the second caller now sees 'posted' and is refused.
+      const inward = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!inward) throw notFound();
       if (inward.status === 'posted') throw badReq('Posted inward cannot be cancelled');
+      if (inward.status === 'cancelled') return inward;
       await repo.update(id, { status: 'cancelled' });
       // Release the weighbridge slip this draft came from so the truck can be
       // converted again: 'matched' is terminal on the entry and the web hides

@@ -89,14 +89,18 @@ export class WeighbridgeService {
     if (!allowed.includes(status)) throw badReq(`Invalid status ${status}`);
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(WeighbridgeEntry);
-      const entry = await repo.findOne({ where: { id } });
+      // Lock the row: two transitions at once both read the same status, both
+      // clear the terminal check below, and the later write silently wins — which
+      // is how a 'matched' entry gets re-opened and re-converted.
+      const entry = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!entry) throw notFound();
       // A matched entry has been converted to an inward, a cancelled one is
       // void — neither may be re-opened (that would enable a re-conversion).
       if (leavesTerminal(entry.status, status, ['matched', 'cancelled'])) {
         throw badReq(`A ${entry.status} weighbridge entry cannot change status`);
       }
-      await repo.update(id, { status });
+      const res = await repo.update({ id, status: entry.status }, { status });
+      if (!res.affected) throw badReq('Weighbridge entry changed status concurrently — retry');
       return repo.findOne({ where: { id } });
     });
   }
@@ -104,9 +108,16 @@ export class WeighbridgeService {
   /** Convert a weighbridge entry into a draft material inward (net → received). */
   toInward(tenantId: string, id: string, dto: Record<string, unknown>, _userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const entry = await m.getRepository(WeighbridgeEntry).findOne({ where: { id } });
+      const entry = await m.getRepository(WeighbridgeEntry).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!entry) throw notFound();
       if (entry.status === 'cancelled') throw badReq('Cancelled entry cannot be converted');
+      // Only a finished weighing becomes stock. A 'draft' slip is still being
+      // keyed — its gross/tare may yet change — so converting one posted a
+      // provisional weight into the GRN and then into the stock ledger. ('matched'
+      // stays convertible so the duplicate-inward guard below owns that message.)
+      if (!['completed', 'mismatch', 'matched'].includes(entry.status)) {
+        throw badReq(`A ${entry.status} weighbridge entry cannot be converted — complete the weighing first`);
+      }
       if (!entry.materialId) throw badReq('Weighbridge entry has no material');
       const net = num(entry.netWeight);
       if (net <= 0) throw badReq('Net weight must be greater than zero');

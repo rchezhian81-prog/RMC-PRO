@@ -2,7 +2,7 @@ import { resolveOptionalRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { BatchTicket, ConcreteGrade, Plant, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
+import { BatchTicket, ConcreteGrade, MixDesign, Plant, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { assessCubeSet } from './acceptance.util';
 
@@ -36,11 +36,12 @@ export class QcService {
    * wrong characteristic strength (fck) — silently passing or failing the wrong
    * concrete. When both a batch ticket and a grade are named, reject a mismatch.
    * (No ticket named, or the ticket carries no grade → nothing to reconcile.)
+   * The caller resolves the ticket through the tenant manager first, so an
+   * unknown id is a 400 rather than a silent skip of this very check.
    */
-  private async assertGradeMatchesTicket(m: EntityManager, batchTicketId: string | null, gradeId: string | null) {
-    if (!batchTicketId || !gradeId) return;
-    const bt = await m.getRepository(BatchTicket).findOne({ where: { id: batchTicketId } });
-    if (bt && bt.gradeId && String(bt.gradeId) !== String(gradeId)) {
+  private assertGradeMatchesTicket(bt: BatchTicket | null, gradeId: string | null) {
+    if (!bt || !gradeId) return;
+    if (bt.gradeId && String(bt.gradeId) !== String(gradeId)) {
       throw badReq(
         `Grade does not match batch ticket ${bt.batchTicketNo} (grade ${bt.gradeLabel ?? bt.gradeId}).`,
       );
@@ -100,7 +101,10 @@ export class QcService {
       if (min !== null && max !== null && min > max) throw badReq('Target min slump cannot exceed target max slump.');
       await resolveOptionalRef(m, Plant, dto.plantId, 'Plant');
       await resolveOptionalRef(m, ConcreteGrade, dto.gradeId, 'Grade');
-      await this.assertGradeMatchesTicket(m, str(dto.batchTicketId), str(dto.gradeId));
+      // Resolve the ticket rather than trusting the id: an unknown one used to be
+      // stored as-is AND silently disabled the grade reconciliation below.
+      const ticket = await resolveOptionalRef(m, BatchTicket, dto.batchTicketId, 'Batch ticket');
+      this.assertGradeMatchesTicket(ticket, str(dto.gradeId));
       const passed = (min === null || measured >= min) && (max === null || measured <= max);
       const repo = m.getRepository(QcSlumpTest);
       const row = await repo.save(
@@ -148,12 +152,10 @@ export class QcService {
       const batchTicketId = str(dto.batchTicketId);
       // Derive the grade from the ticket when the caller names only the ticket,
       // so the grade/ticket reconciliation below is never short-circuited.
-      if (!gradeId && batchTicketId) {
-        const bt = await m.getRepository(BatchTicket).findOne({ where: { id: batchTicketId } });
-        if (bt?.gradeId) {
-          gradeId = bt.gradeId;
-          gradeLabel = gradeLabel ?? bt.gradeLabel ?? null;
-        }
+      const ticket = await resolveOptionalRef(m, BatchTicket, batchTicketId, 'Batch ticket');
+      if (!gradeId && ticket?.gradeId) {
+        gradeId = ticket.gradeId;
+        gradeLabel = gradeLabel ?? ticket.gradeLabel ?? null;
       }
       if (gradeId) {
         const grade = await m.getRepository(ConcreteGrade).findOne({ where: { id: gradeId } });
@@ -171,9 +173,25 @@ export class QcService {
         }
       }
       if (!(fck > 0)) throw badReq('Target strength (fck) is required — set it directly or pick a grade like M25');
-      await this.assertGradeMatchesTicket(m, batchTicketId, gradeId);
+      this.assertGradeMatchesTicket(ticket, gradeId);
 
       await resolveOptionalRef(m, Plant, dto.plantId, 'Plant');
+      await resolveOptionalRef(m, MixDesign, dto.mixDesignId, 'Mix design');
+
+      // The set is judged on the cubes actually cast: specimenCount caps how many
+      // 28-day results may be recorded and decides when the sample is complete.
+      // num('abc') and num(0) are both 0, and a 0 cap switched BOTH protections
+      // off — no cap, and the verdict taken on whatever results arrived first.
+      const specimenCount =
+        dto.specimenCount === undefined || dto.specimenCount === null || dto.specimenCount === ''
+          ? 3
+          : num(dto.specimenCount);
+      if (!Number.isInteger(specimenCount) || specimenCount < 1 || specimenCount > 20) {
+        throw badReq('Specimen count must be a whole number between 1 and 20');
+      }
+      const cubeSizeMm =
+        dto.cubeSizeMm === undefined || dto.cubeSizeMm === null || dto.cubeSizeMm === '' ? 150 : num(dto.cubeSizeMm);
+      if (!(cubeSizeMm > 0)) throw badReq('Cube size (mm) must be greater than zero');
       const setNo = await this.numbering.next(m, tenantId, 'qc_cube_set', 'CUBE-');
       const repo = m.getRepository(QcCubeSet);
       const set = await repo.save(
@@ -181,8 +199,7 @@ export class QcService {
           tenantId, setNo,
           plantId: str(dto.plantId), batchTicketId: str(dto.batchTicketId), mixDesignId: str(dto.mixDesignId),
           gradeId, gradeLabel,
-          castDate, specimenCount: dto.specimenCount ? num(dto.specimenCount) : 3,
-          cubeSizeMm: dto.cubeSizeMm ? num(dto.cubeSizeMm) : 150,
+          castDate, specimenCount, cubeSizeMm,
           targetStrengthMpa: String(fck), samplingRef: str(dto.samplingRef), status: 'open',
           remarks: str(dto.remarks),
         }),

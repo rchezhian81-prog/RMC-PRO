@@ -26,6 +26,11 @@ PG_SERVICE="${PG_SERVICE:-postgres}"
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups/postgres}"
 SCRATCH="${SCRATCH:-rmc_restore_verify}"
 MIN_MIGRATIONS="${MIN_MIGRATIONS:-10}"   # a floor that proves the schema applied (we ship far more)
+# Same reasoning as install-backup-cron.sh: the drill time is written in this
+# named timezone rather than the server's, so a UTC box still runs it overnight
+# local. A cron that ignores CRON_TZ falls back to server-local — today's
+# behaviour — so this never makes matters worse.
+BACKUP_CRON_TZ="${BACKUP_CRON_TZ:-Asia/Kolkata}"
 CRON_FILE="/etc/cron.d/rmc-restore-verify"
 LOG_FILE="/var/log/rmc-restore-verify.log"
 
@@ -51,11 +56,13 @@ install_cron() {
 # scripts/backup/verify-restore.sh — edit there, not here).
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CRON_TZ=$BACKUP_CRON_TZ
 15 3 1 * *  $run_user  cd $REPO_ROOT && ./scripts/backup/verify-restore.sh >> $LOG_FILE 2>&1
 EOF
   chmod 644 "$CRON_FILE"
   systemctl reload cron 2>/dev/null || service cron reload 2>/dev/null || true
-  log "installed $CRON_FILE (1st of month, 03:15) -> $LOG_FILE"
+  log "installed $CRON_FILE (1st of month, 03:15 $BACKUP_CRON_TZ) -> $LOG_FILE"
+  log "server clock: $(date '+%Y-%m-%d %H:%M:%S %Z (UTC%:z)')"
   log "running one drill now:"; drill
 }
 

@@ -102,6 +102,36 @@ alternative — set `RMC_OFFBOX_SCP` and leave `RMC_OFFBOX_RCLONE` unset.
 > restore takes; that time is your restore-side RTO. Confirm the newest B2 dump
 > restores cleanly, not just the on-box copy.
 
+## What time do the backups actually run?
+
+The schedules say 02:15 / 02:30 / 02:45, and the restore drill 03:15 — and those
+are **IST**, not server time. `CRON_TZ=Asia/Kolkata` is written into both cron
+files, so a server left on UTC still backs up overnight local rather than during
+the working day.
+
+This is worth knowing because it bit us: with no `CRON_TZ`, cron interprets
+`15 2 * * *` in the server's timezone. On a UTC box that fires at **02:15 UTC =
+07:45 IST** — a `pg_dump` plus an off-box upload landing mid-morning, against
+live dispatch and billing traffic. The backups all succeeded, so nothing looked
+wrong; only the timestamps in `/var/log/rmc-backup.log` showed it.
+
+Override the zone if the plant is elsewhere:
+
+```bash
+sudo BACKUP_CRON_TZ=Asia/Dubai ./scripts/backup/install-backup-cron.sh
+```
+
+A cron build that does not understand `CRON_TZ` treats it as an ordinary
+environment variable and falls back to server-local time — the old behaviour —
+so this can only help or be neutral. Confirm which you got from the next run:
+
+```bash
+grep 'starting daily backup' /var/log/rmc-backup.log | tail -1
+```
+
+Those timestamps are in the **server's** zone, so on a UTC box a correctly
+pinned 02:15 IST backup will appear there as `20:45` the previous day.
+
 ## Retention & the deploy flow
 - `pg-backup.sh --label pre-migrate` **before every migration** — the rollback anchor
   referenced in the deploy runbook (§7 rollback) and plan (§5, §11).

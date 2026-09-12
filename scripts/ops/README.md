@@ -471,3 +471,44 @@ passes.
 Note the login rate limit: `/auth/login` allows `AUTH_THROTTLE_LIMIT` (default
 5) attempts per minute per IP, so repeated runs in quick succession will see
 429s on sign-in rather than a failure of the checks themselves.
+
+## Deploying a new commit — the whole sequence
+
+`redeploy.sh` **builds the current checkout**. It takes no commit argument: the
+SHA you want is selected by checking it out, not by naming it on the command
+line. (Passing one is now refused outright — see `lib-args.sh` — because bash
+used to ignore it silently, which made a stale rebuild read like a fresh
+deploy.)
+
+```bash
+cd /opt/rmc
+
+# 1. Move the checkout to what you intend to ship. `git fetch` alone does NOT
+#    do this — it updates origin/main and leaves the working tree where it was.
+git pull --ff-only origin main
+git log --oneline -1                     # this is the commit that will be built
+
+# 2. Keep the image label in step with the checkout (redeploy refuses a mismatch)
+sudo sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$(git rev-parse --short=7 HEAD)/" .env.production
+
+# 3. Gate, deploy, verify — none of these take arguments
+sudo ./scripts/ops/migration-preflight.sh
+sudo ./scripts/ops/redeploy.sh
+./scripts/ops/verify-app.sh
+```
+
+### Confirming what is actually running
+
+`verify-app.sh` proves the app works, not which commit it is. To check the
+deployed code really is the commit you think, look for a file that only exists
+in it:
+
+```bash
+DC="docker compose --env-file .env.production -f docker/docker-compose.prod.yml"
+$DC exec -T api sh -c 'ls -1 dist/common/user-throttler.guard.js'   # added in cff2198
+grep ^IMAGE_TAG= .env.production
+git log --oneline -1
+```
+
+All three should agree. A tag names whatever was built; it is not evidence on
+its own.

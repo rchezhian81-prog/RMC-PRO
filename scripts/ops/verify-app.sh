@@ -26,6 +26,12 @@
 #      COMPOSE_FILE, ENV_FILE, CERT_WARN_DAYS (default 21).
 set -uo pipefail
 
+# Refuse a positional argument: these act on the current checkout, and a silently
+# ignored commit-ish makes a stale build look like a fresh deploy.
+# shellcheck source=scripts/ops/lib-args.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-args.sh"
+reject_positional_args "$@"
+
 DOMAIN="${DOMAIN:-mixnovas.com}"
 APP="https://app.${DOMAIN}"
 API="https://api.${DOMAIN}"

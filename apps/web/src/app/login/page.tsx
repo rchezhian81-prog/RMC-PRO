@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, BLOCKED_REASON_KEY } from '../../lib/api';
 import { saveSession } from '../../lib/session';
@@ -75,7 +76,9 @@ export default function LoginPage() {
     return (
       <main className="mn-app mn-login-v2">
         <aside className="mn-login-hero">
-          <Logo size="lg" onDark />
+          <Link href="/" aria-label="Mix Nova home" className="mn-login-home">
+            <Logo size="lg" onDark />
+          </Link>
           <h2 className="mn-login-hero-title">Smart Mix. Stronger Future.</h2>
           <p className="mn-login-hero-sub">
             The operating system for your ready-mix concrete plant — sales, production, dispatch and
@@ -170,7 +173,9 @@ export default function LoginPage() {
       >
         {/* Nova-gradient brand header */}
         <div className="mn-gradient" style={{ padding: '26px 28px 22px' }}>
-          <Logo size="lg" showTagline onDark />
+          <Link href="/" aria-label="Mix Nova home" className="mn-login-home">
+            <Logo size="lg" showTagline onDark />
+          </Link>
         </div>
 
         <div style={{ padding: 28 }}>

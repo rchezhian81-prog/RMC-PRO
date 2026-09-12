@@ -13,18 +13,24 @@ try {
 }
 
 /**
- * Content-Security-Policy — the interim XSS-surface mitigation (QA #5).
+ * Content-Security-Policy.
  *
- * TRADE-OFF (documented): access/refresh tokens are still kept in localStorage,
- * not httpOnly cookies. A full cookie migration is non-trivial here because the
- * web app (app.<domain>) and API (api.<domain>) are different origins, so the
- * cookies would need SameSite=None + credentialed CORS + CSRF tokens — a
- * cross-cutting change we are not making on a live pilot mid-flight. Until then
- * this CSP shrinks the XSS surface that makes localStorage tokens exploitable:
- * it blocks loading external scripts and, crucially, blocks connections
- * (exfiltration) to anywhere but our own API — so injected JS cannot phone a
- * stolen token home. Inline scripts/styles stay allowed (Next hydration + the
- * app's inline styles); tightening those to nonces is the follow-up.
+ * WHAT IT DEFENDS NOW: the cookie migration this comment used to defer has
+ * happened. The refresh token rides in the httpOnly `rmc_rt` cookie (see
+ * auth.controller.ts) and the access token is held in memory — the web app puts
+ * no token in localStorage at all, which holds only the theme and sidebar
+ * preference. So the CSP is no longer standing in for exposed tokens.
+ *
+ * It still earns its place against what XSS could otherwise do with a session
+ * it cannot read: `connect-src` confines requests to our own API, so injected
+ * JS cannot exfiltrate tenant data it reads through the user's session;
+ * `frame-ancestors 'none'` blocks clickjacking; `object-src 'none'` and
+ * `base-uri 'self'` close the plugin and base-tag vectors.
+ *
+ * REMAINING LOOSENESS: `script-src` still allows 'unsafe-inline' and
+ * 'unsafe-eval' (Next hydration and the app's inline styles). Moving to nonces,
+ * and dropping 'unsafe-eval' — which a production Next build should not need —
+ * is the follow-up, and wants a browser pass over every screen before it ships.
  */
 const csp = [
   `default-src 'self'`,

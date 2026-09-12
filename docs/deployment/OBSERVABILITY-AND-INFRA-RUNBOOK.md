@@ -170,3 +170,41 @@ scrape_configs:
 
 None of the remaining infra items block the current release; they are the next
 rung of operability once the app-level hardening (Waves 0–2 + RLS) is deployed.
+
+## 9. Load probe (`scripts/ops/load-test.mjs`)
+
+A read-only probe that drives GET endpoints at a chosen concurrency and reports
+per-endpoint p50/p95/p99, throughput and error rate. It issues **no writes** — a
+write load test against a live pilot would leave real orders, invoices and stock
+movements behind.
+
+```bash
+LOGIN=owner@pilot1.com RMC_PASSWORD=... \
+  API_BASE=http://localhost:4000 CONCURRENCY=10 DURATION_SEC=30 \
+  node scripts/ops/load-test.mjs
+```
+
+It exits non-zero when `P95_BUDGET_MS` (default 1500) or `ERROR_BUDGET` (default
+1%) is breached, so it can gate a release. Against anything other than localhost
+it refuses to run without `I_MEAN_IT=1`: sustained load competes with real users
+for the same database connections, so it belongs in a maintenance window.
+
+### Read the 429s before you read the latency
+
+The API throttles **100 requests per 60 s per client IP** across all routes
+(`THROTTLE_LIMIT` / `THROTTLE_TTL`). A probe from one machine therefore measures
+the throttler, not the application — a first run will show a handful of 200s and
+then a wall of 429s, which is the rate limiter working, not the app failing.
+
+To measure the app, raise the limit for the window you are testing:
+
+```bash
+# in .env.production, for the duration of the test only
+THROTTLE_LIMIT=100000
+```
+
+and put it back afterwards. Note what this implies for real plants: a site whose
+staff share one public IP shares one 100/min bucket, so a handful of concurrent
+users can exhaust it during normal work. Tracking authenticated requests per
+USER rather than per IP — keeping a strict per-IP limit on `/auth/login` — is the
+change that removes that ceiling without weakening brute-force protection.

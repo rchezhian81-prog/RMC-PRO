@@ -576,6 +576,53 @@ else
   fi
 fi
 
+section "7. Backups & alerting"
+
+# Nothing else checks that the SCHEDULED backups are actually producing files.
+# redeploy.sh takes a pre-redeploy snapshot, and verify-restore.sh proves a dump
+# restores — but neither notices if the nightly cron stopped running a month ago,
+# which is exactly the failure that leaves you with a proven restore of a stale
+# backup. Checking it here means every deploy asks the question.
+BK_DIR="${BACKUP_DIR:-backups/postgres}"
+if [ -d "$BK_DIR" ]; then
+  # Scheduled dumps only: pre-redeploy/install-check/offbox-check snapshots are
+  # operator-triggered and say nothing about whether the schedule is alive.
+  newest=""
+  for f in "$BK_DIR"/rmc-daily-*.dump "$BK_DIR"/rmc-weekly-*.dump "$BK_DIR"/rmc-monthly-*.dump; do
+    [ -f "$f" ] || continue
+    [ -z "$newest" ] || [ "$f" -nt "$newest" ] && newest="$f"
+  done
+  if [ -z "$newest" ]; then
+    bad "scheduled backup" "no rmc-daily/weekly/monthly dump exists — is the cron installed? scripts/backup/install-backup-cron.sh"
+  else
+    age_h=$(( ( $(date +%s) - $(stat -c %Y "$newest" 2>/dev/null || echo 0) ) / 3600 ))
+    if   [ "$age_h" -le 48 ];  then ok   "scheduled backup" "$(basename "$newest") — ${age_h}h old"
+    elif [ "$age_h" -le 192 ]; then warn "scheduled backup" "$(basename "$newest") — ${age_h}h old (a daily should be <48h)"
+    else bad "scheduled backup" "$(basename "$newest") — ${age_h}h old; the schedule has stopped producing backups"; fi
+    if [ -f "$newest.sha256" ]; then ok "backup checksum" "present"
+    else warn "backup checksum" "no .sha256 beside $(basename "$newest")"; fi
+  fi
+else
+  skip "scheduled backup" "run from the repo root on the server"
+fi
+
+# On-box copies die with the box, so an unset off-box target is a real gap even
+# when every backup is fresh.
+if [ -f "$ENV_FILE" ]; then
+  offbox="$(grep -E '^RMC_OFFBOX_(RCLONE|SCP)=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' | head -1)"
+  if [ -n "$offbox" ]; then ok "off-box target" "configured"
+  else warn "off-box target" "unset — every backup lives only on this box (scripts/backup/README.md)"; fi
+
+  # health-check.sh returns silently when no webhook is set, so the monitor cron
+  # runs and alerts nowhere. Say so here rather than letting it stay invisible.
+  alertw="$(grep -E '^(RMC_ALERT_WEBHOOK|ALERT_WEBHOOK_URL)=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' | head -1)"
+  if [ -n "$alertw" ]; then ok "failure alerting" "webhook configured"
+  else warn "failure alerting" "no RMC_ALERT_WEBHOOK/ALERT_WEBHOOK_URL — backup failures and 5xx alert nowhere"; fi
+else
+  skip "off-box target"  "run from the repo root on the server"
+  skip "failure alerting" "run from the repo root on the server"
+fi
+
 # ------------------------------------------------------------------ verdict --
 printf '\n────────────────────────────────────────\n'
 printf '%s%d passed%s · %s%d failed%s · %s%d warning(s)%s · %d skipped\n' \

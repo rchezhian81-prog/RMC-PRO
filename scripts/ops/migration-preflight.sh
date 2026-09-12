@@ -27,6 +27,12 @@
 # =============================================================================
 set -u
 
+# Refuse a positional argument: these act on the current checkout, and a silently
+# ignored commit-ish makes a stale build look like a fresh deploy.
+# shellcheck source=scripts/ops/lib-args.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-args.sh"
+reject_positional_args "$@"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.production}"
 COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"

@@ -441,3 +441,33 @@ challenge) — remove them: `rm -f /etc/letsencrypt/renewal-hooks/{pre,post}/10-
 (no rate-limit impact, real cert untouched); it briefly stops+starts nginx
 (~10-15s HTTPS blip) to prove the whole path. A green dry-run — *"Congratulations,
 all simulated renewals succeeded"* — means renewals are now hands-off.
+
+## `verify-tenant-isolation.mjs` — prove two live tenants cannot see each other
+
+The RLS isolation e2e test runs in CI against synthetic fixtures. This runs
+against the real box with real tenants, which is the only thing that proves the
+*deployed* configuration — roles, policies, the app DB user — actually enforces
+isolation.
+
+```bash
+read -rs PASSWORD_A; export PASSWORD_A
+read -rs PASSWORD_B; export PASSWORD_B
+LOGIN_A='owner@pilot1.com' LOGIN_B='owner@pilot2.com' \
+  node scripts/ops/verify-tenant-isolation.mjs
+unset PASSWORD_A PASSWORD_B
+```
+
+For each tenant-scoped collection it checks that the two lists are disjoint and
+then — the stronger check — fetches one of A's record ids **as B** and requires a
+404. A 200 there is a data breach; a 500 means the row was reached before
+something failed. It also confirms neither tenant owner can reach the platform
+console, and refuses to run at all if both logins resolve to the same tenant,
+since every check would then pass vacuously.
+
+Read-only (GETs only), and it prints counts and verdicts rather than tenant
+data, so the output is safe to paste into a ticket. Exit 0 only if every check
+passes.
+
+Note the login rate limit: `/auth/login` allows `AUTH_THROTTLE_LIMIT` (default
+5) attempts per minute per IP, so repeated runs in quick succession will see
+429s on sign-in rather than a failure of the checks themselves.

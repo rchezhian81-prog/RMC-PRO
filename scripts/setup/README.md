@@ -297,3 +297,41 @@ The tenant screen in the admin portal has **Offboarding → Download all data
 (JSON)** — the same export, without SSH, for handing to the customer. Every
 export is recorded in that tenant's audit trail. The portal deliberately has no
 "delete" button: the irreversible purge is this script alone.
+
+## Provisioning a new tenant
+
+`provision-tenant.mjs` does what *Platform → Tenants* does, without the
+clicking: creates the tenant, assigns a plan, creates its first owner user, and
+enables any modules the plan does not turn on by default. `offboard-tenant.sh`
+already existed; this is the other half.
+
+```bash
+LOGIN='super@platform.com' node scripts/setup/provision-tenant.mjs --list-plans
+LOGIN='super@platform.com' node scripts/setup/provision-tenant.mjs --list-modules
+
+read -rs RMC_PASSWORD;   export RMC_PASSWORD      # YOUR super-admin password
+read -rs OWNER_PASSWORD; export OWNER_PASSWORD    # the new tenant owner's
+LOGIN='super@platform.com' \
+TENANT_CODE='PILOT2' TENANT_NAME='Second Ready Mix' \
+OWNER_NAME='Owner Name' OWNER_EMAIL='owner@pilot2.com' \
+PLAN_CODE='PRO' MODULES='qc,purchase,weighbridge' \
+  node scripts/setup/provision-tenant.mjs
+unset RMC_PASSWORD OWNER_PASSWORD
+```
+
+Run each `read -rs` on its own line. Add `--dry-run` to validate without
+creating anything. Neither password is printed, logged or written to disk.
+
+Safe to re-run: an existing `TENANT_CODE` is reused rather than duplicated, an
+existing owner email is left alone, and re-enabling a module is a no-op — so a
+partially-failed run can simply be repeated.
+
+**Then prove the isolation** — that is the whole reason to have a second tenant:
+
+```bash
+read -rs PASSWORD_A; export PASSWORD_A
+read -rs PASSWORD_B; export PASSWORD_B
+LOGIN_A='owner@pilot1.com' LOGIN_B='owner@pilot2.com' \
+  node scripts/ops/verify-tenant-isolation.mjs
+unset PASSWORD_A PASSWORD_B
+```

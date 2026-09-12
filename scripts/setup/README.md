@@ -298,7 +298,26 @@ The tenant screen in the admin portal has **Offboarding → Download all data
 export is recorded in that tenant's audit trail. The portal deliberately has no
 "delete" button: the irreversible purge is this script alone.
 
-## Provisioning a new tenant
+## Onboarding a new tenant — start here
+
+`onboard-tenant.sh` is the one to use unless you are scripting. It asks plain
+questions, generates passwords that satisfy the policy, shows you a summary
+before creating anything, and offers to prove the new tenant is isolated
+afterwards:
+
+```bash
+cd /opt/rmc
+bash scripts/setup/onboard-tenant.sh
+```
+
+Nothing is created until you type `yes` at the summary. If the super-admin
+password is wrong it tells you so and points at the reset command instead of
+dead-ending, and it refuses values still containing `<` `>` so example text
+pasted from a chat cannot become a real company name.
+
+`provision-tenant.mjs` below is the non-interactive form the wizard calls.
+
+## Provisioning a new tenant (non-interactive)
 
 `provision-tenant.mjs` does what *Platform → Tenants* does, without the
 clicking: creates the tenant, assigns a plan, creates its first owner user, and

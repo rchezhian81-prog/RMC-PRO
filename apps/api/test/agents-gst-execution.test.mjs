@@ -249,6 +249,13 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   const [cJob] = await owner.query(`SELECT status, last_error FROM gst_execution_jobs WHERE approval_id=$1`, [cApprovalId]);
   ok('the queued job is dead-lettered by the cancel (same transaction)', cJob?.status === 'dead' && /cancelled/i.test(cJob?.last_error ?? ''));
   const cExec = await api('POST', `/agents/approvals/${cApprovalId}/execute`);
+  // GW-1 regression: a manual execute must RECONCILE the durable job, or a later
+  // drain re-files the same GST action. The reconcile UPDATE used to be rejected
+  // by Postgres on every call ("inconsistent types deduced for parameter $3")
+  // and the failure was swallowed by a catch, so the job kept its old status.
+  const [cJobAfter] = await owner.query(`SELECT status FROM gst_execution_jobs WHERE approval_id=$1`, [cApprovalId]);
+  ok('the job row is still reconciled (not left mid-flight) after a manual execute', typeof cJobAfter?.status === 'string' && cJobAfter.status !== 'queued' && cJobAfter.status !== 'running');
+
   ok('executing the approval afterwards is REFUSED (invoice not issued) — nothing filed', cExec.data?.status === 'refused');
   const [cRow] = await owner.query(`SELECT irn, einvoice_status, invoice_status FROM invoices WHERE id=$1`, [cInv.invId]);
   ok('no IRN was stamped on the cancelled invoice', cRow.irn === null && cRow.invoice_status === 'cancelled' && cRow.einvoice_status !== 'generated');

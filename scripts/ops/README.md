@@ -442,6 +442,32 @@ challenge) — remove them: `rm -f /etc/letsencrypt/renewal-hooks/{pre,post}/10-
 (~10-15s HTTPS blip) to prove the whole path. A green dry-run — *"Congratulations,
 all simulated renewals succeeded"* — means renewals are now hands-off.
 
+## Isolation as part of the post-deploy check
+
+`verify-app.sh` runs the isolation check as **section 6** when you give it a
+login in a second tenant. It is opt-in: with `LOGIN_B` unset the section is
+skipped and everything else behaves exactly as before, so a single-tenant
+install is unaffected.
+
+```bash
+LOGIN='smoke.verify@pilot1.com' RMC_PASSWORD='...' \
+LOGIN_B='smoke.verify@pilot2.com' PASSWORD_B='...' \
+  bash scripts/ops/verify-app.sh
+```
+
+Use a **read-only auditor** account in each tenant, as `smoke.verify` already is
+for the first — that keeps owner passwords out of the routine post-deploy loop.
+Create one in the new tenant with `scripts/setup/create-staff-user.mjs` and the
+`auditor` role.
+
+A failure prints the underlying check output indented beneath the ✗ line, and a
+misconfiguration where both logins land in the same tenant is reported as a
+failure rather than a vacuous pass.
+
+**It costs two extra sign-ins.** `/auth/login` allows `AUTH_THROTTLE_LIMIT`
+(default 5) per minute per IP, so with section 6 enabled two runs back to back
+will start returning 429 on sign-in. That is the rate limiter, not a fault.
+
 ## `verify-tenant-isolation.mjs` — prove two live tenants cannot see each other
 
 The RLS isolation e2e test runs in CI against synthetic fixtures. This runs

@@ -1,7 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { UserThrottlerGuard } from './common/user-throttler.guard';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { RequestContextMiddleware } from './common/request-context.middleware';
 import { MetricsModule } from './common/metrics.module';
 import { DatabaseModule } from './core/database/database.module';
@@ -74,7 +75,7 @@ import { GpsModule } from './gps/gps.module';
     CorrectionModule,
     GpsModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: UserThrottlerGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

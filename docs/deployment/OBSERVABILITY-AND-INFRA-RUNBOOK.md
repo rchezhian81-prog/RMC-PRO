@@ -191,20 +191,28 @@ for the same database connections, so it belongs in a maintenance window.
 
 ### Read the 429s before you read the latency
 
-The API throttles **100 requests per 60 s per client IP** across all routes
-(`THROTTLE_LIMIT` / `THROTTLE_TTL`). A probe from one machine therefore measures
-the throttler, not the application — a first run will show a handful of 200s and
-then a wall of 429s, which is the rate limiter working, not the app failing.
+The API throttles **100 requests per 60 s** (`THROTTLE_LIMIT` / `THROTTLE_TTL`).
+An **authenticated** request is counted against the *user*; anything without a
+valid bearer token — `/auth/login`, `/auth/refresh`, `/health` — is counted
+against the *client IP* (`UserThrottlerGuard`). So a probe run anonymously from
+one machine measures the IP bucket, not the application: a first run shows a
+handful of 200s and then a wall of 429s, which is the rate limiter working, not
+the app failing.
 
-To measure the app, raise the limit for the window you are testing:
+To measure the app, either pass `LOGIN`/`RMC_PASSWORD` so the probe runs as a
+user, or raise the limit for the window you are testing:
 
 ```bash
 # in .env.production, for the duration of the test only
 THROTTLE_LIMIT=100000
 ```
 
-and put it back afterwards. Note what this implies for real plants: a site whose
-staff share one public IP shares one 100/min bucket, so a handful of concurrent
-users can exhaust it during normal work. Tracking authenticated requests per
-USER rather than per IP — keeping a strict per-IP limit on `/auth/login` — is the
-change that removes that ceiling without weakening brute-force protection.
+and put it back afterwards. Even as a single user the probe will still hit the
+per-user ceiling at default settings — one virtual user is not one human.
+
+> **Why per-user:** keying purely on IP meant a site whose staff share one public
+> address shared one 100/min bucket, so a handful of people working normally
+> exhausted it and everyone there began seeing 429s. Login and refresh carry no
+> token and stay IP-keyed, so brute-force protection is unchanged. The guard
+> *verifies* the token rather than decoding it — trusting an unverified `sub`
+> would let anyone mint unlimited buckets and switch the limiter off.

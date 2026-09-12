@@ -132,9 +132,16 @@ export class GstJobService {
     try {
       await this.db.runInTenant(tenantId, (m) =>
         m.query(
+          // $3 is CAST on both uses. Without the casts Postgres infers varchar
+          // from `status=$3` and text from the IN-list, cannot reconcile the two,
+          // and rejects the statement with "inconsistent types deduced for
+          // parameter $3" — every single time. The catch below turned that into a
+          // log line, so this reconcile silently never ran: after a manual
+          // execute the job kept its old status and a later drain could re-file
+          // the same GST action, which is the exact thing it exists to prevent.
           `UPDATE gst_execution_jobs
-              SET status=$3, last_outcome=$4, last_error=$5,
-                  attempts = attempts + CASE WHEN $3 IN ('failed','dead') THEN 1 ELSE 0 END,
+              SET status=$3::text, last_outcome=$4, last_error=$5,
+                  attempts = attempts + CASE WHEN $3::text IN ('failed','dead') THEN 1 ELSE 0 END,
                   updated_at = now()
             WHERE approval_id=$2 AND tenant_id=$1 AND status IN ('queued','running','failed')`,
           [tenantId, approvalId, target, outcome.status, outcomeError(outcome)],

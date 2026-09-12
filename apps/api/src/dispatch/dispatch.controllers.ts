@@ -47,7 +47,7 @@ export class DeliveryChallanController {
     private readonly pdf: PdfService,
   ) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
 
   @Get('report/wastage')
   @RequirePermissions('reports.view')

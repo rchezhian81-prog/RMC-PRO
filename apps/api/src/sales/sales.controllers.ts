@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -32,8 +33,8 @@ export class LeadsController {
   constructor(private readonly service: LeadsService) {}
 
   @Get() @RequirePermissions('leads.view')
-  list(@CurrentUser() u: AuthUser) {
-    return this.service.list(tid(u));
+  list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), limit);
   }
   @Get(':id') @RequirePermissions('leads.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) {
@@ -67,8 +68,8 @@ export class QuotationsController {
   ) {}
 
   @Get() @RequirePermissions('quotations.view')
-  list(@CurrentUser() u: AuthUser) {
-    return this.service.list(tid(u));
+  list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), limit);
   }
   @Get(':id') @RequirePermissions('quotations.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) {
@@ -147,8 +148,8 @@ export class RateContractsController {
   constructor(private readonly service: RateContractsService) {}
 
   @Get() @RequirePermissions('rate_contracts.view')
-  list(@CurrentUser() u: AuthUser) {
-    return this.service.list(tid(u));
+  list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), limit);
   }
   @Get(':id') @RequirePermissions('rate_contracts.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) {

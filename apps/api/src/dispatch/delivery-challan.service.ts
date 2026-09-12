@@ -1,3 +1,4 @@
+import { listLimit } from '../common/list-limit.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -38,11 +39,12 @@ export class DeliveryChallanService {
     private readonly whatsapp: WhatsAppService,
   ) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(DeliveryChallan).find({
         where: status ? { challanStatus: status } : {},
         order: { createdAt: 'DESC' },
+        take: listLimit(limit),
       }),
     );
   }

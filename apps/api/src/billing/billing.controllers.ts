@@ -29,7 +29,7 @@ export class InvoiceController {
     private readonly pdf: PdfService,
   ) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   @Get('billable-challans') billable(@CurrentUser() u: AuthUser, @Query('customerId') customerId?: string) { return this.service.billableChallans(tid(u), customerId); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 

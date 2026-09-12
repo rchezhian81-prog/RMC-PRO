@@ -1,3 +1,4 @@
+import { listLimit } from '../common/list-limit.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Lead, LeadFollowup } from '../core/database/entities';
@@ -14,9 +15,9 @@ export class LeadsService {
     private readonly numbering: NumberingService,
   ) {}
 
-  list(tenantId: string) {
+  list(tenantId: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Lead).find({ order: { createdAt: 'DESC' } }),
+      m.getRepository(Lead).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 

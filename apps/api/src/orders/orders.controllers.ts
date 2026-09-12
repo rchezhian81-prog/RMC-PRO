@@ -18,8 +18,8 @@ export class OrdersController {
 
   @Get()
   @RequirePermissions('orders.view')
-  list(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
-    return this.service.list(tid(u), status);
+  list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), status, limit);
   }
 
   // Declared before `:id` so the literal path wins over the id param route.

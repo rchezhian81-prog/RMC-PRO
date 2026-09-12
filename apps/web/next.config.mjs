@@ -27,14 +27,20 @@ try {
  * `frame-ancestors 'none'` blocks clickjacking; `object-src 'none'` and
  * `base-uri 'self'` close the plugin and base-tag vectors.
  *
- * REMAINING LOOSENESS: `script-src` still allows 'unsafe-inline' and
- * 'unsafe-eval' (Next hydration and the app's inline styles). Moving to nonces,
- * and dropping 'unsafe-eval' — which a production Next build should not need —
- * is the follow-up, and wants a browser pass over every screen before it ships.
+ * 'unsafe-eval' is GONE. A production Next build does not need it: no file in
+ * the client or server output uses `eval(` or `new Function(` (99 + 170 files
+ * checked), and Chromium loading /, /login and /app under the stricter policy
+ * reports zero CSP violations with byte-identical DOM. If a future dependency
+ * needs it, the symptom is a console error naming 'unsafe-eval' — add it back
+ * here rather than working around it.
+ *
+ * REMAINING LOOSENESS: `script-src` still allows 'unsafe-inline', which Next's
+ * hydration bootstrap requires. Moving that to nonces is the next step and needs
+ * a `headers()` -> middleware change, since a nonce must be per-request.
  */
 const csp = [
   `default-src 'self'`,
-  `script-src 'self' 'unsafe-inline' 'unsafe-eval'`,
+  `script-src 'self' 'unsafe-inline'`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: blob:`,
   `font-src 'self' data:`,

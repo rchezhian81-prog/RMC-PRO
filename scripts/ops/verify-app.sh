@@ -23,7 +23,13 @@
 # never written to disk. The access token is likewise never displayed.
 #
 # Env: DOMAIN (default mixnovas.com), LOGIN, RMC_PASSWORD,
-#      COMPOSE_FILE, ENV_FILE, CERT_WARN_DAYS (default 21).
+#      COMPOSE_FILE, ENV_FILE, CERT_WARN_DAYS (default 21),
+#      LOGIN_B / PASSWORD_B (optional: a login in a SECOND tenant — enables the
+#      cross-tenant isolation check in section 6; skipped when unset).
+#
+# Note if you enable section 6: the run then makes three sign-ins instead of
+# one, and /auth/login allows AUTH_THROTTLE_LIMIT (default 5) per minute per IP
+# — so two runs back to back will start returning 429 on sign-in.
 set -uo pipefail
 
 # Refuse a positional argument: these act on the current checkout, and a silently
@@ -34,7 +40,7 @@ reject_positional_args "$@"
 
 DOMAIN="${DOMAIN:-mixnovas.com}"
 APP="https://app.${DOMAIN}"
-API="https://api.${DOMAIN}"
+API="${API:-https://api.${DOMAIN}}"
 ADMIN="https://admin.${DOMAIN}"
 LOGIN="${LOGIN:-${RMC_LOGIN:-}}"
 PASSWORD="${RMC_PASSWORD:-}"
@@ -530,6 +536,44 @@ else
   skip "containers" "run from the repo root on the server"
   skip "api errors"  "run from the repo root on the server"
   skip "disk usage"  "run from the repo root on the server"
+fi
+
+section "6. Tenant isolation (cross-tenant reads)"
+
+# The RLS isolation e2e test runs in CI against synthetic fixtures. This is the
+# same question asked of the DEPLOYED configuration — roles, policies, the app
+# DB user — with real tenants, which is the only thing that proves multi-tenancy
+# actually holds in production. Opt-in, because it needs a login in a second
+# tenant; without one every check below would pass vacuously.
+#
+# Prefer a READ-ONLY auditor account in each tenant (as smoke.verify is for the
+# first), so the routine post-deploy check never needs an owner password.
+ISO_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/verify-tenant-isolation.mjs"
+if [ -z "${LOGIN_B:-}" ]; then
+  skip "tenant isolation" "set LOGIN_B/PASSWORD_B to a second tenant's login to enable"
+elif [ -z "$TOKEN" ]; then
+  skip "tenant isolation" "needs the primary login too (LOGIN/RMC_PASSWORD)"
+elif [ -z "${PASSWORD_B:-}" ]; then
+  skip "tenant isolation" "PASSWORD_B is not set for $LOGIN_B"
+elif ! command -v node >/dev/null 2>&1; then
+  skip "tenant isolation" "node is not on PATH"
+elif [ ! -f "$ISO_SCRIPT" ]; then
+  skip "tenant isolation" "verify-tenant-isolation.mjs not found — git pull"
+else
+  ISO_OUT="$(API_URL="$API" \
+    LOGIN_A="$LOGIN" PASSWORD_A="$PASSWORD" \
+    LOGIN_B="$LOGIN_B" PASSWORD_B="$PASSWORD_B" \
+    node "$ISO_SCRIPT" 2>&1)"
+  ISO_RC=$?
+  ISO_TALLY="$(printf '%s' "$ISO_OUT" | grep -E '^[0-9]+ passed' | tail -1)"
+  if [ "$ISO_RC" -eq 0 ]; then
+    ok "tenant isolation" "${ISO_TALLY:-all cross-tenant reads refused}"
+  else
+    bad "tenant isolation" "${ISO_TALLY:-check failed}"
+    # Only on failure: show which check broke. The script prints counts and
+    # verdicts, never tenant data, so this stays safe to paste into a ticket.
+    printf '%s\n' "$ISO_OUT" | sed 's/^/      /'
+  fi
 fi
 
 # ------------------------------------------------------------------ verdict --

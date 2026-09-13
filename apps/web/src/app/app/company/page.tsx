@@ -79,6 +79,8 @@ function fileToBase64(file: File): Promise<{ mime: string; base64: string; dataU
 
 export default function CompanyPage() {
   const [form, setForm] = useState<Record<string, string>>({});
+  // Kept out of `form`, which holds text fields only.
+  const [einvoiceApplicable, setEinvoiceApplicable] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +102,7 @@ export default function CompanyPage() {
           const next: Record<string, string> = {};
           for (const k of ALL_KEYS) next[k] = String(rec[k] ?? '');
           setForm(next);
+          setEinvoiceApplicable(rec.einvoiceApplicable === true);
           if (rec.logoData && rec.logoMime) {
             setPreview(`data:${String(rec.logoMime)};base64,${String(rec.logoData)}`);
             setHasServerLogo(true);
@@ -175,7 +178,7 @@ export default function CompanyPage() {
       // Send only the profile keys, trimmed.
       const payload: Record<string, string> = {};
       for (const k of ALL_KEYS) payload[k] = (form[k] ?? '').trim();
-      await company.update(payload);
+      await company.update({ ...payload, einvoiceApplicable });
       setMsg('Saved.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
@@ -254,6 +257,24 @@ export default function CompanyPage() {
               </div>
             </Card>
           ))}
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <Card title="GST filing">
+            <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '0 0 12px' }}>
+              E-invoicing (getting an IRN from the government portal before a sale) applies only to
+              businesses above the turnover limit — ₹5 crore at present. Your accountant will tell you
+              if it applies to you. Leave this off if it does not: the compliance report then stops
+              asking for an IRN on every invoice.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={einvoiceApplicable}
+                onChange={(e) => setEinvoiceApplicable(e.target.checked)}
+              />
+              E-invoicing applies to this company
+            </label>
+          </Card>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
           <Button type="submit">Save profile</Button>

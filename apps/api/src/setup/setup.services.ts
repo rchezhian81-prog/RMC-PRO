@@ -71,9 +71,17 @@ export class CompanyService {
       'companyName', 'legalName', 'gstin', 'pan', 'addressLine1', 'addressLine2',
       'city', 'state', 'pincode', 'phone', 'email', 'website',
       'bankName', 'bankAccountNo', 'bankIfsc', 'bankBranch',
+      'einvoiceApplicable',
     ] as const;
     for (const k of fields) {
       if (dto[k] !== undefined) patch[k] = dto[k];
+    }
+    // A checkbox reaches here as true, "true", "on" or 1 depending on the client.
+    // The column is NOT NULL boolean, so settle it to a real boolean rather than
+    // letting the driver decide what "on" means.
+    if (patch.einvoiceApplicable !== undefined) {
+      const v = patch.einvoiceApplicable;
+      patch.einvoiceApplicable = v === true || v === 1 || /^(true|on|yes|1)$/i.test(String(v ?? ''));
     }
     const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Company);

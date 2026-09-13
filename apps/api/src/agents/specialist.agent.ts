@@ -40,18 +40,29 @@ export class SpecialistAgent implements OnModuleInit {
         const days = clampInt((ctx.args as { windowDays?: unknown })?.windowDays, 30, 1, 365);
         const findings: Array<Record<string, unknown>> = [];
 
-        const [irn] = await ctx.manager.query(
-          `SELECT count(*)::int AS count FROM invoices
-            WHERE invoice_status NOT IN ('draft', 'cancelled') AND einvoice_status = 'not_generated'
-              AND created_at >= now() - make_interval(days => $1)`,
-          [days],
+        // E-invoicing binds only above the AATO threshold. Nothing recorded
+        // whether this plant is above it, so this used to warn about every
+        // issued invoice — telling a small plant on every single sale to produce
+        // an IRN it is not required to make and has no IRP credentials for. The
+        // owner says whether the rule applies (Settings → Company); until they
+        // do, it does not, which is the right answer for a plant starting out.
+        const [company] = await ctx.manager.query(
+          `SELECT coalesce(einvoice_applicable, false) AS applicable FROM companies LIMIT 1`,
         );
-        if (num(irn.count) > 0) {
-          findings.push({
-            code: 'einvoice_pending', severity: 'warn', count: num(irn.count),
-            recommendation: 'Generate the IRN via the IRP before the invoice is legally issued/dispatched.',
-            citation: 'India GST e-invoice (IRP/IRN), AATO > ₹5 cr — WR-TAX-12 / IND-02',
-          });
+        if (company?.applicable === true) {
+          const [irn] = await ctx.manager.query(
+            `SELECT count(*)::int AS count FROM invoices
+              WHERE invoice_status NOT IN ('draft', 'cancelled') AND einvoice_status = 'not_generated'
+                AND created_at >= now() - make_interval(days => $1)`,
+            [days],
+          );
+          if (num(irn.count) > 0) {
+            findings.push({
+              code: 'einvoice_pending', severity: 'warn', count: num(irn.count),
+              recommendation: 'Generate the IRN via the IRP before the invoice is legally issued/dispatched.',
+              citation: 'India GST e-invoice (IRP/IRN), AATO > ₹5 cr — WR-TAX-12 / IND-02',
+            });
+          }
         }
 
         const [eway] = await ctx.manager.query(
@@ -79,7 +90,7 @@ export class SpecialistAgent implements OnModuleInit {
         if (num(hsn.count) > 0) {
           findings.push({
             code: 'hsn_missing', severity: 'warn', count: num(hsn.count),
-            recommendation: 'Populate a valid 6-digit HSN/SAC on every line; clearance portals reject missing codes.',
+            recommendation: 'Populate an HSN/SAC on every line — 6 digits above the ₹5 cr turnover threshold, 4 below it; clearance portals reject missing codes.',
             citation: 'India HSN 6-digit at AATO > ₹5 cr — WR-TAX-7 / IND-05',
           });
         }

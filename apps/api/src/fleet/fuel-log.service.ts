@@ -4,6 +4,7 @@ import { MoreThan } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Vehicle, VehicleFuelLog } from '../core/database/entities';
 import { fuelEfficiency, summariseFuel, type FuelSummaryRow } from './fleet.util';
+import { listLimit } from '../common/list-limit.util';
 
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
@@ -20,11 +21,11 @@ const todayIso = (): string => new Date().toISOString().slice(0, 10);
 export class FuelLogService {
   constructor(private readonly db: TenantDbService) {}
 
-  list(tenantId: string, vehicleId?: string) {
+  list(tenantId: string, vehicleId?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) => {
       const where: Record<string, unknown> = {};
       if (vehicleId) where.vehicleId = vehicleId;
-      return m.getRepository(VehicleFuelLog).find({ where, order: { odometer: 'DESC', createdAt: 'DESC' } });
+      return m.getRepository(VehicleFuelLog).find({ where, order: { odometer: 'DESC', createdAt: 'DESC' }, take: listLimit(limit) });
     });
   }
 

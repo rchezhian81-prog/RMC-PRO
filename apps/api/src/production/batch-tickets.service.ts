@@ -14,6 +14,7 @@ import {
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from './stock.service';
 import { applyMoistureCorrection, type MoistureInput } from './moisture-correction.util';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Batch ticket not found' });
 const badReq = (message: string, extra?: unknown) =>
@@ -35,11 +36,12 @@ export class BatchTicketsService {
     private readonly stock: StockService,
   ) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(BatchTicket).find({
         where: status ? { status } : {},
         order: { createdAt: 'DESC' },
+        take: listLimit(limit),
       }),
     );
   }

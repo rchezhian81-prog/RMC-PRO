@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, materialInwardApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -50,9 +52,10 @@ export default function MaterialInwardPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [i, m, s, p] = await Promise.all([materialInwardApi.list(), crud('materials').list(), crud('suppliers').list(), crud('plants').list()]);
+    const [i, m, s, p] = await Promise.all([materialInwardApi.list(undefined, win.limit), crud('materials').list(), crud('suppliers').list(), crud('plants').list()]);
     setRows(i);
     setMaterials(m);
     setSuppliers(s);
@@ -60,7 +63,7 @@ export default function MaterialInwardPage() {
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
     setError(null);
@@ -163,6 +166,8 @@ export default function MaterialInwardPage() {
         ) : (
           <EmptyState title="No inwards yet" description="Receive material to create a GRN." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="inwards" />
       </Card>
     </div>
   );

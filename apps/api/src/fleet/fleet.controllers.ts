@@ -40,8 +40,8 @@ export class MaintenanceJobController {
   constructor(private readonly service: MaintenanceJobService) {}
 
   @Get() @RequirePermissions('fleet.view')
-  list(@CurrentUser() u: AuthUser, @Query('vehicleId') vehicleId?: string, @Query('status') status?: string) {
-    return this.service.list(tid(u), vehicleId, status);
+  list(@CurrentUser() u: AuthUser, @Query('vehicleId') vehicleId?: string, @Query('status') status?: string, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), vehicleId, status, limit);
   }
 
   @Get(':id') @RequirePermissions('fleet.view')
@@ -66,7 +66,7 @@ export class FuelLogController {
   constructor(private readonly service: FuelLogService) {}
 
   @Get() @RequirePermissions('fleet.view')
-  list(@CurrentUser() u: AuthUser, @Query('vehicleId') vehicleId?: string) { return this.service.list(tid(u), vehicleId); }
+  list(@CurrentUser() u: AuthUser, @Query('vehicleId') vehicleId?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), vehicleId, limit); }
 
   @Get('summary/:vehicleId') @RequirePermissions('fleet.view')
   summary(@CurrentUser() u: AuthUser, @Param('vehicleId') vehicleId: string) { return this.service.summary(tid(u), vehicleId); }

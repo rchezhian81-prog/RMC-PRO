@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { purchaseApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -31,12 +33,13 @@ export default function GoodsReceiptsPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
   const [busy, setBusy] = useState(false);
 
-  const reload = async () => setRows(await purchaseApi.grns());
+  const reload = async () => setRows(await purchaseApi.grns(undefined, win.limit));
 
   useEffect(() => {
-    Promise.all([purchaseApi.grns(), purchaseApi.orders()])
+    Promise.all([purchaseApi.grns(undefined, win.limit), purchaseApi.orders()])
       .then(([g, o]) => {
         setRows(g);
         setOpenPos((o as Row[]).filter((p) => ['issued', 'partially_received'].includes(String(p.status))));
@@ -46,7 +49,7 @@ export default function GoodsReceiptsPage() {
     // Preselect a PO passed as ?po=… (from the Purchase Orders "Receive" action).
     const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('po') : null;
     if (q) pickPo(q);
-  }, []);
+  }, [win.limit]);
 
   async function pickPo(id: string) {
     setPoId(id);
@@ -271,6 +274,8 @@ export default function GoodsReceiptsPage() {
         ) : (
           <EmptyState title="No goods receipts" description="Receive a purchase order above to record a GRN." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="goods receipts" />
       </Card>
     </div>
   );

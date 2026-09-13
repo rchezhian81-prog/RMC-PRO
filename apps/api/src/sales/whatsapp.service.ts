@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { NotificationLog } from '../core/database/entities';
+import { listLimit } from '../common/list-limit.util';
 
 export interface WhatsAppShareInput {
   recipientMobile?: string | null;
@@ -60,9 +61,9 @@ export class WhatsAppService {
   }
 
   /** Notification history for a tenant (most recent first). */
-  history(tenantId: string): Promise<NotificationLog[]> {
+  history(tenantId: string, limit?: string): Promise<NotificationLog[]> {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(NotificationLog).find({ order: { createdAt: 'DESC' }, take: 100 }),
+      m.getRepository(NotificationLog).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 }

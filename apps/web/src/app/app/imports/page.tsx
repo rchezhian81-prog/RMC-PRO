@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useListWindow } from '../../../lib/list-window';
+import { ListCap } from '../../../components/ListCap';
 import { downloadImportTemplate, importsApi, type ImportDef, type Row } from '../../../lib/api';
 import { getAccess } from '../../../lib/session';
 import { Card } from '../../../components/ui/Card';
@@ -21,13 +23,14 @@ export default function ImportsPage() {
   const [result, setResult] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const canRun = getAccess().has('imports.run');
 
   async function reload() {
-    const [d, j] = await Promise.all([importsApi.definitions(), importsApi.jobs()]);
+    const [d, j] = await Promise.all([importsApi.definitions(), importsApi.jobs(win.limit)]);
     setDefs(d); setJobs(j);
     const first = d[0];
     if (first && !d.some((x) => x.key === entityType)) setEntityType(first.key);
@@ -36,7 +39,7 @@ export default function ImportsPage() {
     reload()
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   const activeDef = defs.find((d) => d.key === entityType);
 
@@ -141,6 +144,8 @@ export default function ImportsPage() {
         ) : (
           <EmptyState title="No imports yet" description="Run your first bulk import above." />
         )}
+        <ListCap shown={jobs.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="import jobs" />
       </Card>
     </div>
   );

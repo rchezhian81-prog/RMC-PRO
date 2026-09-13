@@ -1,4 +1,4 @@
-import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
+import { listLimit } from '../common/list-limit.util';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -23,9 +23,9 @@ export class MaterialInwardService {
     private readonly stock: StockService,
   ) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(MaterialInward).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
+      m.getRepository(MaterialInward).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 

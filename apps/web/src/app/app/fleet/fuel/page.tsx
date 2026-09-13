@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, fleetApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -21,6 +23,7 @@ export default function FleetFuelPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   // Fuel entry form
   const [fVehicle, setFVehicle] = useState('');
@@ -35,14 +38,14 @@ export default function FleetFuelPage() {
   const vehLabel = (id: unknown) => String(vehicles.find((v) => String(v.id) === String(id))?.vehicleNo ?? '—');
 
   async function reload() {
-    const [lg, vh] = await Promise.all([fleetApi.fuelLogs(filterVehicle || undefined), crud('vehicles').list()]);
+    const [lg, vh] = await Promise.all([fleetApi.fuelLogs(filterVehicle || undefined, win.limit), crud('vehicles').list()]);
     setRows(lg); setVehicles(vh);
     if (filterVehicle) setSummary(await fleetApi.fuelSummary(filterVehicle));
     else setSummary(null);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
-  }, [filterVehicle]);
+  }, [filterVehicle, win.limit]);
 
   async function create() {
     setError(null); setMsg(null);
@@ -143,6 +146,8 @@ export default function FleetFuelPage() {
           ) : (
             <EmptyState title="No fuel entries yet" description={canRecord ? 'Log the first diesel fill above.' : 'Nothing to show.'} />
           )}
+          <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+            onWiden={() => win.setLimit(win.widen())} noun="fuel entries" hint="the running-cost report (Fleet → Reports)" />
         </Card>
       </div>
     </div>

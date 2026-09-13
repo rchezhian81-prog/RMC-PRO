@@ -34,6 +34,7 @@ import {
   type ChallanStatus,
 } from '../dispatch/challan-transition.util';
 import { recordDeliveryHistory } from '../dispatch/delivery-history.util';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = (msg = 'Not found') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: msg });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -911,15 +912,16 @@ export class SyncService {
   }
 
   // ---- Conflicts --------------------------------------------------------
-  listConflicts(tenantId: string, status?: string) {
+  listConflicts(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       // sync_conflicts is append-only and grows with device sync activity; the
-      // screen shows the recent ones to resolve, so bound the read to the most
-      // recent 500 rather than loading the whole history into one response.
+      // screen shows the recent ones to resolve, so bound the read rather than
+      // loading the whole history into one response. The screen can widen the
+      // window, and says so when it is full — see lib/list-window.ts.
       m.getRepository(SyncConflict).find({
         where: status ? { resolutionStatus: status } : {},
         order: { createdAt: 'DESC' },
-        take: 500,
+        take: listLimit(limit),
       }),
     );
   }

@@ -86,8 +86,8 @@ export class CreditHoldsController {
 
   @Get()
   @RequirePermissions('orders.view')
-  list(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
-    return this.service.list(tid(u), status);
+  list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), status, limit);
   }
 
   @Post(':id/approve')

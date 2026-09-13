@@ -13,6 +13,7 @@ import { isNonNegativeNumber } from '@rmc/shared';
 import { NumberingService } from '../sales/numbering.service';
 import { recordDeliveryHistory } from './delivery-history.util';
 import { buildCycleTimes } from './dispatch-cycle.util';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Dispatch not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -60,11 +61,12 @@ export class DispatchService {
     private readonly numbering: NumberingService,
   ) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(Dispatch).find({
         where: status ? { dispatchStatus: status } : {},
         order: { createdAt: 'DESC' },
+        take: listLimit(limit),
       }),
     );
   }

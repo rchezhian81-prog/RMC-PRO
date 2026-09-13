@@ -485,7 +485,7 @@ const post = (path: string, b?: Record<string, unknown>) =>
   apiFetch<Row>(path, { method: 'POST', ...(b ? { body: JSON.stringify(b) } : {}) });
 
 export const leadsApi = {
-  list: () => apiFetch<Row[]>('/leads'),
+  list: (limit?: number) => apiFetch<Row[]>(`/leads${listQs(undefined, limit)}`),
   get: (id: string) => apiFetch<Row>(`/leads/${id}`),
   create: (b: Record<string, unknown>) => post('/leads', b),
   update: (id: string, b: Record<string, unknown>) =>
@@ -494,7 +494,7 @@ export const leadsApi = {
 };
 
 export const quotationsApi = {
-  list: () => apiFetch<Row[]>('/quotations'),
+  list: (limit?: number) => apiFetch<Row[]>(`/quotations${listQs(undefined, limit)}`),
   get: (id: string) => apiFetch<Row>(`/quotations/${id}`),
   create: (b: Record<string, unknown>) => post('/quotations', b),
   update: (id: string, b: Record<string, unknown>) =>
@@ -515,7 +515,7 @@ export const quotationsApi = {
 };
 
 export const rateContractsApi = {
-  list: () => apiFetch<Row[]>('/rate-contracts'),
+  list: (limit?: number) => apiFetch<Row[]>(`/rate-contracts${listQs(undefined, limit)}`),
   get: (id: string) => apiFetch<Row>(`/rate-contracts/${id}`),
   create: (b: Record<string, unknown>) => post('/rate-contracts', b),
   update: (id: string, b: Record<string, unknown>) =>
@@ -541,7 +541,7 @@ export const orderDraftsApi = {
 
 // ---- Orders + credit control (Sprint 5) ----
 export const ordersApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/orders${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/orders${listQs(status, limit)}`),
   get: (id: string) => apiFetch<Row>(`/orders/${id}`),
   creditCheck: (id: string) => apiFetch<Row>(`/orders/${id}/credit-check`),
   confirm: (id: string) => post(`/orders/${id}/confirm`),
@@ -555,7 +555,7 @@ export const ordersApi = {
 };
 
 export const creditHoldsApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/credit-holds${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/credit-holds${listQs(status, limit)}`),
   approve: (id: string, note: string) => post(`/credit-holds/${id}/approve`, { note }),
   reject: (id: string, note: string) => post(`/credit-holds/${id}/reject`, { note }),
 };
@@ -573,7 +573,7 @@ export const mixDesignsApi = {
 };
 
 export const productionPlansApi = {
-  list: () => apiFetch<Row[]>('/production-plans'),
+  list: (limit?: number) => apiFetch<Row[]>(`/production-plans${listQs(undefined, limit)}`),
   get: (id: string) => apiFetch<Row>(`/production-plans/${id}`),
   create: (b: Record<string, unknown>) => post('/production-plans', b),
   addItem: (id: string, b: Record<string, unknown>) => post(`/production-plans/${id}/items`, b),
@@ -584,13 +584,13 @@ export const productionPlansApi = {
 };
 
 export const batchQueueApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/batch-queue${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/batch-queue${listQs(status, limit)}`),
   enqueueFromOrder: (orderId: string) => post(`/batch-queue/from-order/${orderId}`),
   setStatus: (id: string, status: string) => post(`/batch-queue/${id}/status`, { status }),
 };
 
 export const batchTicketsApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/batch-tickets${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/batch-tickets${listQs(status, limit)}`),
   get: (id: string) => apiFetch<Row>(`/batch-tickets/${id}`),
   createFromQueue: (queueId: string, b: Record<string, unknown>) => post(`/batch-tickets/from-queue/${queueId}`, b),
   updateActuals: (id: string, materials: Record<string, unknown>[]) => post(`/batch-tickets/${id}/actuals`, { materials }),
@@ -625,8 +625,27 @@ export const batchingControllerApi = {
 
 export const stockApi = {
   balances: () => apiFetch<Row[]>('/stock/balances'),
-  ledger: (materialId?: string) => apiFetch<Row[]>(`/stock/ledger${materialId ? `?materialId=${materialId}` : ''}`),
+  ledger: (materialId?: string, limit?: number) => {
+    const qs = new URLSearchParams();
+    if (materialId) qs.set('materialId', materialId);
+    if (limit) qs.set('limit', String(limit));
+    const s = qs.toString();
+    return apiFetch<Row[]>(`/stock/ledger${s ? `?${s}` : ''}`);
+  },
   setOpening: (b: Record<string, unknown>) => post('/stock/opening', b),
+};
+
+/**
+ * `?status=…&limit=…` for a transaction list — omitting whichever is unset.
+ *
+ * `limit` exists because the API caps these lists (200 by default, 1,000 hard)
+ * and returns a bare array, so a screen cannot tell a complete list from a
+ * truncated one. Screens pass their current window and compare the row count
+ * against it; see lib/list-window.ts.
+ */
+const listQs = (status?: string, limit?: number): string => {
+  const parts = [status ? `status=${encodeURIComponent(status)}` : '', limit ? `limit=${limit}` : ''].filter(Boolean);
+  return parts.length ? `?${parts.join('&')}` : '';
 };
 
 const dateQs = (from?: string, to?: string) => {
@@ -646,7 +665,7 @@ export const productionReportsApi = {
 
 // ---- Dispatch & delivery challan (Sprint 7) ----
 export const dispatchApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/dispatches${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/dispatches${listQs(status, limit)}`),
   get: (id: string) => apiFetch<Row>(`/dispatches/${id}`),
   createFromBatch: (batchTicketId: string, b: Record<string, unknown>) => post(`/dispatches/from-batch-ticket/${batchTicketId}`, b),
   setStatus: (id: string, status: string, extra: Record<string, unknown> = {}) => post(`/dispatches/${id}/status`, { status, ...extra }),
@@ -664,7 +683,7 @@ export const fleetReportsApi = {
 };
 
 export const challansApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/delivery-challans${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/delivery-challans${listQs(status, limit)}`),
   get: (id: string) => apiFetch<Row>(`/delivery-challans/${id}`),
   createFromDispatch: (dispatchId: string, b: Record<string, unknown>) => post(`/delivery-challans/from-dispatch/${dispatchId}`, b),
   issue: (id: string) => post(`/delivery-challans/${id}/issue`),
@@ -692,14 +711,14 @@ export const challansApi = {
 
 // ---- Inventory & weighbridge (Sprint 8) ----
 export const materialInwardApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/material-inwards${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/material-inwards${listQs(status, limit)}`),
   create: (b: Record<string, unknown>) => post('/material-inwards', b),
   post: (id: string) => post(`/material-inwards/${id}/post`),
   cancel: (id: string) => post(`/material-inwards/${id}/cancel`),
 };
 
 export const weighbridgeApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/weighbridge${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/weighbridge${listQs(status, limit)}`),
   create: (b: Record<string, unknown>) => post('/weighbridge', b),
   toInward: (id: string, rate: number) => post(`/weighbridge/${id}/to-inward`, { rate }),
   setStatus: (id: string, status: string) => post(`/weighbridge/${id}/status`, { status }),
@@ -730,7 +749,7 @@ export const weighbridgeIndicatorApi = {
 };
 
 export const stockAdjustApi = {
-  list: () => apiFetch<Row[]>('/stock-adjustments'),
+  list: (limit?: number) => apiFetch<Row[]>(`/stock-adjustments${listQs(undefined, limit)}`),
   adjust: (b: Record<string, unknown>) => post('/stock-adjustments', b),
 };
 
@@ -758,7 +777,7 @@ export const agentsApi = {
 };
 
 export const negativeStockApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/negative-stock-requests${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/negative-stock-requests${listQs(status, limit)}`),
   approve: (id: string, remarks: string) => post(`/negative-stock-requests/${id}/approve`, { remarks }),
   reject: (id: string, remarks: string) => post(`/negative-stock-requests/${id}/reject`, { remarks }),
 };
@@ -772,7 +791,7 @@ export const inventoryReportsApi = {
 
 // ---- Billing & payments (Sprint 9) ----
 export const invoicesApi = {
-  list: (status?: string) => apiFetch<Row[]>(`/invoices${status ? `?status=${status}` : ''}`),
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/invoices${listQs(status, limit)}`),
   get: (id: string) => apiFetch<Row>(`/invoices/${id}`),
   billableChallans: (customerId: string) => apiFetch<Row[]>(`/invoices/billable-challans?customerId=${customerId}`),
   fromChallans: (b: Record<string, unknown>) => post('/invoices/from-challans', b),
@@ -854,7 +873,7 @@ export const gstCredentialsApi = {
 };
 
 export const receiptsApi = {
-  list: () => apiFetch<Row[]>('/receipts'),
+  list: (limit?: number) => apiFetch<Row[]>(`/receipts${listQs(undefined, limit)}`),
   get: (id: string) => apiFetch<Row>(`/receipts/${id}`),
   create: (b: Record<string, unknown>) => post('/receipts', b),
   realise: (id: string) => post(`/receipts/${id}/realise`),
@@ -900,9 +919,9 @@ export async function downloadTallyCsv(): Promise<void> {
 
 // ---- QC / Lab (Plan A3) ----
 export const qcApi = {
-  slumpList: () => apiFetch<Row[]>('/qc/slump-tests'),
+  slumpList: (limit?: number) => apiFetch<Row[]>(`/qc/slump-tests${listQs(undefined, limit)}`),
   slumpCreate: (b: Record<string, unknown>) => post('/qc/slump-tests', b),
-  cubeSets: (status?: string) => apiFetch<Row[]>(`/qc/cube-sets${status ? `?status=${status}` : ''}`),
+  cubeSets: (status?: string, limit?: number) => apiFetch<Row[]>(`/qc/cube-sets${listQs(status, limit)}`),
   cubeSet: (id: string) => apiFetch<Row>(`/qc/cube-sets/${id}`),
   cubeSetCreate: (b: Record<string, unknown>) => post('/qc/cube-sets', b),
   recordResults: (id: string, results: Record<string, unknown>[]) =>
@@ -913,23 +932,23 @@ export const qcApi = {
 
 // ---- Purchase / AP-lite (Plan D2) ----
 export const purchaseApi = {
-  orders: (status?: string) => apiFetch<Row[]>(`/purchase-orders${status ? `?status=${status}` : ''}`),
+  orders: (status?: string, limit?: number) => apiFetch<Row[]>(`/purchase-orders${listQs(status, limit)}`),
   order: (id: string) => apiFetch<Row>(`/purchase-orders/${id}`),
   createOrder: (b: Record<string, unknown>) => post('/purchase-orders', b),
   issueOrder: (id: string) => post(`/purchase-orders/${id}/issue`),
   cancelOrder: (id: string) => post(`/purchase-orders/${id}/cancel`),
-  grns: (status?: string) => apiFetch<Row[]>(`/goods-receipts${status ? `?status=${status}` : ''}`),
+  grns: (status?: string, limit?: number) => apiFetch<Row[]>(`/goods-receipts${listQs(status, limit)}`),
   grn: (id: string) => apiFetch<Row>(`/goods-receipts/${id}`),
   createGrn: (b: Record<string, unknown>) => post('/goods-receipts', b),
   postGrn: (id: string) => post(`/goods-receipts/${id}/post`),
   cancelGrn: (id: string) => post(`/goods-receipts/${id}/cancel`),
   reverseGrn: (id: string, reason: string) => post(`/goods-receipts/${id}/reverse`, { reason }),
-  bills: (status?: string) => apiFetch<Row[]>(`/vendor-bills${status ? `?status=${status}` : ''}`),
+  bills: (status?: string, limit?: number) => apiFetch<Row[]>(`/vendor-bills${listQs(status, limit)}`),
   bill: (id: string) => apiFetch<Row>(`/vendor-bills/${id}`),
   createBill: (b: Record<string, unknown>) => post('/vendor-bills', b),
   approveBill: (id: string) => post(`/vendor-bills/${id}/approve`),
   cancelBill: (id: string) => post(`/vendor-bills/${id}/cancel`),
-  payments: () => apiFetch<Row[]>('/vendor-payments'),
+  payments: (limit?: number) => apiFetch<Row[]>(`/vendor-payments${listQs(undefined, limit)}`),
   createPayment: (b: Record<string, unknown>) => post('/vendor-payments', b),
   reversePayment: (id: string, reason?: string) => post(`/vendor-payments/${id}/reverse`, { reason }),
   applyAdvance: (id: string, allocations: { billId: string; amount: number }[]) => post(`/vendor-payments/${id}/apply-advance`, { allocations }),
@@ -955,7 +974,7 @@ export interface ImportDef { key: string; label: string; columns: ImportColumn[]
 
 export const importsApi = {
   definitions: () => apiFetch<ImportDef[]>('/imports/definitions'),
-  jobs: () => apiFetch<Row[]>('/imports'),
+  jobs: (limit?: number) => apiFetch<Row[]>(`/imports${listQs(undefined, limit)}`),
   job: (id: string) => apiFetch<Row>(`/imports/${id}`),
   run: (entityType: string, content: string, fileName: string) => post(`/imports/${entityType}`, { content, fileName }),
 };
@@ -976,17 +995,24 @@ export const fleetApi = {
   schedules: (vehicleId?: string) => apiFetch<Row[]>(`/vehicle-service-schedules${vehicleId ? `?vehicleId=${vehicleId}` : ''}`),
   createSchedule: (b: Record<string, unknown>) => post('/vehicle-service-schedules', b),
   updateSchedule: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/vehicle-service-schedules/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
-  jobs: (vehicleId?: string, status?: string) => {
+  jobs: (vehicleId?: string, status?: string, limit?: number) => {
     const qs = new URLSearchParams();
     if (vehicleId) qs.set('vehicleId', vehicleId);
     if (status) qs.set('status', status);
+    if (limit) qs.set('limit', String(limit));
     const s = qs.toString();
     return apiFetch<Row[]>(`/vehicle-maintenance-jobs${s ? `?${s}` : ''}`);
   },
   createJob: (b: Record<string, unknown>) => post('/vehicle-maintenance-jobs', b),
   completeJob: (id: string, b?: Record<string, unknown>) => post(`/vehicle-maintenance-jobs/${id}/complete`, b),
   cancelJob: (id: string) => post(`/vehicle-maintenance-jobs/${id}/cancel`),
-  fuelLogs: (vehicleId?: string) => apiFetch<Row[]>(`/vehicle-fuel-logs${vehicleId ? `?vehicleId=${vehicleId}` : ''}`),
+  fuelLogs: (vehicleId?: string, limit?: number) => {
+    const qs = new URLSearchParams();
+    if (vehicleId) qs.set('vehicleId', vehicleId);
+    if (limit) qs.set('limit', String(limit));
+    const s = qs.toString();
+    return apiFetch<Row[]>(`/vehicle-fuel-logs${s ? `?${s}` : ''}`);
+  },
   createFuelLog: (b: Record<string, unknown>) => post('/vehicle-fuel-logs', b),
   fuelSummary: (vehicleId: string) => apiFetch<Row>(`/vehicle-fuel-logs/summary/${vehicleId}`),
 };
@@ -999,7 +1025,7 @@ export const expensesApi = {
   heads: () => apiFetch<Row[]>('/expense-heads'),
   createHead: (b: Record<string, unknown>) => post('/expense-heads', b),
   updateHead: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/expense-heads/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
-  vouchers: (status?: string) => apiFetch<Row[]>(`/expense-vouchers${status ? `?status=${status}` : ''}`),
+  vouchers: (status?: string, limit?: number) => apiFetch<Row[]>(`/expense-vouchers${listQs(status, limit)}`),
   voucher: (id: string) => apiFetch<Row>(`/expense-vouchers/${id}`),
   createVoucher: (b: Record<string, unknown>) => post('/expense-vouchers', b),
   postVoucher: (id: string) => post(`/expense-vouchers/${id}/post`),
@@ -1107,7 +1133,7 @@ export interface PoExtract {
 export const syncApi = {
   devices: () => apiFetch<Row[]>('/sync/devices'),
   reservations: () => apiFetch<Row[]>('/sync/number-reservations'),
-  conflicts: (status?: string) => apiFetch<Row[]>(`/sync/conflicts${status ? `?status=${status}` : ''}`),
+  conflicts: (status?: string, limit?: number) => apiFetch<Row[]>(`/sync/conflicts${listQs(status, limit)}`),
   deactivateDevice: (id: string) => post(`/sync/devices/${id}/deactivate`),
   reactivateDevice: (id: string) => post(`/sync/devices/${id}/reactivate`),
   resolveConflict: (id: string, resolution: string) => post(`/sync/conflicts/${id}/resolve`, { resolution }),
@@ -1128,10 +1154,11 @@ export const gpsApi = {
 
 // ---- Document corrections / amendment trail (Plan F2) ----
 export const correctionsApi = {
-  list: (documentType?: string, documentId?: string) => {
+  list: (documentType?: string, documentId?: string, limit?: number) => {
     const qs = new URLSearchParams();
     if (documentType) qs.set('documentType', documentType);
     if (documentId) qs.set('documentId', documentId);
+    if (limit) qs.set('limit', String(limit));
     const s = qs.toString();
     return apiFetch<Row[]>(`/document-corrections${s ? `?${s}` : ''}`);
   },

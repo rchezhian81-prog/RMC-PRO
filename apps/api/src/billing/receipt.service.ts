@@ -1,4 +1,4 @@
-import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
+import { listLimit } from '../common/list-limit.util';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -27,8 +27,8 @@ export class ReceiptService {
     private readonly audit: AuditService,
   ) {}
 
-  list(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) => m.getRepository(Payment).find({ order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }));
+  list(tenantId: string, limit?: string) {
+    return this.db.runInTenant(tenantId, (m) => m.getRepository(Payment).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }));
   }
 
   private async loadFull(m: EntityManager, id: string) {

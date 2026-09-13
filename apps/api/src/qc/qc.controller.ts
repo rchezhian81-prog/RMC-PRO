@@ -27,7 +27,7 @@ export class QcController {
   }
 
   @Get('slump-tests') @RequirePermissions('qc.view')
-  listSlump(@CurrentUser() u: AuthUser) { return this.service.listSlump(tid(u)); }
+  listSlump(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.listSlump(tid(u), limit); }
 
   @Get('slump-tests/:id') @RequirePermissions('qc.view')
   getSlump(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.getSlump(tid(u), id); }
@@ -38,8 +38,8 @@ export class QcController {
   }
 
   @Get('cube-sets') @RequirePermissions('qc.view')
-  listCubeSets(@CurrentUser() u: AuthUser, @Query('status') status?: string) {
-    return this.service.listCubeSets(tid(u), status);
+  listCubeSets(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) {
+    return this.service.listCubeSets(tid(u), status, limit);
   }
 
   @Get('cube-sets/:id') @RequirePermissions('qc.view')

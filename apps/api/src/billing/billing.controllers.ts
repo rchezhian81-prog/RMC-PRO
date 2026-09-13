@@ -75,7 +75,7 @@ export class InvoiceController {
 export class ReceiptController {
   constructor(private readonly service: ReceiptService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post() @RequirePermissions('receipts.create')

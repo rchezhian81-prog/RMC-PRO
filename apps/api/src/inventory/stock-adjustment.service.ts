@@ -4,6 +4,7 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { Material, NegativeStockRequest, StockTransaction } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { StockService } from '../production/stock.service';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Request not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -23,12 +24,12 @@ export class StockAdjustmentService {
   ) {}
 
   /** History of applied adjustments — the adjustment rows from the stock ledger. */
-  list(tenantId: string) {
+  list(tenantId: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(StockTransaction).find({
         where: { transactionType: 'adjustment' },
         order: { createdAt: 'DESC' },
-        take: 200,
+        take: listLimit(limit),
       }),
     );
   }
@@ -92,11 +93,12 @@ export class NegativeStockService {
     private readonly audit: AuditService,
   ) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(NegativeStockRequest).find({
         where: status ? { approvalStatus: status } : {},
         order: { createdAt: 'DESC' },
+        take: listLimit(limit),
       }),
     );
   }

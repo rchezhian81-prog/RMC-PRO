@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, openPdf, weighbridgeApi, weighbridgeIndicatorApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -57,10 +59,11 @@ export default function WeighbridgePage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
     const [w, m, s, p, ind] = await Promise.all([
-      weighbridgeApi.list(),
+      weighbridgeApi.list(undefined, win.limit),
       crud('materials').list(),
       crud('suppliers').list(),
       crud('plants').list(),
@@ -75,7 +78,7 @@ export default function WeighbridgePage() {
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
     setError(null);
@@ -253,6 +256,8 @@ export default function WeighbridgePage() {
         ) : (
           <EmptyState title="No weighbridge entries yet" />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="entries" />
       </Card>
     </div>
   );

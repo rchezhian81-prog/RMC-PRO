@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { useRouter } from 'next/navigation';
 import { batchQueueApi, batchTicketsApi, mixDesignsApi, ordersApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -25,9 +27,10 @@ export default function BatchQueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [q, o, mx] = await Promise.all([batchQueueApi.list(), ordersApi.list('confirmed'), mixDesignsApi.list()]);
+    const [q, o, mx] = await Promise.all([batchQueueApi.list(undefined, win.limit), ordersApi.list('confirmed'), mixDesignsApi.list()]);
     setRows(q);
     setOrders(o);
     setMixes(mx);
@@ -36,7 +39,7 @@ export default function BatchQueuePage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
     setError(null);
@@ -182,6 +185,8 @@ export default function BatchQueuePage() {
         ) : (
           <EmptyState title="Queue is empty" description="Send a confirmed order to the queue to begin batching." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="queue entries" />
       </Card>
     </div>
   );

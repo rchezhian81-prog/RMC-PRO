@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../lib/list-window';
+import { ListCap } from '../../../components/ListCap';
 import { correctionsApi, type Row } from '../../../lib/api';
 import { getAccess } from '../../../lib/session';
 import { Card } from '../../../components/ui/Card';
@@ -16,6 +18,7 @@ export default function CorrectionsPage() {
   const [filterType, setFilterType] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -30,14 +33,14 @@ export default function CorrectionsPage() {
   const canManage = getAccess().has('document_corrections.manage');
 
   async function reload() {
-    setRows(await correctionsApi.list(filterType || undefined));
+    setRows(await correctionsApi.list(filterType || undefined, undefined, win.limit));
   }
   useEffect(() => {
     reload()
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoaded(true));
     // filter drives reload
-  }, [filterType]);
+  }, [filterType, win.limit]);
 
   async function record() {
     setError(null); setMsg(null);
@@ -115,6 +118,8 @@ export default function CorrectionsPage() {
         ) : (
           <EmptyState title="No corrections yet" description={canManage ? 'Record the first amendment above.' : 'Nothing to show.'} />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="corrections" />
       </Card>
     </div>
   );

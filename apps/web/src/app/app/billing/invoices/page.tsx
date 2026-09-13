@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { crud, invoicesApi, type Row } from '../../../../lib/api';
@@ -26,9 +28,10 @@ export default function InvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [inv, c] = await Promise.all([invoicesApi.list(), crud('customers').list()]);
+    const [inv, c] = await Promise.all([invoicesApi.list(undefined, win.limit), crud('customers').list()]);
     setRows(inv);
     setCustomers(c);
   }
@@ -36,7 +39,7 @@ export default function InvoicesPage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function loadBillable(cid: string) {
     setCustomerId(cid);
@@ -204,6 +207,8 @@ export default function InvoicesPage() {
         ) : (
           <EmptyState title="No invoices yet" description="Create an invoice from delivered challans above." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="invoices" hint="the sales register (Billing → Reports)" />
       </Card>
     </div>
   );

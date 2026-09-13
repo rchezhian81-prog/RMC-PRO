@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { useRouter } from 'next/navigation';
 import { qcApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
@@ -25,17 +27,18 @@ const TYPE: Record<string, string> = { targetStrengthMpa: 'number', castDate: 'd
 export default function CubeSets() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
+  const win = useListWindow();
   const [form, setForm] = useState<Record<string, string>>({ specimenCount: '3' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const canRecord = getAccess().has('qc.record');
 
   async function reload() {
-    setRows(await qcApi.cubeSets());
+    setRows(await qcApi.cubeSets(undefined, win.limit));
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+  }, [win.limit]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -118,6 +121,8 @@ export default function CubeSets() {
         ) : (
           <EmptyState title="No cube sets yet" description={canRecord ? 'Cast your first set above.' : 'Nothing to show.'} />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="cube sets" hint="the QC register" />
       </Card>
     </div>
   );

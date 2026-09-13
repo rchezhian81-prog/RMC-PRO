@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { leavesTerminal } from '../common/state-machine.util';
 import { BatchQueueEntry, Order, OrderItem } from '../core/database/entities';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Queue entry not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -11,11 +12,12 @@ const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_
 export class BatchQueueService {
   constructor(private readonly db: TenantDbService) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(BatchQueueEntry).find({
         where: status ? { queueStatus: status } : {},
         order: { createdAt: 'DESC' },
+        take: listLimit(limit),
       }),
     );
   }

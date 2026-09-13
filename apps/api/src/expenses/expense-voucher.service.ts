@@ -1,3 +1,4 @@
+import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
 import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
@@ -38,7 +39,7 @@ export class ExpenseVoucherService {
 
   list(tenantId: string, status?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(ExpenseVoucher).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' } }),
+      m.getRepository(ExpenseVoucher).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
     );
   }
 

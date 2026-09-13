@@ -1,3 +1,4 @@
+import { DEFAULT_LIST_LIMIT, REPORT_FETCH_LIMIT, assertReportSize } from '../common/list-limit.util';
 import { resolveOptionalRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -52,7 +53,7 @@ export class QcService {
 
   listSlump(tenantId: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' } }),
+      m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
     );
   }
 
@@ -60,8 +61,14 @@ export class QcService {
    *  mean strength and acceptance, plus accepted/rejected counts. */
   cubeRegister(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const all = await m.getRepository(QcCubeSet).find({ order: { castDate: 'DESC' } });
-      const rows = all.filter((s) => (!from || (s.castDate ?? '') >= from) && (!to || (s.castDate ?? '') <= to));
+      // Date-bound in the DB rather than loading every set and filtering in JS.
+      // The comparison is the same: a NULL cast_date fails `>=`/`<=` exactly as
+      // `(s.castDate ?? '') >= from` dropped it.
+      const qb = m.getRepository(QcCubeSet).createQueryBuilder('s');
+      if (from) qb.andWhere('s.castDate >= :from', { from });
+      if (to) qb.andWhere('s.castDate <= :to', { to });
+      const rows = await qb.orderBy('s.castDate', 'DESC').take(REPORT_FETCH_LIMIT).getMany();
+      assertReportSize(rows, 'cube register');
       const accepted = rows.filter((s) => s.acceptanceStatus === 'accepted').length;
       const rejected = rows.filter((s) => s.acceptanceStatus === 'rejected').length;
       return { rows, count: rows.length, accepted, rejected };
@@ -72,11 +79,20 @@ export class QcService {
    *  range and pass/fail counts. */
   slumpRegister(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const all = await m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' } });
-      const rows = all.filter((s) => {
-        const d = String(s.testedAt ?? '').slice(0, 10);
-        return (!from || d >= from) && (!to || d <= to);
-      });
+      // testedAt is a timestamptz, so `to` is treated as the END of that day:
+      // a half-open range keeps a test recorded at 23:30 inside its own day.
+      // (Casting the column — s.testedAt::date — is NOT an option here: the cast
+      // suffix defeats TypeORM's property-name mapping and the raw `s.testedAt`
+      // reaches Postgres lowercased, as `column s.testedat does not exist`.)
+      const qb = m.getRepository(QcSlumpTest).createQueryBuilder('s');
+      if (from) qb.andWhere('s.testedAt >= :from', { from });
+      if (to) {
+        const next = new Date(`${to}T00:00:00.000Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        qb.andWhere('s.testedAt < :toEnd', { toEnd: next.toISOString() });
+      }
+      const rows = await qb.orderBy('s.testedAt', 'DESC').take(REPORT_FETCH_LIMIT).getMany();
+      assertReportSize(rows, 'slump register');
       const passed = rows.filter((s) => s.passed).length;
       return { rows, count: rows.length, passed, failed: rows.length - passed };
     });
@@ -124,7 +140,7 @@ export class QcService {
 
   listCubeSets(tenantId: string, status?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(QcCubeSet).find({ where: status ? { status } : {}, order: { castDate: 'DESC', createdAt: 'DESC' } }),
+      m.getRepository(QcCubeSet).find({ where: status ? { status } : {}, order: { castDate: 'DESC', createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
     );
   }
 

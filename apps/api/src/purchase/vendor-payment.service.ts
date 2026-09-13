@@ -1,3 +1,4 @@
+import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
 import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
@@ -26,7 +27,7 @@ export class VendorPaymentService {
   ) {}
 
   list(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) => m.getRepository(VendorPayment).find({ order: { createdAt: 'DESC' } }));
+    return this.db.runInTenant(tenantId, (m) => m.getRepository(VendorPayment).find({ order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }));
   }
 
   private async loadFull(m: EntityManager, id: string) {

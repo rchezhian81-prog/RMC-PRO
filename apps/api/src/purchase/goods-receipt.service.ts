@@ -1,3 +1,4 @@
+import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
 import { resolveRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -42,7 +43,7 @@ export class GrnService {
 
   list(tenantId: string, status?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(GoodsReceipt).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' } }),
+      m.getRepository(GoodsReceipt).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
     );
   }
 

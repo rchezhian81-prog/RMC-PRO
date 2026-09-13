@@ -538,3 +538,38 @@ git log --oneline -1
 
 All three should agree. A tag names whatever was built; it is not evidence on
 its own.
+
+## `check-gst-states.mjs` — do your saved states resolve to a GST state?
+
+A record's state is not a label: it decides whether a bill carries CGST + SGST
+or IGST. Until the state became a picker it was free text, so the same state
+could be written `TN`, `Tamil Nadu`, `Tamilnadu` — or `Tamil Nadi`.
+
+The resolver now handles every real spelling and two-letter code, so `TN` and
+`Tamil Nadu` are correctly one state. This script answers the question the fix
+cannot: is anything **already in your database** still unresolvable — a typo, a
+blank, something pasted from a spreadsheet — and is your company's own state one
+of them?
+
+```bash
+read -rs RMC_PASSWORD; export RMC_PASSWORD
+LOGIN='owner@example.com' node scripts/ops/check-gst-states.mjs
+unset RMC_PASSWORD
+```
+
+The company's own state is reported first and matters most: it is the seller
+side of *every* classification, so one wrong value there mis-taxes every
+invoice, not one customer's.
+
+Records with **no** state are listed separately and are not counted as problems
+— a blank is treated as a local supply, which is usually what it is. A state
+that resolves to nothing is a problem: it falls back to a name comparison, and
+the answer is then whatever the two spellings happen to be.
+
+Read-only (one POST to sign in, GETs after that), reads the password from the
+environment only, and never prints it. Exit 0 when everything resolves, 1 when
+something needs a state chosen from the list.
+
+The state table is inlined in the script so it runs from a plain checkout with
+nothing built; `packages/shared/test/unit/gst-states.test.mjs` asserts that copy
+matches the shared list exactly, so the two cannot drift.

@@ -11,6 +11,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
 import { GST_STATES, GST_STATE_NAMES, resolveGstStateCode, isKnownGstState } from '../../dist/index.js';
 import { validateMasterFields } from '../../dist/index.js';
 
@@ -66,4 +71,25 @@ test('a record with no state at all is not blocked by this rule', () => {
   assert.deepEqual(validateMasterFields({}), {});
   assert.deepEqual(validateMasterFields({ state: '' }), {});
   assert.deepEqual(validateMasterFields({ state: '   ' }), {});
+});
+
+test('the ops checker’s inlined table matches this list exactly', () => {
+  // scripts/ops/check-gst-states.mjs inlines the table so it runs on a VPS from
+  // a plain checkout with nothing built. Two copies of a table that decides tax
+  // heads is exactly the drift this project keeps getting bitten by, so the copy
+  // is checked against the original here rather than trusted.
+  const src = readFileSync(resolve(here, '../../../../scripts/ops/check-gst-states.mjs'), 'utf8');
+  const m = /const STATE_CODES = (\{[\s\S]*?\n\});/.exec(src);
+  assert.ok(m, 'the checker must still declare STATE_CODES');
+  const inlined = new Function(`return ${m[1]}`)();
+
+  for (const [written, code] of Object.entries(inlined)) {
+    assert.equal(resolveGstStateCode(written), code,
+      `the checker maps "${written}" to ${code}; the shared list disagrees`);
+  }
+  // and the other way: every canonical name the shared list knows must be in it
+  for (const s of GST_STATES) {
+    const key = s.name.toLowerCase().replace(/&/g, 'and').replace(/\s+/g, ' ');
+    assert.equal(inlined[key], s.code, `the checker is missing ${s.name}`);
+  }
 });

@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ENTITIES } from './entity-list';
 import { TenantDbService } from './tenant-db.service';
+import { postgresTimeZoneOptions } from '../../common/business-date.util';
 
 /**
  * Runtime DB wiring. The API connects as APP_DB_USER (non-superuser) so it is
@@ -24,6 +25,9 @@ import { TenantDbService } from './tenant-db.service';
         synchronize: false,
         migrationsRun: false,
         logging: process.env.DB_LOGGING === 'true',
+        // Every connection speaks the plant's time, so current_date is the
+        // plant's today rather than UTC's.
+        extra: postgresTimeZoneOptions(),
       }),
     }),
   ],

@@ -4,6 +4,7 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { AuditService } from '../audit/audit.service';
 import { MetricsService } from '../common/metrics.service';
 import { ErrorAlertService } from '../common/error-alert.service';
+import { hasEwayBill } from '../common/eway-status.util';
 import { AgentApprovalRequest } from '../core/database/entities';
 import {
   EWB_EXTEND_REASON_CODES,
@@ -229,9 +230,12 @@ export class GstExecutionService {
     const { ctx } = loaded;
 
     // Idempotency — already generated for this action? Nothing to do.
+    // 'recorded' counts: the plant generated that e-way bill by hand on the
+    // portal, so one already exists for this consignment. Generating another
+    // would put two live e-way bills against the same supply.
     const now = await this.currentStatus(tenantId, ctx.invoiceId);
     if (ctx.isEinvoice && now.einvoice === 'generated') return { status: 'already_generated', reference: now.irn ?? '' };
-    if (!ctx.isEinvoice && now.eway === 'generated') return { status: 'already_generated', reference: now.ewayBillNo ?? '' };
+    if (!ctx.isEinvoice && hasEwayBill(now.eway)) return { status: 'already_generated', reference: now.ewayBillNo ?? '' };
 
     // Pre-flight (pure) — reject master-data problems before any portal call.
     const pf = ctx.isEinvoice
@@ -259,7 +263,7 @@ export class GstExecutionService {
         // complete (an incomplete EwbDtls would make the portal reject the IRN).
         const wantsEway = appr.payload?.includeEway === true;
         const includeEwb =
-          wantsEway && now.eway !== 'generated' && validateEwbPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer).ok;
+          wantsEway && !hasEwayBill(now.eway) && validateEwbPreflight(ctx.header, ctx.lines, ctx.seller, ctx.buyer).ok;
         const res = await this.provider.generateIrn(
           session,
           buildIrnRequest(ctx.header, ctx.lines, ctx.seller, ctx.buyer, { includeEwb }),

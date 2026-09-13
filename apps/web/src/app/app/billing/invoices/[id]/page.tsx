@@ -56,7 +56,7 @@ export default function InvoiceDetail() {
   const [inv, setInv] = useState<Row | null>(null);
   const [gst, setGst] = useState<GstStatus | null>(null);
   const [transporters, setTransporters] = useState<Row[]>([]);
-  const [tp, setTp] = useState({ transporterId: '', vehicleNo: '', transportMode: '', distanceKm: '' });
+  const [tp, setTp] = useState({ transporterId: '', vehicleNo: '', transportMode: '', distanceKm: '', ewayBillNo: '', ewayValidUntil: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -70,6 +70,8 @@ export default function InvoiceDetail() {
       vehicleNo: String(full.vehicleNo ?? ''),
       transportMode: String(full.transportMode ?? ''),
       distanceKm: full.distanceKm != null ? String(full.distanceKm) : '',
+      ewayBillNo: String(full.ewayBillNo ?? ''),
+      ewayValidUntil: full.ewayValidUntil ? String(full.ewayValidUntil).slice(0, 10) : '',
     });
   }, [id]);
   useEffect(() => {
@@ -87,6 +89,8 @@ export default function InvoiceDetail() {
           vehicleNo: tp.vehicleNo.trim() || null,
           transportMode: tp.transportMode || null,
           distanceKm: tp.distanceKm === '' ? null : Number(tp.distanceKm),
+          ewayBillNo: tp.ewayBillNo.trim() || null,
+          ewayValidUntil: tp.ewayValidUntil || null,
         }),
       'Transport details saved',
     );
@@ -267,6 +271,8 @@ export default function InvoiceDetail() {
       <Card title="Transport (e-way bill)">
         <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px' }}>
           Transporter, vehicle, mode and distance for this consignment — these feed the e-way bill.
+          If you generate the e-way bill yourself on the government portal, put its number here: it
+          then prints on the delivery challan, and this invoice stops being counted as pending.
         </p>
         {status === 'cancelled' ? (
           <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>
@@ -274,6 +280,7 @@ export default function InvoiceDetail() {
             {' · '}Vehicle: {String(inv.vehicleNo ?? '—')}
             {' · '}Mode: {String(inv.transportMode ?? '—')}
             {' · '}Distance: {inv.distanceKm != null ? `${String(inv.distanceKm)} km` : '—'}
+            {' · '}E-way bill: {String(inv.ewayBillNo ?? '—')}
           </p>
         ) : (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
@@ -305,6 +312,26 @@ export default function InvoiceDetail() {
             <div style={{ minWidth: 110 }}>
               <Field label="Distance (km)">
                 <Input type="number" value={tp.distanceKm} onChange={(e) => setTp({ ...tp, distanceKm: e.target.value })} />
+              </Field>
+            </div>
+            <div style={{ minWidth: 170 }}>
+              <Field label="E-way bill no">
+                <Input
+                  value={tp.ewayBillNo}
+                  onChange={(e) => setTp({ ...tp, ewayBillNo: e.target.value })}
+                  placeholder="12 digits from the portal"
+                  disabled={String(inv.ewayStatus) === 'generated'}
+                />
+              </Field>
+            </div>
+            <div style={{ minWidth: 150 }}>
+              <Field label="Valid until">
+                <Input
+                  type="date"
+                  value={tp.ewayValidUntil}
+                  onChange={(e) => setTp({ ...tp, ewayValidUntil: e.target.value })}
+                  disabled={String(inv.ewayStatus) === 'generated'}
+                />
               </Field>
             </div>
             <div style={{ marginBottom: 14 }}>

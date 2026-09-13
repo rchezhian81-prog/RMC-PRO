@@ -1,3 +1,4 @@
+import { REPORT_FETCH_LIMIT, assertReportSize } from '../common/list-limit.util';
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -220,6 +221,8 @@ export class BillingReportsService {
       // did. The register returns the rows, so the b2b/b2c summary still reduces
       // over them in memory — unchanged.
       const rows = await this.issuedInvoicesInRange(m, from, to);
+      // Refuse rather than truncate: a register missing rows is a wrong total.
+      assertReportSize(rows, 'sales register');
       const total = round2(rows.reduce((s, i) => s + num(i.totalAmount), 0));
       const taxable = round2(rows.reduce((s, i) => s + num(i.taxableAmount), 0));
       const bucket = (list: Invoice[]) => ({
@@ -308,7 +311,9 @@ export class BillingReportsService {
     const qb = m.getRepository(Invoice).createQueryBuilder('i').where("i.invoiceStatus = :status", { status: 'issued' });
     if (from) qb.andWhere('i.invoiceDate >= :from', { from });
     if (to) qb.andWhere('i.invoiceDate <= :to', { to });
-    return qb.orderBy('i.invoiceDate', 'ASC').getMany();
+    // One more than the cap, so the caller can tell "at the limit" from
+    // "over it" without a second COUNT query.
+    return qb.orderBy('i.invoiceDate', 'ASC').take(REPORT_FETCH_LIMIT).getMany();
   }
 
   /**
@@ -399,6 +404,9 @@ export class BillingReportsService {
   tallyExportCsv(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const invoices = await this.issuedInvoicesInRange(m, from, to);
+      // The shared query is capped, so this MUST check: a Tally export quietly
+      // missing invoices is a set of books that does not balance.
+      assertReportSize(invoices, 'Tally export');
       const customers = await m.getRepository(Customer).find();
       const nameOf = new Map(customers.map((c) => [c.id, c.customerName]));
       const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;

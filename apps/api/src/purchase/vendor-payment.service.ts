@@ -8,6 +8,7 @@ import { Supplier, VendorBill, VendorPayment, VendorPaymentAllocation } from '..
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { billPaymentStatus } from './purchase.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Vendor payment not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -83,7 +84,7 @@ export class VendorPaymentService {
       const payment = await paymentRepo.save(
         paymentRepo.create({
           tenantId, paymentNo: paymentNoStr, supplierId,
-          paymentDate: (dto.paymentDate as string) ?? null,
+          paymentDate: documentDate(dto.paymentDate),
           paymentMode: (dto.paymentMode as string) ?? 'neft',
           amount: String(amount), bankReference,
           remarks: (dto.remarks as string) ?? null, status: 'posted',

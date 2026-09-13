@@ -15,6 +15,7 @@ import { nullifyEmpty } from '../common/sanitize';
 import { attachCustomerName } from '../common/attach-customer-name';
 import { NumberingService } from './numbering.service';
 import { summariseGst, isInterstateSupply, type QuoteLine } from '../billing/tax.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -138,7 +139,7 @@ export class OrdersDraftService {
           siteId: quotation.siteId,
           plantId: (dto.plantId as string) ?? null,
           quotationId,
-          orderDate: (dto.orderDate as string) ?? null,
+          orderDate: documentDate(dto.orderDate),
           requiredDatetime: (dto.requiredDatetime as Date) ?? null,
           pricingSource: 'quotation',
           creditStatus: 'not_checked',
@@ -233,7 +234,7 @@ export class OrdersDraftService {
           siteId: contract.siteId,
           plantId: (dto.plantId as string) ?? null,
           rateContractId,
-          orderDate: (dto.orderDate as string) ?? null,
+          orderDate: documentDate(dto.orderDate),
           requiredDatetime: (dto.requiredDatetime as Date) ?? null,
           pricingSource: 'rate_contract',
           creditStatus: 'not_checked',

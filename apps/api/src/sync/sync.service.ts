@@ -35,6 +35,7 @@ import {
 } from '../dispatch/challan-transition.util';
 import { recordDeliveryHistory } from '../dispatch/delivery-history.util';
 import { listLimit } from '../common/list-limit.util';
+import { numberWithinBlock } from './reservation-match.util';
 
 const notFound = (msg = 'Not found') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: msg });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -467,21 +468,70 @@ export class SyncService {
    * that has already applied.
    */
   private async noteNumberUsed(m: EntityManager, deviceId: string, documentType: string, documentNo: string): Promise<void> {
-    const digits = documentNo.match(/(\d+)/);
-    if (!digits) return;
-    const n = Number(digits[1]);
-    if (!Number.isFinite(n)) return;
+    // A SAVEPOINT, so "best-effort" is true rather than aspirational. This runs
+    // inside the push transaction, and in Postgres a failed statement aborts the
+    // WHOLE transaction — a try/catch around it hides the error but not the
+    // damage, and every later statement dies with "current transaction is
+    // aborted". A delivery challan from a plant tablet must never be lost over
+    // a bookkeeping column, so the work is fenced and rolled back on its own.
+    const SP = 'note_number_used';
     try {
-      await m.query(
-        `UPDATE local_number_reservations
-            SET used_count = LEAST(number_to - number_from + 1, GREATEST(used_count, $4 - number_from + 1)),
-                updated_at = now()
-          WHERE device_id = $1 AND document_type = $2 AND status = $3
-            AND $4 BETWEEN number_from AND number_to`,
-        [deviceId, documentType, 'active', n],
-      );
+      await m.query(`SAVEPOINT ${SP}`);
     } catch {
-      /* bookkeeping only — never fail an applied push over it */
+      return; // not in a transaction we can fence — skip the bookkeeping entirely
+    }
+    try {
+      // Match the number against each block's OWN format, never by scanning the
+      // string for digits. `documentNo.match(/(\d+)/)` took the first digit run
+      // ANYWHERE, so a hand-typed number — "MANUAL-2026-45", a site reference,
+      // an imported legacy number — could yield a figure that fell inside a live
+      // block and mark it spent up to that point. The Devices screen then
+      // reported a device about to run dry when it had barely started, which is
+      // the one question that screen exists to answer.
+      //
+      // The suffix is NOT on the reservation row (it carries the financial-year
+      // token and comes from the series at reserve time), so it is read back
+      // from the series the block was drawn on, preferring the one scoped to the
+      // same plant.
+      const blocks: Array<{
+        id: string; prefix: string | null; suffix: string | null;
+        padding_length: number; number_from: number; number_to: number;
+      }> = await m.query(
+        `SELECT r.id, r.prefix, r.padding_length, r.number_from, r.number_to,
+                COALESCE((
+                  SELECT s.suffix FROM number_series s
+                   WHERE s.tenant_id = r.tenant_id
+                     AND s.document_type = r.document_type
+                     AND s.financial_year IS NOT DISTINCT FROM r.financial_year
+                   ORDER BY (s.plant_id IS NOT DISTINCT FROM r.plant_id) DESC
+                   LIMIT 1
+                ), '') AS suffix
+           FROM local_number_reservations r
+          WHERE r.device_id = $1 AND r.document_type = $2 AND r.status = $3`,
+        [deviceId, documentType, 'active'],
+      );
+
+      for (const b of blocks) {
+        const n = numberWithinBlock(documentNo, b);
+        if (n === null) continue;
+        await m.query(
+          `UPDATE local_number_reservations
+              SET used_count = LEAST(number_to - number_from + 1, GREATEST(used_count, $2 - number_from + 1)),
+                  updated_at = now()
+            WHERE id = $1`,
+          [b.id, n],
+        );
+        break; // a number belongs to at most one block
+      }
+      await m.query(`RELEASE SAVEPOINT ${SP}`);
+    } catch {
+      // Undo only this bookkeeping; the push itself stays intact and committable.
+      try {
+        await m.query(`ROLLBACK TO SAVEPOINT ${SP}`);
+        await m.query(`RELEASE SAVEPOINT ${SP}`);
+      } catch {
+        /* nothing further we can safely do */
+      }
     }
   }
 

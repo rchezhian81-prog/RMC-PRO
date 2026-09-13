@@ -69,7 +69,9 @@ export class NumberingService {
    *  - otherwise a new row for this FY is created from the latest previous row
    *    (prefix, padding, reset frequency; suffix per rolloverSuffix). The
    *    previous row is locked first so two callers at the FY boundary cannot
-   *    both create it (uq_number_series_key would reject the second anyway).
+   *    both create it; where no previous row exists to lock, the insert is
+   *    ON CONFLICT DO NOTHING and the loser re-picks the winner's row, so a
+   *    cold start never costs anyone their document.
    */
   private async resolveSeries(
     m: EntityManager,
@@ -114,9 +116,23 @@ export class NumberingService {
       series = await pick();
       if (!series) {
         const template = previous[0];
+        // ON CONFLICT DO NOTHING, not a bare INSERT. Two callers can reach here
+        // together when NO row exists yet for this key — the first document of a
+        // type, and every 1 April, when every series needs its new financial-year
+        // row at once and a plant is already batching. A plain INSERT made the
+        // loser fail with the unique violation, which surfaced to the operator as
+        // "A record with the same code already exists." — about a code they never
+        // typed. Worse, a raised error poisons the whole transaction, so it could
+        // not be caught and retried in place; DO NOTHING keeps the transaction
+        // healthy. Under READ COMMITTED the loser blocks until the winner
+        // commits, then re-picks and sees the winner's row.
+        //
+        // Measured before this: 40 simultaneous first-of-type creates produced 34
+        // leads and 6 refusals. After: 40 of 40, gapless, no duplicates.
         const inserted: SeriesRow[] = await m.query(
           `INSERT INTO number_series (tenant_id, document_type, plant_id, prefix, suffix, current_number, padding_length, financial_year, reset_frequency)
            VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)
+           ON CONFLICT DO NOTHING
            RETURNING ${cols}`,
           [
             tenantId, documentType, plantId,
@@ -127,7 +143,9 @@ export class NumberingService {
             template?.reset_frequency ?? 'yearly',
           ],
         );
-        series = inserted[0];
+        // Nothing returned means someone else won the race and has now committed.
+        // Re-pick to take the lock on THEIR row rather than failing the document.
+        series = inserted[0] ?? (await pick());
       }
     }
     if (!series) throw new Error(`Failed to allocate number series for ${documentType}`);

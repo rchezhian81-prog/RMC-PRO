@@ -386,14 +386,30 @@ console.log('\n[I38] the cloud learns how much of a block a device has spent');
   const after5 = await one(`SELECT used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
   ok(Number(after5.used_count) === 5, `and tracks how far into the block the device has reached (${after5.used_count})`);
 
-  // A hand-typed number from outside every block matches nothing and is harmless.
+  // A hand-typed number matches nothing, even when it CONTAINS a figure that
+  // falls inside a live block. This used to be `MANUAL-${tag}`, whose tag is
+  // time-derived: the digits inside it landed in the block's range only some of
+  // the time, so the bug it was meant to catch showed up as a test that failed
+  // once a fortnight. The number below always carries the block's last figure,
+  // so the old "first digit run anywhere" matcher fails this every run.
+  const inRange = first + 19; // the top of the 20-number block
   const outside = (await push([{
     entityName: 'delivery_challan', localId: `L-${tag}-NX`, operation: 'create',
-    payload: { challanNo: `MANUAL-${tag}`, gradeLabel: 'M25', quantityM3: 5, challanStatus: 'delivered' },
+    payload: { challanNo: `MANUAL-${inRange}-${tag}`, gradeLabel: 'M25', quantityM3: 5, challanStatus: 'delivered' },
   }])).data.results[0];
   ok(outside.status === 'applied', 'a number from outside any block still applies');
   const afterX = await one(`SELECT used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
-  ok(Number(afterX.used_count) === 5, `and changes no block's count (${afterX.used_count})`);
+  ok(Number(afterX.used_count) === 5,
+    `a hand-typed number carrying a figure from the block's range still spends nothing (${afterX.used_count}, expected 5)`);
+
+  // The same figure, formatted the way the block formats it, IS one of its numbers.
+  const realTop = `${block.prefix ?? ''}${String(inRange).padStart(Number(block.padding_length), '0')}${suffix}`;
+  await push([{
+    entityName: 'delivery_challan', localId: `L-${tag}-NTOP`, operation: 'create',
+    payload: { challanNo: realTop, gradeLabel: 'M25', quantityM3: 5, challanStatus: 'delivered' },
+  }]);
+  const afterTop = await one(`SELECT used_count FROM local_number_reservations WHERE id = $1`, [r.data.id]);
+  ok(Number(afterTop.used_count) === 20, `and the block's own last number does spend it (${afterTop.used_count})`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

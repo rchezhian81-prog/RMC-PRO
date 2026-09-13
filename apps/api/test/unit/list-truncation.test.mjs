@@ -28,6 +28,22 @@ import { dirname, resolve, relative, join } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../../..');
 
+/**
+ * Source with comment bodies blanked out, so a guard reads CODE and never the
+ * prose beside it. Characters are replaced with spaces rather than removed, so
+ * offsets and line numbers still point at the real line.
+ *
+ * This exists because the word "mistake:" in a comment contains "take:" and was
+ * reported as an uncapped list read. A guard that its own explanation can trip
+ * is a guard people learn to work around.
+ */
+function codeOnly(src) {
+  const blank = (m) => m.replace(/[^\n]/g, ' ');
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, blank)
+    .replace(/(^|[^:])\/\/[^\n]*/g, (m, p1) => p1 + blank(m.slice(p1.length)));
+}
+
 function walk(dir, ext, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
@@ -50,7 +66,8 @@ const TAKE_EXCEPTIONS = [/take: 5000,/];
 test('every capped read can be widened — no magic-number take:', () => {
   const offenders = [];
   for (const f of apiSrc) {
-    for (const m of f.src.matchAll(/take: ([^,\n)]+)/g)) {
+    const code = codeOnly(f.src);
+    for (const m of code.matchAll(/take: ([^,\n)]+)/g)) {
       const value = m[1].trim();
       if (/^listLimit\(/.test(value)) continue;            // the shared window
       if (/^(capped|clampLimit\()/.test(value)) continue;  // already a bounded variable
@@ -58,7 +75,7 @@ test('every capped read can be widened — no magic-number take:', () => {
       // the only one" — not a list, so it has nothing to widen.
       const literal = Number(/^(\d+)\b/.exec(value)?.[1]);
       if (Number.isFinite(literal) && literal <= 2) continue;
-      const line = f.src.slice(0, m.index).split('\n').length;
+      const line = code.slice(0, m.index).split('\n').length;
       const whole = `take: ${value}`;
       if (TAKE_EXCEPTIONS.some((re) => re.test(whole + ','))) continue;
       offenders.push(`${f.rel}:${line}  take: ${value}`);

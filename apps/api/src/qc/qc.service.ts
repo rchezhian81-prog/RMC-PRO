@@ -5,7 +5,7 @@ import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { BatchTicket, ConcreteGrade, MixDesign, Plant, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
-import { assessCubeSet } from './acceptance.util';
+import { assessCubeSet, individualFloor } from './acceptance.util';
 
 const notFound = (what = 'Record') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: `${what} not found` });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -242,8 +242,9 @@ export class QcService {
       if (!rows.length) throw badReq('No cube results supplied');
 
       const fck = num(set.targetStrengthMpa);
-      const tolerance = fck >= 20 ? 3 : 4;
-      const individualFloor = fck - tolerance;
+      // The same IS 456 floor the set verdict uses — asked for, not restated, so
+      // a cube can never be stamped "passed" inside a set that was rejected.
+      const cubeFloor = individualFloor(fck);
       const resRepo = m.getRepository(QcCubeResult);
 
       // Protect the IS 456 verdict from being computed on the wrong sample. The
@@ -282,7 +283,7 @@ export class QcService {
           resRepo.create({
             tenantId, cubeSetId: setId, testAgeDays: age, specimenNo: num(r.specimenNo) || 0,
             testedOn: str(r.testedOn), loadKn: str(r.loadKn), compressiveStrengthMpa: String(strength),
-            passed: age >= 28 ? strength >= individualFloor : null, remarks: str(r.remarks),
+            passed: age >= 28 ? strength >= cubeFloor : null, remarks: str(r.remarks),
           }),
         );
       }

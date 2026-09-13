@@ -115,7 +115,7 @@ export class ImportService {
         successCount++;
       } catch (e) {
         // +2: row 1 is the header, and humans count from 1.
-        errors.push({ row: i + 2, message: this.errorMessage(e) });
+        errors.push({ row: i + 2, message: this.errorMessage(e, importer.def) });
       }
     }
 
@@ -132,8 +132,24 @@ export class ImportService {
     });
   }
 
-  private errorMessage(e: unknown): string {
-    const resp = (e as { response?: { message?: string } })?.response;
+  private errorMessage(e: unknown, def?: ImportDef): string {
+    const resp = (e as { response?: { message?: string; fields?: Record<string, string> } })?.response;
+
+    // Field-level validation detail is the whole point of a row error here. The
+    // master services answer a bad value with the generic "Please correct the
+    // highlighted fields." plus a `fields` map — which is right for a FORM,
+    // where the web app highlights the offending inputs. A spreadsheet has
+    // nothing to highlight, so that message told the person onboarding their
+    // customer list only that row 4 was wrong, never which column or why.
+    // Name the column (by its header, not the internal key) and give the
+    // message the validator already wrote.
+    if (resp?.fields && Object.keys(resp.fields).length) {
+      const label = (key: string) => def?.columns.find((c) => c.key === key)?.label ?? key;
+      return Object.entries(resp.fields)
+        .map(([key, message]) => `${label(key)}: ${message}`)
+        .join(' ');
+    }
+
     if (resp?.message) return resp.message;
     const msg = (e as Error)?.message ?? 'Row failed';
     // Surface a friendly message for a duplicate code rather than the raw SQL.

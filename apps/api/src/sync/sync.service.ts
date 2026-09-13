@@ -36,6 +36,7 @@ import {
 import { recordDeliveryHistory } from '../dispatch/delivery-history.util';
 import { listLimit } from '../common/list-limit.util';
 import { numberWithinBlock } from './reservation-match.util';
+import { businessToday } from '../common/business-date.util';
 
 const notFound = (msg = 'Not found') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: msg });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -369,7 +370,10 @@ export class SyncService {
    * device's hands.
    */
   private async expireStaleReservations(m: EntityManager, deviceId?: string | null): Promise<number> {
-    const currentFy = financialYearOf(new Date().toISOString().slice(0, 10));
+    // The plant's date, not UTC: on 1 April before 05:30 IST a UTC clock still
+    // says 31 March, so the cloud would judge this year's blocks against last
+    // year's financial year — on the one morning when the answer changes.
+    const currentFy = financialYearOf(businessToday());
     const params: unknown[] = [currentFy];
     let scope = '';
     if (deviceId) {

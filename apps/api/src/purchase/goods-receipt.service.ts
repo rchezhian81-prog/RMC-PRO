@@ -16,6 +16,7 @@ import { NumberingService } from '../sales/numbering.service';
 import { StockService } from '../production/stock.service';
 import { poReceiptStatus } from './purchase.util';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Goods receipt not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -92,7 +93,7 @@ export class GrnService {
           tenantId, grnNo, purchaseOrderId,
           supplierId: supplierIdIn ?? po?.supplierId ?? null,
           plantId: plantIdIn ?? po?.plantId ?? null,
-          receiptDate: (dto.receiptDate as string) ?? null,
+          receiptDate: documentDate(dto.receiptDate),
           vehicleNo: (dto.vehicleNo as string) ?? null,
           supplierChallanNo: (dto.supplierChallanNo as string) ?? null,
           status: 'draft', remarks: (dto.remarks as string) ?? null,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { crud, purchaseReportsApi, type Row, type VendorLedger } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -177,7 +178,7 @@ export default function PurchaseReportsPage() {
                   <tr key={i}>
                     <Td style={{ fontWeight: 600 }}>{String(r.billNo)}</Td>
                     <Td>{String(r.supplierBillNo ?? '—')}</Td>
-                    <Td>{String(r.billDate ?? '—')}</Td>
+                    <Td>{formatDate(r.billDate)}</Td>
                     <Td>{String(r.supplierName ?? '')}</Td>
                     <Td numeric>{money(r.taxable)}</Td>
                     <Td numeric>{money(r.tax)}</Td>
@@ -296,7 +297,7 @@ export default function PurchaseReportsPage() {
                   </tr>
                   {ledger.rows.map((r, i) => (
                     <tr key={i}>
-                      <Td>{String(r.date ?? '—')}</Td>
+                      <Td>{formatDate(r.date)}</Td>
                       <Td>{String(r.ref ?? '')}</Td>
                       <Td>{String(r.particulars ?? '')}</Td>
                       <Td numeric>{Number(r.debit) ? money(r.debit) : ''}</Td>

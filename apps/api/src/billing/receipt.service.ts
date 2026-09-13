@@ -8,6 +8,7 @@ import { WhatsAppService } from '../sales/whatsapp.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { round2 } from './tax.util';
 import { allocateAcrossInvoices, invoiceBalanceAfter } from './receipt-allocation.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Receipt not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -103,7 +104,7 @@ export class ReceiptService {
       const payment = await paymentRepo.save(
         paymentRepo.create({
           tenantId, receiptNo, customerId,
-          receiptDate: (dto.receiptDate as string) ?? null,
+          receiptDate: documentDate(dto.receiptDate),
           paymentMode: (dto.paymentMode as string) ?? 'cash',
           amount: String(amount), bankReference,
           remarks: (dto.remarks as string) ?? null, status: 'posted',

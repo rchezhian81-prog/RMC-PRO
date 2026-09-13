@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
@@ -156,7 +157,7 @@ export default function PurchaseOrdersPage() {
                 return (
                   <tr key={r.id}>
                     <Td style={{ fontWeight: 600 }}>{String(r.poNo)}</Td>
-                    <Td>{String(r.orderDate ?? '—')}</Td>
+                    <Td>{formatDate(r.orderDate)}</Td>
                     <Td numeric>₹{money(r.totalAmount)}</Td>
                     <Td><StatusBadge status={status} /></Td>
                     <Td style={{ textAlign: 'right' }}>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
@@ -141,7 +142,7 @@ export default function QuotationsPage() {
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.quotationNo ?? '')}</Td>
                   <Td>{custName.get(String(r.customerId)) || '—'}</Td>
-                  <Td>{String(r.quotationDate ?? '—')}</Td>
+                  <Td>{formatDate(r.quotationDate)}</Td>
                   <Td>{String(r.validUntil ?? '—')}</Td>
                   <Td numeric>{String(r.revisionNo ?? 0)}</Td>
                   <Td><StatusBadge status={String(r.approvalStatus)} /></Td>

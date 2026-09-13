@@ -15,11 +15,11 @@ import {
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { allocationSummary, categorySummary } from './expenses.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Expense voucher not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
-const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 const ALLOCATION_TYPES = new Set(['plant', 'vehicle', 'site', 'general']);
 
@@ -74,7 +74,7 @@ export class ExpenseVoucherService {
       const voucher = await voucherRepo.save(
         voucherRepo.create({
           tenantId, voucherNo,
-          voucherDate: (dto.voucherDate as string) ?? todayIso(),
+          voucherDate: documentDate(dto.voucherDate),
           payee: (dto.payee as string) ?? null,
           paymentMode: (dto.paymentMode as string) ?? null,
           plantId: (dto.plantId as string) ?? null,

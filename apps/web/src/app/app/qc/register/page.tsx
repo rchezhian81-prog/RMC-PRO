@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { qcApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -89,7 +90,7 @@ export default function QcRegisterPage() {
               {cube.rows.map((r, i) => (
                 <tr key={i}>
                   <Td style={{ fontWeight: 600 }}>{String(r.setNo)}</Td>
-                  <Td>{String(r.castDate ?? '')}</Td>
+                  <Td>{formatDate(r.castDate)}</Td>
                   <Td>{String(r.gradeLabel ?? '')}</Td>
                   <Td numeric>{n(r.targetStrengthMpa)}</Td>
                   <Td numeric>{r.meanStrengthMpa != null ? n(r.meanStrengthMpa) : <span style={{ color: 'var(--mn-muted)' }}>pending</span>}</Td>

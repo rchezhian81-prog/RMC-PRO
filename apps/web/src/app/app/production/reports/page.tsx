@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { productionReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -160,7 +161,7 @@ export default function ProductionReportsPage() {
             <tbody>
               {batch.rows.map((r, i) => (
                 <tr key={i}>
-                  <Td>{String(r.date ?? '')}</Td>
+                  <Td>{formatDate(r.date)}</Td>
                   <Td style={{ fontWeight: 600 }}>{String(r.batchTicketNo)}</Td>
                   <Td>{String(r.gradeLabel ?? '')}</Td>
                   <Td numeric>{fmt(r.m3)}</Td>

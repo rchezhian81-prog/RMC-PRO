@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { crud, ordersApi, productionPlansApi, type Row } from '../../../../lib/api';
@@ -153,7 +154,7 @@ export default function ProductionPlansPage() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.planNo ?? '')}</Td>
-                  <Td>{String(r.planDate ?? '—')}</Td>
+                  <Td>{formatDate(r.planDate)}</Td>
                   <Td>{String(r.shift ?? '—')}</Td>
                   <Td><StatusBadge status={String(r.status ?? '')} /></Td>
                   <Td style={{ textAlign: 'right' }}>

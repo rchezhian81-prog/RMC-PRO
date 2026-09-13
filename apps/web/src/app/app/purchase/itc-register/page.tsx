@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { currentMonthRange } from '../../../../lib/report-range';
 import { purchaseApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -91,7 +92,7 @@ export default function ItcRegisterPage() {
                   <tr key={i}>
                     <Td style={{ fontWeight: 600 }}>{String(r.billNo)}</Td>
                     <Td>{String(r.supplierBillNo ?? '—')}</Td>
-                    <Td>{String(r.billDate ?? '—')}</Td>
+                    <Td>{formatDate(r.billDate)}</Td>
                     <Td>{String(r.supplierName ?? '')}</Td>
                     <Td>{r.gstin ? String(r.gstin) : <span style={{ color: 'var(--mn-muted)' }}>—</span>}</Td>
                     <Td numeric>{money(r.taxable)}</Td>

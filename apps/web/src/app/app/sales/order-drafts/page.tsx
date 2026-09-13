@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { orderDraftsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -65,7 +66,7 @@ export default function OrderDraftsPage() {
                   <Td style={{ fontWeight: 600 }}>{String(r.orderNo ?? '')}</Td>
                   <Td>{String(r.customerName ?? '—')}</Td>
                   <Td>{String(r.pricingSource ?? '—')}</Td>
-                  <Td>{String(r.orderDate ?? '—')}</Td>
+                  <Td>{formatDate(r.orderDate)}</Td>
                   <Td>{String(r.creditStatus ?? '')}</Td>
                   <Td><StatusBadge status={String(r.orderStatus)} /></Td>
                   <Td numeric>{money(r.estimatedOrderValue)}</Td>

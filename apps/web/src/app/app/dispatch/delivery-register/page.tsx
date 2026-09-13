@@ -1,6 +1,7 @@
 'use client';
 
 import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { formatDate } from '../../../../lib/format-date';
 import { useEffect, useState } from 'react';
 import { challansApi, dispatchApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -87,7 +88,7 @@ export default function DeliveryRegisterPage() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i}>
-                  <Td>{String(r.date ?? '')}</Td>
+                  <Td>{formatDate(r.date)}</Td>
                   <Td style={{ fontWeight: 600 }}>{String(r.challanNo)}</Td>
                   <Td>{String(r.customerName ?? '')}</Td>
                   <Td>{String(r.gradeLabel ?? '')}</Td>

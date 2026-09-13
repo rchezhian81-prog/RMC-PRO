@@ -19,6 +19,7 @@ import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { isInterstateSupply } from '../billing/tax.util';
 import { summariseMatch, deriveGstSplit, type MatchLineInput } from './purchase.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Vendor bill not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -150,7 +151,7 @@ export class VendorBillService {
           tenantId, billNo,
           supplierBillNo: supplierBillNo || null,
           supplierId, purchaseOrderId, goodsReceiptId,
-          billDate: (dto.billDate as string) ?? null,
+          billDate: documentDate(dto.billDate),
           dueDate: (dto.dueDate as string) ?? null,
           status: 'draft', paymentStatus: 'unpaid',
           // Default eligible; the operator flags a blocked-credit bill (Sec 17(5)).

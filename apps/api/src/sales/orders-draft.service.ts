@@ -15,6 +15,7 @@ import { nullifyEmpty } from '../common/sanitize';
 import { attachCustomerName } from '../common/attach-customer-name';
 import { NumberingService } from './numbering.service';
 import { summariseGst, isInterstateSupply, type QuoteLine } from '../billing/tax.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -119,7 +120,7 @@ export class OrdersDraftService {
       // Enforce the quotation's validity window, exactly as the rate-contract path
       // does — an approved-but-expired quote must not convert at stale rates after
       // a cement/diesel price change.
-      const asOf = (dto.orderDate as string) || new Date().toISOString().slice(0, 10);
+      const asOf = documentDate(dto.orderDate);
       if (quotation.validUntil && asOf > quotation.validUntil) {
         throw badReq(`Quotation expired on ${quotation.validUntil}. Revise and re-approve it before converting.`);
       }
@@ -138,7 +139,7 @@ export class OrdersDraftService {
           siteId: quotation.siteId,
           plantId: (dto.plantId as string) ?? null,
           quotationId,
-          orderDate: (dto.orderDate as string) ?? null,
+          orderDate: documentDate(dto.orderDate),
           requiredDatetime: (dto.requiredDatetime as Date) ?? null,
           pricingSource: 'quotation',
           creditStatus: 'not_checked',
@@ -207,7 +208,7 @@ export class OrdersDraftService {
       }
       // Enforce the contract's validity window (when set) so an expired or
       // not-yet-effective contract can't be converted at stale rates.
-      const asOf = (dto.orderDate as string) || new Date().toISOString().slice(0, 10);
+      const asOf = documentDate(dto.orderDate);
       if (contract.validFrom && asOf < contract.validFrom) {
         throw badReq(`Rate contract is not yet effective (valid from ${contract.validFrom})`);
       }
@@ -233,7 +234,7 @@ export class OrdersDraftService {
           siteId: contract.siteId,
           plantId: (dto.plantId as string) ?? null,
           rateContractId,
-          orderDate: (dto.orderDate as string) ?? null,
+          orderDate: documentDate(dto.orderDate),
           requiredDatetime: (dto.requiredDatetime as Date) ?? null,
           pricingSource: 'rate_contract',
           creditStatus: 'not_checked',

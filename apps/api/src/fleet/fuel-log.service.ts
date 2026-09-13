@@ -5,11 +5,11 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { Vehicle, VehicleFuelLog } from '../core/database/entities';
 import { fuelEfficiency, summariseFuel, type FuelSummaryRow } from './fleet.util';
 import { listLimit } from '../common/list-limit.util';
+import { documentDate } from '../common/business-date.util';
 
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
-const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 /**
  * Vehicle fuel (diesel) log (Plan D3). Each fill records the odometer and litres;
@@ -70,7 +70,7 @@ export class FuelLogService {
       const saved = await repo.save(
         repo.create({
           tenantId, vehicleId,
-          fuelDate: (dto.fuelDate as string) ?? todayIso(),
+          fuelDate: documentDate(dto.fuelDate),
           odometer: String(odometer),
           fuelType: (dto.fuelType as string) ?? 'diesel',
           quantityLitres: String(round2(quantityLitres)),

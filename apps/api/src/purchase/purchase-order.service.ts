@@ -6,6 +6,7 @@ import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Material, Plant, PurchaseOrder, PurchaseOrderItem, Supplier } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Purchase order not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -58,7 +59,7 @@ export class PurchaseOrderService {
         poRepo.create({
           tenantId, poNo, supplierId,
           plantId: (dto.plantId as string) ?? null,
-          orderDate: (dto.orderDate as string) ?? null,
+          orderDate: documentDate(dto.orderDate),
           expectedDate: (dto.expectedDate as string) ?? null,
           status: 'draft', remarks: (dto.remarks as string) ?? null,
         }),

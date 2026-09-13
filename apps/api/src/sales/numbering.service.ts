@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { financialYearOf, formatSeriesNumber, rolloverSuffix } from './numbering.util';
+import { businessToday } from '../common/business-date.util';
 
 interface SeriesRow {
   id: string;
@@ -31,7 +32,12 @@ interface ResolvedSeries {
   financialYear: string | null;
 }
 
-const todayIso = (): string => new Date().toISOString().slice(0, 10);
+/**
+ * The financial year a number is drawn in is decided on the PLANT's date. On a
+ * UTC clock, 1 April before 05:30 IST is still 31 March, so the first documents
+ * of a new financial year would have been numbered into the old year's series —
+ * on the one day of the year when that is least forgivable.
+ */
 const defaultPrefixFor = (documentType: string): string => documentType.slice(0, 3).toUpperCase() + '-';
 
 /**
@@ -81,7 +87,7 @@ export class NumberingService {
     opts: NumberingOpts = {},
   ): Promise<ResolvedSeries> {
     const plantId = opts.plantId ?? null;
-    const currentFy = opts.financialYear ?? financialYearOf(opts.date ?? todayIso());
+    const currentFy = opts.financialYear ?? financialYearOf(opts.date ?? businessToday());
 
     const plantClause = plantId ? 'AND plant_id = $3' : 'AND plant_id IS NULL';
     const keyParams = plantId ? [tenantId, documentType, plantId] : [tenantId, documentType];

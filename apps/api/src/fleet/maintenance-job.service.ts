@@ -5,13 +5,13 @@ import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeNextDue } from './fleet.util';
 import { listLimit } from '../common/list-limit.util';
+import { businessToday, documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Maintenance job not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 const numOrNull = (v: unknown): number | null => (v === undefined || v === null || v === '' ? null : Number(v) || 0);
 const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
-const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 const JOB_TYPES = new Set(['service', 'repair', 'breakdown']);
 
@@ -72,7 +72,7 @@ export class MaintenanceJobService {
       const job = await repo.save(
         repo.create({
           tenantId, jobNo, vehicleId, scheduleId, jobType,
-          reportedDate: (dto.reportedDate as string) ?? todayIso(),
+          reportedDate: documentDate(dto.reportedDate),
           completedDate: (dto.completedDate as string) ?? null,
           odometer: numOrNull(dto.odometer) === null ? null : String(numOrNull(dto.odometer)),
           vendorName: (dto.vendorName as string) ?? null,
@@ -99,7 +99,7 @@ export class MaintenanceJobService {
       if (job.status === 'completed') throw badReq('Job already completed');
       if (job.status === 'cancelled') throw badReq('Cannot complete a cancelled job');
 
-      const completedDate = (dto.completedDate as string) ?? job.completedDate ?? todayIso();
+      const completedDate = (dto.completedDate as string) ?? job.completedDate ?? businessToday();
       const odometer = dto.odometer !== undefined ? numOrNull(dto.odometer) : numOrNull(job.odometer);
       await repo.update(id, {
         status: 'completed',

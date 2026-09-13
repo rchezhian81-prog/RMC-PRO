@@ -24,6 +24,7 @@ import { computeLineTax, round2, isInterstateSupply } from './tax.util';
 import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy } from './return-billing.util';
 import { invoiceBalanceAfter } from './receipt-allocation.util';
 import { gstStateCode, isGstin } from '../compliance/gst-payload.util';
+import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -198,7 +199,7 @@ export class InvoiceService {
       // Due date defaults to invoiceDate + the customer's credit days (falling
       // back to the tenant default_credit_days setting), so aging and overdue
       // alerts key off the agreed terms instead of a hand-typed date.
-      const invoiceDate = (dto.invoiceDate as string) || new Date().toISOString().slice(0, 10);
+      const invoiceDate = documentDate(dto.invoiceDate);
       let dueDate = (dto.dueDate as string) || null;
       if (!dueDate) {
         let days = num(customer.creditDays);

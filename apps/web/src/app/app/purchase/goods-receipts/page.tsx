@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { purchaseApi, type Row } from '../../../../lib/api';
@@ -225,7 +226,7 @@ export default function GoodsReceiptsPage() {
                 return (
                   <tr key={r.id}>
                     <Td style={{ fontWeight: 600 }}>{String(r.grnNo ?? '')}</Td>
-                    <Td>{String(r.receiptDate ?? '')}</Td>
+                    <Td>{formatDate(r.receiptDate)}</Td>
                     <Td>{String(r.supplierChallanNo ?? '—')}</Td>
                     <Td>{String(r.vehicleNo ?? '—')}</Td>
                     <Td><StatusBadge status={status} /></Td>

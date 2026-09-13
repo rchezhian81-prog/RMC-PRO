@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { leadsApi, type Row } from '../../../../lib/api';
@@ -138,7 +139,7 @@ export default function LeadsPage() {
                   <Td>{String(r.customerName ?? '')}</Td>
                   <Td>{String(r.mobile ?? '')}</Td>
                   <Td><StatusBadge status={String(r.leadStage ?? '')} /></Td>
-                  <Td>{String(r.nextFollowupDate ?? '—')}</Td>
+                  <Td>{formatDate(r.nextFollowupDate)}</Td>
                   <Td style={{ textAlign: 'right' }}>
                     <Button variant="secondary" size="sm" onClick={() => open(String(r.id))}>Follow-ups</Button>
                   </Td>

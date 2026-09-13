@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { crud, fleetApi, type Row } from '../../../../lib/api';
@@ -132,7 +133,7 @@ export default function FleetFuelPage() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={String(r.id)}>
-                    <Td>{String(r.fuelDate ?? '—')}</Td>
+                    <Td>{formatDate(r.fuelDate)}</Td>
                     <Td>{vehLabel(r.vehicleId)}</Td>
                     <Td numeric>{dec(r.odometer)}</Td>
                     <Td numeric>{dec(r.quantityLitres)}</Td>

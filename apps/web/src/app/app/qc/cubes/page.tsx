@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { useRouter } from 'next/navigation';
@@ -108,7 +109,7 @@ export default function CubeSets() {
                   <Td>{String(r.setNo)}</Td>
                   <Td>{String(r.gradeLabel ?? '—')}</Td>
                   <Td numeric>{String(r.targetStrengthMpa)}</Td>
-                  <Td>{String(r.castDate ?? '').slice(0, 10)}</Td>
+                  <Td>{formatDate(r.castDate)}</Td>
                   <Td numeric>{r.meanStrengthMpa == null ? '—' : String(r.meanStrengthMpa)}</Td>
                   <Td><StatusBadge status={String(r.acceptanceStatus ?? r.status)} /></Td>
                   <Td>

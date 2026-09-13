@@ -1,6 +1,7 @@
 'use client';
 
 import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { formatDate } from '../../../../lib/format-date';
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { billingReportsApi, downloadTallyCsv, type SalesRegister, type Row } from '../../../../lib/api';
@@ -254,7 +255,7 @@ export default function BillingReportsPage() {
                 {sales.rows.map((r) => (
                   <tr key={r.id}>
                     <Td style={{ fontWeight: 600 }}>{String(r.invoiceNo)}</Td>
-                    <Td>{String(r.invoiceDate ?? '—')}</Td>
+                    <Td>{formatDate(r.invoiceDate)}</Td>
                     <Td>{r.gstin ? String(r.gstin) : <span style={{ color: 'var(--mn-muted)' }}>B2C</span>}</Td>
                     <Td>{String(r.placeOfSupply ?? '—')}</Td>
                     <Td numeric>{money(r.taxableAmount)}</Td>
@@ -300,7 +301,7 @@ export default function BillingReportsPage() {
               {receipts.map((r) => (
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.receiptNo)}</Td>
-                  <Td>{String(r.receiptDate ?? '—')}</Td>
+                  <Td>{formatDate(r.receiptDate)}</Td>
                   <Td>{String(r.paymentMode ?? '')}</Td>
                   <Td numeric>{money(r.amount)}</Td>
                   <Td numeric>{money(r.allocatedAmount)}</Td>
@@ -364,7 +365,7 @@ export default function BillingReportsPage() {
               <tbody>
                 {dayBook.rows.map((r, i) => (
                   <tr key={i}>
-                    <Td>{String(r.date ?? '—')}</Td>
+                    <Td>{formatDate(r.date)}</Td>
                     <Td>{String(r.kind)}</Td>
                     <Td style={{ fontWeight: 600 }}>{String(r.ref)}</Td>
                     <Td>{String(r.mode)}</Td>

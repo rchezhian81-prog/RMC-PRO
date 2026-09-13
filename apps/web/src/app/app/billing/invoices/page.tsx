@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
@@ -189,7 +190,7 @@ export default function InvoicesPage() {
                       ? String(r.invoiceNo)
                       : <span style={{ color: 'var(--mn-text-muted)', fontWeight: 500 }}>Draft</span>}
                   </Td>
-                  <Td>{String(r.invoiceDate ?? '—')}</Td>
+                  <Td>{formatDate(r.invoiceDate)}</Td>
                   <Td numeric>₹{money(r.taxableAmount)}</Td>
                   <Td numeric>₹{money(r.totalAmount)}</Td>
                   <Td numeric>₹{money(r.outstandingAmount)}</Td>

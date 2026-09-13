@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { crud, customersApi, invoicesApi, receiptsApi, type CustomerExposure, type Row } from '../../../../lib/api';
@@ -234,7 +235,7 @@ export default function ReceiptsPage() {
                 return (
                 <tr key={r.id}>
                   <Td style={{ fontWeight: 600 }}>{String(r.receiptNo ?? '')}</Td>
-                  <Td>{String(r.receiptDate ?? '—')}</Td>
+                  <Td>{formatDate(r.receiptDate)}</Td>
                   <Td>{String(r.paymentMode ?? '')}</Td>
                   <Td numeric>₹{money(r.amount)}</Td>
                   <Td numeric>₹{money(r.allocatedAmount)}</Td>

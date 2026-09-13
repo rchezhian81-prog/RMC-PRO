@@ -1,7 +1,21 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { isUiV2 } from '../../lib/ui-flag';
 
-/** Mix Nova surface card with an optional header (title + actions). */
+/**
+ * Mix Nova surface card with an optional header (title + actions).
+ *
+ * WHY `minWidth: 0`: most screens lay their cards out in a `display: grid`
+ * wrapper, and a grid (or flex) item defaults to `min-width: auto` — it refuses
+ * to shrink below its content's intrinsic width. A card holding a wide table
+ * therefore pushed its grid track wider than the viewport, and because the card
+ * never got narrow, the table's own `overflow-x: auto` scroller never engaged:
+ * instead of the TABLE scrolling sideways, the whole PAGE did, dragging the
+ * heading and every other card along with it.
+ *
+ * Measured on a 400px phone before this: Delivery Register 517px wide, Stock
+ * 593px, and Billing Reports 901px at a 768px tablet. After: every page exactly
+ * its viewport, with the wide tables scrolling inside their own cards.
+ */
 export function Card({
   title,
   actions,
@@ -20,7 +34,7 @@ export function Card({
   // ---- V2 (Aurora premium): class-driven header/body so CSS owns the look. ----
   if (v2) {
     return (
-      <section className="mn-card" style={style}>
+      <section className="mn-card" style={{ minWidth: 0, ...style }}>
         {(title || actions) && (
           <div className="mn-card-head">
             {typeof title === 'string' ? (
@@ -38,7 +52,7 @@ export function Card({
 
   // ---- Legacy (flag-off) — unchanged inline version. ----
   return (
-    <section className="mn-card" style={style}>
+    <section className="mn-card" style={{ minWidth: 0, ...style }}>
       {(title || actions) && (
         <div
           style={{

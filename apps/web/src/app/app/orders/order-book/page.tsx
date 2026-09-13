@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { ordersApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -62,7 +63,7 @@ export default function OrderBookPage() {
               {rows.map((r, i) => (
                 <tr key={i}>
                   <Td style={{ fontWeight: 600 }}>{String(r.orderNo)}</Td>
-                  <Td>{String(r.orderDate ?? '—')}</Td>
+                  <Td>{formatDate(r.orderDate)}</Td>
                   <Td>{String(r.customerName ?? '')}</Td>
                   <Td numeric>{m3(r.ordered)}</Td>
                   <Td numeric>{m3(r.delivered)}</Td>

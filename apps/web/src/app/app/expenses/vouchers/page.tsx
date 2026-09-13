@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { crud, expensesApi, type Row } from '../../../../lib/api';
@@ -179,7 +180,7 @@ export default function ExpenseVouchersPage() {
                   return (
                     <tr key={String(r.id)}>
                       <Td style={{ fontWeight: 600 }}>{String(r.voucherNo)}</Td>
-                      <Td>{String(r.voucherDate ?? '—')}</Td>
+                      <Td>{formatDate(r.voucherDate)}</Td>
                       <Td>{String(r.payee ?? '—')}</Td>
                       <Td numeric>₹{money(r.totalAmount)}</Td>
                       <Td><StatusBadge status={status} /></Td>

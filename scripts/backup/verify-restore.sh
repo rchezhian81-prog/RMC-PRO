@@ -35,6 +35,9 @@ CRON_FILE="/etc/cron.d/rmc-restore-verify"
 LOG_FILE="/var/log/rmc-restore-verify.log"
 
 log() { printf '[verify-restore %s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
+# psql spreads an error over several lines ending in a caret; the ERROR line is
+# the one that says what actually went wrong.
+first_error() { grep -m1 'ERROR' "$1" 2>/dev/null | sed 's/^ *//' | cut -c1-200; }
 die() { log "ERROR: $*" >&2; exit 1; }
 getenv() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- ; }
 
@@ -108,12 +111,16 @@ drill() {
   local out
   out="$(dc_psql -d "$SCRATCH" -v ON_ERROR_STOP=1 -Atc \
     "SELECT (SELECT count(*) FROM migrations)||'|'||(SELECT count(*) FROM tenants)||'|'||(SELECT count(*) FROM users)||'|'||(SELECT count(*) FROM invoices)||'|'||(SELECT count(*) FROM stock_balances)" 2>/tmp/verify-restore.err)" \
-    || fail "core tables missing/unreadable after restore ($(tail -1 /tmp/verify-restore.err 2>/dev/null))"
+    || fail "core tables missing/unreadable after restore ($(first_error /tmp/verify-restore.err))"
 
   out="$(printf '%s' "$out" | tr -d '\r')"
   IFS='|' read -r m_ct t_ct u_ct i_ct s_ct <<< "$out"
   log "restored counts: migrations=$m_ct tenants=$t_ct users=$u_ct invoices=$i_ct stock_balances=$s_ct"
   [ "${m_ct:-0}" -ge "$MIN_MIGRATIONS" ] || fail "only $m_ct migration rows (< $MIN_MIGRATIONS) — schema did not fully restore"
+  # A dump can restore a perfect, empty schema. That is not a usable backup, so
+  # the drill fails on it rather than reporting the schema check as a pass.
+  [ "${t_ct:-0}" -ge 1 ] || fail "0 companies restored — this backup holds a schema but no business data"
+  [ "${u_ct:-0}" -ge 1 ] || fail "0 users restored — nobody could log in to a database restored from this backup"
 
   dc_psql -d postgres -c "DROP DATABASE IF EXISTS \"$SCRATCH\";" >/dev/null 2>&1
   log "RESTORE DRILL: PASS — $(basename "$FILE") restores cleanly (scratch db dropped)"

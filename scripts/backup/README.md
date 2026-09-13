@@ -40,19 +40,49 @@ independently. Retention counts default to 7 / 4 / 3 (override via env).
 
 ## Restore — always test before you trust
 
+In the commands below, replace the dump filename with a real one from
+`ls -1t backups/postgres/*.dump` — the names carry the date and time they were taken.
+
 ```bash
-# Safe: restore into a scratch DB, print row counts, drop it. Production untouched.
+# Safe: restore into a scratch DB, check it, drop it. Production untouched.
 ./scripts/backup/pg-restore.sh --file backups/postgres/rmc-daily-20260804-021500.dump
 
 # Keep the scratch DB to poke at it:
-./scripts/backup/pg-restore.sh --file <dump> --into rmc_restore_test --keep
+./scripts/backup/pg-restore.sh --file backups/postgres/rmc-daily-20260804-021500.dump \
+    --into rmc_restore_test --keep
 
-# DANGER — overwrite the live DB (disaster recovery only). Take a fresh backup first:
-./scripts/backup/pg-restore.sh --file <dump> --into rmc --confirm
+# DANGER — overwrite the live DB (disaster recovery only):
+./scripts/backup/pg-restore.sh --file backups/postgres/rmc-daily-20260804-021500.dump \
+    --into rmc --confirm
 ```
 
 Run a **restore test monthly** (and after any backup config change). A green restore
 test is the only proof the backup works.
+
+### What "it worked" means
+
+The script only reports success if the restored database is actually usable. It
+reads the archive **before** it changes anything (so a half-downloaded dump cannot
+wipe the target on its way to failing), treats any `pg_restore` error as a failed
+restore, and then counts real rows — the schema, at least one company, at least one
+user. Anything less prints `RESTORE FAILED` and exits non-zero.
+
+This matters most on the live database: restoring over data that is already there
+looks identical to a restore that did nothing at all, so row counts alone cannot
+tell you it worked.
+
+### Undoing a restore
+
+A live restore (`--into rmc --confirm`) takes a **safety dump of the current
+database first**, named `rmc-pre-restore-<date>-<time>.dump`. If you restore the
+wrong backup — or an older one than you meant — that file is how you get back
+everything entered since the backup was taken. The script prints the exact command
+to run; it also refuses to overwrite the live database at all if that safety dump
+fails, unless you add `--force`.
+
+Safety dumps are deliberately **never pruned** — the nightly GFS retention only
+touches `rmc-daily-*`, `rmc-weekly-*` and `rmc-monthly-*`. Delete them by hand once
+you are sure the restore was the right one.
 
 ## Off-box copy — required (Backblaze B2)
 On-box copies die with the box. Every dump is copied off VM3 to **Backblaze B2**

@@ -1,6 +1,6 @@
 'use client';
 
-import { currentMonthRange } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { useEffect, useState } from 'react';
 import { challansApi, dispatchApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -25,17 +25,14 @@ export default function DeliveryRegisterPage() {
     setError(null);
     // allSettled: a register too wide for its cap must not also hide the cycle
     // times, which answered fine.
-    const [reg, cyc] = await Promise.allSettled([
+    const out = await Promise.allSettled([
       challansApi.deliveryRegister({ from: from || undefined, to: to || undefined }),
       dispatchApi.cycleTimes(from || undefined, to || undefined),
     ]);
-    setData(reg.status === 'fulfilled' ? reg.value : null);
-    setCycle(cyc.status === 'fulfilled' ? cyc.value : null);
-    const failed = [reg, cyc].filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-    if (failed.length) {
-      const why = failed[0]?.reason instanceof Error ? failed[0].reason.message : String(failed[0]?.reason ?? '');
-      setError(why);
-    }
+    setData(settledValue(out[0]));
+    setCycle(settledValue(out[1]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

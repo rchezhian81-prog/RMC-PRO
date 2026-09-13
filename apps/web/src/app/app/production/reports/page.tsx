@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { productionReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -19,13 +20,16 @@ export default function ProductionReportsPage() {
   const [recon, setRecon] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [batch, setBatch] = useState<{ rows: Row[]; totalM3: number; count: number } | null>(null);
   const [pva, setPva] = useState<{ rows: Row[]; totals: Row } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than every batch ever produced.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [s, v, c, b, p, r] = await Promise.all([
+    // allSettled: six independent reports — one failing must not blank five
+    // that answered.
+    const out = await Promise.allSettled([
       productionReportsApi.summary(from || undefined, to || undefined),
       productionReportsApi.variance(),
       productionReportsApi.consumption(from || undefined, to || undefined),
@@ -33,13 +37,16 @@ export default function ProductionReportsPage() {
       productionReportsApi.planVsActual(from || undefined, to || undefined),
       productionReportsApi.reconciliation(from || undefined, to || undefined),
     ]);
-    setByGrade(s.byGrade as Row[]);
-    setTotals(s.totals as Row);
-    setVariance(v);
-    setConsumption(c);
-    setBatch(b);
-    setPva(p);
-    setRecon(r);
+    const summary = settledValue(out[0]);
+    setByGrade((summary?.byGrade as Row[]) ?? []);
+    setTotals((summary?.totals as Row) ?? null);
+    setVariance(settledValue(out[1]) ?? []);
+    setConsumption(settledValue(out[2]) ?? []);
+    setBatch(settledValue(out[3]));
+    setPva(settledValue(out[4]));
+    setRecon(settledValue(out[5]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

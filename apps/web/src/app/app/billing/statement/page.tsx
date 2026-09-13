@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange } from '../../../../lib/report-range';
 import { crud, billingReportsApi, type CustomerStatement, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { StatCard } from '../../../../components/ui/StatCard';
@@ -15,7 +16,8 @@ const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { m
 export default function CustomerStatementPage() {
   const [customers, setCustomers] = useState<Row[]>([]);
   const [customerId, setCustomerId] = useState('');
-  const [range, setRange] = useState({ from: '', to: '' });
+  // A statement of account is a period document — default to this month.
+  const [range, setRange] = useState(currentMonthRange());
   const [stmt, setStmt] = useState<CustomerStatement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

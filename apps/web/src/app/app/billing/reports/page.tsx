@@ -1,6 +1,6 @@
 'use client';
 
-import { currentMonthRange } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { billingReportsApi, downloadTallyCsv, type SalesRegister, type Row } from '../../../../lib/api';
@@ -45,16 +45,16 @@ export default function BillingReportsPage() {
       billingReportsApi.gradeMargin(from || undefined, to || undefined),
       billingReportsApi.collectionEfficiency(from || undefined, to || undefined),
     ]);
-    const at = <T,>(i: number): T | null =>
-      out[i]?.status === 'fulfilled' ? ((out[i] as PromiseFulfilledResult<T>).value ?? null) : null;
-    setGst(at(0)); setSales(at(1)); setHsn(at(2)); setReceipts(at(3) ?? []);
-    setGstr3b(at(4)); setDayBook(at(5)); setMargin(at(6)); setCollection(at(7));
-
-    const failed = out.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-    if (failed.length) {
-      const why = failed[0]?.reason instanceof Error ? failed[0].reason.message : String(failed[0]?.reason ?? '');
-      setError(`${failed.length} of ${out.length} reports could not load. ${why}`);
-    }
+    setGst(settledValue(out[0]));
+    setSales(settledValue(out[1]));
+    setHsn(settledValue(out[2]));
+    setReceipts(settledValue(out[3]) ?? []);
+    setGstr3b(settledValue(out[4]));
+    setDayBook(settledValue(out[5]));
+    setMargin(settledValue(out[6]));
+    setCollection(settledValue(out[7]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

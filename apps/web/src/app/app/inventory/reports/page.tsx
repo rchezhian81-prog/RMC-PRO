@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { inventoryReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -16,22 +17,27 @@ export default function InventoryReportsPage() {
   const [negative, setNegative] = useState<Row[]>([]);
   const [valuation, setValuation] = useState<{ rows: Row[]; total: number } | null>(null);
   const [movement, setMovement] = useState<Row[]>([]);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Bounds the movement ledger; the stock views below are point-in-time.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [l, n, v, mv] = await Promise.all([
+    // allSettled: low stock, negative stock, valuation and the movement ledger
+    // are four independent reports — one failing must not blank the other three.
+    const out = await Promise.allSettled([
       inventoryReportsApi.lowStock(),
       inventoryReportsApi.negativeStock(),
       inventoryReportsApi.valuation(),
       inventoryReportsApi.movement(from || undefined, to || undefined),
     ]);
-    setLow(l);
-    setNegative(n);
-    setValuation(v);
-    setMovement(mv);
+    setLow(settledValue(out[0]) ?? []);
+    setNegative(settledValue(out[1]) ?? []);
+    setValuation(settledValue(out[2]));
+    setMovement(settledValue(out[3]) ?? []);
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

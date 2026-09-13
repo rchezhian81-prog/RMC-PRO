@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { dispatchApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -16,18 +17,23 @@ const num1 = (v: unknown) => (v == null ? '—' : Number(v).toLocaleString('en-I
 export default function FleetUtilizationPage() {
   const [data, setData] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [driver, setDriver] = useState<{ rows: Row[]; totals: Row } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than every trip ever run.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [fu, dp] = await Promise.all([
+    // allSettled: vehicle utilisation and driver productivity are separate
+    // reports; one failing must not blank the other.
+    const out = await Promise.allSettled([
       dispatchApi.fleetUtilization(from || undefined, to || undefined),
       dispatchApi.driverProductivity(from || undefined, to || undefined),
     ]);
-    setData(fu);
-    setDriver(dp);
+    setData(settledValue(out[0]));
+    setDriver(settledValue(out[1]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

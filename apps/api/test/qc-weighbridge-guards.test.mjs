@@ -220,3 +220,41 @@ console.log('\n[Q2] a cube set cannot be cast with a specimen count that disable
 await owner.destroy();
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
+
+// ───────────────────────── Q3 — the slump register date filter actually filters ─────────────────────────
+console.log('\n[Q3] the slump-register date range is applied in SQL, not by slicing a Date');
+{
+  // REGRESSION: the old filter did String(testedAt).slice(0, 10), and testedAt is
+  // a timestamptz that TypeORM hands back as a Date. String(date) is
+  // "Sat Sep 12 2026 …", so slice(0,10) gave "Sat Sep 12" — which compares
+  // lexically ABOVE any "2026-.." bound. A `to` bound therefore excluded every
+  // row and a `from` bound excluded none: the filter never worked.
+  const tag2 = `${tag}Q3`;
+  for (const day of ['01', '02', '03', '10', '11']) {
+    await q(
+      `INSERT INTO qc_slump_tests (id, tenant_id, measured_slump_mm, passed, tested_at, remarks)
+       VALUES ($1,$2,120,true,$3,$4)`,
+      [randomUUID(), TENANT, `2026-03-${day}T10:30:00Z`, `q3-${tag2}`],
+    );
+  }
+  const count = async (qs) => (await call('GET', `/qc/slump-register${qs}`)).data?.count ?? -1;
+
+  const windowed = await count('?from=2026-03-01&to=2026-03-03');
+  ok(windowed >= 3, `a from..to window returns its rows, not zero (got ${windowed})`);
+
+  const toOnly = await count('?to=2026-03-03');
+  const fromOnly = await count('?from=2026-03-10');
+  ok(toOnly >= 3, `a 'to' bound no longer excludes everything (got ${toOnly})`);
+  ok(fromOnly >= 2, `a 'from' bound returns the later rows (got ${fromOnly})`);
+  ok(toOnly < fromOnly + windowed + 1000, 'the bounds actually narrow the result');
+
+  // A test recorded late in the day belongs to that day, not the next one.
+  const lateId = randomUUID();
+  await q(
+    `INSERT INTO qc_slump_tests (id, tenant_id, measured_slump_mm, passed, tested_at, remarks)
+     VALUES ($1,$2,120,true,'2026-03-20T23:30:00Z',$3)`,
+    [lateId, TENANT, `q3-late-${tag2}`],
+  );
+  const onItsDay = await count('?from=2026-03-20&to=2026-03-20');
+  ok(onItsDay >= 1, `a 23:30 test falls on its own day (got ${onItsDay})`);
+}

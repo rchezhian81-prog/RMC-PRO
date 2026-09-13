@@ -1,3 +1,4 @@
+import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -28,7 +29,7 @@ export class ProductionPlansService {
 
   list(tenantId: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(ProductionPlan).find({ order: { createdAt: 'DESC' } }),
+      m.getRepository(ProductionPlan).find({ order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
     );
   }
 

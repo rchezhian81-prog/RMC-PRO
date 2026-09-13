@@ -25,6 +25,22 @@ const ymd = (d: Date): string => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+/**
+ * Today, as the plant's wall clock has it — YYYY-MM-DD.
+ *
+ * Use this for any date SENT TO THE API as a document's date. `toISOString()` is
+ * UTC, so before 05:30 in India it names YESTERDAY. A goods receipt or purchase
+ * bill keyed at 2am would be filed a day early, and on the 1st of April that is
+ * not a day early but a FINANCIAL YEAR early — the wrong GST period, and the
+ * wrong period to claim the input credit in.
+ *
+ * The server defaults a missing date to the plant's today, but a client that
+ * sends an explicit wrong date is believed. So the client has to be right too.
+ */
+export function todayLocal(now: Date = new Date()): string {
+  return ymd(now);
+}
+
 /** First day of the current month → today, in the viewer's own timezone. */
 export function currentMonthRange(now: Date = new Date()): { from: string; to: string } {
   return { from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: ymd(now) };

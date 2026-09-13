@@ -13,6 +13,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
+import { todayLocal } from '../../../../lib/report-range';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const PAYMENT_MODES = ['cash', 'bank', 'upi', 'cheque'];
@@ -75,7 +76,7 @@ export default function ExpenseVouchersPage() {
     if (!payloadLines.length) { setError('Add at least one line with a head and amount'); return; }
     setBusy(true);
     try {
-      const v = await expensesApi.createVoucher({ payee: payee || undefined, paymentMode: mode, plantId: plantId || undefined, voucherDate: new Date().toISOString().slice(0, 10), lines: payloadLines });
+      const v = await expensesApi.createVoucher({ payee: payee || undefined, paymentMode: mode, plantId: plantId || undefined, voucherDate: todayLocal(), lines: payloadLines });
       setMsg(`Voucher ${String(v.voucherNo)} created (₹${money(v.totalAmount)}).`);
       setPayee(''); setPlantId(''); setLines([emptyLine()]);
       await reload();

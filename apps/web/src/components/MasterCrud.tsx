@@ -14,6 +14,7 @@ import { Form } from './ui/Form';
 import { Field, Input } from './ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from './ui/States';
 import { useConfirm } from './ui/ConfirmDialog';
+import { todayLocal } from '../lib/report-range';
 
 type Access = { isOwner: boolean; permissions: string[]; has: (k: string) => boolean };
 const NO_ACCESS: Access = { isOwner: false, permissions: [], has: () => false };
@@ -200,7 +201,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
 
   function exportCsv() {
     const cols = Array.from(new Set([...config.columns, ...fieldKeys]));
-    downloadCsv(`${config.path}-${new Date().toISOString().slice(0, 10)}`, toCsv(rows, cols));
+    downloadCsv(`${config.path}-${todayLocal()}`, toCsv(rows, cols));
   }
 
   function downloadTemplate() {

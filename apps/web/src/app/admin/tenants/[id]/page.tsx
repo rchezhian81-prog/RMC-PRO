@@ -12,6 +12,7 @@ import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState } from '../../../../components/ui/States';
+import { todayLocal } from '../../../../lib/report-range';
 
 /** "3 of 5 users", or just "3 users" when no plan caps it. */
 function describeUsage(u: { used: number; limit: number | null }, noun: string): string {
@@ -130,7 +131,7 @@ export default function TenantDetailPage() {
       const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = todayLocal();
       a.href = url;
       a.download = `${doc.tenant.code || 'tenant'}-export-${stamp}.json`;
       a.click();

@@ -43,6 +43,17 @@ function screens() {
 
 const ALL = screens();
 
+/**
+ * Source with comments removed. These guards must read CODE: the comment above
+ * a rule naturally quotes the wrong form it forbids, and a guard that matches
+ * its own explanation is worthless in both directions — it can pass when the
+ * behaviour is gone, and fail when only the prose changed.
+ */
+const readCode = (path) =>
+  readFileSync(path, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
 test('no screen mounts with an empty date range', () => {
   // An empty range means "every row you have" — the one request the API caps.
   const bad = ALL.filter((f) => /useState\(\s*\{\s*from:\s*''\s*,\s*to:\s*''\s*\}\s*\)/.test(f.src));
@@ -89,7 +100,7 @@ test('the range helper computes the windows it claims to', () => {
   // Node cannot import .ts, and every other source-scanning test here is
   // regex-based, so pin the arithmetic by shape. The behaviour itself is
   // exercised by tsc and by the build.
-  const src = readFileSync(resolve(webSrc, 'lib/report-range.ts'), 'utf8');
+  const src = readCode(resolve(webSrc, 'lib/report-range.ts'));
   assert.match(src, /new Date\(now\.getFullYear\(\), now\.getMonth\(\), 1\)/,
     'currentMonthRange must start at the first of the current month');
   assert.match(src, /now\.getMonth\(\) >= 3/, 'the Indian financial year must start in April');
@@ -99,4 +110,37 @@ test('the range helper computes the windows it claims to', () => {
   assert.ok(!/getUTC/.test(src), 'the range must not use UTC getters');
   assert.match(src, /\$\{startYear\}-04-01/, 'the financial year must run 1 April');
   assert.match(src, /\$\{startYear \+ 1\}-03-31/, 'to 31 March');
+});
+
+test('no screen derives a date it sends to the API from UTC', () => {
+  // `new Date().toISOString().slice(0, 10)` is UTC. In IST that names YESTERDAY
+  // until 05:30, so a goods receipt or purchase bill keyed at 2am was filed a
+  // day early — and on 1 April, a FINANCIAL YEAR early, into the wrong GST
+  // period. The server defaults a missing date to the plant's today, but a
+  // client that sends an explicit wrong date is believed, so the client has to
+  // be right too.
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+      const src = readCode(full);
+      if (/new Date\(\)\.toISOString\(\)\.slice\(\s*0\s*,\s*10\s*\)/.test(src)) {
+        offenders.push(full.slice(webSrc.length + 1));
+      }
+    }
+  };
+  walk(webSrc);
+  assert.deepEqual(
+    offenders,
+    [],
+    `these build a date from UTC — use todayLocal() from lib/report-range: ${offenders.join(', ')}`,
+  );
+});
+
+test('todayLocal is the plant\'s date, never UTC-shifted', () => {
+  const src = readCode(resolve(webSrc, 'lib/report-range.ts'));
+  assert.match(src, /export function todayLocal\b/, 'report-range.ts must export todayLocal');
+  assert.ok(!/toISOString\(\)/.test(src), 'and must build it from local date parts');
 });

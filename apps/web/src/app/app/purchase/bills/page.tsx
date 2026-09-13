@@ -12,6 +12,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
+import { todayLocal } from '../../../../lib/report-range';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -54,7 +55,7 @@ export default function VendorBillsPage() {
     try {
       const bill = await purchaseApi.createBill({
         supplierId: grn.supplierId, goodsReceiptId: grn.id, purchaseOrderId: grn.purchaseOrderId ?? undefined,
-        supplierBillNo: supplierBillNo || undefined, billDate: new Date().toISOString().slice(0, 10),
+        supplierBillNo: supplierBillNo || undefined, billDate: todayLocal(),
         itcEligible,
       });
       setMsg(`Vendor bill ${String(bill.billNo)} created — match: ${String(bill.matchStatus)}.`);

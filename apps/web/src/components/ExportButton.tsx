@@ -3,6 +3,7 @@
 import { Download } from 'lucide-react';
 import { toCsv, downloadCsv } from '../lib/csv';
 import { Button } from './ui/Button';
+import { todayLocal } from '../lib/report-range';
 
 /** Reusable "Export CSV" action for any list/register. */
 export function ExportButton({
@@ -22,7 +23,7 @@ export function ExportButton({
       size="sm"
       icon={<Download size={15} />}
       disabled={!rows.length}
-      onClick={() => downloadCsv(`${filename}-${new Date().toISOString().slice(0, 10)}`, toCsv(rows, columns))}
+      onClick={() => downloadCsv(`${filename}-${todayLocal()}`, toCsv(rows, columns))}
     >
       {label}
     </Button>

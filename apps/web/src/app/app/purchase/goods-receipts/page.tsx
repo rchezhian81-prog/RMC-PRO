@@ -13,6 +13,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
+import { todayLocal } from '../../../../lib/report-range';
 
 const qty = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -99,7 +100,7 @@ export default function GoodsReceiptsPage() {
     try {
       const grn = await purchaseApi.createGrn({
         purchaseOrderId: poId, plantId: po?.plantId ?? undefined,
-        receiptDate: head.receiptDate || new Date().toISOString().slice(0, 10),
+        receiptDate: head.receiptDate || todayLocal(),
         supplierChallanNo: head.supplierChallanNo || undefined, vehicleNo: head.vehicleNo || undefined,
         lines: payloadLines,
       });

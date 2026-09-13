@@ -573,3 +573,42 @@ something needs a state chosen from the list.
 The state table is inlined in the script so it runs from a plain checkout with
 nothing built; `packages/shared/test/unit/gst-states.test.mjs` asserts that copy
 matches the shared list exactly, so the two cannot drift.
+
+## `reset-user-password.mjs` — the way back in when the owner is locked out
+
+A Company Admin can reset any staff member's password from Setup → Users, but
+**not the Company Owner's**. That rule is deliberate: without it an admin could
+take the owner's login and with it the whole company's data.
+
+It does mean that if the owner forgets their own password and there is no second
+owner, nobody inside the application can let them back in — not another admin,
+and not the platform super admin, which has no reset route either. This script
+is the way back.
+
+```bash
+read -rs NEW_PASSWORD; export NEW_PASSWORD
+EMAIL='owner@example.com' node scripts/ops/reset-user-password.mjs
+unset NEW_PASSWORD
+```
+
+Add `DRY_RUN=1` first to see whose account it would change without changing it.
+
+**Use Setup → Users instead whenever the account is not the owner.** That path is
+audited inside the application and needs no shell.
+
+The password is read from the environment **only**. Never pass it as an argument:
+command-line arguments are visible to every user on the box through `ps`.
+
+It refuses a password the application itself would refuse, writes a bcrypt hash
+at the same cost the API uses, and bumps `token_version` so **every existing
+session and refresh token for that account is revoked** — a reset must not leave
+an old login working. It prints the email and company it changed, never the
+password.
+
+Verified end to end: a real refresh token that renewed before the reset is
+rejected after it ("This session was signed out. Please sign in again."), the new
+password signs in, and the old one is refused.
+
+Needing SSH access and the database password is the second factor here. Someone
+who can already run commands on the box could reach the data anyway, so this
+grants no new power — it only saves a rebuild.

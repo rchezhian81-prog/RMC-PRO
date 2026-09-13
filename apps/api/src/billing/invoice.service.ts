@@ -23,6 +23,7 @@ import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeLineTax, round2, isInterstateSupply } from './tax.util';
 import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy } from './return-billing.util';
 import { invoiceBalanceAfter } from './receipt-allocation.util';
+import { gstStateCode, isGstin } from '../compliance/gst-payload.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -335,6 +336,28 @@ export class InvoiceService {
       const missingHsn = items.filter((it) => !(it.hsnSac ?? '').trim());
       if (missingHsn.length) {
         throw badReq(`Every line needs an HSN/SAC before issuing (${missingHsn.length} missing) — it is required on the GST invoice and the e-invoice.`);
+      }
+      // The SUPPLIER's own GSTIN and state are just as mandatory, and nothing
+      // was checking them. The PDF prints the GSTIN line only when there is one,
+      // so a company record with the field left blank produced a clean-looking
+      // "TAX INVOICE" carrying no supplier GSTIN at all — not a valid tax
+      // invoice under Rule 46, and the customer cannot claim the credit from it.
+      // The state matters twice over: it is the seller side of the CGST+SGST vs
+      // IGST decision, so a blank one silently makes every supply local.
+      // A fresh install starts with both unset, so this is the default state of
+      // the system rather than an unlucky edge case.
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      if (!isGstin(company?.gstin)) {
+        throw badReq(
+          'Your company GSTIN is missing or not valid, and a tax invoice cannot be issued without it. ' +
+            'Set it in Settings → Company, then issue this invoice again.',
+        );
+      }
+      if (!gstStateCode(company?.state, company?.gstin)) {
+        throw badReq(
+          'Your company state is missing or not a recognised state, and it decides whether a bill is ' +
+            'CGST + SGST or IGST. Choose it in Settings → Company, then issue this invoice again.',
+        );
       }
       // Draw the number now, under the same lock that settles the status, so
       // the series only ever advances for an invoice that is actually issued.

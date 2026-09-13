@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange } from '../../../../lib/report-range';
 import { fleetReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -16,7 +17,8 @@ const num2 = (v: unknown) => (v == null ? '—' : Number(v).toLocaleString('en-I
 
 export default function FleetRunningCostPage() {
   const [data, setData] = useState<{ rows: Row[]; totals: Row } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than every fuel log ever entered.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 

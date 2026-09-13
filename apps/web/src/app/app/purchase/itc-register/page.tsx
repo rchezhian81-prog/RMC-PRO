@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange } from '../../../../lib/report-range';
 import { purchaseApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -14,7 +15,8 @@ const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { m
 
 export default function ItcRegisterPage() {
   const [data, setData] = useState<{ rows: Row[]; totals: Row } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // ITC is claimed monthly, so open on the current month.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 

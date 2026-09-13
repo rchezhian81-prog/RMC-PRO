@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange } from '../../../../lib/report-range';
 import { billingReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -74,7 +75,8 @@ function DimCard(props: {
 
 export default function SalesMisPage() {
   const [data, setData] = useState<{ byCustomer: Row[]; byPlant: Row[]; byGrade: Row[]; totals: Row } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than every invoice ever raised.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 

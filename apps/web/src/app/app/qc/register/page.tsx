@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { qcApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -16,18 +17,23 @@ const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFracti
 export default function QcRegisterPage() {
   const [cube, setCube] = useState<{ rows: Row[]; count: number; accepted: number; rejected: number } | null>(null);
   const [slump, setSlump] = useState<{ rows: Row[]; count: number; passed: number; failed: number } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month: both registers are capped at 5,000 rows.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [c, s] = await Promise.all([
+    // allSettled: a cube register too wide for its cap must not also hide the
+    // slump results, which are a separate report entirely.
+    const out = await Promise.allSettled([
       qcApi.cubeRegister(from || undefined, to || undefined),
       qcApi.slumpRegister(from || undefined, to || undefined),
     ]);
-    setCube(c);
-    setSlump(s);
+    setCube(settledValue(out[0]));
+    setSlump(settledValue(out[1]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

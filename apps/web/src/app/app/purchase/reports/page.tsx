@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { crud, purchaseReportsApi, type Row, type VendorLedger } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -19,18 +20,23 @@ export default function PurchaseReportsPage() {
   const [ledger, setLedger] = useState<VendorLedger | null>(null);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
   const [supplierId, setSupplierId] = useState('');
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Bounds the purchase register; payables aging is point-in-time.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [ag, reg] = await Promise.all([
+    // allSettled: payables aging and the purchase register are independent —
+    // one failing must not blank the other.
+    const out = await Promise.allSettled([
       purchaseReportsApi.payablesAging(),
       purchaseReportsApi.purchaseRegister(from || undefined, to || undefined),
     ]);
-    setAging(ag);
-    setRegister(reg);
+    setAging(settledValue(out[0]));
+    setRegister(settledValue(out[1]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   async function loadLedger(id = supplierId, from = range.from, to = range.to) {

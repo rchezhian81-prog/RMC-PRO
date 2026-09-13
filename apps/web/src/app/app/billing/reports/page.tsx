@@ -1,5 +1,6 @@
 'use client';
 
+import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { billingReportsApi, downloadTallyCsv, type SalesRegister, type Row } from '../../../../lib/api';
@@ -23,14 +24,18 @@ export default function BillingReportsPage() {
   const [dayBook, setDayBook] = useState<{ rows: Row[]; totals: Row; byMode: Row[] } | null>(null);
   const [margin, setMargin] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [collection, setCollection] = useState<{ rows: Row[]; totals: Row; periodDays: number } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than "everything" — see report-range.ts.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [g, s, h, r, l, d, mg, ce] = await Promise.all([
+    // allSettled, not all: these are eight independent reports, and one of them
+    // failing (a register too wide for its cap, say) must not blank the other
+    // seven that answered perfectly well.
+    const out = await Promise.allSettled([
       billingReportsApi.gstSummary(from || undefined, to || undefined),
       billingReportsApi.salesRegister(from || undefined, to || undefined),
       billingReportsApi.hsnSummary(from || undefined, to || undefined),
@@ -40,7 +45,16 @@ export default function BillingReportsPage() {
       billingReportsApi.gradeMargin(from || undefined, to || undefined),
       billingReportsApi.collectionEfficiency(from || undefined, to || undefined),
     ]);
-    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d); setMargin(mg); setCollection(ce);
+    setGst(settledValue(out[0]));
+    setSales(settledValue(out[1]));
+    setHsn(settledValue(out[2]));
+    setReceipts(settledValue(out[3]) ?? []);
+    setGstr3b(settledValue(out[4]));
+    setDayBook(settledValue(out[5]));
+    setMargin(settledValue(out[6]));
+    setCollection(settledValue(out[7]));
+    const why = settledFailure(out);
+    if (why) setError(why);
   }
 
   useEffect(() => {

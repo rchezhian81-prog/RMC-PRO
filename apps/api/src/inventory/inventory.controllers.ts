@@ -22,7 +22,7 @@ const tid = (u: AuthUser) => u.tenantId as string;
 export class MaterialInwardController {
   constructor(private readonly service: MaterialInwardService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post() @RequirePermissions('stock.adjust')
@@ -44,7 +44,7 @@ export class WeighbridgeController {
     private readonly pdf: PdfService,
   ) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post() @RequirePermissions('stock.adjust')
@@ -102,7 +102,7 @@ export class WeighbridgeIndicatorController {
 export class StockAdjustmentController {
   constructor(private readonly service: StockAdjustmentService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
 
   @Post() @RequirePermissions('stock.adjust')
   adjust(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.adjust(tid(u), dto, u.userId); }
@@ -114,7 +114,7 @@ export class StockAdjustmentController {
 export class NegativeStockController {
   constructor(private readonly service: NegativeStockService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
 
   @Post(':id/approve') @RequirePermissions('negative_stock.approve')
   approve(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.approve(tid(u), id, u.userId, dto.remarks as string); }

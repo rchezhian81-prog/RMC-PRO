@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, stockAdjustApi, stockApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -22,9 +24,10 @@ export default function StockAdjustmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [b, h, m, p] = await Promise.all([stockApi.balances(), stockAdjustApi.list(), crud('materials').list(), crud('plants').list()]);
+    const [b, h, m, p] = await Promise.all([stockApi.balances(), stockAdjustApi.list(win.limit), crud('materials').list(), crud('plants').list()]);
     setBalances(b);
     setHistory(h);
     setMaterials(m);
@@ -32,7 +35,7 @@ export default function StockAdjustmentsPage() {
   }
   useEffect(() => {
     reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function adjust(e: FormEvent) {
     e.preventDefault();
@@ -191,6 +194,8 @@ export default function StockAdjustmentsPage() {
           ) : (
             <EmptyState title="No adjustments yet" description="Applied stock adjustments will appear here, newest first." />
           )}
+          <ListCap shown={history.length} limit={win.limit} canWiden={win.canWiden}
+            onWiden={() => win.setLimit(win.widen())} noun="adjustments" />
         </Card>
       </div>
     </div>

@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useListWindow } from '../../../lib/list-window';
+import { ListCap } from '../../../components/ListCap';
 import Link from 'next/link';
 import { creditHoldsApi, type Row } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
@@ -20,12 +22,13 @@ export default function CreditHoldsPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   const reload = useCallback(async () => {
     setLoaded(false);
-    setRows(await creditHoldsApi.list(filter || undefined));
+    setRows(await creditHoldsApi.list(filter || undefined, win.limit));
     setLoaded(true);
-  }, [filter]);
+  }, [filter, win.limit]);
 
   useEffect(() => {
     reload().catch((e) => { setError(String(e)); setLoaded(true); });
@@ -121,6 +124,8 @@ export default function CreditHoldsPage() {
         ) : (
           <EmptyState title="No credit holds" description="Over-limit bookings awaiting approval will appear here." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="requests" />
       </Card>
     </div>
   );

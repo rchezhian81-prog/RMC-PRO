@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { ImportJob } from '../core/database/entities';
 import { CustomersService, MaterialsService, SuppliersService } from '../masters/masters.services';
+import { listLimit } from '../common/list-limit.util';
 import {
   IMPORT_DEFS,
   getImportDef,
@@ -55,9 +56,9 @@ export class ImportService {
     return buildTemplateCsv(importer.def);
   }
 
-  list(tenantId: string) {
+  list(tenantId: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(ImportJob).find({ order: { createdAt: 'DESC' }, take: 50 }),
+      m.getRepository(ImportJob).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 

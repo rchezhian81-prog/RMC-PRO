@@ -21,7 +21,7 @@ export class PurchaseOrderController {
   constructor(private readonly service: PurchaseOrderService) {}
 
   @Get() @RequirePermissions('purchase.view')
-  list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
 
   @Get(':id') @RequirePermissions('purchase.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
@@ -43,7 +43,7 @@ export class GoodsReceiptController {
   constructor(private readonly service: GrnService) {}
 
   @Get() @RequirePermissions('purchase.view')
-  list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
 
   @Get(':id') @RequirePermissions('purchase.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
@@ -70,7 +70,7 @@ export class VendorBillController {
   constructor(private readonly service: VendorBillService) {}
 
   @Get() @RequirePermissions('purchase.view')
-  list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
 
   @Get(':id') @RequirePermissions('purchase.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
@@ -92,7 +92,7 @@ export class VendorPaymentController {
   constructor(private readonly service: VendorPaymentService) {}
 
   @Get() @RequirePermissions('purchase.view')
-  list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+  list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
 
   @Get(':id') @RequirePermissions('purchase.view')
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }

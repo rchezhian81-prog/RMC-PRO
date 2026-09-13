@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { IsNull, type EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Material, Plant, StockBalance, StockTransaction } from '../core/database/entities';
+import { listLimit } from '../common/list-limit.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
 
@@ -36,12 +37,12 @@ export class StockService {
     );
   }
 
-  ledger(tenantId: string, materialId?: string) {
+  ledger(tenantId: string, materialId?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
       m.getRepository(StockTransaction).find({
         where: materialId ? { materialId } : {},
         order: { createdAt: 'DESC' },
-        take: 200,
+        take: listLimit(limit),
       }),
     );
   }

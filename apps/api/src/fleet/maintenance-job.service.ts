@@ -4,6 +4,7 @@ import { Vehicle, VehicleMaintenanceJob, VehicleServiceSchedule } from '../core/
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeNextDue } from './fleet.util';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Maintenance job not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -28,12 +29,12 @@ export class MaintenanceJobService {
     private readonly audit: AuditService,
   ) {}
 
-  list(tenantId: string, vehicleId?: string, status?: string) {
+  list(tenantId: string, vehicleId?: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) => {
       const where: Record<string, unknown> = {};
       if (vehicleId) where.vehicleId = vehicleId;
       if (status) where.status = status;
-      return m.getRepository(VehicleMaintenanceJob).find({ where, order: { createdAt: 'DESC' } });
+      return m.getRepository(VehicleMaintenanceJob).find({ where, order: { createdAt: 'DESC' }, take: listLimit(limit) });
     });
   }
 

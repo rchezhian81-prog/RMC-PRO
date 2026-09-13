@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { purchaseApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -25,17 +27,18 @@ export default function VendorBillsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
   const canCreate = getAccess().has('vendor_bills.create');
   const canApprove = getAccess().has('vendor_bills.approve');
   const canPay = getAccess().has('vendor_payments.create');
 
   async function reload() {
-    const [b, g, p] = await Promise.all([purchaseApi.bills(), purchaseApi.grns('posted'), purchaseApi.payments()]);
+    const [b, g, p] = await Promise.all([purchaseApi.bills(undefined, win.limit), purchaseApi.grns('posted'), purchaseApi.payments(win.limit)]);
     setRows(b); setGrns(g); setPayments(p);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function act(fn: () => Promise<unknown>, okMsg: string) {
     setError(null); setMsg(null);
@@ -176,6 +179,8 @@ export default function VendorBillsPage() {
         ) : (
           <EmptyState title="No vendor bills yet" description={canCreate ? 'Create one from a posted goods receipt above.' : 'Nothing to show.'} />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="bills" hint="the purchase register (Purchase → Reports)" />
       </Card>
 
       <div style={{ marginTop: 18 }}>
@@ -217,6 +222,8 @@ export default function VendorBillsPage() {
           ) : (
             <EmptyState title="No payments yet" description="Payments recorded against approved bills appear here." />
           )}
+          <ListCap shown={payments.length} limit={win.limit} canWiden={win.canWiden}
+            onWiden={() => win.setLimit(win.widen())} noun="payments" />
         </Card>
       </div>
     </div>

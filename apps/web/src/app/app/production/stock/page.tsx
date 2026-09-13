@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, stockApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -21,11 +23,12 @@ export default function StockPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
     const [b, l, m, p] = await Promise.all([
       stockApi.balances(),
-      stockApi.ledger(),
+      stockApi.ledger(undefined, win.limit),
       crud('materials').list(),
       crud('plants').list(),
     ]);
@@ -38,7 +41,7 @@ export default function StockPage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function setOpening(e: FormEvent) {
     e.preventDefault();
@@ -143,7 +146,7 @@ export default function StockPage() {
       </Card>
 
       <Card
-        title="Ledger — latest 200 (export for the full set)"
+        title="Ledger"
         padded={false}
         actions={
           <ExportButton
@@ -183,6 +186,8 @@ export default function StockPage() {
         ) : (
           <EmptyState title="No transactions yet" />
         )}
+        <ListCap shown={ledger.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="ledger rows" hint="the stock movement report (Inventory → Reports)" />
       </Card>
     </div>
   );

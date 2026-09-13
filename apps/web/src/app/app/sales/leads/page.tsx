@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { leadsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -32,15 +34,16 @@ export default function LeadsPage() {
   const [fu, setFu] = useState({ notes: '', outcome: '', nextFollowupDate: '', leadStage: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    setRows(await leadsApi.list());
+    setRows(await leadsApi.list(win.limit));
   }
   useEffect(() => {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function open(id: string) {
     setError(null);
@@ -146,6 +149,8 @@ export default function LeadsPage() {
         ) : (
           <EmptyState title="No leads yet" description="Capture your first lead above." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="leads" />
       </Card>
 
       {sel && (

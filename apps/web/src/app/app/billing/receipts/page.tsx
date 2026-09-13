@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, customersApi, invoicesApi, receiptsApi, type CustomerExposure, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { StatCard } from '../../../../components/ui/StatCard';
@@ -29,9 +31,10 @@ export default function ReceiptsPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [r, c] = await Promise.all([receiptsApi.list(), crud('customers').list()]);
+    const [r, c] = await Promise.all([receiptsApi.list(win.limit), crud('customers').list()]);
     setRows(r);
     setCustomers(c);
   }
@@ -39,7 +42,7 @@ export default function ReceiptsPage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function pickCustomer(cid: string) {
     setCustomerId(cid);
@@ -312,6 +315,8 @@ export default function ReceiptsPage() {
         ) : (
           <EmptyState title="No receipts yet" description="Record a customer payment above." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="receipts" hint="the receipts register (Billing → Reports)" />
       </Card>
     </div>
   );

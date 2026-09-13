@@ -51,7 +51,7 @@ export class SyncController {
 
   @Get('pull') pull(@CurrentUser() u: AuthUser, @Query('deviceId') deviceId: string, @Query('since') since?: string) { return this.service.pull(tid(u), deviceId, since); }
 
-  @Get('conflicts') conflicts(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.listConflicts(tid(u), status); }
+  @Get('conflicts') conflicts(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.listConflicts(tid(u), status, limit); }
 
   @Post('conflicts/:id/resolve') @RequirePermissions('sync.manage')
   resolve(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {

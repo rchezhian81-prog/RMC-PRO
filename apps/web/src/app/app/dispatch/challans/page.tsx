@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
 import { challansApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -16,12 +18,13 @@ interface WastageBucket { key: string; label: string; quantityM3: number; cost: 
 
 export default function ChallansPage() {
   const [rows, setRows] = useState<Row[]>([]);
+  const win = useListWindow();
   const [error, setError] = useState<string | null>(null);
   const [wastage, setWastage] = useState<Row | null>(null);
 
   useEffect(() => {
-    challansApi.list().then(setRows).catch((e) => setError(String(e)));
-  }, []);
+    challansApi.list(undefined, win.limit).then(setRows).catch((e) => setError(String(e)));
+  }, [win.limit]);
 
   async function loadWastage() {
     setError(null);
@@ -97,6 +100,8 @@ export default function ChallansPage() {
         ) : (
           <EmptyState title="No challans yet" description="Challans generated from dispatches will appear here." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="challans" hint="the delivery register (Dispatch)" />
       </Card>
     </div>
   );

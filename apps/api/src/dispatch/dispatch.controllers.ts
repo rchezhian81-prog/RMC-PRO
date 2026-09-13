@@ -18,7 +18,7 @@ const tid = (u: AuthUser) => u.tenantId as string;
 export class DispatchController {
   constructor(private readonly service: DispatchService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   // Literal route declared before `:id` so it wins over the param route.
   @Get('report/cycle-times') @RequirePermissions('reports.view') cycleTimes(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cycleTimeReport(tid(u), from, to); }
   @Get('report/fleet-utilization') @RequirePermissions('reports.view') fleetUtilization(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.fleetUtilizationReport(tid(u), from, to); }

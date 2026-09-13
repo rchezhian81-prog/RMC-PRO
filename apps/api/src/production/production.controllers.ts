@@ -55,7 +55,7 @@ export class MixDesignsController {
 export class ProductionPlansController {
   constructor(private readonly service: ProductionPlansService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   // Production-plan writes were previously ungated, so any user with the
@@ -89,7 +89,7 @@ export class ProductionPlansController {
 export class BatchQueueController {
   constructor(private readonly service: BatchQueueService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-order/:orderId')
@@ -107,7 +107,7 @@ export class BatchQueueController {
 export class BatchTicketsController {
   constructor(private readonly service: BatchTicketsService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string) { return this.service.list(tid(u), status); }
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-queue/:queueId')
@@ -163,7 +163,7 @@ export class StockController {
   constructor(private readonly service: StockService) {}
 
   @Get('balances') balances(@CurrentUser() u: AuthUser) { return this.service.listBalances(tid(u)); }
-  @Get('ledger') ledger(@CurrentUser() u: AuthUser, @Query('materialId') materialId?: string) { return this.service.ledger(tid(u), materialId); }
+  @Get('ledger') ledger(@CurrentUser() u: AuthUser, @Query('materialId') materialId?: string, @Query('limit') limit?: string) { return this.service.ledger(tid(u), materialId, limit); }
 
   @Post('opening')
   @RequirePermissions('stock.adjust')

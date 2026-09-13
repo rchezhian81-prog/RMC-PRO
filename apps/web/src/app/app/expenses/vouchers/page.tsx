@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, expensesApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -32,6 +34,7 @@ export default function ExpenseVouchersPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   const [payee, setPayee] = useState('');
   const [mode, setMode] = useState('cash');
@@ -47,13 +50,13 @@ export default function ExpenseVouchersPage() {
 
   async function reload() {
     const [v, h, p, ve, s] = await Promise.all([
-      expensesApi.vouchers(), expensesApi.heads(), crud('plants').list(), crud('vehicles').list(), crud('sites').list(),
+      expensesApi.vouchers(undefined, win.limit), expensesApi.heads(), crud('plants').list(), crud('vehicles').list(), crud('sites').list(),
     ]);
     setRows(v); setHeads(h); setPlants(p); setVehicles(ve); setSites(s);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   function setLine(i: number, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -198,6 +201,8 @@ export default function ExpenseVouchersPage() {
           ) : (
             <EmptyState title="No expense vouchers yet" description={canManage ? 'Book your first voucher above.' : 'Nothing to show.'} />
           )}
+          <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+            onWiden={() => win.setLimit(win.widen())} noun="vouchers" />
         </Card>
       </div>
 

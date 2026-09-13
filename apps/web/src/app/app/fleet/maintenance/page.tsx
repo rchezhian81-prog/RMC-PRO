@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, fleetApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -23,6 +25,7 @@ export default function FleetMaintenancePage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   // Schedule form
   const [sVehicle, setSVehicle] = useState('');
@@ -47,12 +50,12 @@ export default function FleetMaintenancePage() {
   const vehLabel = (id: unknown) => String(vehicles.find((v) => String(v.id) === String(id))?.vehicleNo ?? '—');
 
   async function reload() {
-    const [sc, jb, vh] = await Promise.all([fleetApi.schedules(), fleetApi.jobs(), crud('vehicles').list()]);
+    const [sc, jb, vh] = await Promise.all([fleetApi.schedules(), fleetApi.jobs(undefined, undefined, win.limit), crud('vehicles').list()]);
     setSchedules(sc); setJobs(jb); setVehicles(vh);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function createSchedule() {
     setError(null); setMsg(null);
@@ -244,6 +247,8 @@ export default function FleetMaintenancePage() {
         ) : (
           <EmptyState title="No maintenance jobs yet" description={canRecord ? 'Log a service or breakdown above.' : 'Nothing to show.'} />
         )}
+        <ListCap shown={jobs.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="jobs" />
       </Card>
     </div>
   );

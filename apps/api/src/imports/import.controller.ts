@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -21,7 +21,7 @@ export class ImportController {
   constructor(private readonly service: ImportService) {}
 
   @Get() @RequirePermissions('imports.view')
-  list(@CurrentUser() u: AuthUser) { return this.service.list(tid(u)); }
+  list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
 
   @Get('definitions') @RequirePermissions('imports.view')
   definitions() { return this.service.definitions(); }

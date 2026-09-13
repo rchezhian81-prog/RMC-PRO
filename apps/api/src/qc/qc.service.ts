@@ -1,4 +1,4 @@
-import { DEFAULT_LIST_LIMIT, REPORT_FETCH_LIMIT, assertReportSize } from '../common/list-limit.util';
+import { REPORT_FETCH_LIMIT, assertReportSize, listLimit } from '../common/list-limit.util';
 import { resolveOptionalRef } from '../common/resolve-ref';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -51,9 +51,9 @@ export class QcService {
 
   // ---- slump tests ----
 
-  listSlump(tenantId: string) {
+  listSlump(tenantId: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
+      m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 
@@ -138,9 +138,9 @@ export class QcService {
 
   // ---- cube sets ----
 
-  listCubeSets(tenantId: string, status?: string) {
+  listCubeSets(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(QcCubeSet).find({ where: status ? { status } : {}, order: { castDate: 'DESC', createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
+      m.getRepository(QcCubeSet).find({ where: status ? { status } : {}, order: { castDate: 'DESC', createdAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 

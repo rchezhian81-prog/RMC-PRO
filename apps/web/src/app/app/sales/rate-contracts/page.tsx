@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
 import { crud, rateContractsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -17,9 +19,10 @@ export default function RateContractsPage() {
   const [form, setForm] = useState({ customerId: '', validFrom: '', validTo: '', paymentTerms: '', transportTerms: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [rc, c] = await Promise.all([rateContractsApi.list(), crud('customers').list()]);
+    const [rc, c] = await Promise.all([rateContractsApi.list(win.limit), crud('customers').list()]);
     setRows(rc);
     setCustomers(c);
   }
@@ -27,7 +30,7 @@ export default function RateContractsPage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -116,6 +119,8 @@ export default function RateContractsPage() {
         ) : (
           <EmptyState title="No rate contracts yet" description="Create your first rate contract above." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="rate contracts" />
       </Card>
     </div>
   );

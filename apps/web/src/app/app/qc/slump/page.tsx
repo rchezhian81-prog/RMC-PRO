@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { qcApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
@@ -24,17 +26,18 @@ const NUMERIC = new Set(['measuredSlumpMm', 'targetMinMm', 'targetMaxMm']);
 
 export default function SlumpTests() {
   const [rows, setRows] = useState<Row[]>([]);
+  const win = useListWindow();
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const canRecord = getAccess().has('qc.record');
 
   async function reload() {
-    setRows(await qcApi.slumpList());
+    setRows(await qcApi.slumpList(win.limit));
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+  }, [win.limit]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -118,6 +121,8 @@ export default function SlumpTests() {
         ) : (
           <EmptyState title="No slump tests yet" description={canRecord ? 'Record your first test above.' : 'Nothing to show.'} />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="slump tests" hint="the QC register" />
       </Card>
     </div>
   );

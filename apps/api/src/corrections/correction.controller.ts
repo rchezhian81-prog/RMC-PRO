@@ -18,8 +18,8 @@ export class CorrectionController {
   constructor(private readonly service: CorrectionService) {}
 
   @Get() @RequirePermissions('document_corrections.manage')
-  list(@CurrentUser() u: AuthUser, @Query('documentType') documentType?: string, @Query('documentId') documentId?: string) {
-    return this.service.list(tid(u), { documentType, documentId });
+  list(@CurrentUser() u: AuthUser, @Query('documentType') documentType?: string, @Query('documentId') documentId?: string, @Query('limit') limit?: string) {
+    return this.service.list(tid(u), { documentType, documentId }, limit);
   }
 
   @Post() @RequirePermissions('document_corrections.manage')

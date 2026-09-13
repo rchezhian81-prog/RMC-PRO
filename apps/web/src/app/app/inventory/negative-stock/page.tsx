@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { negativeStockApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -19,10 +21,11 @@ export default function NegativeStockPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   const reload = useCallback(async () => {
-    setRows(await negativeStockApi.list(filter || undefined));
-  }, [filter]);
+    setRows(await negativeStockApi.list(filter || undefined, win.limit));
+  }, [filter, win.limit]);
   useEffect(() => {
     reload().catch((e) => setError(String(e))).finally(() => setLoaded(true));
   }, [reload]);
@@ -110,6 +113,8 @@ export default function NegativeStockPage() {
         ) : (
           <EmptyState title="No requests" description="Negative-stock approval requests will appear here." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="requests" />
       </Card>
     </div>
   );

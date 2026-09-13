@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
 import { crud, quotationsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -30,9 +32,10 @@ export default function QuotationsPage() {
   const [form, setForm] = useState({ customerId: '', siteId: '', quotationDate: '', validUntil: '', paymentTerms: '' });
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [q, c, s] = await Promise.all([quotationsApi.list(), crud('customers').list(), crud('sites').list()]);
+    const [q, c, s] = await Promise.all([quotationsApi.list(win.limit), crud('customers').list(), crud('sites').list()]);
     setRows(q);
     setCustomers(c);
     setSites(s);
@@ -41,7 +44,7 @@ export default function QuotationsPage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -154,6 +157,8 @@ export default function QuotationsPage() {
         ) : (
           <EmptyState title="No quotations yet" description="Create your first quotation above." />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="quotations" />
       </Card>
     </div>
   );

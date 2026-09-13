@@ -3,6 +3,7 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { CreditHoldRequest, Order } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { recordHistory } from './history.util';
+import { listLimit } from '../common/list-limit.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Credit hold not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -21,7 +22,7 @@ export class CreditHoldService {
   ) {}
 
   /** Hold requests with order + customer labels for the approver queue. */
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) => {
       const qb = m
         .getRepository(CreditHoldRequest)
@@ -44,7 +45,8 @@ export class CreditHoldService {
           'o.order_no AS "orderNo"',
           'c.customer_name AS "customerName"',
         ])
-        .orderBy('h.created_at', 'DESC');
+        .orderBy('h.created_at', 'DESC')
+        .limit(listLimit(limit));
       if (status) qb.where('h.status = :status', { status });
       return qb.getRawMany();
     });

@@ -1,4 +1,4 @@
-import { DEFAULT_LIST_LIMIT } from '../common/list-limit.util';
+import { listLimit } from '../common/list-limit.util';
 import { resolveRef } from '../common/resolve-ref';
 import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
@@ -24,9 +24,9 @@ export class PurchaseOrderService {
     private readonly numbering: NumberingService,
   ) {}
 
-  list(tenantId: string, status?: string) {
+  list(tenantId: string, status?: string, limit?: string) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(PurchaseOrder).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: DEFAULT_LIST_LIMIT }),
+      m.getRepository(PurchaseOrder).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
     );
   }
 

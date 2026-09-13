@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
 import { crud, purchaseApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
@@ -30,18 +32,19 @@ export default function PurchaseOrdersPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
   const canCreate = getAccess().has('purchase_orders.create');
   const canReceive = getAccess().has('grn.create');
 
   async function reload() {
     const [o, s, mt, p] = await Promise.all([
-      purchaseApi.orders(), crud('suppliers').list(), crud('materials').list(), crud('plants').list(),
+      purchaseApi.orders(undefined, win.limit), crud('suppliers').list(), crud('materials').list(), crud('plants').list(),
     ]);
     setRows(o); setSuppliers(s); setMaterials(mt); setPlants(p);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   function setLine(i: number, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -179,6 +182,8 @@ export default function PurchaseOrdersPage() {
         ) : (
           <EmptyState title="No purchase orders yet" description={canCreate ? 'Raise your first PO above.' : 'Nothing to show.'} />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="purchase orders" hint="the purchase register (Purchase → Reports)" />
       </Card>
     </div>
   );

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { DocumentCorrection } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
+import { listLimit } from '../common/list-limit.util';
 
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 
@@ -18,12 +19,12 @@ export class CorrectionService {
     private readonly audit: AuditService,
   ) {}
 
-  list(tenantId: string, filters: { documentType?: string; documentId?: string } = {}) {
+  list(tenantId: string, filters: { documentType?: string; documentId?: string } = {}, limit?: string) {
     return this.db.runInTenant(tenantId, (m) => {
       const where: Record<string, unknown> = {};
       if (filters.documentType) where.documentType = filters.documentType;
       if (filters.documentId) where.documentId = filters.documentId;
-      return m.getRepository(DocumentCorrection).find({ where, order: { createdAt: 'DESC' }, take: 200 });
+      return m.getRepository(DocumentCorrection).find({ where, order: { createdAt: 'DESC' }, take: listLimit(limit) });
     });
   }
 

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { useListWindow } from '../../../../lib/list-window';
+import { ListCap } from '../../../../components/ListCap';
 import { crud, ordersApi, productionPlansApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -22,9 +24,10 @@ export default function ProductionPlansPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const win = useListWindow();
 
   async function reload() {
-    const [p, pl, o] = await Promise.all([productionPlansApi.list(), crud('plants').list(), ordersApi.list('confirmed')]);
+    const [p, pl, o] = await Promise.all([productionPlansApi.list(win.limit), crud('plants').list(), ordersApi.list('confirmed')]);
     setRows(p);
     setPlants(pl);
     setOrders(o);
@@ -33,7 +36,7 @@ export default function ProductionPlansPage() {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [win.limit]);
 
   async function run(fn: () => Promise<unknown>, okMsg?: string) {
     setError(null);
@@ -163,6 +166,8 @@ export default function ProductionPlansPage() {
         ) : (
           <EmptyState title="No plans yet" />
         )}
+        <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden}
+          onWiden={() => win.setLimit(win.widen())} noun="plans" />
       </Card>
 
       {sel && (

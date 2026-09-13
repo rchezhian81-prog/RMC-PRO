@@ -222,7 +222,7 @@ export class NotificationsController {
   constructor(private readonly whatsapp: WhatsAppService) {}
 
   @Get() @RequirePermissions('whatsapp.send')
-  history(@CurrentUser() u: AuthUser) {
-    return this.whatsapp.history(tid(u));
+  history(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) {
+    return this.whatsapp.history(tid(u), limit);
   }
 }

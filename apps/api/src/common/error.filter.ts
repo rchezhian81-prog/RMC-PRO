@@ -105,6 +105,24 @@ export class ErrorFilter implements ExceptionFilter {
     if (status >= 500) {
       return { code: fallbackCode, message: 'Something went wrong. Please try again.' };
     }
+
+    // Framework text a person should never be shown. Nest's throttler answers
+    // "ThrottlerException: Too Many Requests", which is what a plant manager who
+    // mistyped their password five times was being told — jargon that reads like
+    // a crash and does not say the one useful thing: wait a moment.
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      return {
+        code: fallbackCode,
+        message: 'Too many attempts. Please wait a minute and try again.',
+      };
+    }
+    // Express's 404 for an unrouted path is "Cannot GET /api/v1/whatever" — it
+    // means nothing to a user and repeats our internal route shape back at
+    // whoever probed it.
+    if (status === HttpStatus.NOT_FOUND && /^Cannot [A-Z]+ \//.test(String((exception as Error)?.message ?? ''))) {
+      return { code: fallbackCode, message: 'That page or record could not be found.' };
+    }
+
     if (!(exception instanceof HttpException)) {
       return { code: fallbackCode, message: 'Request failed' };
     }

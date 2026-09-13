@@ -3,11 +3,11 @@ import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Vehicle, VehicleServiceSchedule } from '../core/database/entities';
 import { computeNextDue, serviceDueState } from './fleet.util';
+import { businessToday } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Service schedule not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
 const numOrNull = (v: unknown): number | null => (v === undefined || v === null || v === '' ? null : Number(v) || 0);
-const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 /**
  * Vehicle preventive-service schedules (Plan D3). A schedule pairs a vehicle with
@@ -40,7 +40,7 @@ export class ServiceScheduleService {
       nextDueOdometer: numOrNull(s.nextDueOdometer),
       currentOdometer,
       nextDueDate: s.nextDueDate,
-      today: todayIso(),
+      today: businessToday(),
     });
     return { ...s, currentOdometer, dueState };
   }
@@ -66,7 +66,7 @@ export class ServiceScheduleService {
         [vehicleIds],
       );
       const odoOf = new Map(odoRows.map((r) => [r.vehicle_id, numOrNull(r.odo) ?? 0]));
-      const today = todayIso();
+      const today = businessToday();
       return rows.map((s) => {
         // Mirror currentOdometer(): GREATEST(vehicle log odometer, this schedule's
         // anchor), then fall back to the anchor (or null) when nothing positive.

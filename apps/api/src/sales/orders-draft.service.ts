@@ -120,7 +120,7 @@ export class OrdersDraftService {
       // Enforce the quotation's validity window, exactly as the rate-contract path
       // does — an approved-but-expired quote must not convert at stale rates after
       // a cement/diesel price change.
-      const asOf = (dto.orderDate as string) || new Date().toISOString().slice(0, 10);
+      const asOf = documentDate(dto.orderDate);
       if (quotation.validUntil && asOf > quotation.validUntil) {
         throw badReq(`Quotation expired on ${quotation.validUntil}. Revise and re-approve it before converting.`);
       }
@@ -208,7 +208,7 @@ export class OrdersDraftService {
       }
       // Enforce the contract's validity window (when set) so an expired or
       // not-yet-effective contract can't be converted at stale rates.
-      const asOf = (dto.orderDate as string) || new Date().toISOString().slice(0, 10);
+      const asOf = documentDate(dto.orderDate);
       if (contract.validFrom && asOf < contract.validFrom) {
         throw badReq(`Rate contract is not yet effective (valid from ${contract.validFrom})`);
       }

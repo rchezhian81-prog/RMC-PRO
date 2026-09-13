@@ -94,3 +94,28 @@ test('the backfill repairs old rows and only old rows', () => {
   const ds = readFileSync(resolve(apiSrc, 'core/database/data-source.ts'), 'utf8');
   assert.match(ds, /BackfillDocumentDates1720000068000,/, 'the migration must be in the data source list');
 });
+
+test('no business decision is made on the UTC date', () => {
+  // A plant pours at night. Anywhere the server asks "what day is it?" to date
+  // a document, decide a financial year, or judge a block's age, it must ask in
+  // the plant's timezone — on 1 April before 05:30 IST a UTC clock still says
+  // 31 March, which is the one morning of the year when the answer changes the
+  // financial year a document number is drawn in.
+  const offenders = [];
+  for (const f of ALL) {
+    const rel = f.path.slice(apiSrc.length + 1);
+    if (rel.includes('fake.provider')) continue;      // a test double, not a plant
+    if (rel.includes('business-date.util')) continue; // the fallback lives here
+    if (/new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/.test(f.src)) offenders.push(rel);
+  }
+  assert.deepEqual(offenders, [], 'use businessToday() / documentDate() instead of the UTC date');
+});
+
+test('the financial year of a document number is the plant\u2019s', () => {
+  const numbering = readFileSync(resolve(apiSrc, 'sales/numbering.service.ts'), 'utf8');
+  assert.match(numbering, /financialYearOf\(opts\.date \?\? businessToday\(\)\)/,
+    'a number drawn at 2am on 1 April must belong to the NEW financial year');
+  const sync = readFileSync(resolve(apiSrc, 'sync/sync.service.ts'), 'utf8');
+  assert.match(sync, /financialYearOf\(businessToday\(\)\)/,
+    "a device's reserved block must be judged against the plant's financial year");
+});

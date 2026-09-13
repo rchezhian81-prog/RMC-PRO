@@ -142,6 +142,11 @@ const TESTS = [
   // move backwards. Rolls the tenant-wide `receipt` series, so it runs after
   // every test that asserts a plain receipt number format.
   'test/numbering-fy-rollover.test.mjs',
+  // Numbering under simultaneous use: the cold start (a fresh tenant, and every
+  // 1 April) used to refuse all but one of the callers racing to create the
+  // series row. Deletes and rebuilds the tenant-wide `lead` series, so it runs
+  // after anything asserting a particular lead number.
+  'test/numbering-concurrency.test.mjs',
   // Seeds an isolated customer + delivered/un-invoiced challans to prove the
   // billable-challans batching; runs after the tenant-wide funnel/dashboard
   // tests so its extra open challans don't perturb their counts.

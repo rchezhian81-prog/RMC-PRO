@@ -24,6 +24,37 @@
 export const plantTimeZone = (): string => process.env.PLANT_TIMEZONE || 'Asia/Kolkata';
 
 /**
+ * The same zone, safe to hand to Postgres as a connection option.
+ *
+ * The value goes into the connection's startup options string, so it is checked
+ * against the shape of an IANA zone name first: a stray space or quote would
+ * either break every connection at boot or, worse, smuggle another setting in
+ * beside it. An unrecognisable value falls back to the default rather than
+ * taking the database down.
+ */
+const IANA_ZONE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/;
+export function plantTimeZoneForPostgres(): string {
+  const tz = plantTimeZone();
+  return IANA_ZONE.test(tz) && tz.length <= 64 ? tz : 'Asia/Kolkata';
+}
+
+/**
+ * Connection settings that make Postgres speak the plant's time.
+ *
+ * Without this the database runs in UTC, so `current_date` — which decides the
+ * dashboard's date window, whether an invoice is overdue, and the day a DATE
+ * column gets when a timestamp is cast — is yesterday's date between midnight
+ * and 05:30 in India. A plant pouring at 2am would open the dashboard and see
+ * the previous day, with the night's challans outside the window entirely.
+ *
+ * Timestamps themselves are unaffected: `timestamptz` stores an absolute
+ * instant, and this changes only the calendar day those instants are read as.
+ */
+export function postgresTimeZoneOptions(): { options: string } {
+  return { options: `-c timezone=${plantTimeZoneForPostgres()}` };
+}
+
+/**
  * Today's calendar date in the plant's timezone, as YYYY-MM-DD.
  *
  * `en-CA` formats as YYYY-MM-DD, which is what the DATE columns hold, so this

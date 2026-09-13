@@ -12,6 +12,7 @@ import { Form } from '../../../../../components/ui/Form';
 import { Field, Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
+import { todayLocal } from '../../../../../lib/report-range';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -179,7 +180,7 @@ export default function QuotationDetail() {
                 confirmLabel: 'Create order draft',
               });
               if (plantId === null) return;
-              const od = await orderDraftsApi.fromQuotation(id, { plantId: plantId || undefined, orderDate: new Date().toISOString().slice(0, 10) });
+              const od = await orderDraftsApi.fromQuotation(id, { plantId: plantId || undefined, orderDate: todayLocal() });
               setMsg(`Order draft ${String(od.orderNo)} created`);
             })}>Convert → Order draft</Button>
           )}

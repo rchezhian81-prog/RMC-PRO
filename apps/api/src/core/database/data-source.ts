@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { ENTITIES } from './entity-list';
+import { postgresTimeZoneOptions } from '../../common/business-date.util';
 import { Init1720000000000 } from './migrations/1720000000000-Init';
 import { Platform1720000001000 } from './migrations/1720000001000-Platform';
 import { Masters1720000002000 } from './migrations/1720000002000-Masters';
@@ -160,4 +161,6 @@ export const AppDataSource = new DataSource({
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',
+  // Migrations and the seed read the same clock the API does.
+  extra: postgresTimeZoneOptions(),
 });

@@ -14,6 +14,7 @@ import { StatusBadge } from '../../../../components/ui/Badge';
 import { Field, Input } from '../../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 import { useConfirm } from '../../../../components/ui/ConfirmDialog';
+import { todayLocal } from '../../../../lib/report-range';
 
 const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
@@ -66,7 +67,7 @@ export default function PurchaseOrdersPage() {
     if (!payloadLines.length) { setError('Add at least one line with a material and quantity'); return; }
     setBusy(true);
     try {
-      const po = await purchaseApi.createOrder({ supplierId, plantId: plantId || undefined, orderDate: new Date().toISOString().slice(0, 10), lines: payloadLines });
+      const po = await purchaseApi.createOrder({ supplierId, plantId: plantId || undefined, orderDate: todayLocal(), lines: payloadLines });
       setMsg(`Purchase order ${String(po.poNo)} created (₹${money(po.totalAmount)}).`);
       setSupplierId(''); setPlantId(''); setLines([emptyLine()]);
       await reload();

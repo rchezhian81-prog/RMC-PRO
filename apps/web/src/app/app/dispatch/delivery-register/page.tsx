@@ -1,5 +1,6 @@
 'use client';
 
+import { currentMonthRange } from '../../../../lib/report-range';
 import { useEffect, useState } from 'react';
 import { challansApi, dispatchApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
@@ -15,18 +16,26 @@ const m3 = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFract
 export default function DeliveryRegisterPage() {
   const [data, setData] = useState<{ rows: Row[]; totalM3: number; count: number } | null>(null);
   const [cycle, setCycle] = useState<{ rows: Row[]; averages: Row; count: number } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than every challan ever — see report-range.ts.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [reg, cyc] = await Promise.all([
+    // allSettled: a register too wide for its cap must not also hide the cycle
+    // times, which answered fine.
+    const [reg, cyc] = await Promise.allSettled([
       challansApi.deliveryRegister({ from: from || undefined, to: to || undefined }),
       dispatchApi.cycleTimes(from || undefined, to || undefined),
     ]);
-    setData(reg);
-    setCycle(cyc);
+    setData(reg.status === 'fulfilled' ? reg.value : null);
+    setCycle(cyc.status === 'fulfilled' ? cyc.value : null);
+    const failed = [reg, cyc].filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    if (failed.length) {
+      const why = failed[0]?.reason instanceof Error ? failed[0].reason.message : String(failed[0]?.reason ?? '');
+      setError(why);
+    }
   }
 
   useEffect(() => {

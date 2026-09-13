@@ -1,5 +1,6 @@
 'use client';
 
+import { currentMonthRange } from '../../../../lib/report-range';
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { billingReportsApi, downloadTallyCsv, type SalesRegister, type Row } from '../../../../lib/api';
@@ -23,14 +24,18 @@ export default function BillingReportsPage() {
   const [dayBook, setDayBook] = useState<{ rows: Row[]; totals: Row; byMode: Row[] } | null>(null);
   const [margin, setMargin] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [collection, setCollection] = useState<{ rows: Row[]; totals: Row; periodDays: number } | null>(null);
-  const [range, setRange] = useState({ from: '', to: '' });
+  // Opens on the current month rather than "everything" — see report-range.ts.
+  const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   async function load(from = range.from, to = range.to) {
     setError(null);
-    const [g, s, h, r, l, d, mg, ce] = await Promise.all([
+    // allSettled, not all: these are eight independent reports, and one of them
+    // failing (a register too wide for its cap, say) must not blank the other
+    // seven that answered perfectly well.
+    const out = await Promise.allSettled([
       billingReportsApi.gstSummary(from || undefined, to || undefined),
       billingReportsApi.salesRegister(from || undefined, to || undefined),
       billingReportsApi.hsnSummary(from || undefined, to || undefined),
@@ -40,7 +45,16 @@ export default function BillingReportsPage() {
       billingReportsApi.gradeMargin(from || undefined, to || undefined),
       billingReportsApi.collectionEfficiency(from || undefined, to || undefined),
     ]);
-    setGst(g); setSales(s); setHsn(h); setReceipts(r); setGstr3b(l); setDayBook(d); setMargin(mg); setCollection(ce);
+    const at = <T,>(i: number): T | null =>
+      out[i]?.status === 'fulfilled' ? ((out[i] as PromiseFulfilledResult<T>).value ?? null) : null;
+    setGst(at(0)); setSales(at(1)); setHsn(at(2)); setReceipts(at(3) ?? []);
+    setGstr3b(at(4)); setDayBook(at(5)); setMargin(at(6)); setCollection(at(7));
+
+    const failed = out.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    if (failed.length) {
+      const why = failed[0]?.reason instanceof Error ? failed[0].reason.message : String(failed[0]?.reason ?? '');
+      setError(`${failed.length} of ${out.length} reports could not load. ${why}`);
+    }
   }
 
   useEffect(() => {

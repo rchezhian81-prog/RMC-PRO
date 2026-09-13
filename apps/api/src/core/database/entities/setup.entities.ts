@@ -58,6 +58,17 @@ export class Company extends TenantScopedEntity {
   bankBranch!: string | null;
 
   /**
+   * Whether e-invoicing (IRN via the IRP) applies to this company.
+   *
+   * A flag the owner sets, not a turnover figure: the AATO threshold has moved
+   * repeatedly, so a stored figure would need re-judging every year. False means
+   * the compliance check does not ask for an IRN — the correct answer for a plant
+   * below the limit, which is where every new plant starts.
+   */
+  @Column({ name: 'einvoice_applicable', type: 'boolean', default: false })
+  einvoiceApplicable!: boolean;
+
+  /**
    * Company logo for invoice branding. Stored in-row (not on disk) so it is
    * tenant-isolated by RLS and survives container redeploys with the rest of the
    * data. `logoMime` is the validated content type (png/jpeg/svg+xml); `logoData`

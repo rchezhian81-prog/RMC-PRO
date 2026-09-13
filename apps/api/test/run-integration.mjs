@@ -153,6 +153,7 @@ const TESTS = [
   'test/billable-challans.test.mjs',
   'test/billing-guards.test.mjs',
   'test/eway-record.test.mjs',
+  'test/einvoice-applicability.test.mjs',
   // Seeds far-future (2099) invoices/receipts/bills to prove the report date
   // pushdowns, so it must run after the tenant-wide aggregate reports above
   // (dashboard-trends etc.) — its rows sit outside every real report window.

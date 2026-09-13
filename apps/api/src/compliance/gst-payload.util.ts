@@ -185,6 +185,31 @@ const GST_STATE_CODES: Record<string, string> = {
   'other territory': '97',
 };
 
+/**
+ * The two-letter state abbreviations people actually type, and that most
+ * accounting packages export.
+ *
+ * WHY THIS EXISTS: the map above holds full names only, so a company saved as
+ * "TN" and a customer saved as "Tamil Nadu" — the same state — resolved to no
+ * code and no code, fell through to comparing the two NAMES, and were judged
+ * INTER-state. Every local sale was then taxed IGST instead of CGST + SGST:
+ * wrong heads on the invoice, a wrong GSTR-1, and a buyer who cannot match the
+ * credit. The seeded company state is "TN", so a fresh install shipped with
+ * exactly that mismatch waiting for its first local customer.
+ *
+ * Codes are the official GST list. Andhra Pradesh resolves to 37 (28 was the
+ * pre-bifurcation code and is no longer allotted).
+ */
+const GST_STATE_ABBREVIATIONS: Record<string, string> = {
+  jk: '01', hp: '02', pb: '03', ch: '04', uk: '05', ua: '05', hr: '06',
+  dl: '07', rj: '08', up: '09', br: '10', sk: '11', ar: '12', nl: '13',
+  mn: '14', mz: '15', tr: '16', ml: '17', as: '18', wb: '19', jh: '20',
+  od: '21', or: '21', cg: '22', ct: '22', mp: '23', gj: '24', dd: '26',
+  dn: '26', mh: '27', ka: '29', ga: '30', ld: '31', kl: '32', tn: '33',
+  py: '34', pd: '34', an: '35', ts: '36', tg: '36', ap: '37', la: '38',
+  ot: '97',
+};
+
 const normaliseStateKey = (s: string): string =>
   s.trim().toLowerCase().replace(/&/g, 'and').replace(/\s+/g, ' ');
 
@@ -193,14 +218,22 @@ const normaliseStateKey = (s: string): string =>
  * portal's Pos / state-code fields require the numeric code (e.g. '33'), but
  * invoices store the place of supply as the customer's state NAME. Resolution
  * order: an already-numeric 2-digit value is kept as-is; a known state name is
- * mapped; otherwise a valid GSTIN's own state code is used; else '' (the
- * payload validator then flags the missing POS rather than sending a bad one).
+ * mapped; a bare two-letter abbreviation (TN, KA, MH) is mapped; otherwise a
+ * valid GSTIN's own state code is used; else '' (the payload validator then
+ * flags the missing POS rather than sending a bad one).
  */
 export function gstStateCode(placeOfSupply?: string | null, gstin?: string | null): string {
   const v = (placeOfSupply ?? '').trim();
   if (/^\d{2}$/.test(v)) return v;
-  const named = GST_STATE_CODES[normaliseStateKey(v)];
+  const key = normaliseStateKey(v);
+  const named = GST_STATE_CODES[key];
   if (named) return named;
+  // Only a bare two-letter token is treated as an abbreviation, so a state name
+  // is never truncated into the wrong code.
+  if (/^[a-z]{2}$/.test(key)) {
+    const abbr = GST_STATE_ABBREVIATIONS[key];
+    if (abbr) return abbr;
+  }
   if (isGstin(gstin)) return stateCodeOf(gstin as string);
   return '';
 }

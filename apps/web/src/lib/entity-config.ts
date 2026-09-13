@@ -1,4 +1,4 @@
-import { MATERIAL_TYPES, UOM_CATEGORIES } from '@rmc/shared';
+import { GST_STATE_NAMES, MATERIAL_TYPES, UOM_CATEGORIES } from '@rmc/shared';
 
 export interface FieldDef {
   key: string;
@@ -31,6 +31,11 @@ const MATERIAL_TYPE_LABELS: Record<string, string> = {
 };
 const MATERIAL_TYPE_OPTIONS = MATERIAL_TYPES.map((t) => ({ value: t, label: MATERIAL_TYPE_LABELS[t] ?? t }));
 const UOM_CATEGORY_OPTIONS = UOM_CATEGORIES.map((c) => ({ value: c, label: titleCase(c) }));
+
+// The state decides CGST + SGST vs IGST on every quotation, order, invoice and
+// vendor bill, so it is chosen rather than typed. Free text let the same state
+// be written four ways, and only some of them resolved.
+const STATE_OPTIONS = GST_STATE_NAMES.map((name) => ({ value: name, label: name }));
 
 const CUSTOMER_TYPE_OPTIONS = [
   { value: 'b2b', label: 'B2B (registered)' },
@@ -84,7 +89,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       // State is required: it is the place-of-supply that decides CGST/SGST vs
       // IGST on every quotation, order and invoice — a customer saved without it
       // is silently taxed intra-state.
-      { key: 'state', label: 'State', required: true },
+      { key: 'state', label: 'State', required: true, options: STATE_OPTIONS },
       { key: 'pincode', label: 'PIN code' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
@@ -106,7 +111,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'customerId', label: 'Customer', ref: { path: 'customers', value: 'id', label: 'customerName' } },
       { key: 'address', label: 'Address' },
       { key: 'city', label: 'City' },
-      { key: 'state', label: 'State' },
+      { key: 'state', label: 'State', options: STATE_OPTIONS },
       { key: 'pincode', label: 'PIN code' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
@@ -161,7 +166,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'supplierName', label: 'Name', required: true },
       { key: 'gstin', label: 'GSTIN' },
       { key: 'pan', label: 'PAN' },
-      { key: 'state', label: 'State' },
+      { key: 'state', label: 'State', options: STATE_OPTIONS },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
       { key: 'email', label: 'Email' },
@@ -208,7 +213,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'gstin', label: 'GSTIN' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
-      { key: 'state', label: 'State' },
+      { key: 'state', label: 'State', options: STATE_OPTIONS },
     ],
   },
   'concrete-grades': {

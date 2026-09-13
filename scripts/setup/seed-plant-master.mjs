@@ -280,7 +280,18 @@ async function main() {
   log(`\n────────────────────────────────────────`);
   log(`Done. Created ${created.length}, skipped ${skipped.length} (already present).`);
   log(`Everything above is editable in the app — correct any placeholder values there.`);
-  log(`Next: open app.mixnovas.com → Masters to review, then try a Quotation → Order → Batch → Challan → Invoice.`);
+  // The seeder creates no company profile, and an invoice cannot be issued
+  // without the plant's own GSTIN and state (the state decides CGST+SGST vs
+  // IGST). Sending people straight to the order flow from here walks them into
+  // that wall after they have already raised a challan.
+  log(`\nNext, before raising anything:`);
+  log(`  1. Set your company GSTIN and state — Settings → Company in the app, or fill in`);
+  log(`     the "company" section of scripts/setup/plant-config.json and run:`);
+  log(`       node scripts/setup/apply-plant-config.mjs`);
+  log(`     An invoice cannot be issued until both are set: the state decides whether a`);
+  log(`     sale is CGST+SGST or IGST.`);
+  log(`  2. Review the placeholder master data — everything above is editable in the app.`);
+  log(`  3. Then try a Quotation → Order → Batch → Challan → Invoice.`);
 }
 
 main().catch((e) => die(e.message));

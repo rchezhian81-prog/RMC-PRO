@@ -236,5 +236,9 @@ fi
 echo "  Data export : $EXPORT_FILE"
 [ "$SKIP_BACKUP" -ne 1 ] && echo "  Full backup : $BACKUP_FILE"
 echo
-echo "Restore from the full backup with:"
-echo "  docker compose ... exec -T $PG_SERVICE pg_restore -U \$POSTGRES_USER -d \$POSTGRES_DB --clean < <dump>"
+if [ "$SKIP_BACKUP" -ne 1 ] && [ -n "${BACKUP_FILE:-}" ] && [ -f "$BACKUP_FILE" ]; then
+  # The real filename, in a command that can be run as printed. pg-restore.sh
+  # verifies the archive before dropping anything and the result afterwards.
+  echo "To restore from the full backup, run:"
+  echo "  ./scripts/backup/pg-restore.sh --file $BACKUP_FILE --into \"\$POSTGRES_DB\" --confirm"
+fi

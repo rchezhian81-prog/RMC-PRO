@@ -223,5 +223,12 @@ echo "Next — restore opening stock by re-running the seeder (sets it absolutel
 echo "  API_URL=https://api.mixnovas.com LOGIN='<tenant owner>' \\"
 echo "    RMC_PASSWORD='<password>' node scripts/setup/seed-plant-master.mjs"
 echo
-echo "The backup above is a full snapshot taken just before the reset —"
-echo "restore with: docker compose ... exec -T $PG_SERVICE pg_restore -U \$POSTGRES_USER -d \$POSTGRES_DB --clean < <dump>"
+if [ "$SKIP_BACKUP" -ne 1 ] && [ -n "${BACKUP_FILE:-}" ] && [ -f "$BACKUP_FILE" ]; then
+  # Print the command that can actually be run, with the real filename already
+  # in it. pg-restore.sh checks the archive before it drops anything, verifies
+  # the result, and takes its own safety dump first — a bare pg_restore does
+  # none of that and reports success even when it restores nothing.
+  echo "The backup above is a full snapshot taken just before the reset."
+  echo "To undo this reset entirely, run:"
+  echo "  ./scripts/backup/pg-restore.sh --file $BACKUP_FILE --into \"\$POSTGRES_DB\" --confirm"
+fi

@@ -39,7 +39,7 @@ console.log('=== qc cube-set integrity (sample cap + specimen dedup) ===');
 TOKEN = (await api('POST', '/auth/login', { login: LOGIN, password: PASSWORD })).access_token;
 
 const TODAY = new Date().toISOString().slice(0, 10);
-// fck 25, tolerance 3 → individual floor 22; 30 N/mm² passes comfortably.
+// fck 25 → IS 456 floors: mean 29, individual 21. 30 N/mm² passes comfortably.
 const newSet = () => api('POST', '/qc/cube-sets', { castDate: TODAY, targetStrengthMpa: 25, specimenCount: 3 });
 const result = (specimenNo, strength = 30) => ({ specimenNo, testAgeDays: 28, compressiveStrengthMpa: strength });
 

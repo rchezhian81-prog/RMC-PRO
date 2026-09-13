@@ -1,3 +1,5 @@
+import { BadRequestException } from '@nestjs/common';
+
 /**
  * How many rows a list endpoint may return.
  *
@@ -33,4 +35,41 @@ export function listLimit(raw?: string | number | null): number {
   const n = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim());
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_LIST_LIMIT;
   return Math.min(Math.floor(n), MAX_LIST_LIMIT);
+}
+
+/* ---------------------------------------------------------------------------
+ * Reports are not lists.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The most rows a report may return before it is refused.
+ *
+ * A list can safely show "the newest 200" — the user is browsing recent work.
+ * A REGISTER cannot: a sales register silently missing rows is a wrong figure
+ * handed to an accountant, which is worse than a slow report. So instead of
+ * truncating, reports refuse and ask for a narrower date range.
+ *
+ * Measured at 20,000 issued invoices: /billing-reports/sales-register returned
+ * 19.2 MB in 0.92s with no date range supplied. The date filter was already
+ * pushed into SQL; nothing bounded the result when the caller omitted a window.
+ */
+export const REPORT_ROW_CAP = 5000;
+
+/** Fetch this many to detect overflow — one more than may be returned. */
+export const REPORT_FETCH_LIMIT = REPORT_ROW_CAP + 1;
+
+/**
+ * Refuse an over-large report rather than returning a partial one.
+ * Callers fetch REPORT_FETCH_LIMIT rows; more than the cap means the window is
+ * too wide to answer honestly.
+ */
+export function assertReportSize(rows: { length: number }, what: string): void {
+  if (rows.length > REPORT_ROW_CAP) {
+    throw new BadRequestException({
+      code: 'REPORT_TOO_LARGE',
+      message:
+        `This ${what} covers more than ${REPORT_ROW_CAP} rows. ` +
+        'Narrow the date range (from / to) and run it again — a partial register would be misleading.',
+    });
+  }
 }

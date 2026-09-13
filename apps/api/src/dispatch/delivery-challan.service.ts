@@ -1,4 +1,4 @@
-import { listLimit } from '../common/list-limit.util';
+import { REPORT_FETCH_LIMIT, assertReportSize, listLimit } from '../common/list-limit.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -222,9 +222,13 @@ export class DeliveryChallanService {
            FROM delivery_challans dc
            LEFT JOIN customers c ON c.id = dc.customer_id
           WHERE ${where.join(' AND ')}
-          ORDER BY date DESC, dc.challan_no`,
+          ORDER BY date DESC, dc.challan_no
+          LIMIT ${REPORT_FETCH_LIMIT}`,
         params,
       );
+      // Refuse rather than truncate: totalM3 over a silently-shortened register
+      // is a wrong number, and it is the figure people reconcile against.
+      assertReportSize(rows, 'delivery register');
       const totalM3 = Math.round(rows.reduce((s, r) => s + (Number(r.delivered) || 0), 0) * 1000) / 1000;
       return { rows, totalM3, count: rows.length };
     });

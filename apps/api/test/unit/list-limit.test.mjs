@@ -17,7 +17,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { listLimit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from '../../dist/common/list-limit.util.js';
+import {
+  listLimit,
+  DEFAULT_LIST_LIMIT,
+  MAX_LIST_LIMIT,
+  REPORT_ROW_CAP,
+  REPORT_FETCH_LIMIT,
+  assertReportSize,
+} from '../../dist/common/list-limit.util.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../../..');
@@ -68,7 +75,10 @@ test('every core business list applies the cap', () => {
   ];
   for (const [file, entity] of LISTS) {
     const s = src(file);
-    assert.match(s, /import \{ listLimit \} from '\.\.\/common\/list-limit\.util'/, `${file} must import the cap`);
+    // Match the symbol and the module, not the exact import line — services that
+    // also pull in the report helpers widen the braces, and pinning the literal
+    // string makes this fail on a correct change.
+    assert.match(s, /import \{[^}]*\blistLimit\b[^}]*\} from '\.\.\/common\/list-limit\.util'/, `${file} must import the cap`);
     assert.match(s, /take: listLimit\(limit\)/, `${entity} list in ${file} must be capped`);
   }
 });
@@ -79,4 +89,46 @@ test('the cap is a shared module, not copied per service', () => {
   for (const file of ['dispatch/delivery-challan.service.ts', 'billing/invoice.service.ts']) {
     assert.ok(!/function listLimit/.test(src(file)), `${file} must not redefine listLimit`);
   }
+});
+
+// ── reports refuse rather than truncate ──────────────────────────────────────
+
+test('a report within the cap passes through', () => {
+  assertReportSize({ length: 0 }, 'sales register');
+  assertReportSize({ length: REPORT_ROW_CAP }, 'sales register');
+});
+
+test('a report over the cap is REFUSED, not silently shortened', () => {
+  // A sales register missing rows is a wrong total handed to an accountant.
+  // Truncation would be the dangerous outcome here, not the safe one.
+  assert.throws(() => assertReportSize({ length: REPORT_FETCH_LIMIT }, 'sales register'), (err) => {
+    assert.equal(err.status, 400);
+    assert.equal(err.response.code, 'REPORT_TOO_LARGE');
+    assert.match(err.response.message, /sales register/);
+    assert.match(err.response.message, /Narrow the date range/);
+    return true;
+  });
+});
+
+test('the fetch limit is exactly one more than the cap', () => {
+  // So overflow is detectable without a second COUNT query.
+  assert.equal(REPORT_FETCH_LIMIT, REPORT_ROW_CAP + 1);
+});
+
+test('every caller of the capped invoice query checks the size', () => {
+  // REGRESSION: issuedInvoicesInRange is shared. Capping it without guarding a
+  // caller turns that caller into a silently-incomplete financial export — the
+  // Tally CSV was one such caller and would have shipped books that do not
+  // balance.
+  const billing = src('billing/billing-reports.service.ts');
+  const callers = (billing.match(/issuedInvoicesInRange\(m, from, to\)/g) ?? []).length;
+  const guards = (billing.match(/assertReportSize\(/g) ?? []).length;
+  assert.ok(callers >= 2, `expected multiple callers, saw ${callers}`);
+  assert.equal(guards, callers, `each of the ${callers} callers must assert its size (saw ${guards})`);
+});
+
+test('the delivery register is bounded in SQL and checked', () => {
+  const dispatch = src('dispatch/delivery-challan.service.ts');
+  assert.match(dispatch, /LIMIT \$\{REPORT_FETCH_LIMIT\}/);
+  assert.match(dispatch, /assertReportSize\(rows, 'delivery register'\)/);
 });

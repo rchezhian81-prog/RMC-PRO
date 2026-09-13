@@ -3,6 +3,7 @@
  * used by both the API (authoritative) and the web client (immediate feedback),
  * so the two can never drift.
  */
+import { isKnownGstState } from './gst-states';
 import { MATERIAL_TYPES } from './enums';
 
 /** Standard 15-character GSTIN: 2 state digits, PAN (5A+4N+1A), entity, Z, check. */
@@ -113,6 +114,15 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   const pincode = str('pincode');
   if (pincode && !isValidPincode(pincode)) {
     errors.pincode = 'Enter a valid 6-digit PIN code.';
+  }
+  // The state is not a label: it decides CGST + SGST vs IGST on every quotation,
+  // order, invoice and vendor bill. A value that resolves to no Indian state
+  // cannot be classified, so it is refused at entry rather than discovered at
+  // filing time. Two-letter codes and older spellings ("TN", "Orissa") resolve
+  // and are accepted.
+  const state = str('state');
+  if (state && !isKnownGstState(state)) {
+    errors.state = 'Choose an Indian state or union territory — it sets CGST/SGST vs IGST on every bill.';
   }
   const transin = str('transin');
   if (transin && !isValidTransporterId(transin)) {

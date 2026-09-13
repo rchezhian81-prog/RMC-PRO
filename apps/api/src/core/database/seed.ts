@@ -68,8 +68,19 @@ async function main() {
     const tenant = await m.save(
       m.create(Tenant, { tenantCode: code, tenantName: name, status: 'active' }),
     );
+    // A GSTIN and a full state name, because issuing a tax invoice now requires
+    // both — the supplier's GSTIN is mandatory under Rule 46, and the state is
+    // the seller side of the CGST+SGST vs IGST decision. These are demo values
+    // in a DEV-ONLY seeder (it truncates every table); a real tenant's company
+    // is created blank by provisioning, so the operator must set their own
+    // before they can issue anything.
     const company = await m.save(
-      m.create(Company, { tenantId: tenant.id, companyName: name, state: 'TN' }),
+      m.create(Company, {
+        tenantId: tenant.id,
+        companyName: name,
+        state: 'Tamil Nadu',
+        gstin: code === 'ALPHA' ? '33AABCA1234B1Z5' : '33AABCB5678C1Z9',
+      }),
     );
     const plants = await m.save([
       m.create(Plant, {

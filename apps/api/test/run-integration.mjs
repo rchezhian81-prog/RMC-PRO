@@ -235,6 +235,12 @@ async function main() {
   });
 
   const ownerTok = (await api('POST', '/auth/login', { login: OWNER_LOGIN, password: OWNER_PW })).access_token;
+  // The company's own GSTIN and state, exactly as an operator sets them in
+  // Settings → Company on their first day. Provisioning deliberately leaves them
+  // blank — they must be the operator's real numbers — and issuing a tax invoice
+  // now refuses without them, since the supplier GSTIN is mandatory under Rule 46
+  // and the state is the seller side of the CGST+SGST vs IGST decision.
+  await api('PATCH', '/company', { gstin: '33AABCA1234B1Z5', state: 'Tamil Nadu' }, ownerTok);
   const plants = await api('GET', '/plants', null, ownerTok);
   const materials = await api('GET', '/materials', null, ownerTok);
   const fixtures = {

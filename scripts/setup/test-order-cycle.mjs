@@ -77,10 +77,35 @@ async function lookup(path, field, value, label, required = true) {
   return hit || null;
 }
 
+/**
+ * Refuse to start unless the company profile is complete.
+ *
+ * This cycle creates real, numbered documents and a batch ticket that CONSUMES
+ * REAL STOCK. Without a company GSTIN and state the run gets all the way to the
+ * invoice before being refused, leaving a quotation, order, batch, dispatch and
+ * challan behind in the plant's books and the stock already deducted. Checking
+ * first costs one request and creates nothing.
+ */
+async function assertCompanyReady() {
+  const company = (await api('GET', '/company')) ?? {};
+  const missing = [];
+  if (!String(company.gstin ?? '').trim()) missing.push('GSTIN');
+  if (!String(company.state ?? '').trim()) missing.push('state');
+  if (!missing.length) return;
+  die(
+    `Your company ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not set, and a tax invoice ` +
+      `cannot be issued without ${missing.length > 1 ? 'them' : 'it'}.\n` +
+      `  Set it in the app under Settings → Company, or fill in the "company" section of\n` +
+      `  scripts/setup/plant-config.json and run:  node scripts/setup/apply-plant-config.mjs\n` +
+      `  Then run this cycle again. Nothing has been created.`,
+  );
+}
+
 async function main() {
   log(`\nMix Nova RMC — order-to-cash test cycle`);
   log(`API: ${BASE}\n`);
   await login();
+  await assertCompanyReady();
 
   // ---- Look up seeded masters (need ids, not codes) ----
   step('0/8', 'Looking up seeded masters');

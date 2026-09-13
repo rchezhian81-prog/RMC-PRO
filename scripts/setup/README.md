@@ -1,3 +1,28 @@
+# Setting up a new plant — the order to run things in
+
+Each script below is documented on its own further down. Run them in this order;
+the numbers matter, because step 3 is what lets an invoice be issued at all.
+
+| # | Run | What it does |
+|---|-----|--------------|
+| 1 | `provision-tenant.mjs` | Creates the company, assigns its plan, creates the owner login. Run as the **platform super admin**. |
+| 2 | `seed-plant-master.mjs` | Fills in starter master data — grades, materials, a sample customer, a mix design, opening stock. Run as the **company owner**. |
+| 3 | `apply-plant-config.mjs` | Replaces the placeholders with the plant's real details — **including the company GSTIN and state**. |
+| 4 | `test-order-cycle.mjs` | Drives one full quotation → order → batch → challan → invoice → receipt, to prove the whole flow works. |
+| 5 | `reset-transactions.sh` | Clears the documents step 4 created, so the plant starts live with clean books. |
+
+**Step 3 is not optional.** A tax invoice cannot be issued without the company's
+own GSTIN, and the company's **state** is what decides whether a sale is
+CGST+SGST or IGST — get it wrong and every tax figure on every invoice is wrong.
+Step 4 refuses to start until both are set, so nothing is created half-finished.
+
+Step 4 creates **real, numbered documents** and its batch ticket **consumes real
+stock**. That is the point — it proves the flow — but run step 5 afterwards so
+the plant goes live with clean books, then re-run step 2 to restore opening
+stock (it sets stock absolutely, so re-running is safe).
+
+---
+
 # Plant master-data seeder
 
 `seed-plant-master.mjs` bootstraps a freshly-onboarded tenant with realistic

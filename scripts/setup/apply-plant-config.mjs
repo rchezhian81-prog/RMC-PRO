@@ -229,7 +229,7 @@ async function main() {
   log('\nStill to do by hand (by design):');
   log('  - M25 mix design: Production → Mix Designs → new version → approve (QC-controlled).');
   log('  - Extra customers/sites/vehicles/drivers: add in the app or via CSV import.');
-  log('\nVerify: LOGIN=<owner> bash scripts/ops/verify-app.sh');
+  log(`\nVerify: LOGIN='${LOGIN}' bash scripts/ops/verify-app.sh`);
 }
 
 main().catch((e) => die(e.message));

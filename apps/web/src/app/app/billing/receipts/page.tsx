@@ -5,7 +5,7 @@ import { Download } from 'lucide-react';
 import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { crud, customersApi, invoicesApi, openPdf, receiptsApi, type CustomerExposure, type Row } from '../../../../lib/api';
+import { crud, customersApi, invoicesApi, openPdf, receiptsApi, type CustomerExposure, type Row, openWhatsAppShare } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -315,9 +315,12 @@ export default function ReceiptsPage() {
                         size="sm"
                         onClick={async () => {
                           const m = await prompt({ title: 'Share receipt', label: 'Recipient mobile', defaultValue: '' });
-                          if (m !== null) {
-                            await receiptsApi.share(String(r.id), m);
-                            setMsg('WhatsApp message logged.');
+                          if (m === null) return;
+                          setError(null);
+                          try {
+                            setMsg(await openWhatsAppShare(() => receiptsApi.share(String(r.id), m)));
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : String(e));
                           }
                         }}
                       >

@@ -20,13 +20,26 @@ export interface WhatsAppShareInput {
  * sales user can share immediately. Later sprints swap `messageStatus:'logged'`
  * for a real provider send without changing callers.
  */
+/**
+ * The number as wa.me wants it: country code, no plus, no zero. A 10-digit
+ * Indian mobile ("98765 43210") becomes 919876543210; "09876543210" and
+ * "+91 98765 43210" the same. wa.me rejects a bare 10-digit number as
+ * "invalid", which is what every share used to open with.
+ */
+export function waMeNumber(mobile: string | null | undefined): string {
+  let d = (mobile ?? '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+  if (d.length === 10) d = `91${d}`;
+  return d;
+}
+
 @Injectable()
 export class WhatsAppService {
   constructor(private readonly db: TenantDbService) {}
 
   /** Build a wa.me click-to-chat link (no gateway required). */
   buildShareUrl(mobile: string | null | undefined, message: string): string {
-    const digits = (mobile ?? '').replace(/\D/g, '');
+    const digits = waMeNumber(mobile);
     const text = encodeURIComponent(message);
     return digits ? `https://wa.me/${digits}?text=${text}` : `https://wa.me/?text=${text}`;
   }

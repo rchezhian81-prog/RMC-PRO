@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
-import { crud, orderDraftsApi, openPdf, quotationsApi, type Row } from '../../../../../lib/api';
+import { crud, orderDraftsApi, openPdf, quotationsApi, type Row, openWhatsAppShare } from '../../../../../lib/api';
 import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
@@ -77,9 +77,12 @@ export default function QuotationDetail() {
     setError(null);
     setMsg(null);
     try {
-      await fn();
+      // An action may return the sentence to show (a share says where the
+      // message went); a fixed okMsg still wins when the caller gives one.
+      const out = await fn();
       await load();
       if (okMsg) setMsg(okMsg);
+      else if (typeof out === 'string' && out) setMsg(out);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     }
@@ -167,7 +170,7 @@ export default function QuotationDetail() {
           {status === 'submitted' && <Button onClick={() => run(() => quotationsApi.approve(id), 'Approved')}>Approve</Button>}
           {status === 'submitted' && <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'Reject quotation', label: 'Rejection reason (why the quote was lost)', defaultValue: '' }); if (reason !== null) await quotationsApi.reject(id, reason || 'Not accepted'); }, 'Quotation rejected')}>Reject</Button>}
           <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/quotations/${id}/pdf`).catch((e) => setError(String(e)))}>Download PDF</Button>
-          <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' }); if (m !== null) await quotationsApi.share(id, m); }, 'WhatsApp message logged')}>Share on WhatsApp</Button>
+          <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' }); if (m === null) return 'Not shared.'; return openWhatsAppShare(() => quotationsApi.share(id, m)); })}>Share on WhatsApp</Button>
           <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'New revision', label: 'Revision reason', defaultValue: '' }); if (reason !== null) await quotationsApi.createRevision(id, reason); }, 'New revision created')}>New revision</Button>
           {status === 'approved' && (
             <Button onClick={() => run(async () => {

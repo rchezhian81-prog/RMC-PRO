@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
-import { challansApi, openPdf, type Row } from '../../../../../lib/api';
+import { challansApi, openPdf, type Row, openWhatsAppShare } from '../../../../../lib/api';
 import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
@@ -42,9 +42,12 @@ export default function ChallanDetail() {
     setError(null);
     setMsg(null);
     try {
-      await fn();
+      // An action may return the sentence to show (a share says where the
+      // message went); a fixed okMsg still wins when the caller gives one.
+      const out = await fn();
       await load();
       if (okMsg) setMsg(okMsg);
+      else if (typeof out === 'string' && out) setMsg(out);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
@@ -118,8 +121,9 @@ export default function ChallanDetail() {
             onClick={() =>
               run(async () => {
                 const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' });
-                if (m !== null) await challansApi.share(id, m);
-              }, 'WhatsApp message logged')
+                if (m === null) return 'Not shared.';
+                return openWhatsAppShare(() => challansApi.share(id, m));
+              })
             }
           >
             Share on WhatsApp

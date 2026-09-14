@@ -10,6 +10,7 @@ import { isUiV2 } from '../../lib/ui-flag';
 import { Logo } from '../../components/ui/Logo';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
+import { ConfirmProvider } from '../../components/ui/ConfirmDialog';
 
 const NAV = [
   { href: '/admin/tenants', label: 'Tenants', icon: <Building2 size={18} /> },
@@ -31,7 +32,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const title = NAV.find((n) => pathname.startsWith(n.href))?.label ?? 'Super Admin';
 
+  // The app shell mounts the same provider; without it, useConfirm() throws on
+  // the first admin screen that asks a question — suspending a company does.
   return (
+    <ConfirmProvider>
     <div className="mn-shell">
       <a href="#main" className="mn-skip">Skip to content</a>
       <aside className="mn-sidebar">
@@ -88,5 +92,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }

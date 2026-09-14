@@ -11,7 +11,7 @@ import { dirname, resolve } from 'node:path';
 import {
   isValidGstin,
   gstinCheckDigit,
-  isValidMobile, isNonNegativeNumber, isValidPincode, validateMasterFields } from '../../dist/index.js';
+  isValidMobile, isNonNegativeNumber, isValidPincode, validateMasterFields, validateCompanyProfile } from '../../dist/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -109,4 +109,12 @@ test('the compliance validator is the shared one, not a second regex', () => {
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   assert.doesNotMatch(src, /GSTIN_RE\s*=/, 'gst-payload.util.ts must not keep its own GSTIN regex');
   assert.match(src, /isValidGstin\(/, 'it must ask the shared validator');
+});
+
+test('the company profile refuses a state that is not a real one — it is the seller side of every tax decision', () => {
+  assert.equal(validateCompanyProfile({ state: 'Tamil Nadu' }).state, undefined, 'a canonical name');
+  assert.equal(validateCompanyProfile({ state: 'Tamilnadu' }).state, undefined, 'a known alias resolves');
+  assert.equal(validateCompanyProfile({ state: '33' }).state, undefined, 'the code itself');
+  assert.match(validateCompanyProfile({ state: 'Tamilnad' }).state ?? '', /Choose the state from the list/, 'a typo is refused');
+  assert.equal(validateCompanyProfile({ state: '' }).state, undefined, 'blank is not an error here — the invoice guard asks for it');
 });

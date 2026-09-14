@@ -45,6 +45,12 @@ const csp = [
   `img-src 'self' data: blob:`,
   `font-src 'self' data:`,
   `connect-src 'self' ${apiOrigin} ws: wss:`.replace(/\s+/g, ' ').trim(),
+  // The print viewer shows a fetched PDF from a blob: URL inside an iframe
+  // (a document fetched with an Authorization header cannot be a plain link).
+  // Without this, frames fall back to default-src 'self' and the PDF is a
+  // broken-document icon. object-src stays 'none': the viewer uses an iframe,
+  // not a plugin element.
+  `frame-src 'self' blob:`,
   `object-src 'none'`,
   `base-uri 'self'`,
   `form-action 'self'`,

@@ -12,7 +12,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { pdfText } from './helpers/pdf-text.mjs';
+import { pdfText, pdfTextReport } from './helpers/pdf-text.mjs';
 
 const require = createRequire(import.meta.url);
 const { DataSource } = require('typeorm');
@@ -53,8 +53,11 @@ async function api(method, path, body) {
 const pdf = async (path) => {
   const res = await fetch(`${BASE}${path}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
   const buf = Buffer.from(await res.arrayBuffer());
-  return { ok: res.ok, status: res.status, isPdf: buf.subarray(0, 5).toString() === '%PDF-', text: pdfText(buf) };
+  const declared = Number(res.headers.get('content-length') ?? buf.length);
+  // When an expected string is missing, say what the reader saw instead of a bare "not found".
+  return { ok: res.ok, status: res.status, isPdf: buf.subarray(0, 5).toString() === '%PDF-', text: pdfText(buf), report: () => `${pdfTextReport(buf)}; declared ${declared} bytes` };
 };
+const prints = (label, r, s) => ok(`${label} "${s}"${r.text.includes(s) ? '' : ` — reader saw: ${r.report()}`}`, r.text.includes(s));
 
 console.log('=== the receipt can be printed, and says the right thing at each step of a cheque ===');
 const tag = Date.now().toString(36);
@@ -95,7 +98,7 @@ ok(`receipt recorded ${receipt.receiptNo}, clearing ${receipt.clearingStatus}`, 
   for (const s of ['RECEIPT', `No: ${receipt.receiptNo}`, `Receipt Print ${tag}`, 'GSTIN: 33AAACB1234C1Z5', 'INR 10,000.00',
     'Amount in words: Rupees Ten Thousand Only', 'Mode: cheque', `Ref: CHQ-${tag}`, 'Set against', invoice.invoiceNo,
     'Subject to realisation of the cheque / instrument.']) {
-    ok(`prints "${s}"`, r.text.includes(s));
+    prints('prints', r, s);
   }
   ok('and nothing about a reversal', !r.text.includes('REVERSED') && !r.text.includes('INSTRUMENT RETURNED'));
   ok('the customer address is on the receipt', r.text.includes('12 Anna Salai, Chennai, Tamil Nadu, 600002'));

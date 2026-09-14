@@ -940,6 +940,7 @@ export const purchaseApi = {
   createOrder: (b: Record<string, unknown>) => post('/purchase-orders', b),
   issueOrder: (id: string) => post(`/purchase-orders/${id}/issue`),
   cancelOrder: (id: string) => post(`/purchase-orders/${id}/cancel`),
+  shareOrder: (id: string, mobile: string) => post(`/purchase-orders/${id}/share`, { mobile }),
   grns: (status?: string, limit?: number) => apiFetch<Row[]>(`/goods-receipts${listQs(status, limit)}`),
   grn: (id: string) => apiFetch<Row>(`/goods-receipts/${id}`),
   createGrn: (b: Record<string, unknown>) => post('/goods-receipts', b),

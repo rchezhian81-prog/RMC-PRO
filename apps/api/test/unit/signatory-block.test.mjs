@@ -58,10 +58,10 @@ test('every document opens with the supplier block: name, address, GSTIN and PAN
   }
 });
 
-test('one company block, built once and drawn once, for all six documents', () => {
+test('one company block, built once and drawn once, for all seven documents', () => {
   const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src/sales/pdf.service.ts'), 'utf8'));
   assert.equal((src.match(/function drawCompanyHeader\(/g) ?? []).length, 1, 'one header drawer');
-  assert.equal((src.match(/drawCompanyHeader\(doc, data, left\)/g) ?? []).length, 6, 'invoice, receipt, challan, quotation, weighbridge, statement');
+  assert.equal((src.match(/drawCompanyHeader\(doc, data, left\)/g) ?? []).length, 7, 'invoice, receipt, challan, quotation, weighbridge, statement, purchase order');
   assert.equal((src.match(/export function companyBlock\(/g) ?? []).length, 1, 'one builder');
   for (const f of ['billing/invoice.service.ts', 'billing/receipt.service.ts', 'dispatch/delivery-challan.service.ts', 'sales/quotations.service.ts', 'inventory/weighbridge.service.ts']) {
     const svcSrc = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src', f), 'utf8'));
@@ -70,9 +70,9 @@ test('one company block, built once and drawn once, for all six documents', () =
   }
 });
 
-test('one signature block, drawn by one helper, on the four documents that close with it', () => {
+test('one signature block, drawn by one helper, on the five documents that close with it', () => {
   const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src/sales/pdf.service.ts'), 'utf8'));
   assert.equal((src.match(/function drawSignatoryBlock\(/g) ?? []).length, 1, 'one definition');
-  assert.equal((src.match(/drawSignatoryBlock\(doc, data\.companyName, left, right\)/g) ?? []).length, 4, 'invoice, receipt, quotation, statement');
+  assert.equal((src.match(/drawSignatoryBlock\(doc, data\.companyName, left, right\)/g) ?? []).length, 5, 'invoice, receipt, quotation, statement, purchase order');
   assert.equal((src.match(/Authorised Signatory/g) ?? []).length, 1, 'the wording lives in the helper only');
 });

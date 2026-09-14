@@ -71,8 +71,8 @@ test('a quotation gives its date, revision and validity, and asks for a reply', 
   );
 });
 
-test('the four services use the helpers — no inline "Status: …" text left', () => {
-  for (const [f, fn] of [['billing/invoice.service.ts', 'invoiceShareMessage'], ['billing/receipt.service.ts', 'receiptShareMessage'], ['dispatch/delivery-challan.service.ts', 'challanShareMessage'], ['sales/quotations.service.ts', 'quotationShareMessage']]) {
+test('the five services use the helpers — no inline "Status: …" text left', () => {
+  for (const [f, fn] of [['billing/invoice.service.ts', 'invoiceShareMessage'], ['billing/receipt.service.ts', 'receiptShareMessage'], ['dispatch/delivery-challan.service.ts', 'challanShareMessage'], ['sales/quotations.service.ts', 'quotationShareMessage'], ['purchase/purchase-order.service.ts', 'purchaseOrderShareMessage']]) {
     const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src', f), 'utf8'));
     assert.match(src, new RegExp(`\\(dto\\.message as string\\) \\?\\? ${fn}\\(`), `${f} builds its share text with ${fn}`);
     assert.doesNotMatch(src, /Status: \$\{/, `${f} no longer sends an internal status word`);

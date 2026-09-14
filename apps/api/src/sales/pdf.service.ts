@@ -154,6 +154,33 @@ export interface ReceiptPdfData extends CompanyBlock {
   isAdvance?: boolean;
 }
 
+export interface PurchaseOrderPdfItem {
+  materialLabel: string;
+  uom?: string | null;
+  quantity: string | number;
+  rate: string | number;
+  gstRate: string | number;
+  taxableAmount: string | number;
+  taxAmount: string | number;
+  lineTotal: string | number;
+}
+/** A purchase order — the document a supplier is asked to deliver against. */
+export interface PurchaseOrderPdfData extends CompanyBlock {
+  poNo: string;
+  orderDate?: string | null;
+  expectedDate?: string | null;
+  status: string;
+  supplierName: string;
+  supplierGstin?: string | null;
+  supplierContact?: string | null;
+  deliverTo?: string | null;
+  items: PurchaseOrderPdfItem[];
+  taxableAmount: string | number;
+  taxAmount: string | number;
+  totalAmount: string | number;
+  remarks?: string | null;
+}
+
 export interface StatementPdfRow {
   date?: string | null;
   particulars: string;
@@ -878,6 +905,99 @@ export class PdfService {
       drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated statement of account.', left, doc.y, { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /**
+   * Purchase order. What the plant is buying, from whom, at what rate, to be
+   * delivered where and by when — the document the supplier's dispatch works
+   * from. A cancelled order says so in red rather than printing as an order.
+   */
+  purchaseOrderPdf(data: PurchaseOrderPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      drawCompanyHeader(doc, data, left);
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text('PURCHASE ORDER', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.poNo}`, { align: 'right' });
+      if (data.orderDate) doc.text(`Date: ${data.orderDate}`, { align: 'right' });
+      if (data.expectedDate) doc.text(`Deliver by: ${data.expectedDate}`, { align: 'right' });
+      doc.text(`Status: ${data.status}`, { align: 'right' });
+
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+      if (data.status === 'cancelled') {
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#b91c1c').text('CANCELLED — this order is withdrawn. Please do not supply against it.');
+        doc.fillColor('#000').moveDown(0.5);
+      }
+      doc.font('Helvetica-Bold').fontSize(10).text('To: ', { continued: true });
+      doc.font('Helvetica').text(data.supplierName);
+      if (data.supplierGstin) doc.fontSize(9).text(`GSTIN: ${data.supplierGstin}`);
+      if (data.supplierContact) doc.fontSize(9).text(data.supplierContact);
+      if (data.deliverTo) {
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(10).text('Deliver to: ', { continued: true });
+        doc.font('Helvetica').text(data.deliverTo);
+      }
+      doc.moveDown(0.6);
+
+      const cols = [
+        { key: 'material', label: 'Material', w: 170, align: 'left' as const },
+        { key: 'uom', label: 'UOM', w: 45, align: 'left' as const },
+        { key: 'qty', label: 'Qty', w: 60, align: 'right' as const },
+        { key: 'rate', label: 'Rate', w: 65, align: 'right' as const },
+        { key: 'gst', label: 'GST%', w: 40, align: 'right' as const },
+        { key: 'taxable', label: 'Taxable', w: 70, align: 'right' as const },
+        { key: 'total', label: 'Total', w: 65, align: 'right' as const },
+      ];
+      let y = doc.y;
+      const rowH = 18;
+      const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+        if (fill) doc.rect(left, y - 2, right - left, rowH).fill(fill).fillColor('#000');
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+        let x = left;
+        cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align, lineBreak: false }); x += c.w; });
+        y += rowH;
+      };
+      const header = () => drawRow(cols.map((c) => c.label), true, '#eef1f6');
+      header();
+      for (const it of data.items) {
+        if (y > doc.page.height - 160) { doc.addPage(); y = doc.page.margins.top; header(); }
+        drawRow([it.materialLabel || '-', it.uom || '-', money(it.quantity), money(it.rate), String(Number(it.gstRate) || 0), money(it.taxableAmount), money(it.lineTotal)], false);
+      }
+      doc.y = y + 10;
+      doc.x = left;
+      const totalLine = (label: string, value: string, bold = false) => {
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 9.5).text(`${label}   ${value}`, left, doc.y, { align: 'right' });
+      };
+      totalLine('Taxable', money(data.taxableAmount));
+      totalLine('GST', money(data.taxAmount));
+      totalLine('Total', `INR ${money(data.totalAmount)}`, true);
+      doc.font('Helvetica').fontSize(9).text(`Amount in words: ${amountInWords(data.totalAmount)}`, left, doc.y, { align: 'right' });
+      if (data.remarks) {
+        doc.moveDown(0.6);
+        doc.font('Helvetica-Bold').fontSize(9).text('Terms / remarks: ', left, doc.y, { continued: true });
+        doc.font('Helvetica').text(data.remarks);
+      }
+      doc.moveDown(0.4);
+      doc.font('Helvetica').fontSize(8.5).fillColor('#555')
+        .text('Please quote the PO number on your delivery challan and invoice. Quantities are subject to weighbridge at our plant.', left, doc.y);
+      doc.fillColor('#000');
+
+      drawSignatoryBlock(doc, data.companyName, left, right);
+      doc.moveDown(1.5);
+      doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated purchase order.', left, doc.y, { align: 'center' });
       doc.end();
     });
   }

@@ -72,3 +72,16 @@ export function quotationShareMessage(q: {
   const valid = q.validUntil ? `, valid until ${dmy(q.validUntil)}` : '';
   return `${q.companyName}: Quotation ${q.quotationNo}${rev}${dated}${valid}. Please review and confirm.`;
 }
+
+export function purchaseOrderShareMessage(o: {
+  companyName: string; poNo: string; orderDate?: string | null; expectedDate?: string | null;
+  totalAmount: string | number; status: string; lines: string[];
+}): string {
+  const dated = o.orderDate ? ` dated ${dmy(o.orderDate)}` : '';
+  if (o.status === 'cancelled') {
+    return `${o.companyName}: Purchase order ${o.poNo}${dated} has been CANCELLED. Please do not supply against it.`;
+  }
+  const by = o.expectedDate ? `, deliver by ${dmy(o.expectedDate)}` : '';
+  const what = o.lines.length ? ` — ${o.lines.join('; ')}` : '';
+  return `${o.companyName}: Purchase order ${o.poNo}${dated}${what}, total ₹${inr(o.totalAmount)}${by}. Please quote the PO number on your challan and invoice.`;
+}

@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
+import { PdfService } from '../sales/pdf.service';
 import { dateRange } from '../common/date-range.util';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -18,7 +20,10 @@ const tid = (u: AuthUser) => u.tenantId as string;
 @RequireModule('purchase')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class PurchaseOrderController {
-  constructor(private readonly service: PurchaseOrderService) {}
+  constructor(
+    private readonly service: PurchaseOrderService,
+    private readonly pdf: PdfService,
+  ) {}
 
   @Get() @RequirePermissions('purchase.view')
   list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
@@ -34,6 +39,18 @@ export class PurchaseOrderController {
 
   @Post(':id/cancel') @RequirePermissions('purchase_orders.create')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.cancel(tid(u), id); }
+
+  @Post(':id/share') @RequirePermissions('whatsapp.send')
+  share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }
+
+  @Get(':id/pdf') @RequirePermissions('purchase.view')
+  async pdfDoc(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const { data, poNo } = await this.service.pdfData(tid(u), id);
+    const buffer = await this.pdf.purchaseOrderPdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${poNo}.pdf"`);
+    res.end(buffer);
+  }
 }
 
 @Controller('goods-receipts')

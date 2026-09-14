@@ -4,7 +4,10 @@ import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Material, Plant, PurchaseOrder, PurchaseOrderItem, Supplier } from '../core/database/entities';
+import { Company, Material, Plant, PurchaseOrder, PurchaseOrderItem, Supplier } from '../core/database/entities';
+import { WhatsAppService } from '../sales/whatsapp.service';
+import { companyBlock, type PurchaseOrderPdfData } from '../sales/pdf.service';
+import { purchaseOrderShareMessage } from '../common/share-messages.util';
 import { NumberingService } from '../sales/numbering.service';
 import { documentDate } from '../common/business-date.util';
 
@@ -23,6 +26,7 @@ export class PurchaseOrderService {
   constructor(
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
+    private readonly whatsapp: WhatsAppService,
   ) {}
 
   list(tenantId: string, status?: string, limit?: string) {
@@ -36,6 +40,54 @@ export class PurchaseOrderService {
     if (!po) throw notFound();
     const items = await m.getRepository(PurchaseOrderItem).find({ where: { purchaseOrderId: id }, order: { createdAt: 'ASC' } });
     return { ...po, items };
+  }
+
+  /** Everything the printed order needs: supplier, delivery plant, lines. */
+  async pdfData(tenantId: string, id: string): Promise<{ data: PurchaseOrderPdfData; poNo: string }> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const supplier = full.supplierId ? await m.getRepository(Supplier).findOne({ where: { id: full.supplierId } }) : null;
+      const plant = full.plantId ? await m.getRepository(Plant).findOne({ where: { id: full.plantId } }) : null;
+      const data: PurchaseOrderPdfData = {
+        ...companyBlock(company),
+        poNo: full.poNo,
+        orderDate: full.orderDate,
+        expectedDate: full.expectedDate,
+        status: full.status,
+        supplierName: supplier?.supplierName ?? 'Supplier',
+        supplierGstin: supplier?.gstin ?? null,
+        supplierContact: [supplier?.contactPerson, supplier?.mobile, supplier?.email].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ') || null,
+        deliverTo: plant ? [plant.plantName, plant.city].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') : null,
+        items: full.items.map((it) => ({
+          materialLabel: it.materialLabel ?? '', uom: it.uom, quantity: it.quantity, rate: it.rate, gstRate: it.gstRate,
+          taxableAmount: it.taxableAmount, taxAmount: it.taxAmount, lineTotal: it.lineTotal,
+        })),
+        taxableAmount: full.taxableAmount, taxAmount: full.taxAmount, totalAmount: full.totalAmount,
+        remarks: full.remarks,
+      };
+      return { data, poNo: full.poNo };
+    });
+  }
+
+  /** Send the order to the supplier's phone: the text is composed here, opened by the screen. */
+  async share(tenantId: string, id: string, dto: Record<string, unknown>) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      if (full.status === 'draft') throw badReq('Issue the purchase order before sharing it — a draft is not an order yet.');
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const supplier = full.supplierId ? await m.getRepository(Supplier).findOne({ where: { id: full.supplierId } }) : null;
+      const mobile = (dto.mobile as string) ?? supplier?.mobile ?? null;
+      const message = (dto.message as string) ?? purchaseOrderShareMessage({
+        companyName: company?.companyName ?? 'Your customer', poNo: full.poNo, orderDate: full.orderDate, expectedDate: full.expectedDate,
+        totalAmount: full.totalAmount, status: full.status,
+        lines: full.items.map((it) => `${it.materialLabel ?? ''} ${Number(it.quantity) || 0} ${it.uom ?? ''} @ ₹${Number(it.rate) || 0}`.replace(/\s+/g, ' ').trim()),
+      });
+      return this.whatsapp.logWithin(m, tenantId, {
+        recipientMobile: mobile, moduleKey: 'purchase', eventKey: 'po_share',
+        referenceType: 'purchase_order', referenceId: id, message,
+      });
+    });
   }
 
   get(tenantId: string, id: string) {

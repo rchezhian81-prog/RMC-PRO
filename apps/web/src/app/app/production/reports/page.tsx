@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatDate } from '../../../../lib/format-date';
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { productionReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -15,6 +15,9 @@ const fmt = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFrac
 
 export default function ProductionReportsPage() {
   const [byGrade, setByGrade] = useState<Row[]>([]);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [totals, setTotals] = useState<Row | null>(null);
   const [variance, setVariance] = useState<Row[]>([]);
   const [consumption, setConsumption] = useState<Row[]>([]);
@@ -46,6 +49,7 @@ export default function ProductionReportsPage() {
     setBatch(settledValue(out[3]));
     setPva(settledValue(out[4]));
     setRecon(settledValue(out[5]));
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -98,7 +102,7 @@ export default function ProductionReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No production yet" />
+          failed[0] ? <ErrorState message={failed[0] ?? "This report did not load."} /> : <EmptyState title="No production yet" />
         )}
       </Card>
 
@@ -137,7 +141,7 @@ export default function ProductionReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No plan or production in range" description="Plans are bound by plan date, batches by their batch date." />
+          failed[4] ? <ErrorState message={failed[4] ?? "This report did not load."} /> : <EmptyState title="No plan or production in range" description="Plans are bound by plan date, batches by their batch date." />
         )}
       </Card>
 
@@ -170,7 +174,7 @@ export default function ProductionReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No batches" />
+          failed[3] ? <ErrorState message={failed[3] ?? "This report did not load."} /> : <EmptyState title="No batches" />
         )}
       </Card>
 
@@ -195,7 +199,7 @@ export default function ProductionReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No consumption yet" />
+          failed[2] ? <ErrorState message={failed[2] ?? "This report did not load."} /> : <EmptyState title="No consumption yet" />
         )}
       </Card>
 
@@ -242,7 +246,7 @@ export default function ProductionReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="Nothing to reconcile in range" description="Theoretical (mix-design target) vs dosed (controller) vs stock drawn. Confirmed batches only." />
+          failed[5] ? <ErrorState message={failed[5] ?? "This report did not load."} /> : <EmptyState title="Nothing to reconcile in range" description="Theoretical (mix-design target) vs dosed (controller) vs stock drawn. Confirmed batches only." />
         )}
       </Card>
 

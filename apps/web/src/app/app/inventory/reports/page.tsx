@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { inventoryReportsApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -14,6 +14,9 @@ const money = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFr
 
 export default function InventoryReportsPage() {
   const [low, setLow] = useState<Row[]>([]);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [negative, setNegative] = useState<Row[]>([]);
   const [valuation, setValuation] = useState<{ rows: Row[]; total: number } | null>(null);
   const [movement, setMovement] = useState<Row[]>([]);
@@ -36,6 +39,7 @@ export default function InventoryReportsPage() {
     setNegative(settledValue(out[1]) ?? []);
     setValuation(settledValue(out[2]));
     setMovement(settledValue(out[3]) ?? []);
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -82,7 +86,7 @@ export default function InventoryReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No negative balances" />
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No negative balances" />
         )}
       </Card>
 
@@ -111,7 +115,7 @@ export default function InventoryReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No low-stock materials" />
+          failed[0] ? <ErrorState message={failed[0] ?? "This report did not load."} /> : <EmptyState title="No low-stock materials" />
         )}
       </Card>
 
@@ -140,7 +144,7 @@ export default function InventoryReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No stock" />
+          failed[2] ? <ErrorState message={failed[2] ?? "This report did not load."} /> : <EmptyState title="No stock" />
         )}
       </Card>
 
@@ -167,7 +171,7 @@ export default function InventoryReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No movement yet" />
+          failed[3] ? <ErrorState message={failed[3] ?? "This report did not load."} /> : <EmptyState title="No movement yet" />
         )}
       </Card>
     </div>

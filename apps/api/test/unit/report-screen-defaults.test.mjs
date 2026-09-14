@@ -144,3 +144,34 @@ test('todayLocal is the plant\'s date, never UTC-shifted', () => {
   assert.match(src, /export function todayLocal\b/, 'report-range.ts must export todayLocal');
   assert.ok(!/toISOString\(\)/.test(src), 'and must build it from local date parts');
 });
+
+test('a report card whose fetch failed never says "No …"', () => {
+  // Every report screen fetches its cards with Promise.allSettled so one
+  // failure cannot hide the rest. The cost was that a refused card — the QC
+  // module not enabled, a register over its row cap — rendered the same
+  // EmptyState as a genuinely empty one: "No cube sets", beneath a banner
+  // saying the report could not load. A confident, false statement about data
+  // that exists. Each card now checks its own settled slot first; this fails
+  // if a card is added without that check.
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (entry.name !== 'page.tsx') continue;
+      const src = readCode(full);
+      if (!/settledValue\(/.test(src)) continue;
+      assert.match(src, /setFailed\(out\.map\(settledReason\)\)/, `${full.slice(webSrc.length + 1)} must keep per-slot failure reasons`);
+      for (const m of src.matchAll(/<EmptyState\b/g)) {
+        const before = src.slice(Math.max(0, m.index - 90), m.index);
+        // The ledger drill-down on the purchase screen is not a settled slot.
+        if (/failed\[\d+\] \? <ErrorState/.test(before)) continue;
+        if (/ledger\.rows\.length/.test(before)) continue;
+        const line = src.slice(0, m.index).split('\n').length;
+        offenders.push(`${full.slice(webSrc.length + 1)}:${line}`);
+      }
+    }
+  };
+  walk(resolve(webSrc, 'app'));
+  assert.deepEqual(offenders, [], `these EmptyStates can render for a FAILED fetch — gate on failed[i] first: ${offenders.join(', ')}`);
+});

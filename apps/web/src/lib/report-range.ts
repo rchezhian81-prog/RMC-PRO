@@ -84,3 +84,19 @@ export function settledFailure(results: PromiseSettledResult<unknown>[]): string
   if (results.length === 1) return why;
   return `${failed.length} of ${results.length} reports could not load. ${why}`;
 }
+
+/**
+ * Why one report in an allSettled batch failed — null when it loaded.
+ *
+ * Every report screen keeps its cards independent with Promise.allSettled, and
+ * `settledValue` turns a rejection into null (or, after `?? []`, into an empty
+ * list). That is right for the data, and wrong for what the card then says: a
+ * card whose fetch was refused rendered "No cube sets" — a confident statement
+ * about data that exists and simply could not be read. With the reasons kept
+ * per slot, a card can say "did not load" instead of lying about the rows.
+ */
+export function settledReason(r: PromiseSettledResult<unknown> | undefined): string | null {
+  if (!r || r.status !== 'rejected') return null;
+  const why = r.reason;
+  return why instanceof Error ? why.message : String(why ?? 'Could not load');
+}

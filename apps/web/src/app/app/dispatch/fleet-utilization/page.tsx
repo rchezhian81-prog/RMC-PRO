@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { dispatchApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -16,6 +16,9 @@ const num1 = (v: unknown) => (v == null ? '—' : Number(v).toLocaleString('en-I
 
 export default function FleetUtilizationPage() {
   const [data, setData] = useState<{ rows: Row[]; totals: Row } | null>(null);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [driver, setDriver] = useState<{ rows: Row[]; totals: Row } | null>(null);
   // Opens on the current month rather than every trip ever run.
   const [range, setRange] = useState(currentMonthRange());
@@ -32,6 +35,7 @@ export default function FleetUtilizationPage() {
     ]);
     setData(settledValue(out[0]));
     setDriver(settledValue(out[1]));
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -120,7 +124,7 @@ export default function FleetUtilizationPage() {
             </Table>
           </div>
         ) : (
-          <EmptyState title="No vehicles" description="Register vehicles and complete dispatches to see utilization." />
+          failed[0] ? <ErrorState message={failed[0] ?? "This report did not load."} /> : <EmptyState title="No vehicles" description="Register vehicles and complete dispatches to see utilization." />
         )}
       </Card>
 
@@ -159,7 +163,7 @@ export default function FleetUtilizationPage() {
             </Table>
           </div>
         ) : (
-          <EmptyState title="No drivers" description="Register drivers and complete dispatches to see productivity." />
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No drivers" description="Register drivers and complete dispatches to see productivity." />
         )}
       </Card>
     </div>

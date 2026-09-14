@@ -9,9 +9,42 @@ import { MATERIAL_TYPES } from './enums';
 /** Standard 15-character GSTIN: 2 state digits, PAN (5A+4N+1A), entity, Z, check. */
 export const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
-/** True for a well-formed GSTIN. Callers decide whether the field is required. */
+const GSTIN_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * The 15th character of a GSTIN, computed from the first 14.
+ *
+ * GSTN's check digit: each character is its base-36 value, multiplied by 1 and
+ * 2 alternately from the left, each product reduced to the sum of its base-36
+ * digits, the total taken mod 36 and subtracted from 36. Returns null when the
+ * input is not 14 base-36 characters.
+ */
+export function gstinCheckDigit(first14: string): string | null {
+  const s = first14.toUpperCase();
+  if (s.length !== 14) return null;
+  let sum = 0;
+  for (let i = 0; i < 14; i += 1) {
+    const v = GSTIN_ALPHABET.indexOf(s[i] as string);
+    if (v < 0) return null;
+    const product = v * (i % 2 === 0 ? 1 : 2);
+    sum += Math.floor(product / 36) + (product % 36);
+  }
+  return GSTIN_ALPHABET[(36 - (sum % 36)) % 36] as string;
+}
+
+/**
+ * True for a GSTIN that is well-formed AND whose check digit holds.
+ *
+ * The shape alone was accepted before, so a GSTIN with one mistyped character
+ * sailed through: onto every tax invoice for that customer, into GSTR-1, and
+ * into a buyer who could not claim their input credit because the number on
+ * the invoice was not theirs. The check digit exists to catch exactly a single
+ * wrong key, and costs nothing to apply. Callers decide whether the field is
+ * required at all.
+ */
 export function isValidGstin(value: string): boolean {
-  return GSTIN_REGEX.test(value.trim().toUpperCase());
+  const g = value.trim().toUpperCase();
+  return GSTIN_REGEX.test(g) && gstinCheckDigit(g.slice(0, 14)) === g[14];
 }
 
 /**
@@ -101,7 +134,7 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
 
   const gstin = str('gstin');
   if (gstin && !isValidGstin(gstin)) {
-    errors.gstin = 'Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).';
+    errors.gstin = 'Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z7).';
   }
   const pan = str('pan');
   if (pan && !isValidPan(pan)) {
@@ -178,7 +211,7 @@ export function validateCompanyProfile(dto: Record<string, unknown>): Record<str
     return v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim();
   };
   const gstin = str('gstin');
-  if (gstin && !isValidGstin(gstin)) errors.gstin = 'Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).';
+  if (gstin && !isValidGstin(gstin)) errors.gstin = 'Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z7).';
   const pan = str('pan');
   if (pan && !isValidPan(pan)) errors.pan = 'Enter a valid 10-character PAN (e.g. ABCDE1234F).';
   const pincode = str('pincode');

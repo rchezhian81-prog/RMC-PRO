@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { NicGstProvider } from '../../dist/compliance/nic.provider.js';
 
 const creds = { resolve: async () => ({ username: 'u', password: 'p' }) };
-const GSTIN = '29ABCDE1234F1Z5';
+const GSTIN = '29ABCDE1234F1ZW';
 
 // post() reads GST_GSP_CLIENT_ID/SECRET to build the request headers; set them
 // for the test and restore the environment afterwards so other suites are clean.

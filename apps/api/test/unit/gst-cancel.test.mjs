@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FakeGstProvider } from '../../dist/compliance/fake.provider.js';
 
-const seller = { gstin: '33ABCDE1234F1Z5' };
+const seller = { gstin: '33ABCDE1234F1Z7' };
 
 test('fake provider cancels an IRN and echoes the reference', async () => {
   const p = new FakeGstProvider();

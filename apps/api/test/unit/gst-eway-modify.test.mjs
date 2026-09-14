@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FakeGstProvider } from '../../dist/compliance/fake.provider.js';
 
-const seller = { gstin: '33ABCDE1234F1Z5' };
+const seller = { gstin: '33ABCDE1234F1Z7' };
 const ewbNo = '123456789012';
 
 test('fake provider updates the Part-B vehicle and echoes the reference', async () => {

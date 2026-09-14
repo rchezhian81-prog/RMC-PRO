@@ -85,7 +85,7 @@ const OUT = '2099-07-15';
 
   // Two in-range invoices (one B2B with GSTIN, one B2C without), one out of
   // range, one with a NULL invoice_date — the last two must be excluded.
-  await inv(`RPI-${tag}-A`, IN_A, '29ABCDE1234F1Z5', 1000, 90, 90, 0, 0, 1180);
+  await inv(`RPI-${tag}-A`, IN_A, '29ABCDE1234F1ZW', 1000, 90, 90, 0, 0, 1180);
   await inv(`RPI-${tag}-B`, IN_B, null, 2000, 0, 0, 360, 10, 2370);
   await inv(`RPI-${tag}-OUT`, OUT, null, 5000, 0, 0, 900, 0, 5900);
   await inv(`RPI-${tag}-NULL`, null, null, 7000, 0, 0, 1260, 0, 8260);

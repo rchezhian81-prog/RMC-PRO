@@ -13,8 +13,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildEwbRequest, validateEwbPreflight } from '../../dist/compliance/gst-payload.util.js';
 
-const seller = { gstin: '33ABCDE1234F1Z5', legalName: 'Mix Nova RMC', address1: 'Plant Rd', location: 'Chennai', pincode: '600001', stateCode: '33' };
-const buyer = { gstin: '33XYZAB6789K1Z2', legalName: 'BuildCo', posStateCode: '33', address1: 'Site 1', location: 'Chennai', pincode: '600002', stateCode: '33' };
+const seller = { gstin: '33ABCDE1234F1Z7', legalName: 'Mix Nova RMC', address1: 'Plant Rd', location: 'Chennai', pincode: '600001', stateCode: '33' };
+const buyer = { gstin: '33XYZAB6789K1ZQ', legalName: 'BuildCo', posStateCode: '33', address1: 'Site 1', location: 'Chennai', pincode: '600002', stateCode: '33' };
 const header = {
   docNo: 'INV-001', docDate: '2026-08-01', taxable: 250000, cgst: 22500, sgst: 22500, igst: 0, cess: 0, roundOff: 0,
   total: 295000, distanceKm: 350, transportMode: 'road', vehicleNo: 'TN01AB1234',
@@ -30,8 +30,8 @@ test('Part A carries supply/doc/party/value details', () => {
   assert.equal(req.docType, 'INV');
   assert.equal(req.docNo, 'INV-001');
   assert.equal(req.docDate, '01/08/2026');
-  assert.equal(req.fromGstin, '33ABCDE1234F1Z5');
-  assert.equal(req.toGstin, '33XYZAB6789K1Z2');
+  assert.equal(req.fromGstin, '33ABCDE1234F1Z7');
+  assert.equal(req.toGstin, '33XYZAB6789K1ZQ');
   assert.equal(req.fromStateCode, '33');
   assert.equal(req.toStateCode, '33');
   assert.equal(req.transDistance, 350);
@@ -75,7 +75,7 @@ test('itemList maps each line with a numeric HSN and split rates (intra-state)',
 test('inter-state supply uses IGST rate/value only', () => {
   const interHeader = { ...header, taxable: 45000, cgst: 0, sgst: 0, igst: 8100, total: 53100 };
   const interLines = [{ ...lines[0], taxable: 45000, cgst: 0, sgst: 0, igst: 8100, total: 53100 }];
-  const interBuyer = { ...buyer, gstin: '29XYZAB6789K1Z2', stateCode: '29', posStateCode: '29' };
+  const interBuyer = { ...buyer, gstin: '29XYZAB6789K1ZF', stateCode: '29', posStateCode: '29' };
   const req = buildEwbRequest(interHeader, interLines, seller, interBuyer);
   assert.equal(req.itemList[0].igstRate, 18);
   assert.equal(req.itemList[0].cgstRate, 0);

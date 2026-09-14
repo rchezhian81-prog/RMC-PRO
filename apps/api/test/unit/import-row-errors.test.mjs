@@ -10,7 +10,7 @@
  * learn which of eleven columns was wrong, or why.
  *
  * Verified live against a six-row file:
- *   Row 3 — GSTIN: Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).
+ *   Row 3 — GSTIN: Enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z7).
  *   Row 4 — Mobile: Enter a valid 10-digit mobile number.
  *   Row 6 — GSTIN: … Mobile: … PIN Code: …        (all three at once)
  *   Row 7 — Credit Limit: "not-a-number" is not a number

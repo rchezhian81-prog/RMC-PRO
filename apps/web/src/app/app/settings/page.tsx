@@ -216,7 +216,7 @@ function GstCredentialsCard() {
       <Form onSubmit={add} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginTop: 14 }}>
         <div style={{ minWidth: 190 }}>
           <Field label="GSTIN" required>
-            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="33ABCDE1234F1Z5" required />
+            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="33ABCDE1234F1Z7" required />
           </Field>
         </div>
         <div style={{ minWidth: 160 }}>

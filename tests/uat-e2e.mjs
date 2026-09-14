@@ -18,7 +18,7 @@ export async function run() {
 
   // 2. Master setup
   const grade = (await api('GET', '/concrete-grades', t)).find((g) => g.gradeCode === 'M25');
-  const customer = await api('POST', '/customers', { ...t, body: { customerCode: `UAT-${stamp}`, customerName: `UAT Customer ${stamp}`, state: company?.state ?? 'TN', gstin: '33UATCD1234F1Z5', creditLimit: 5000000, billingAddress: 'Chennai', mobile: '9800099999' } });
+  const customer = await api('POST', '/customers', { ...t, body: { customerCode: `UAT-${stamp}`, customerName: `UAT Customer ${stamp}`, state: company?.state ?? 'TN', gstin: '33UATCD1234F1ZB', creditLimit: 5000000, billingAddress: 'Chennai', mobile: '9800099999' } });
   const mats = {};
   for (const [k, code, name] of [['cem', `UATC-${stamp}`, 'UAT Cement'], ['sand', `UATS-${stamp}`, 'UAT Sand'], ['agg', `UATA-${stamp}`, 'UAT Aggregate']]) {
     mats[k] = await api('POST', '/materials', { ...t, body: { materialCode: code, materialName: name, uom: 'kg', reorderLevel: 100, standardRate: 6 } });

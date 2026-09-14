@@ -24,7 +24,7 @@ const inv = {
   invoiceNo: 'INV0001', invoiceDate: '2026-08-01',
   totalAmount: '295000.00', taxableAmount: '250000.00',
   cgstAmount: '0', sgstAmount: '0', igstAmount: '45000.00', cessAmount: '0',
-  placeOfSupply: '33', gstin: '33ABCDE1234F1Z5', distanceKm: 350,
+  placeOfSupply: '33', gstin: '33ABCDE1234F1Z7', distanceKm: 350,
   transportMode: 'road', vehicleNo: 'TN01AB1234',
 };
 

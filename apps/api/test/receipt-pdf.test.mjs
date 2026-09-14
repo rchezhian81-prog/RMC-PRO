@@ -137,6 +137,16 @@ const cash = await api('POST', '/receipts', { customerId, amount: 2500, paymentM
   ok(`an unknown customer is a 404, not a blank statement (${nobody.status})`, nobody.status === 404);
 }
 
+console.log('\n[6] the shared receipt text names the company and formats the money');
+{
+  const log = await api('POST', `/receipts/${cash.id}/share`, { mobile: '9876543210' });
+  const body = String(log?.messageBody ?? log?.message ?? JSON.stringify(log));
+  ok(`share text: ${body.slice(0, 120)}`, body.includes(`Receipt ${cash.receiptNo}`) && body.includes('₹2,500.00') && body.includes('by cash') && !body.includes('Status:'));
+  const bounced = await api('POST', `/receipts/${receipt.id}/share`, { mobile: '9876543210' });
+  const bbody = String(bounced?.messageBody ?? bounced?.message ?? '');
+  ok('a bounced receipt\'s share text says it is reversed and the amount remains due', /REVERSED/.test(bbody) && /remains due/.test(bbody));
+}
+
 console.log(`\nRECEIPT PDF TEST: ${pass} passed`);
 await owner.destroy();
 process.exit(0);

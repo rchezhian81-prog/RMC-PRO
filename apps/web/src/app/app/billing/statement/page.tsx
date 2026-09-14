@@ -107,7 +107,7 @@ export default function CustomerStatementPage() {
               variant="ghost"
               size="sm"
               icon={<Download size={15} />}
-              onClick={() => openPdf(`/billing-reports/customer-statement/pdf?customerId=${encodeURIComponent(customerId)}${range.from ? `&from=${range.from}` : ''}${range.to ? `&to=${range.to}` : ''}`).catch((e) => setError(String(e)))}
+              onClick={() => openPdf(`/billing-reports/customer-statement/pdf?customerId=${encodeURIComponent(customerId)}${range.from ? `&from=${range.from}` : ''}${range.to ? `&to=${range.to}` : ''}`, `Statement - ${stmt?.customerName ?? 'customer'}`).catch((e) => setError(String(e)))}
             >
               Print statement
             </Button>

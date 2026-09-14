@@ -145,6 +145,7 @@ export interface ReceiptPdfData extends CompanyBlock {
   clearingStatus?: string | null;
   customerName: string;
   customerGstin?: string | null;
+  customerAddress?: string | null;
   amount: string | number;
   paymentMode?: string | null;
   bankReference?: string | null;
@@ -808,6 +809,7 @@ export class PdfService {
 
       doc.font('Helvetica-Bold').fontSize(10).text('Received from: ', { continued: true });
       doc.font('Helvetica').text(data.customerName);
+      if (data.customerAddress) doc.fontSize(9).text(data.customerAddress);
       if (data.customerGstin) doc.fontSize(9).text(`GSTIN: ${data.customerGstin}`);
       doc.moveDown(0.6);
       doc.font('Helvetica-Bold').fontSize(13).text(`INR ${money(data.amount)}`);

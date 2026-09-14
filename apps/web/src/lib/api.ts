@@ -1,4 +1,5 @@
 import { clearSession, getSession, updateAccessToken } from './session';
+import { documentFilename, documentViewerHtml } from '@rmc/shared';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -1201,15 +1202,22 @@ export async function openWhatsAppShare(call: () => Promise<Row>): Promise<strin
 
 /**
  * Fetch a PDF (the auth header is required, so a plain link cannot do it) and
- * show it in a new tab.
+ * show it in a tab of its own.
  *
  * The tab is opened synchronously, inside the click, and filled once the bytes
  * arrive: browsers block a window opened after an await as a pop-up, and a
- * blocked pop-up is silent — the button appears to do nothing. When the API
- * refuses (an invoice that needs the company GSTIN first, a receipt that is
- * not there) its own reason is thrown, not "Failed to load PDF".
+ * blocked pop-up is silent — the button appears to do nothing. The tab is a
+ * small viewer page titled with the document's number, with Print and "Save as
+ * RCPT-0001.pdf" buttons and the PDF below; navigating the tab to the blob
+ * itself titled it with the blob's random id and saved it under that. When
+ * the API refuses (an invoice that needs the company GSTIN first, a receipt
+ * that is not there) its own reason is thrown, not "Failed to load PDF". If
+ * the browser will not open a tab at all, the file is saved instead.
+ *
+ * `name` is the document number the caller already has; the API's own
+ * Content-Disposition filename wins when the browser lets us read it.
  */
-export async function openPdf(path: string): Promise<void> {
+export async function openPdf(path: string, name?: string | null): Promise<void> {
   const tab = window.open('', '_blank');
   try {
     const token = getSession()?.token;
@@ -1224,10 +1232,21 @@ export async function openPdf(path: string): Promise<void> {
       }
       throw new Error(reason);
     }
+    const filename = documentFilename(res.headers.get('content-disposition'), name);
     const url = URL.createObjectURL(await res.blob());
-    if (tab) tab.location.href = url;
-    else if (!window.open(url, '_blank')) throw new Error('Your browser blocked the document window. Allow pop-ups for this site and try again.');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    if (tab) {
+      tab.document.open();
+      tab.document.write(documentViewerHtml({ url, filename }));
+      tab.document.close();
+      // The blob lives as long as the tab does; a fixed timer would break
+      // Print/Save on a tab left open for a while.
+      tab.addEventListener('pagehide', () => URL.revokeObjectURL(url));
+    } else {
+      // Pop-ups blocked: a download needs no window and keeps the real name.
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
   } catch (e) {
     tab?.close();
     throw e;

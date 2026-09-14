@@ -256,7 +256,7 @@ export default function ReceiptsPage() {
                         variant="secondary"
                         size="sm"
                         icon={<Download size={14} />}
-                        onClick={() => openPdf(`/receipts/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}
+                        onClick={() => openPdf(`/receipts/${String(r.id)}/pdf`, String(r.receiptNo ?? '')).catch((e) => setError(String(e)))}
                       >
                         Print
                       </Button>

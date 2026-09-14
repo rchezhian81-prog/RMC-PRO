@@ -199,7 +199,7 @@ export default function InvoicesPage() {
                   <Td><StatusBadge status={String(r.invoiceStatus)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/invoices/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/invoices/${String(r.id)}/pdf`, String(r.invoiceNo ?? 'Draft invoice')).catch((e) => setError(String(e)))}>Print</Button>
                       <Link href={`/app/billing/invoices/${r.id}`}>
                         <Button variant="secondary" size="sm">Open</Button>
                       </Link>

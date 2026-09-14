@@ -190,6 +190,9 @@ export default function OrderDetail() {
             <tr>
               <Th>Grade</Th>
               <Th numeric>Qty m³</Th>
+              <Th numeric>Batched</Th>
+              <Th numeric>Delivered</Th>
+              <Th numeric>Balance</Th>
               <Th numeric>Rate/m³</Th>
               <Th numeric>Transport</Th>
               <Th numeric>Pump</Th>
@@ -203,6 +206,9 @@ export default function OrderDetail() {
               <tr key={it.id}>
                 <Td>{String(it.gradeLabel ?? '')}</Td>
                 <Td numeric>{qty(it.quantityM3)}</Td>
+                <Td numeric title="Confirmed batch tickets for this grade">{it.batchedM3 == null ? '—' : qty(it.batchedM3)}</Td>
+                <Td numeric title="Delivered challans for this grade, net of returns">{it.deliveredM3 == null ? '—' : qty(it.deliveredM3)}</Td>
+                <Td numeric style={{ fontWeight: 600, color: Number(it.balanceM3) > 0 ? 'var(--mn-warning)' : 'var(--mn-text)' }}>{it.balanceM3 == null ? '—' : qty(it.balanceM3)}</Td>
                 <Td numeric>{money(it.ratePerM3)}</Td>
                 <Td numeric>{money(it.transportCharge)}</Td>
                 <Td numeric>{money(it.pumpCharge)}</Td>
@@ -274,7 +280,9 @@ export default function OrderDetail() {
                 <StatCard label="Ordered m³" value={String(ps.ordered)} />
                 <StatCard label="Scheduled m³" value={String(ps.scheduled)} />
                 <StatCard label="Unscheduled m³" value={String(ps.unscheduled)} />
+                <StatCard label="Batched m³" value={String(ps.batched ?? "—")} />
                 <StatCard label="Delivered m³" value={String(ps.delivered)} />
+                <StatCard label="On the road m³" value={String(ps.pendingDelivery ?? "—")} tone={Number(ps.pendingDelivery) > 0 ? "warning" : "neutral"} />
               </div>
             )}
             <Table>

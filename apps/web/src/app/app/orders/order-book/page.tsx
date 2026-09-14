@@ -34,7 +34,9 @@ export default function OrderBookPage() {
       {t && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
           <StatCard label="Ordered m³" value={m3(t.ordered)} />
+          <StatCard label="Batched m³" value={m3(t.batched)} />
           <StatCard label="Delivered m³" value={m3(t.delivered)} />
+          <StatCard label="On the road m³" value={m3(t.pending)} tone={Number(t.pending) > 0 ? "warning" : "neutral"} />
           <StatCard label="Balance m³ (to pour)" value={m3(t.balance)} tone={Number(t.balance) > 0 ? 'warning' : 'neutral'} />
           <StatCard label="Confirmed orders" value={String(t.count)} />
         </div>
@@ -55,6 +57,7 @@ export default function OrderBookPage() {
                 <Th>Date</Th>
                 <Th>Customer</Th>
                 <Th numeric>Ordered</Th>
+                <Th numeric>Batched</Th>
                 <Th numeric>Delivered</Th>
                 <Th numeric>Balance</Th>
               </tr>
@@ -66,7 +69,8 @@ export default function OrderBookPage() {
                   <Td>{formatDate(r.orderDate)}</Td>
                   <Td>{String(r.customerName ?? '')}</Td>
                   <Td numeric>{m3(r.ordered)}</Td>
-                  <Td numeric>{m3(r.delivered)}</Td>
+                  <Td numeric title="Confirmed batch tickets — made, whether or not it has reached the site">{m3(r.batched)}</Td>
+                  <Td numeric title="Delivered challans, net of concrete returned">{m3(r.delivered)}</Td>
                   <Td numeric style={{ fontWeight: 600, color: Number(r.balance) > 0 ? 'var(--mn-warning)' : 'var(--mn-text)' }}>{m3(r.balance)}</Td>
                 </tr>
               ))}
@@ -77,6 +81,7 @@ export default function OrderBookPage() {
                   <Td style={{ fontWeight: 700 }}>All orders</Td>
                   <Td /><Td />
                   <Td numeric style={{ fontWeight: 700 }}>{m3(t.ordered)}</Td>
+                  <Td numeric style={{ fontWeight: 700 }}>{m3(t.batched)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{m3(t.delivered)}</Td>
                   <Td numeric style={{ fontWeight: 700 }}>{m3(t.balance)}</Td>
                 </tr>

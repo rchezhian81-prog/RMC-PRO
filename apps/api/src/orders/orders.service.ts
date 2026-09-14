@@ -13,6 +13,7 @@ import {
 } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { summariseGst, isInterstateSupply } from '../billing/tax.util';
+import { attributeByGrade, reconcileQuantities, type GradeQuantities } from './order-quantities.util';
 import { summarisePourSchedule } from './pour-schedule.util';
 
 const num = (v: unknown): number => Number(v ?? 0) || 0;
@@ -35,6 +36,62 @@ function affectedRows(result: unknown): number {
  * cancel, and expose the credit assessment + status history. Confirmed orders
  * hand off to later sprints (production/dispatch) — none of which run here.
  */
+/**
+ * The three quantities of each order — ordered, batched, delivered (net) plus
+ * returned — and the same per grade, from one place.
+ *
+ * Exported so the order book and the order detail ask the same question and
+ * get the same answer. They used to ask different ones: the book summed
+ * delivered challans, the detail summed confirmed batch tickets and called it
+ * delivered.
+ */
+export async function orderQuantitiesWithin(
+  m: EntityManager,
+  orderIds: string[],
+): Promise<Map<string, { orderedM3: number; batchedM3: number; deliveredM3: number; returnedM3: number; byGrade: Map<string, GradeQuantities> }>> {
+  const out = new Map<string, { orderedM3: number; batchedM3: number; deliveredM3: number; returnedM3: number; byGrade: Map<string, GradeQuantities> }>();
+  if (!orderIds.length) return out;
+  const entry = (id: string) => {
+    let e = out.get(id);
+    if (!e) { e = { orderedM3: 0, batchedM3: 0, deliveredM3: 0, returnedM3: 0, byGrade: new Map() }; out.set(id, e); }
+    return e;
+  };
+  const gradeEntry = (id: string, key: string) => {
+    const e = entry(id);
+    let g = e.byGrade.get(key);
+    if (!g) { g = { batchedM3: 0, deliveredM3: 0, returnedM3: 0 }; e.byGrade.set(key, g); }
+    return g;
+  };
+  const key = (r: { gradeId: string | null; gradeLabel: string | null }) =>
+    r.gradeId ?? String(r.gradeLabel ?? '').trim().toUpperCase();
+
+  const ordered: Array<{ orderId: string; m3: number }> = await m.query(
+    `SELECT order_id AS "orderId", COALESCE(SUM(quantity_m3), 0)::float AS m3 FROM order_items WHERE order_id = ANY($1) GROUP BY order_id`,
+    [orderIds],
+  );
+  for (const r of ordered) entry(r.orderId).orderedM3 = Number(r.m3);
+
+  const batched: Array<{ orderId: string; gradeId: string | null; gradeLabel: string | null; m3: number }> = await m.query(
+    `SELECT order_id AS "orderId", grade_id AS "gradeId", grade_label AS "gradeLabel", COALESCE(SUM(batch_quantity_m3), 0)::float AS m3
+       FROM batch_tickets WHERE order_id = ANY($1) AND status = 'confirmed' GROUP BY order_id, grade_id, grade_label`,
+    [orderIds],
+  );
+  for (const r of batched) { entry(r.orderId).batchedM3 += Number(r.m3); gradeEntry(r.orderId, key(r)).batchedM3 += Number(r.m3); }
+
+  const delivered: Array<{ orderId: string; gradeId: string | null; gradeLabel: string | null; net: number; returned: number }> = await m.query(
+    `SELECT order_id AS "orderId", grade_id AS "gradeId", grade_label AS "gradeLabel",
+            COALESCE(SUM(quantity_m3 - return_quantity_m3), 0)::float AS net,
+            COALESCE(SUM(return_quantity_m3), 0)::float AS returned
+       FROM delivery_challans WHERE order_id = ANY($1) AND challan_status = 'delivered' GROUP BY order_id, grade_id, grade_label`,
+    [orderIds],
+  );
+  for (const r of delivered) {
+    const e = entry(r.orderId); e.deliveredM3 += Number(r.net); e.returnedM3 += Number(r.returned);
+    const g = gradeEntry(r.orderId, key(r)); g.deliveredM3 += Number(r.net); g.returnedM3 += Number(r.returned);
+  }
+  return out;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -58,22 +115,27 @@ export class OrdersService {
    */
   orderBook(tenantId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const rows: Array<{ ordered: number | string; delivered: number | string; balance: number | string }> = await m.query(
-        `SELECT o.order_no AS "orderNo", o.order_date AS "orderDate", c.customer_name AS "customerName",
-                COALESCE(oi.ordered, 0)::float AS ordered,
-                COALESCE(dl.delivered, 0)::float AS delivered,
-                (COALESCE(oi.ordered, 0) - COALESCE(dl.delivered, 0))::float AS balance
-           FROM orders o
-           LEFT JOIN customers c ON c.id = o.customer_id
-           LEFT JOIN (SELECT order_id, SUM(quantity_m3) AS ordered FROM order_items GROUP BY order_id) oi ON oi.order_id = o.id
-           LEFT JOIN (SELECT order_id, SUM(quantity_m3 - return_quantity_m3) AS delivered
-                        FROM delivery_challans WHERE challan_status = 'delivered' GROUP BY order_id) dl ON dl.order_id = o.id
-          WHERE o.order_status = 'confirmed'
-          ORDER BY balance DESC, o.order_date`,
+      const orders: Array<{ id: string; orderNo: string; orderDate: string; customerName: string | null }> = await m.query(
+        `SELECT o.id, o.order_no AS "orderNo", o.order_date AS "orderDate", c.customer_name AS "customerName"
+           FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
+          WHERE o.order_status = 'confirmed'`,
       );
-      const sum = (f: (r: (typeof rows)[number]) => unknown) =>
-        Math.round(rows.reduce((s, r) => s + (Number(f(r)) || 0), 0) * 1000) / 1000;
-      const totals = { ordered: sum((r) => r.ordered), delivered: sum((r) => r.delivered), balance: sum((r) => r.balance), count: rows.length };
+      const q = await orderQuantitiesWithin(m, orders.map((o) => o.id));
+      const rows = orders
+        .map((o) => {
+          const r = reconcileQuantities(q.get(o.id) ?? { orderedM3: 0, batchedM3: 0, deliveredM3: 0, returnedM3: 0 });
+          return {
+            orderNo: o.orderNo, orderDate: o.orderDate, customerName: o.customerName,
+            ordered: r.orderedM3, batched: r.batchedM3, delivered: r.deliveredM3, returned: r.returnedM3,
+            pending: r.pendingDeliveryM3, balance: r.balanceM3,
+          };
+        })
+        .sort((a, b) => b.balance - a.balance || String(a.orderDate).localeCompare(String(b.orderDate)));
+      const sum = (f: (r: (typeof rows)[number]) => number) => Math.round(rows.reduce((t, r) => t + (f(r) || 0), 0) * 1000) / 1000;
+      const totals = {
+        ordered: sum((r) => r.ordered), batched: sum((r) => r.batched), delivered: sum((r) => r.delivered),
+        returned: sum((r) => r.returned), pending: sum((r) => r.pending), balance: sum((r) => r.balance), count: rows.length,
+      };
       return { rows, totals };
     });
   }
@@ -106,17 +168,26 @@ export class OrdersService {
     const pourSlots = await m
       .getRepository(PourScheduleSlot)
       .find({ where: { orderId: id }, order: { slotDate: 'ASC', sequenceNo: 'ASC', createdAt: 'ASC' } });
-    const orderedM3 = items.reduce((a, it) => a + num(it.quantityM3), 0);
-    const [delivered] = await m.query(
-      `SELECT COALESCE(sum(batch_quantity_m3), 0)::float AS m3 FROM batch_tickets WHERE order_id = $1 AND status = 'confirmed'`,
-      [id],
-    );
-    const pourSummary = summarisePourSchedule(
-      pourSlots.map((s) => ({ quantityM3: num(s.quantityM3), status: s.status })),
-      orderedM3,
-      num(delivered?.m3),
-    );
-    return { ...order, items, history, creditHolds: holds, taxSummary, pourSlots, pourSummary };
+    // One rule for ordered / batched / delivered, shared with the order book.
+    // "Delivered" here used to be confirmed batch tickets — concrete made, not
+    // concrete that reached the site — while the book counted delivered
+    // challans, so the two screens disagreed about the same order.
+    const qmap = await orderQuantitiesWithin(m, [id]);
+    const raw = qmap.get(id) ?? { orderedM3: 0, batchedM3: 0, deliveredM3: 0, returnedM3: 0, byGrade: new Map<string, GradeQuantities>() };
+    const quantities = reconcileQuantities(raw);
+    const perLine = attributeByGrade(items, raw.byGrade);
+    const itemsWithQuantities = items.map((it, i) => ({ ...it, ...(perLine[i] ?? { batchedM3: null, deliveredM3: null, returnedM3: null, balanceM3: null }) }));
+    const pourSummary = {
+      ...summarisePourSchedule(
+        pourSlots.map((s) => ({ quantityM3: num(s.quantityM3), status: s.status })),
+        quantities.orderedM3,
+        quantities.deliveredM3,
+      ),
+      batched: quantities.batchedM3,
+      returned: quantities.returnedM3,
+      pendingDelivery: quantities.pendingDeliveryM3,
+    };
+    return { ...order, items: itemsWithQuantities, history, creditHolds: holds, taxSummary, pourSlots, pourSummary, quantities };
   }
 
   // ---- Pour schedule (Plan B1) -------------------------------------------

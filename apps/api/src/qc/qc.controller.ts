@@ -21,6 +21,11 @@ export class QcController {
     return this.service.cubeRegister(tid(u), ...dateRange(from, to));
   }
 
+  @Get('sampling-report') @RequirePermissions('qc.view')
+  samplingReport(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.samplingReport(tid(u), ...dateRange(from, to));
+  }
+
   @Get('slump-register') @RequirePermissions('qc.view')
   slumpRegister(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
     return this.service.slumpRegister(tid(u), ...dateRange(from, to));

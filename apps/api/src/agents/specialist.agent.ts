@@ -1,3 +1,6 @@
+import { samplingGroupsWithin } from '../qc/qc.service';
+import { samplingSummary } from '../qc/sampling.util';
+import { businessToday } from '../common/business-date.util';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ToolRegistryService } from './tool-registry.service';
 import { clampInt, num } from './insights.util';
@@ -92,6 +95,20 @@ export class SpecialistAgent implements OnModuleInit {
             code: 'hsn_missing', severity: 'warn', count: num(hsn.count),
             recommendation: 'Populate an HSN/SAC on every line — 6 digits above the ₹5 cr turnover threshold, 4 below it; clearance portals reject missing codes.',
             citation: 'India HSN 6-digit at AATO > ₹5 cr — WR-TAX-7 / IND-05',
+          });
+        }
+
+        // IS 456 Table 10: enough cube samples for the concrete produced. Asked
+        // through the same SQL and rule the QC sampling report uses, so the
+        // report and this finding can never disagree about a day.
+        const since = new Date(Date.now() - (days - 1) * 86_400_000);
+        const sampling = samplingSummary(await samplingGroupsWithin(ctx.manager, businessToday(since), businessToday()));
+        if (sampling.underSampled > 0) {
+          findings.push({
+            code: 'under_sampled', severity: 'warn', count: sampling.underSampled,
+            detail: { shortfall: sampling.totalShortfall, producedM3: sampling.totalProducedM3 },
+            recommendation: `Cast the missing cube sets: ${sampling.totalShortfall} short across ${sampling.underSampled} plant-day-grade(s). A cube test cannot certify concrete it was not taken from.`,
+            citation: 'IS 456:2000 §15.2.2 Table 10 sampling frequency — WR-STD-13',
           });
         }
 

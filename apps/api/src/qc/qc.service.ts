@@ -6,6 +6,7 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { BatchTicket, ConcreteGrade, MixDesign, Plant, QcCubeResult, QcCubeSet, QcSlumpTest } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { assessCubeSet, individualFloor } from './acceptance.util';
+import { samplingSummary, type SamplingGroup, type SamplingSummary } from './sampling.util';
 
 const notFound = (what = 'Record') => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: `${what} not found` });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -24,6 +25,67 @@ export function fckFromGradeCode(code?: string | null): number {
  * 28-day results are assessed against the grade's characteristic strength
  * (IS 456 acceptance). Every query runs inside the caller's RLS context.
  */
+/**
+ * Concrete produced and cube sets cast, per plant × day × grade, over a period.
+ *
+ * Exported as a plain function on an EntityManager so the compliance agent can
+ * ask the same question the report answers — one SQL, one rule, one answer.
+ *
+ * "Produced" is a confirmed batch ticket, dated by the day it was batched (the
+ * plant's day: the connection runs on the plant's clock). Cube sets are grouped
+ * by the day they were cast. Both keyed by grade, falling back to the label for
+ * a set recorded against a strength with no grade master behind it.
+ */
+export async function samplingGroupsWithin(
+  m: EntityManager,
+  from?: string,
+  to?: string,
+): Promise<SamplingGroup[]> {
+  const bounds = (col: string, params: unknown[]) => {
+    const parts: string[] = [];
+    if (from) { params.push(from); parts.push(`${col} >= $${params.length}`); }
+    if (to) { params.push(to); parts.push(`${col} <= $${params.length}`); }
+    return parts.length ? ` AND ${parts.join(' AND ')}` : '';
+  };
+  const pp: unknown[] = [];
+  const produced: Array<Record<string, unknown>> = await m.query(
+    `SELECT t.plant_id AS "plantId", p.plant_name AS "plantLabel",
+            to_char(COALESCE(t.batch_start_time, t.created_at)::date, 'YYYY-MM-DD') AS day,
+            t.grade_id AS "gradeId", COALESCE(g.grade_code, t.grade_label) AS "gradeLabel",
+            COALESCE(SUM(t.batch_quantity_m3), 0)::float AS "producedM3"
+       FROM batch_tickets t
+       LEFT JOIN plants p ON p.id = t.plant_id
+       LEFT JOIN concrete_grades g ON g.id = t.grade_id
+      WHERE t.status = 'confirmed'${bounds('COALESCE(t.batch_start_time, t.created_at)::date', pp)}
+      GROUP BY t.plant_id, p.plant_name, day, t.grade_id, g.grade_code, t.grade_label`,
+    pp,
+  );
+  const sp: unknown[] = [];
+  const cast: Array<Record<string, unknown>> = await m.query(
+    `SELECT s.plant_id AS "plantId", to_char(s.cast_date, 'YYYY-MM-DD') AS day,
+            s.grade_id AS "gradeId", COALESCE(g.grade_code, s.grade_label) AS "gradeLabel",
+            COUNT(*)::int AS "samplesCast"
+       FROM qc_cube_sets s
+       LEFT JOIN concrete_grades g ON g.id = s.grade_id
+      WHERE s.status <> 'cancelled'${bounds('s.cast_date', sp)}
+      GROUP BY s.plant_id, day, s.grade_id, g.grade_code, s.grade_label`,
+    sp,
+  );
+  const key = (r: Record<string, unknown>) =>
+    `${r.plantId ?? ''}|${r.day}|${r.gradeId ?? String(r.gradeLabel ?? '').toUpperCase()}`;
+  const castBy = new Map<string, number>();
+  for (const r of cast) castBy.set(key(r), (castBy.get(key(r)) ?? 0) + Number(r.samplesCast));
+  return produced.map((r) => ({
+    plantId: (r.plantId as string | null) ?? null,
+    plantLabel: (r.plantLabel as string | null) ?? null,
+    day: String(r.day),
+    gradeId: (r.gradeId as string | null) ?? null,
+    gradeLabel: (r.gradeLabel as string | null) ?? null,
+    producedM3: Number(r.producedM3),
+    samplesCast: castBy.get(key(r)) ?? 0,
+  }));
+}
+
 @Injectable()
 export class QcService {
   constructor(
@@ -96,6 +158,11 @@ export class QcService {
       const passed = rows.filter((s) => s.passed).length;
       return { rows, count: rows.length, passed, failed: rows.length - passed };
     });
+  }
+
+  /** IS 456 Table 10 sampling compliance — produced m³ vs cube sets cast, per plant × day × grade. */
+  samplingReport(tenantId: string, from?: string, to?: string): Promise<SamplingSummary> {
+    return this.db.runInTenant(tenantId, async (m) => samplingSummary(await samplingGroupsWithin(m, from, to)));
   }
 
   getSlump(tenantId: string, id: string) {

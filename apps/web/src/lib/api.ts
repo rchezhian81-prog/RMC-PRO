@@ -928,6 +928,9 @@ export const qcApi = {
     post(`/qc/cube-sets/${id}/results`, { results }),
   cubeRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; count: number; accepted: number; rejected: number }>(`/qc/cube-register${dateQs(from, to)}`),
   slumpRegister: (from?: string, to?: string) => apiFetch<{ rows: Row[]; count: number; passed: number; failed: number }>(`/qc/slump-register${dateQs(from, to)}`),
+  // IS 456 Table 10: cube samples required for the concrete produced, per plant × day × grade.
+  samplingReport: (from?: string, to?: string) =>
+    apiFetch<{ rows: Row[]; groups: number; underSampled: number; totalProducedM3: number; totalRequired: number; totalCast: number; totalShortfall: number }>(`/qc/sampling-report${dateQs(from, to)}`),
 };
 
 // ---- Purchase / AP-lite (Plan D2) ----

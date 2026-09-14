@@ -18,6 +18,7 @@ const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFracti
 export default function QcRegisterPage() {
   const [cube, setCube] = useState<{ rows: Row[]; count: number; accepted: number; rejected: number } | null>(null);
   const [slump, setSlump] = useState<{ rows: Row[]; count: number; passed: number; failed: number } | null>(null);
+  const [sampling, setSampling] = useState<Awaited<ReturnType<typeof qcApi.samplingReport>> | null>(null);
   // Opens on the current month: both registers are capped at 5,000 rows.
   const [range, setRange] = useState(currentMonthRange());
   const [error, setError] = useState<string | null>(null);
@@ -30,9 +31,11 @@ export default function QcRegisterPage() {
     const out = await Promise.allSettled([
       qcApi.cubeRegister(from || undefined, to || undefined),
       qcApi.slumpRegister(from || undefined, to || undefined),
+      qcApi.samplingReport(from || undefined, to || undefined),
     ]);
     setCube(settledValue(out[0]));
     setSlump(settledValue(out[1]));
+    setSampling(settledValue(out[2]));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -144,6 +147,73 @@ export default function QcRegisterPage() {
           </Table>
         ) : (
           <EmptyState title="No slump tests" description="Slump tests recorded in the period will appear here." />
+        )}
+      </Card>
+
+      <Card
+        title="Sampling frequency (IS 456 Table 10)"
+        actions={
+          <ExportButton
+            rows={sampling?.rows ?? []}
+            columns={['day', 'plantLabel', 'gradeLabel', 'producedM3', 'samplesRequired', 'samplesCast', 'shortfall']}
+            filename="qc-sampling"
+          />
+        }
+      >
+        <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px' }}>
+          For each day and grade: the concrete batched, the cube sets IS 456 requires for that quantity, and
+          the sets actually cast. A cube test cannot certify concrete it was not taken from, so a shortfall
+          here is what an inspector will ask about first.
+        </p>
+        {sampling && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
+            <StatCard label="Produced m³" value={n(sampling.totalProducedM3)} />
+            <StatCard label="Samples required" value={String(sampling.totalRequired)} />
+            <StatCard label="Samples cast" value={String(sampling.totalCast)} />
+            <StatCard
+              label="Under-sampled days"
+              value={String(sampling.underSampled)}
+              tone={sampling.underSampled > 0 ? 'danger' : 'success'}
+            />
+          </div>
+        )}
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : sampling && sampling.rows.length ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Day</Th>
+                <Th>Plant</Th>
+                <Th>Grade</Th>
+                <Th numeric>Produced m³</Th>
+                <Th numeric>Required</Th>
+                <Th numeric>Cast</Th>
+                <Th>Result</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {sampling.rows.map((r, i) => (
+                <tr key={i}>
+                  <Td>{formatDate(r.day)}</Td>
+                  <Td>{String(r.plantLabel ?? '—')}</Td>
+                  <Td>{String(r.gradeLabel ?? '—')}</Td>
+                  <Td numeric>{n(r.producedM3)}</Td>
+                  <Td numeric>{String(r.samplesRequired)}</Td>
+                  <Td numeric>{String(r.samplesCast)}</Td>
+                  <Td>
+                    {r.compliant ? (
+                      <StatusBadge status="compliant" />
+                    ) : (
+                      <span style={{ color: 'var(--mn-danger)', fontWeight: 600 }}>{String(r.shortfall)} short</span>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState title="No production in the period" description="Confirmed batch tickets in the period are judged here against the cube sets cast." />
         )}
       </Card>
     </div>

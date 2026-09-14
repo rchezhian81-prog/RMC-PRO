@@ -290,6 +290,8 @@ export class DeliveryChallanService {
         useBy: plantDateTime(addMinutes(batchedAt, CONCRETE_SLA_MINUTES)),
         customerName: customer?.customerName ?? 'Customer',
         siteName: site?.siteName ?? null,
+        siteAddress: site ? [site.address, site.city, site.state, site.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null : null,
+        siteContact: site ? [site.contactPerson, site.mobile].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ') || null : null,
         vehicleNo: vehicle?.vehicleNo ?? null,
         driverName: driver?.driverName ?? null,
         gradeLabel: challan.gradeLabel ?? '',

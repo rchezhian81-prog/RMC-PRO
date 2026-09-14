@@ -60,8 +60,8 @@ console.log('=== the receipt can be printed, and says the right thing at each st
 const tag = Date.now().toString(36);
 const customerId = randomUUID();
 await q(
-  `INSERT INTO customers (id, tenant_id, customer_code, customer_name, customer_type, state, gstin)
-   VALUES ($1,$2,$3,$4,'company','Tamil Nadu','33AAACB1234C1Z5')`,
+  `INSERT INTO customers (id, tenant_id, customer_code, customer_name, customer_type, state, gstin, billing_address, city, pincode)
+   VALUES ($1,$2,$3,$4,'company','Tamil Nadu','33AAACB1234C1Z5','12 Anna Salai','Chennai','600002')`,
   [customerId, TENANT, `RPC-${tag}`, `Receipt Print ${tag}`],
 );
 const challanId = randomUUID();
@@ -79,6 +79,8 @@ console.log('\n[0] the invoice carries its total in words');
   const inv = await pdf(`/invoices/${invoice.id}/pdf`);
   ok('invoice PDF renders', inv.ok && inv.isPdf);
   ok('and prints "Amount in words: Rupees … Only"', /Amount in words: Rupees .+ Only/.test(inv.text));
+  ok('the recipient address is on the invoice (CGST Rule 46)', inv.text.includes('12 Anna Salai, Chennai, Tamil Nadu, 600002'));
+  ok('the place of supply carries its state code', inv.text.includes('Place of supply: Tamil Nadu (33)'));
 }
 
 console.log('\n[1] a cheque receipt set against the invoice');

@@ -39,15 +39,15 @@ changes production code — it is analysis only.
 | WR-STD-3 exposure-class catalog | MISSING | P1 | Mix is free-form; no exposure taxonomy. |
 | WR-STD-4 approved versioned mix register | PARTIAL | P0 | Mix + approval gate exist; **create/edit ungated (G8)**; no w/c/exposure/chloride limits. |
 | WR-STD-5 approval workflow + expiry + typing | PARTIAL | P1 | Approval state real; no ≤24-month expiry, no designed/prescribed typing. |
-| WR-STD-6 region-driven delivery ticket | PARTIAL | P0 | Challan built; missing batch-time-at-water, drum revolutions, printed discharge deadline, temperature, acceptance signature. |
+| WR-STD-6 region-driven delivery ticket | PARTIAL | P0 | Challan prints batched time, dispatched time and a bold **Use by** (batch + IS 4926 working life) on the plant clock, site address/contact, supplier block, plant + receiver signatures (#277/#280/#281). Still missing: drum revolutions, water-at-batch, temperature. |
 | WR-STD-7 e-ticket signature/immutable/agency API | MISSING | P1 | Static PDF; no digital signature, immutability, or AASHTOWare export. **Top US/Canada export blocker.** |
-| WR-STD-8 discharge-time + revolution clock | MISSING | P0 | Not modelled (matrix §6 already flags IS-4926 timers absent). |
+| WR-STD-8 discharge-time + revolution clock | PARTIAL | P0 | Discharge deadline is computed from batch start + `CONCRETE_SLA_MINUTES` (IS 4926), printed on the ticket and in the share text, and drives the concrete-life alert (#277/#284). No revolution count. |
 | WR-STD-9 governed site-water addition | MISSING | P0 | No trim-allowance/re-slump/revolution logic. |
 | WR-STD-10 fresh QC (slump/temp/air) + tolerance | PARTIAL | P0 | Slump note exists; no tolerance pass/fail, no temperature/air capture. |
 | WR-STD-11 per-constituent batch tolerance | PARTIAL | P0 | Variance-vs-tolerance exists on manual batch; not per-standard, not actuals-driven. |
 | WR-STD-12 calibration register + truck fitness | MISSING | P1 | No calibration/blade-wear/meter records. |
-| WR-STD-13 sampling-frequency scheduler | MISSING | P0 | No sampling schedule/under-sampling alerts. |
-| WR-STD-14 statistical acceptance engine | MISSING | P0 | Cube register is "≥ grade"; no IS 456 Table 11 / ACI 3-consecutive / EN σ. |
+| WR-STD-13 sampling-frequency scheduler | PARTIAL | P0 | IS 456 Table 10 required-samples per grade/day, a sampling report card on the QC register, and an `under_sampled` compliance finding (#274). IS-only; no ACI/EN schedules. |
+| WR-STD-14 statistical acceptance engine | PARTIAL | P0 | IS 456 Table 11 acceptance: individual floor and mean-of-set with the 3/4 MPa margin by grade, both directions (#271). IS-only; no ACI 3-consecutive / EN σ. |
 | WR-STD-15 low-strength NCR workflow | MISSING | P1 | No core-test/disposition path. |
 | WR-STD-16 chloride-class enforcement | MISSING | P0 | No chloride computation/limits. |
 | WR-STD-17 exposure-driven w/c + sulfate class | MISSING | P0 | No durability limiting-value checks. |
@@ -66,7 +66,7 @@ acceptance + durability enforcement) are the domain-critical gaps.
 | WR-BCI-7..9 two-way download / autobatch / actuals upload | MISSING | P1 | No controller link at all. |
 | WR-BCI-10 moisture-corrected weights | MISSING | P1 | No moisture ingestion. |
 | WR-BCI-11 in-transit quality correlation | MISSING | P1 | No COMMANDassurance/Verifi ingestion. |
-| WR-BCI-12 three-way reconciliation | MISSING | P0* | Bills on manual batch; no ordered↔batched↔delivered reconciliation. |
+| WR-BCI-12 three-way reconciliation | HAVE | P0* | One query reconciles ordered ↔ batched (confirmed tickets) ↔ delivered (challans net of returns) per order and per grade; order book and order page read the same figures, with balance and on-the-road (#276). Batched still comes from manual/imported tickets, not a live controller (WR-BCI-1..9). |
 | WR-BCI-13 offline buffer / errors / audit / OT security | MISSING | P1 | No edge agent; generic app audit only. |
 
 **Roll-up:** the batch-controller integration foundation is **entirely
@@ -92,9 +92,9 @@ exist.
 |---|---|---|---|
 | WR-COM-1 self-service portal | MISSING | P1 | No customer portal; ordering is internal. |
 | WR-COM-2 live customer tracking | MISSING | P1 | No customer-facing tracking/ETA. |
-| WR-COM-3 e-ticket + ePOD to customer | PARTIAL | P1 | Challan PDF + `wa.me` share; no signed receipt/photos/collaboration record. |
+| WR-COM-3 e-ticket + ePOD to customer | PARTIAL | P1 | Challan PDF (times, use-by, site, signatures) and a share text that opens the sender's WhatsApp with the load, vehicle, dispatch time and use-by (#277/#280/#281/#284/#285); no signed ePOD/photos. |
 | WR-COM-4 online payments + AR self-service (UPI AutoPay/e-NACH) | MISSING | P1 | No payment gateway; AR is internal. |
-| WR-COM-5 omnichannel notifications | PARTIAL | P1 | `wa.me` link + log only; **no API send, no SMS/email transports** (matrix §10 §9/§5.5). |
+| WR-COM-5 omnichannel notifications | PARTIAL | P1 | Share opens the sender's own WhatsApp (`wa.me`, country-coded) with a composed, document-aware text, and logs it (#284/#285); **no API send, no SMS/email transports** (matrix §10 §9/§5.5). |
 | WR-COM-6 consent/preference engine (DLT/TCPA/GDPR) | MISSING | P0 | No consent records; legal blocker for messaging at scale. |
 | WR-COM-7 CRM + quoting/contract-rate | PARTIAL | P1 | Leads + rate contracts + quotation-discount approval exist; no CRM/quote-to-close. |
 
@@ -137,9 +137,9 @@ consolidation, BI) is MISSING or single-market PARTIAL.
 | WR-TAX-8 signing + QR + chaining | MISSING | P0 | `signed_qr_code` never populated; no signing/HSM. |
 | WR-TAX-9 archival + retention + audit export | MISSING | P1 | No WORM/retention/SAF-T. |
 | WR-TAX-10 legal-status lifecycle state machine | STORED-ONLY | P0 | `einvoice_status` flat string; no submitted/cleared/rejected; no dispatch gating. |
-| WR-TAX-11 tenant→regime binding + mandate-scoping + counterparty validation | MISSING | P0 | No threshold scoping, no VIES/Peppol/GSTIN-checksum. |
+| WR-TAX-11 tenant→regime binding + mandate-scoping + counterparty validation | PARTIAL | P0 | GSTIN mod-36 check digit enforced on company, customer and supplier (#272); company and customer state chosen from the GST state list (#282); e-invoice applicability is a company setting that scopes the compliance check (#268). No VIES/Peppol, no turnover-threshold automation. |
 | WR-TAX-12 India IRN via IRP | STORED-ONLY | P0 | IRN/ack/QR fields stored READY-ONLY; **no IRP call** (matrix §8 §4.2). |
-| WR-TAX-13 India e-way bill | STORED-ONLY / PARTIAL | P0 | e-way fields stored; cancel-and-reissue path exists but **no auto-threshold flag, no API, no distance→validity** (matrix §8 §4.4). |
+| WR-TAX-13 India e-way bill | PARTIAL | P0 | e-way fields stored; a portal-issued number, date and validity can be recorded on the invoice and print on the challan (#267); cancel-and-reissue exists; live cancel is blocked while a bill stands. **No auto-threshold flag, no API generation, no distance→validity** (matrix §8 §4.4). |
 | WR-TAX-14 other-regime transport docs | MISSING | P1 | No Carta Porte/CT-e/e-Transport. |
 
 **Roll-up:** compliance is a **"fields-only" stub** — legally-valid e-invoicing
@@ -202,6 +202,17 @@ gates a globally-sellable product. Priority is the worldwide-market bar.
 - **Already closed by merged work:** G1 (fail-boot secrets), G2 (cookie/rotated
   auth), G6 (sync keyset), G7 (unit tests), G9 (RLS-on-users), G10
   (observability trio) — these lift several GW items part-way (GW-15/16).
+- **Lifted by the single-plant readiness work merged since (PRs #264–#285):**
+  WR-BCI-12 → HAVE (ordered↔batched↔delivered, #276); WR-STD-13/14 → PARTIAL
+  (IS 456 Table 10 sampling, Table 11 acceptance, #274/#271); WR-STD-6/8 →
+  PARTIAL (printed use-by from batch time on the plant clock, #277);
+  WR-TAX-11 → PARTIAL (GSTIN check digit, state list, e-invoice applicability,
+  #272/#282/#268); WR-COM-3/5 (share opens WhatsApp with a document-aware
+  text, #284/#285). Every printed document now carries the supplier block,
+  recipient address and a signature block (Rules 46/55, #280/#281); receipts
+  and statements of account can be printed (#279/#283). These move rows within
+  GW-4/6/7/8/11, not off the list: the worldwide bar (multi-standard, live
+  controller, API messaging) is unchanged.
 - **Owner-action infra still open:** G3, G4, G5, G13, G14 → folded into **GW-16**.
 - **Integration/compliance gaps promoted to worldwide scope:** G11→**GW-1**,
   G12→**GW-2/3/4/12**, G15→**GW-12/15**, G18 (missing masters incl.

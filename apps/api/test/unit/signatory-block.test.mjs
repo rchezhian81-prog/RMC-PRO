@@ -58,10 +58,10 @@ test('every document opens with the supplier block: name, address, GSTIN and PAN
   }
 });
 
-test('one company block, built once and drawn once, for all five documents', () => {
+test('one company block, built once and drawn once, for all six documents', () => {
   const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src/sales/pdf.service.ts'), 'utf8'));
   assert.equal((src.match(/function drawCompanyHeader\(/g) ?? []).length, 1, 'one header drawer');
-  assert.equal((src.match(/drawCompanyHeader\(doc, data, left\)/g) ?? []).length, 5, 'invoice, receipt, challan, quotation, weighbridge');
+  assert.equal((src.match(/drawCompanyHeader\(doc, data, left\)/g) ?? []).length, 6, 'invoice, receipt, challan, quotation, weighbridge, statement');
   assert.equal((src.match(/export function companyBlock\(/g) ?? []).length, 1, 'one builder');
   for (const f of ['billing/invoice.service.ts', 'billing/receipt.service.ts', 'dispatch/delivery-challan.service.ts', 'sales/quotations.service.ts', 'inventory/weighbridge.service.ts']) {
     const svcSrc = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src', f), 'utf8'));
@@ -70,9 +70,9 @@ test('one company block, built once and drawn once, for all five documents', () 
   }
 });
 
-test('one signature block, drawn by one helper, on the three documents that close with it', () => {
+test('one signature block, drawn by one helper, on the four documents that close with it', () => {
   const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src/sales/pdf.service.ts'), 'utf8'));
   assert.equal((src.match(/function drawSignatoryBlock\(/g) ?? []).length, 1, 'one definition');
-  assert.equal((src.match(/drawSignatoryBlock\(doc, data\.companyName, left, right\)/g) ?? []).length, 3, 'invoice, receipt, quotation');
+  assert.equal((src.match(/drawSignatoryBlock\(doc, data\.companyName, left, right\)/g) ?? []).length, 4, 'invoice, receipt, quotation, statement');
   assert.equal((src.match(/Authorised Signatory/g) ?? []).length, 1, 'the wording lives in the helper only');
 });

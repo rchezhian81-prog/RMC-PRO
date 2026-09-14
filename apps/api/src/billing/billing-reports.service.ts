@@ -1,7 +1,8 @@
 import { REPORT_FETCH_LIMIT, assertReportSize } from '../common/list-limit.util';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
+import { companyBlock, type StatementPdfData } from '../sales/pdf.service';
 import { Company, Customer, Invoice, Payment, Supplier, VendorBill } from '../core/database/entities';
 import { round2, isInterstateSupply } from './tax.util';
 import { deriveGstSplit } from '../purchase/purchase.util';
@@ -401,6 +402,24 @@ export class BillingReportsService {
   }
 
   /** Tally-ready CSV of issued invoices (Phase-1 file export — no live Tally API). */
+
+  /** The statement with the company and customer blocks the printed copy needs. */
+  async customerStatementPdfData(tenantId: string, customerId: string, from?: string, to?: string): Promise<StatementPdfData> {
+    const st = await this.customerStatement(tenantId, customerId, from, to);
+    return this.db.runInTenant(tenantId, async (m) => {
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const customer = customerId ? await m.getRepository(Customer).findOne({ where: { id: customerId } }) : null;
+      if (!customer) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Customer not found' });
+      return {
+        ...companyBlock(company),
+        customerName: customer.customerName,
+        customerGstin: customer.gstin ?? null,
+        customerAddress: [customer.billingAddress, customer.city, customer.state, customer.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null,
+        from: st.from, to: st.to,
+        opening: st.opening, rows: st.rows, totalDebit: st.totalDebit, totalCredit: st.totalCredit, closing: st.closing,
+      };
+    });
+  }
   tallyExportCsv(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const invoices = await this.issuedInvoicesInRange(m, from, to);

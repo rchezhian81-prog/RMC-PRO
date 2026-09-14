@@ -119,13 +119,24 @@ export class ReceiptController {
 @RequirePermissions('reports.view')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class BillingReportsController {
-  constructor(private readonly service: BillingReportsService) {}
+  constructor(
+    private readonly service: BillingReportsService,
+    private readonly pdf: PdfService,
+  ) {}
 
   @Get('outstanding') outstanding(@CurrentUser() u: AuthUser) { return this.service.outstanding(tid(u)); }
   @Get('sales-register') sales(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.salesRegister(tid(u), ...dateRange(from, to)); }
   @Get('gst-summary') gst(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstSummary(tid(u), ...dateRange(from, to)); }
   @Get('hsn-summary') hsn(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.hsnSummary(tid(u), ...dateRange(from, to)); }
   @Get('receipts-register') receipts(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.receiptsRegister(tid(u), ...dateRange(from, to)); }
+  @Get('customer-statement/pdf')
+  async statementPdf(@CurrentUser() u: AuthUser, @Res() res: Response, @Query('customerId') customerId?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const data = await this.service.customerStatementPdfData(tid(u), customerId ?? '', ...dateRange(from, to));
+    const buffer = await this.pdf.statementPdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="statement-${data.customerName.replace(/[^A-Za-z0-9]+/g, '-')}.pdf"`);
+    res.end(buffer);
+  }
   @Get('customer-statement') statement(@CurrentUser() u: AuthUser, @Query('customerId') customerId?: string, @Query('from') from?: string, @Query('to') to?: string) { return this.service.customerStatement(tid(u), customerId ?? '', ...dateRange(from, to)); }
   @Get('gstr-3b') gstr3b(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gstr3b(tid(u), ...dateRange(from, to)); }
   @Get('day-book') dayBook(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cashBankDayBook(tid(u), ...dateRange(from, to)); }

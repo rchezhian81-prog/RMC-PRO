@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { crud, customersApi, invoicesApi, receiptsApi, type CustomerExposure, type Row } from '../../../../lib/api';
+import { crud, customersApi, invoicesApi, openPdf, receiptsApi, type CustomerExposure, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -199,13 +200,21 @@ export default function ReceiptsPage() {
                     ))}
                   </tbody>
                 </Table>
-                <div style={{ marginTop: 14 }}>
-                  <Button disabled={saving} onClick={create}>Record receipt</Button>
-                </div>
               </>
             ) : (
-              <p style={{ color: 'var(--mn-muted)', fontSize: 13 }}>No outstanding invoices for this customer.</p>
+              // An advance — money before the first pour — is the normal first
+              // receipt from a new customer. It used to be unrecordable here:
+              // the button lived inside this branch, so a customer with nothing
+              // outstanding had no way to pay.
+              <p style={{ color: 'var(--mn-muted)', fontSize: 13 }}>
+                No outstanding invoices for this customer. The receipt will be held as an advance on account and applied when an invoice is issued.
+              </p>
             ))}
+          {customerId && (
+            <div style={{ marginTop: 14 }}>
+              <Button disabled={saving} onClick={create}>Record receipt</Button>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -243,6 +252,14 @@ export default function ReceiptsPage() {
                   <Td><StatusBadge status={clearing || String(r.status ?? '')} /></Td>
                   <Td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={<Download size={14} />}
+                        onClick={() => openPdf(`/receipts/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}
+                      >
+                        Print
+                      </Button>
                       {clearing === 'pending' && (
                         <Button
                           variant="secondary"

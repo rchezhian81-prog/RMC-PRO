@@ -1168,25 +1168,37 @@ export const correctionsApi = {
   record: (b: Record<string, unknown>) => post('/document-corrections', b),
 };
 
-/** Fetch a PDF as a blob (auth header required) and open it in a new tab. */
+/**
+ * Fetch a PDF (the auth header is required, so a plain link cannot do it) and
+ * show it in a new tab.
+ *
+ * The tab is opened synchronously, inside the click, and filled once the bytes
+ * arrive: browsers block a window opened after an await as a pop-up, and a
+ * blocked pop-up is silent — the button appears to do nothing. When the API
+ * refuses (an invoice that needs the company GSTIN first, a receipt that is
+ * not there) its own reason is thrown, not "Failed to load PDF".
+ */
 export async function openPdf(path: string): Promise<void> {
-  const token = getSession()?.token;
-  const res = await fetch(`${BASE}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!res.ok) throw new Error('Failed to load PDF');
-  const url = URL.createObjectURL(await res.blob());
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
-/** Fetch the quotation PDF as a blob (auth header required) and open it. */
-export async function openQuotationPdf(id: string): Promise<void> {
-  const token = getSession()?.token;
-  const res = await fetch(`${BASE}/api/v1/quotations/${id}/pdf`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error('Failed to load PDF');
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const tab = window.open('', '_blank');
+  try {
+    const token = getSession()?.token;
+    const res = await fetch(`${BASE}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) {
+      let reason = `The document could not be produced (HTTP ${res.status}).`;
+      try {
+        const j = (await res.json()) as { error?: { message?: string }; message?: string } | null;
+        reason = j?.error?.message ?? j?.message ?? reason;
+      } catch {
+        // A non-JSON body — keep the status-code message.
+      }
+      throw new Error(reason);
+    }
+    const url = URL.createObjectURL(await res.blob());
+    if (tab) tab.location.href = url;
+    else if (!window.open(url, '_blank')) throw new Error('Your browser blocked the document window. Allow pop-ups for this site and try again.');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
 }

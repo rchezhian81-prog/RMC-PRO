@@ -1,8 +1,10 @@
 import { listLimit } from '../common/list-limit.util';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Customer, Invoice, Payment, PaymentAllocation } from '../core/database/entities';
+import { Company, Customer, Invoice, Payment, PaymentAllocation } from '../core/database/entities';
+import type { ReceiptPdfData } from '../sales/pdf.service';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
@@ -326,6 +328,53 @@ export class ReceiptService {
         isAdvance: newAllocated <= 0.001,
       });
       return this.loadFull(m, id);
+    });
+  }
+
+  /** Everything the printed receipt needs, in one place, like the invoice's. */
+  async pdfData(tenantId: string, id: string): Promise<{ data: ReceiptPdfData; receiptNo: string }> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const customer = full.customerId ? await m.getRepository(Customer).findOne({ where: { id: full.customerId } }) : null;
+      const invoiceIds = full.allocations.map((a) => a.invoiceId);
+      const invoices = invoiceIds.length ? await m.getRepository(Invoice).find({ where: { id: In(invoiceIds) } }) : [];
+      const byId = new Map(invoices.map((i) => [i.id, i]));
+      const addr = [
+        company?.addressLine1, company?.addressLine2,
+        [company?.city, company?.state, company?.pincode].filter(Boolean).join(', '),
+      ].filter((v) => v && String(v).trim()).join(', ');
+      const data: ReceiptPdfData = {
+        companyName: company?.companyName ?? 'Company',
+        legalName: company?.legalName ?? null,
+        companyGstin: company?.gstin ?? null,
+        companyPan: company?.pan ?? null,
+        companyAddress: addr || null,
+        companyPhone: company?.phone ?? null,
+        companyEmail: company?.email ?? null,
+        logoMime: company?.logoMime ?? null,
+        logoData: company?.logoData ?? null,
+        receiptNo: full.receiptNo,
+        receiptDate: full.receiptDate,
+        status: full.status,
+        clearingStatus: full.clearingStatus,
+        customerName: customer?.customerName ?? 'Customer',
+        customerGstin: customer?.gstin ?? null,
+        amount: full.amount,
+        paymentMode: full.paymentMode,
+        bankReference: full.bankReference,
+        remarks: full.remarks,
+        allocations: full.allocations
+          .filter((a) => num(a.allocatedAmount) > 0)
+          .map((a) => ({
+            invoiceNo: byId.get(a.invoiceId)?.invoiceNo ?? '-',
+            invoiceDate: byId.get(a.invoiceId)?.invoiceDate ?? null,
+            amount: a.allocatedAmount,
+          })),
+        unallocatedAmount: full.unallocatedAmount,
+        isAdvance: full.isAdvance,
+      };
+      return { data, receiptNo: full.receiptNo };
     });
   }
 

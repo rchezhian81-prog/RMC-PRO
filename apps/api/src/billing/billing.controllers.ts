@@ -73,7 +73,10 @@ export class InvoiceController {
 @RequireAnyPermission('receipts.create', 'reports.view')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ReceiptController {
-  constructor(private readonly service: ReceiptService) {}
+  constructor(
+    private readonly service: ReceiptService,
+    private readonly pdf: PdfService,
+  ) {}
 
   @Get() list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
@@ -97,6 +100,15 @@ export class ReceiptController {
 
   @Post(':id/share') @RequirePermissions('whatsapp.send')
   share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }
+
+  @Get(':id/pdf')
+  async pdfDoc(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const { data, receiptNo } = await this.service.pdfData(tid(u), id);
+    const buffer = await this.pdf.receiptPdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${receiptNo}.pdf"`);
+    res.end(buffer);
+  }
 }
 
 @Controller('billing-reports')

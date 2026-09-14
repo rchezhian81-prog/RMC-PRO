@@ -154,6 +154,28 @@ export interface ReceiptPdfData extends CompanyBlock {
   isAdvance?: boolean;
 }
 
+export interface StatementPdfRow {
+  date?: string | null;
+  particulars: string;
+  ref: string;
+  debit: string | number;
+  credit: string | number;
+  balance: string | number;
+}
+/** A customer's statement of account — the ledger a customer reconciles against. */
+export interface StatementPdfData extends CompanyBlock {
+  customerName: string;
+  customerGstin?: string | null;
+  customerAddress?: string | null;
+  from?: string | null;
+  to?: string | null;
+  opening: string | number;
+  rows: StatementPdfRow[];
+  totalDebit: string | number;
+  totalCredit: string | number;
+  closing: string | number;
+}
+
 const money = (v: string | number): string =>
   Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -771,6 +793,91 @@ export class PdfService {
       drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated receipt.', left, doc.y, { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /**
+   * Statement of account. Opening balance, then every invoice (debit) and
+   * receipt (credit) in date order with a running balance, and the closing
+   * balance the customer is asked to confirm. Long ledgers run to as many
+   * pages as they need, with the column headings repeated on each.
+   */
+  statementPdf(data: StatementPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      drawCompanyHeader(doc, data, left);
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text('STATEMENT OF ACCOUNT', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      if (data.from || data.to) doc.text(`Period: ${data.from ?? '…'} to ${data.to ?? '…'}`, { align: 'right' });
+
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(10).text('Customer: ', { continued: true });
+      doc.font('Helvetica').text(data.customerName);
+      if (data.customerAddress) doc.fontSize(9).text(data.customerAddress);
+      if (data.customerGstin) doc.fontSize(9).text(`GSTIN: ${data.customerGstin}`);
+      doc.moveDown(0.6);
+
+      const cols = [
+        { key: 'date', label: 'Date', w: 66, align: 'left' as const },
+        { key: 'particulars', label: 'Particulars', w: 190, align: 'left' as const },
+        { key: 'ref', label: 'Ref', w: 95, align: 'left' as const },
+        { key: 'debit', label: 'Debit', w: 55, align: 'right' as const },
+        { key: 'credit', label: 'Credit', w: 55, align: 'right' as const },
+        { key: 'balance', label: 'Balance', w: 54, align: 'right' as const },
+      ];
+      let y = doc.y;
+      const rowH = 18;
+      const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+        if (fill) doc.rect(left, y - 2, right - left, rowH).fill(fill).fillColor('#000');
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+        let x = left;
+        cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align, lineBreak: false }); x += c.w; });
+        y += rowH;
+      };
+      const header = () => drawRow(cols.map((c) => c.label), true, '#eef1f6');
+      const pageBreakIfNeeded = () => {
+        if (y > doc.page.height - 120) { doc.addPage(); y = doc.page.margins.top; header(); }
+      };
+      header();
+      drawRow(['', 'Opening balance', '', '', '', money(data.opening)], true);
+      for (const r of data.rows) {
+        pageBreakIfNeeded();
+        drawRow([r.date ?? '-', r.particulars, r.ref, Number(r.debit) ? money(r.debit) : '', Number(r.credit) ? money(r.credit) : '', money(r.balance)], false);
+      }
+      pageBreakIfNeeded();
+      drawRow(['', 'Totals for the period', '', money(data.totalDebit), money(data.totalCredit), ''], true, '#f6f7f9');
+      drawRow(['', 'Closing balance', '', '', '', money(data.closing)], true);
+
+      doc.y = y + 8;
+      doc.x = left;
+      const closing = Number(data.closing) || 0;
+      doc.font('Helvetica-Bold').fontSize(11).text(
+        closing > 0
+          ? `Amount due from you: INR ${money(closing)}`
+          : closing < 0
+            ? `Balance in your favour: INR ${money(-closing)}`
+            : 'No balance outstanding.',
+        left, doc.y,
+      );
+      doc.font('Helvetica').fontSize(9).fillColor('#555')
+        .text('Please report any discrepancy within 7 days; the balance stands confirmed otherwise.', left, doc.y + 2);
+      doc.fillColor('#000');
+
+      drawSignatoryBlock(doc, data.companyName, left, right);
+      doc.moveDown(1.5);
+      doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated statement of account.', left, doc.y, { align: 'center' });
       doc.end();
     });
   }

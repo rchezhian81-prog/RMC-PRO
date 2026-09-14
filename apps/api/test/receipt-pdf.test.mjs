@@ -124,6 +124,19 @@ console.log('\n[4] a receipt that does not exist is refused with a reason, not a
   ok(`404 with a message (${res.status}: ${j?.error?.message ?? j?.message ?? ''})`, res.status === 404 && /not found/i.test(j?.error?.message ?? j?.message ?? ''));
 }
 
+console.log('\n[5] the customer statement can be printed: the invoice and a good receipt are on it, the bounced one is not');
+const cash = await api('POST', '/receipts', { customerId, amount: 2500, paymentMode: 'cash', allocations: [{ invoiceId: invoice.id, amount: 2500 }] });
+{
+  const r = await pdf(`/billing-reports/customer-statement/pdf?customerId=${customerId}`);
+  ok(`GET /billing-reports/customer-statement/pdf is a PDF (${r.status})`, r.ok && r.isPdf);
+  for (const s of ['STATEMENT OF ACCOUNT', `Receipt Print ${tag}`, invoice.invoiceNo, cash.receiptNo, 'Opening balance', 'Closing balance', 'Amount due from you', 'Authorised Signatory']) {
+    ok(`statement prints "${s}"`, r.text.includes(s));
+  }
+  ok(`the bounced cheque receipt ${receipt.receiptNo} is not on the statement`, !r.text.includes(receipt.receiptNo));
+  const nobody = await fetch(`${BASE}/billing-reports/customer-statement/pdf?customerId=${randomUUID()}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  ok(`an unknown customer is a 404, not a blank statement (${nobody.status})`, nobody.status === 404);
+}
+
 console.log(`\nRECEIPT PDF TEST: ${pass} passed`);
 await owner.destroy();
 process.exit(0);

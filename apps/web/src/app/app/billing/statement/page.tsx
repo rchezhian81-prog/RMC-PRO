@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import { currentMonthRange } from '../../../../lib/report-range';
-import { crud, billingReportsApi, type CustomerStatement, type Row } from '../../../../lib/api';
+import { crud, billingReportsApi, type CustomerStatement, type Row, openPdf } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -100,7 +101,19 @@ export default function CustomerStatementPage() {
       <Card
         title={stmt ? `Ledger — ${stmt.customerName}` : 'Ledger'}
         padded={false}
-        actions={stmt && stmt.rows.length ? <ExportButton rows={exportRows} columns={['date', 'particulars', 'ref', 'debit', 'credit', 'balance']} filename="customer-statement" /> : null}
+        actions={stmt && (stmt.rows.length || stmt.opening) ? (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Download size={15} />}
+              onClick={() => openPdf(`/billing-reports/customer-statement/pdf?customerId=${encodeURIComponent(customerId)}${range.from ? `&from=${range.from}` : ''}${range.to ? `&to=${range.to}` : ''}`).catch((e) => setError(String(e)))}
+            >
+              Print statement
+            </Button>
+            <ExportButton rows={exportRows} columns={['date', 'particulars', 'ref', 'debit', 'credit', 'balance']} filename="customer-statement" />
+          </div>
+        ) : null}
       >
         {loading ? (
           <TableSkeleton cols={6} />

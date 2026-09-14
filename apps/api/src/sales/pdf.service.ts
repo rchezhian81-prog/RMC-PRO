@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
+import { amountInWords } from '../common/amount-in-words.util';
 import SVGtoPDF from 'svg-to-pdfkit';
 import { qrMatrix } from './qr.util';
 
@@ -121,6 +122,30 @@ export interface InvoicePdfData extends CompanyBlock {
   signedQrCode?: string | null;
   ackNo?: string | null;
   ackDate?: string | null;
+}
+
+export interface ReceiptPdfAllocation {
+  invoiceNo: string;
+  invoiceDate?: string | null;
+  amount: string | number;
+}
+/** A receipt (money in) — the customer's evidence that they paid. */
+export interface ReceiptPdfData extends CompanyBlock {
+  receiptNo: string;
+  receiptDate?: string | null;
+  /** posted | reversed */
+  status: string;
+  /** null for instant modes; pending → realised | bounced for cheques. */
+  clearingStatus?: string | null;
+  customerName: string;
+  customerGstin?: string | null;
+  amount: string | number;
+  paymentMode?: string | null;
+  bankReference?: string | null;
+  remarks?: string | null;
+  allocations: ReceiptPdfAllocation[];
+  unallocatedAmount: string | number;
+  isAdvance?: boolean;
 }
 
 const money = (v: string | number): string =>
@@ -554,6 +579,9 @@ export class PdfService {
       if (Number(data.cessAmount) > 0) totalLine('Cess', money(data.cessAmount));
       if (Number(data.roundOff) !== 0) totalLine('Round off', money(data.roundOff));
       totalLine('Total', `INR ${money(data.totalAmount)}`, true);
+      // The figure in words beside the figure: what a signatory reads back and
+      // an auditor checks the figure against. Every Indian invoice carries it.
+      doc.font('Helvetica').fontSize(9).text(`Amount in words: ${amountInWords(data.totalAmount)}`, { align: 'right' });
 
       // Bank details block — where the customer pays. Only drawn if provided.
       const bankBits = [
@@ -575,6 +603,119 @@ export class PdfService {
 
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text('System-generated tax invoice.', { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /**
+   * Receipt (money in). The customer's evidence that they paid, and the
+   * plant's record of what the money was set against. A cheque receipt says
+   * plainly that it is subject to realisation; a reversed or bounced receipt
+   * says, in red, that it is no longer a receipt — the document a customer
+   * holds must never claim a discharge the ledger has taken back.
+   */
+  receiptPdf(data: ReceiptPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      drawLogoBand(doc, data, left, doc.page.margins.top);
+      doc.fontSize(17).font('Helvetica-Bold').text(data.companyName);
+      doc.fontSize(9).font('Helvetica').fillColor('#555');
+      if (data.legalName && data.legalName !== data.companyName) doc.text(data.legalName);
+      if (data.companyAddress) doc.text(data.companyAddress);
+      const idLine = [
+        data.companyGstin ? `GSTIN: ${data.companyGstin}` : null,
+        data.companyPan ? `PAN: ${data.companyPan}` : null,
+      ].filter(Boolean).join('   ');
+      if (idLine) doc.text(idLine);
+      const contactLine = [
+        data.companyPhone ? `Ph: ${data.companyPhone}` : null,
+        data.companyEmail ? data.companyEmail : null,
+      ].filter(Boolean).join('   ');
+      if (contactLine) doc.text(contactLine);
+      doc.fillColor('#000');
+
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text('RECEIPT', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.receiptNo}`, { align: 'right' });
+      if (data.receiptDate) doc.text(`Date: ${data.receiptDate}`, { align: 'right' });
+      doc.text(`Status: ${data.status}${data.clearingStatus ? ` (${data.clearingStatus})` : ''}`, { align: 'right' });
+
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+
+      const reversed = data.status === 'reversed' || data.clearingStatus === 'bounced';
+      if (reversed) {
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#b91c1c')
+          .text(data.clearingStatus === 'bounced'
+            ? 'INSTRUMENT RETURNED — this receipt is reversed and does not discharge the amount below.'
+            : 'REVERSED — this receipt is cancelled and does not discharge the amount below.');
+        doc.fillColor('#000').moveDown(0.5);
+      }
+
+      doc.font('Helvetica-Bold').fontSize(10).text('Received from: ', { continued: true });
+      doc.font('Helvetica').text(data.customerName);
+      if (data.customerGstin) doc.fontSize(9).text(`GSTIN: ${data.customerGstin}`);
+      doc.moveDown(0.6);
+      doc.font('Helvetica-Bold').fontSize(13).text(`INR ${money(data.amount)}`);
+      doc.font('Helvetica').fontSize(9.5).text(`Amount in words: ${amountInWords(data.amount)}`);
+      doc.moveDown(0.4);
+      const modeBits = [
+        data.paymentMode ? `Mode: ${data.paymentMode}` : null,
+        data.bankReference ? `Ref: ${data.bankReference}` : null,
+      ].filter(Boolean).join('   ');
+      if (modeBits) doc.fontSize(9).text(modeBits);
+      if (data.remarks) doc.fontSize(9).fillColor('#555').text(`Remarks: ${data.remarks}`).fillColor('#000');
+      doc.moveDown(0.8);
+
+      if (data.allocations.length) {
+        doc.font('Helvetica-Bold').fontSize(10).text('Set against');
+        doc.moveDown(0.2);
+        const cols = [
+          { key: 'inv', label: 'Invoice No', w: 200, align: 'left' as const },
+          { key: 'date', label: 'Invoice date', w: 120, align: 'left' as const },
+          { key: 'amt', label: 'Amount', w: 120, align: 'right' as const },
+        ];
+        let y = doc.y;
+        const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+          const rowH = 18;
+          if (fill) doc.rect(left, y - 2, cols.reduce((a, c) => a + c.w, 0), rowH).fill(fill).fillColor('#000');
+          doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+          let x = left;
+          cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align }); x += c.w; });
+          y += rowH;
+        };
+        drawRow(cols.map((c) => c.label), true, '#eef1f6');
+        for (const a of data.allocations) {
+          drawRow([a.invoiceNo, a.invoiceDate ?? '-', money(a.amount)], false);
+          if (y > doc.page.height - 140) { doc.addPage(); y = doc.page.margins.top; }
+        }
+        doc.y = y + 6;
+        doc.x = left;
+      }
+      if (Number(data.unallocatedAmount) > 0) {
+        doc.font('Helvetica').fontSize(9.5)
+          .text(`Unallocated: INR ${money(data.unallocatedAmount)} — held as an advance against future invoices.`, left, doc.y);
+      } else if (!data.allocations.length && data.isAdvance) {
+        doc.font('Helvetica').fontSize(9.5).text('Received as an advance against future invoices.', left, doc.y);
+      }
+
+      if (data.clearingStatus === 'pending') {
+        doc.moveDown(0.8);
+        doc.font('Helvetica-Bold').fontSize(9.5).text('Subject to realisation of the cheque / instrument.', left, doc.y);
+      }
+
+      doc.moveDown(2);
+      doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated receipt.', left, doc.y, { align: 'center' });
       doc.end();
     });
   }

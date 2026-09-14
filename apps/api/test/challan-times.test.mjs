@@ -9,7 +9,8 @@
  * batching time and no use-by at all, though ready-mix has a working life
  * from batching (IS 4926). Env: API_BASE, LOGIN, RMC_PASSWORD, PLANT_TIMEZONE.
  */
-import { inflateSync } from 'node:zlib';
+
+import { pdfText } from './helpers/pdf-text.mjs';
 
 const API_BASE = process.env.API_BASE || 'http://localhost:4000/api/v1';
 const LOGIN = process.env.LOGIN;
@@ -40,21 +41,6 @@ const onPlantClock = (iso) => {
   return `${g('day')}/${g('month')}/${g('year')} ${g('hour')}:${g('minute')}`;
 };
 const asUtc = (iso) => new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
-/** pdfkit deflates its streams and hex-encodes text inside `[<..>] TJ`; read it back. */
-function pdfText(buf) {
-  const src = buf.toString('latin1');
-  const lines = [];
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m;
-  while ((m = re.exec(src))) {
-    let content;
-    try { content = inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { content = m[1]; }
-    for (const [, arr] of content.matchAll(/\[([^\]]*)\]\s*TJ/g)) {
-      lines.push(Buffer.from([...arr.matchAll(/<([0-9a-fA-F]*)>/g)].map((h) => h[1]).join(''), 'hex').toString('latin1'));
-    }
-  }
-  return lines.join('\n');
-}
 if (!LOGIN || !PASSWORD) { console.log('(skipping challan-times — LOGIN/RMC_PASSWORD not set)'); process.exit(0); }
 
 console.log('=== the delivery challan prints batched / dispatched / use-by on the plant clock ===');

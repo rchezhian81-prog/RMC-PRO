@@ -14,37 +14,17 @@ import { test } from 'node:test';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 import assert from 'node:assert/strict';
-import { inflateSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { plantDateTime, addMinutes } from '../../dist/common/business-date.util.js';
 import { PdfService } from '../../dist/sales/pdf.service.js';
+import { pdfText } from '../helpers/pdf-text.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../../..');
 const codeOnly = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
-/**
- * pdfkit deflates its content streams and writes text as hex glyph strings in
- * `[<..> kern <..>] TJ` arrays; inflate, then decode the hex and drop the
- * kerning numbers so a line reads back as the string it was drawn from.
- */
-function pdfText(buf) {
-  const src = buf.toString('latin1');
-  const lines = [];
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m;
-  while ((m = re.exec(src))) {
-    let content;
-    try { content = inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { content = m[1]; }
-    for (const [, arr] of content.matchAll(/\[([^\]]*)\]\s*TJ/g)) {
-      const hex = [...arr.matchAll(/<([0-9a-fA-F]*)>/g)].map((h) => h[1]).join('');
-      lines.push(Buffer.from(hex, 'hex').toString('latin1'));
-    }
-  }
-  return lines.join('\n');
-}
 
 const withZone = (tz, fn) => {
   const prev = process.env.PLANT_TIMEZONE;

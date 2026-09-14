@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
 import { MODULE_CATALOG, PERMISSIONS, ROLE_KEYS } from '@rmc/shared';
 import { AppDataSource } from './data-source';
+import { provisionTenantRoles, revokePlatformPermissions } from './provision-tenant-roles';
 import {
   Company,
   ConcreteGrade,
@@ -126,6 +127,17 @@ async function main() {
         ),
       );
     }
+    // The same roles a tenant provisioned through the platform gets — Plant
+    // Manager, Batching Operator, Sales Executive and the rest. Without this the
+    // demo companies had only Owner and Admin, so a staff login created against
+    // them could not be given an operational role, and dev did not resemble
+    // production. Only fills gaps; the two roles above are left as they are.
+    await provisionTenantRoles(m, tenant.id);
+    // Owner and Admin were just handed the whole catalogue above, platform.*
+    // included — the keys that govern the SaaS itself, not one company. The
+    // production seed strips those from every tenant role; dev does the same so
+    // a permission check wired to one of them later behaves identically here.
+    await revokePlatformPermissions(m);
 
     const user = await m.save(
       m.create(User, {

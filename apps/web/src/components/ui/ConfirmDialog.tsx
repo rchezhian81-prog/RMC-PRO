@@ -27,7 +27,13 @@ export interface PromptOpts {
   label?: string;
   defaultValue?: string;
   placeholder?: string;
-  type?: 'text' | 'number';
+  /**
+   * 'password' masks the value and tells the browser not to offer or save it —
+   * the users screen sets someone's new password through this dialog, and a
+   * password typed into a native prompt() was shown in plain text and, in some
+   * browsers, kept in history.
+   */
+  type?: 'text' | 'number' | 'password';
   confirmLabel?: string;
   /** When set, the prompt renders a <select> of these options instead of a text input. */
   options?: { value: string; label: string }[];
@@ -180,7 +186,8 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   <input
                     id={promptId}
                     autoFocus
-                    type={state.opts.type === 'number' ? 'number' : 'text'}
+                    type={state.opts.type === 'number' ? 'number' : state.opts.type === 'password' ? 'password' : 'text'}
+                    autoComplete={state.opts.type === 'password' ? 'new-password' : undefined}
                     value={state.value}
                     placeholder={state.opts.placeholder}
                     onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}

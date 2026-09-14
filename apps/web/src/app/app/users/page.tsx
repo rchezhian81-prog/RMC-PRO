@@ -12,10 +12,12 @@ import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
 import { Field, Input, Select } from '../../../components/ui/Field';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
+import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
 const EMPTY = { name: '', email: '', password: '', mobile: '', roleId: '' };
 
 export default function UsersPage() {
+  const { confirm, prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [roles, setRoles] = useState<Row[]>([]);
   const [usage, setUsage] = useState<PlanUsage | null>(null);
@@ -75,7 +77,16 @@ export default function UsersPage() {
   async function toggleActive(u: Row) {
     const active = String(u.status ?? '') === 'active';
     const label = String(u.name ?? u.email ?? 'this user');
-    if (active && !confirm(`Deactivate ${label}? They will not be able to sign in until reactivated.`)) return;
+    if (
+      active &&
+      !(await confirm({
+        title: `Deactivate ${label}?`,
+        message: 'They will not be able to sign in until reactivated. Their history is kept.',
+        confirmLabel: 'Deactivate',
+        danger: true,
+      }))
+    )
+      return;
     setError(null);
     setSavingId(String(u.id));
     try {
@@ -94,9 +105,13 @@ export default function UsersPage() {
    */
   async function resetPassword(u: Row) {
     const label = String(u.name ?? u.email ?? 'this user');
-    const pw = prompt(
-      `New password for ${label}\n\nAt least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number.\nTell them the password yourself — it is not shown again.`,
-    );
+    const pw = await prompt({
+      title: `New password for ${label}`,
+      message: `At least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number. Tell them the password yourself — it is not shown again.`,
+      label: 'New password',
+      type: 'password',
+      confirmLabel: 'Set password',
+    });
     if (pw === null) return;
     const problems = passwordProblems(pw);
     if (problems.length) {

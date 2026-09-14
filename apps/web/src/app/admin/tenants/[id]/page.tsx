@@ -12,6 +12,7 @@ import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Field } from '../../../../components/ui/Field';
 import { ErrorState } from '../../../../components/ui/States';
+import { useConfirm } from '../../../../components/ui/ConfirmDialog';
 import { todayLocal } from '../../../../lib/report-range';
 
 /** "3 of 5 users", or just "3 users" when no plan caps it. */
@@ -30,6 +31,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function TenantDetailPage() {
+  const { confirm } = useConfirm();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [name, setName] = useState('');
@@ -76,9 +78,12 @@ export default function TenantDetailPage() {
   async function changeStatus(next: string) {
     if (next === status) return;
     if (!TENANT_USABLE_STATUSES.includes(next as never)) {
-      const ok = confirm(
-        `Set ${name} to "${next}"?\n\nEveryone at this company is signed out immediately and cannot sign in again until you restore it.`,
-      );
+      const ok = await confirm({
+        title: `Set ${name} to "${next}"?`,
+        message: 'Everyone at this company is signed out immediately and cannot sign in again until you restore it.',
+        confirmLabel: 'Yes, do it',
+        danger: true,
+      });
       if (!ok) return;
     }
     setError(null);

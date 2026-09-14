@@ -167,7 +167,15 @@ async function main() {
 
   // Demo subscription plans.
   const starterModules = ['masters', 'sales', 'orders', 'dispatch', 'inventory', 'billing', 'reports'];
-  const proModules = MODULE_CATALOG.filter((mod) => mod.phase === 1).map((mod) => mod.key);
+  // The demo PRO plan carries every module that is actually built — phase 1
+  // plus the phase-2 modules with a controller behind them. It used to stop at
+  // phase 1, so the demo company had no QC / purchase / fleet / expenses / GPS:
+  // every fetch on those screens was a 403, the e2e suite never reached them,
+  // and a plant provisioned for real (which gets them on toggle) did not look
+  // like the one developers worked against. Unbuilt catalogue entries
+  // (driver_app, customer_portal) stay off.
+  const BUILT_PHASE2 = new Set(['qc', 'purchase', 'fleet', 'expenses', 'gps', 'batching_integration']);
+  const proModules = MODULE_CATALOG.filter((mod) => mod.phase === 1 || BUILT_PHASE2.has(mod.key)).map((mod) => mod.key);
 
   const starter = await m.save(
     m.create(SubscriptionPlan, {

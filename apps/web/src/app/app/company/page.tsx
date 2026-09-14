@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { GST_STATE_NAMES } from '@rmc/shared';
 import { company } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -251,7 +252,19 @@ export default function CompanyPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                 {section.fields.map(([k, label, help]) => (
                   <Field key={k} label={label} help={help}>
-                    <Input value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))} />
+                    {k === 'state' ? (
+                      // Chosen, not typed — like the customer and site forms. The
+                      // company's state is the seller side of every CGST+SGST-vs-IGST
+                      // decision, and a typo here taxed every local sale as inter-state.
+                      <select className="mn-input" value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}>
+                        <option value="">— choose —</option>
+                        {GST_STATE_NAMES.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))} />
+                    )}
                   </Field>
                 ))}
               </div>

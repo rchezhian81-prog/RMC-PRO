@@ -220,5 +220,11 @@ export function validateCompanyProfile(dto: Record<string, unknown>): Record<str
   if (email && !isValidEmail(email)) errors.email = 'Enter a valid email address.';
   const phone = str('phone');
   if (phone && !isValidMobile(phone)) errors.phone = 'Enter a valid 10-digit phone number.';
+  // The company's state is the seller side of every CGST+SGST-vs-IGST decision.
+  // Customers and sites choose theirs from the list; the company typed its own,
+  // and a typo ("Tamilnad") cannot be resolved to a state code, so every local
+  // sale was taxed as inter-state. Same rule on both sides now.
+  const state = str('state');
+  if (state && !isKnownGstState(state)) errors.state = 'Choose the state from the list — it decides CGST+SGST vs IGST on every invoice.';
   return errors;
 }

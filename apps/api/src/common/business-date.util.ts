@@ -82,3 +82,35 @@ export function documentDate(value: unknown, now: Date = new Date()): string {
   const v = typeof value === 'string' ? value.trim() : '';
   return v || businessToday(now);
 }
+
+/**
+ * A moment as the plant's wall clock shows it: "14/09/2026 10:05".
+ *
+ * For anything a person reads — a challan's dispatch time, an e-way bill's
+ * validity. The delivery challan used to print `toISOString()`, which is UTC:
+ * a load dispatched at 02:00 IST was printed as the previous evening, on the
+ * document the site engineer signs. Null in, null out.
+ */
+export function plantDateTime(value: Date | string | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: plantTimeZone(),
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const g = (t: string) => parts.find((x) => x.type === t)?.value ?? '';
+    return `${g('day')}/${g('month')}/${g('year')} ${g('hour')}:${g('minute')}`;
+  } catch {
+    return d.toISOString().slice(0, 16).replace('T', ' ');
+  }
+}
+
+/** `value` plus `minutes`, or null when there is no value. */
+export function addMinutes(value: Date | string | null | undefined, minutes: number): Date | null {
+  if (value == null || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getTime() + minutes * 60_000);
+}

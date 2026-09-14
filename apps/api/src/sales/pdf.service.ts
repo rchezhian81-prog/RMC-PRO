@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { amountInWords } from '../common/amount-in-words.util';
+import type { Company } from '../core/database/entities';
 import SVGtoPDF from 'svg-to-pdfkit';
 import { qrMatrix } from './qr.util';
 
@@ -14,26 +15,21 @@ export interface QuotationPdfItem {
   gstApplicable: boolean;
 }
 
-export interface QuotationPdfData {
-  companyName: string;
-  companyGstin?: string | null;
-  companyState?: string | null;
+export interface QuotationPdfData extends CompanyBlock {
   quotationNo: string;
   quotationDate?: string | null;
   validUntil?: string | null;
   revisionNo: number;
   approvalStatus: string;
   customerName: string;
+  customerAddress?: string | null;
   siteName?: string | null;
   paymentTerms?: string | null;
   remarks?: string | null;
   items: QuotationPdfItem[];
 }
 
-export interface ChallanPdfData {
-  companyName: string;
-  companyGstin?: string | null;
-  companyState?: string | null;
+export interface ChallanPdfData extends CompanyBlock {
   challanNo: string;
   challanStatus: string;
   dispatchTime?: string | null;
@@ -57,8 +53,7 @@ export interface ChallanPdfData {
   ewayValidUntil?: string | null;
 }
 
-export interface WeighbridgePdfData {
-  companyName: string;
+export interface WeighbridgePdfData extends CompanyBlock {
   slipNo: string;
   entryDatetime?: string | null;
   vehicleNo?: string | null;
@@ -88,6 +83,7 @@ export interface CompanyBlock {
   companyName: string;
   legalName?: string | null;
   companyGstin?: string | null;
+  companyState?: string | null;
   companyPan?: string | null;
   companyAddress?: string | null;
   companyPhone?: string | null;
@@ -198,6 +194,74 @@ function drawLogoBand(
 }
 
 /**
+ * The supplier block every document opens with, built once from the company
+ * master. CGST Rule 46 (tax invoice) and Rule 55 (delivery challan) both
+ * require the supplier's name, address and GSTIN; the challan and quotation
+ * used to print the name and GSTIN only, each service assembling its own
+ * subset by hand.
+ */
+export function companyBlock(company: Company | null | undefined): CompanyBlock {
+  const addr = [
+    company?.addressLine1, company?.addressLine2,
+    [company?.city, company?.state, company?.pincode].filter(Boolean).join(', '),
+  ].filter((v) => v && String(v).trim()).join(', ');
+  return {
+    companyName: company?.companyName ?? 'Company',
+    legalName: company?.legalName ?? null,
+    companyGstin: company?.gstin ?? null,
+    companyPan: company?.pan ?? null,
+    companyState: company?.state ?? null,
+    companyAddress: addr || null,
+    companyPhone: company?.phone ?? null,
+    companyEmail: company?.email ?? null,
+    bankName: company?.bankName ?? null,
+    bankAccountNo: company?.bankAccountNo ?? null,
+    bankIfsc: company?.bankIfsc ?? null,
+    bankBranch: company?.bankBranch ?? null,
+    logoMime: company?.logoMime ?? null,
+    logoData: company?.logoData ?? null,
+  };
+}
+
+/** Logo band, then name, legal name, address, GSTIN / PAN (or state), phone / email. */
+function drawCompanyHeader(doc: PDFKit.PDFDocument, data: CompanyBlock, left: number): void {
+  drawLogoBand(doc, data, left, doc.page.margins.top);
+  doc.fontSize(17).font('Helvetica-Bold').fillColor('#000').text(data.companyName);
+  doc.fontSize(9).font('Helvetica').fillColor('#555');
+  if (data.legalName && data.legalName !== data.companyName) doc.text(data.legalName);
+  if (data.companyAddress) doc.text(data.companyAddress);
+  const idLine = [
+    data.companyGstin ? `GSTIN: ${data.companyGstin}` : null,
+    data.companyPan ? `PAN: ${data.companyPan}` : null,
+  ].filter(Boolean).join('   ');
+  if (idLine) doc.text(idLine);
+  else if (data.companyState) doc.text(`State: ${data.companyState}`);
+  const contactLine = [
+    data.companyPhone ? `Ph: ${data.companyPhone}` : null,
+    data.companyEmail ? data.companyEmail : null,
+  ].filter(Boolean).join('   ');
+  if (contactLine) doc.text(contactLine);
+  doc.fillColor('#000');
+}
+
+/**
+ * "For <company> / Authorised Signatory" — the signature block every Indian
+ * commercial document closes with. CGST Rule 46(q) requires the supplier's
+ * signature (or that of an authorised representative) on a tax invoice that
+ * is not an e-invoice, and a customer expects it on a quotation and a receipt
+ * as much as on an invoice. Drawn right-aligned with room to sign; the caller
+ * decides where on the page it sits.
+ */
+function drawSignatoryBlock(doc: PDFKit.PDFDocument, companyName: string, left: number, right: number): void {
+  doc.x = left;
+  doc.moveDown(1.2);
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#000').text(`For ${companyName}`, left, doc.y, { width: right - left, align: 'right' });
+  doc.moveDown(2.4);
+  doc.font('Helvetica').fontSize(9).fillColor('#555').text('Authorised Signatory', left, doc.y, { width: right - left, align: 'right' });
+  doc.fillColor('#000');
+}
+
+/**
  * Draw the e-invoice signed-QR block (runbook 01 §5): the government QR printed
  * as pdfkit rectangles from the module matrix, with the IRN / Ack details beside
  * it. Purely additive and never fatal — like the logo, a QR problem must never be
@@ -267,11 +331,7 @@ export class PdfService {
       const right = doc.page.width - doc.page.margins.right;
 
       // Header — company block.
-      doc.fontSize(18).font('Helvetica-Bold').text(data.companyName, { align: 'left' });
-      doc.fontSize(9).font('Helvetica').fillColor('#555');
-      if (data.companyGstin) doc.text(`GSTIN: ${data.companyGstin}`);
-      if (data.companyState) doc.text(`State: ${data.companyState}`);
-      doc.fillColor('#000');
+      drawCompanyHeader(doc, data, left);
 
       doc.moveDown(0.5);
       doc.fontSize(15).font('Helvetica-Bold').text('QUOTATION', { align: 'right' });
@@ -290,6 +350,7 @@ export class PdfService {
       // Bill-to block.
       doc.fontSize(10).font('Helvetica-Bold').text('Customer');
       doc.font('Helvetica').text(data.customerName);
+      if (data.customerAddress) doc.font('Helvetica').fontSize(9).text(data.customerAddress);
       if (data.siteName) {
         doc.moveDown(0.2);
         doc.font('Helvetica-Bold').text('Site / Project');
@@ -354,6 +415,7 @@ export class PdfService {
         doc.font('Helvetica').text(data.remarks);
       }
 
+      drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text(
         'This is a system-generated quotation. Rates are exclusive of GST unless stated otherwise.',
@@ -376,11 +438,7 @@ export class PdfService {
       const left = doc.page.margins.left;
       const right = doc.page.width - doc.page.margins.right;
 
-      doc.fontSize(18).font('Helvetica-Bold').text(data.companyName);
-      doc.fontSize(9).font('Helvetica').fillColor('#555');
-      if (data.companyGstin) doc.text(`GSTIN: ${data.companyGstin}`);
-      if (data.companyState) doc.text(`State: ${data.companyState}`);
-      doc.fillColor('#000');
+      drawCompanyHeader(doc, data, left);
 
       doc.moveDown(0.4);
       doc.fontSize(15).font('Helvetica-Bold').text('DELIVERY CHALLAN', { align: 'right' });
@@ -436,7 +494,11 @@ export class PdfService {
       doc.x = left;
       doc.font('Helvetica-Bold').fontSize(10).text(`Received by: ${data.receiverName ?? '________________'}`);
       doc.moveDown(2);
-      doc.font('Helvetica').fontSize(9).fillColor('#555').text('Receiver signature: ____________________', { align: 'right' });
+      // Two signatures: the plant's on the left, the receiver's on the right.
+      const sigY = doc.y;
+      doc.font('Helvetica').fontSize(9).fillColor('#555').text(`For ${data.companyName}: ____________________`, left, sigY, { width: (right - left) / 2, align: 'left' });
+      doc.text('Receiver signature: ____________________', left + (right - left) / 2, sigY, { width: (right - left) / 2, align: 'right' });
+      doc.x = left;
       doc.fillColor('#000');
 
       doc.moveDown(1.5);
@@ -457,7 +519,7 @@ export class PdfService {
       const left = doc.page.margins.left;
       const right = doc.page.width - doc.page.margins.right;
 
-      doc.fontSize(18).font('Helvetica-Bold').text(data.companyName);
+      drawCompanyHeader(doc, data, left);
       doc.moveDown(0.3);
       doc.fontSize(15).font('Helvetica-Bold').text('WEIGHBRIDGE SLIP', { align: 'right' });
       doc.fontSize(9).font('Helvetica');
@@ -514,24 +576,7 @@ export class PdfService {
 
       // Optional logo band at the very top; the text header below is unchanged
       // and always drawn, so every required detail still appears with or without.
-      drawLogoBand(doc, data, left, doc.page.margins.top);
-
-      doc.fontSize(17).font('Helvetica-Bold').text(data.companyName);
-      doc.fontSize(9).font('Helvetica').fillColor('#555');
-      if (data.legalName && data.legalName !== data.companyName) doc.text(data.legalName);
-      if (data.companyAddress) doc.text(data.companyAddress);
-      const idLine = [
-        data.companyGstin ? `GSTIN: ${data.companyGstin}` : null,
-        data.companyPan ? `PAN: ${data.companyPan}` : null,
-      ].filter(Boolean).join('   ');
-      if (idLine) doc.text(idLine);
-      else if (data.companyState) doc.text(`State: ${data.companyState}`);
-      const contactLine = [
-        data.companyPhone ? `Ph: ${data.companyPhone}` : null,
-        data.companyEmail ? data.companyEmail : null,
-      ].filter(Boolean).join('   ');
-      if (contactLine) doc.text(contactLine);
-      doc.fillColor('#000');
+      drawCompanyHeader(doc, data, left);
 
       doc.moveDown(0.3);
       doc.fontSize(14).font('Helvetica-Bold').text('TAX INVOICE', { align: 'right' });
@@ -624,6 +669,7 @@ export class PdfService {
       // e-invoice signed QR + IRN (only when the invoice has an IRN).
       drawEinvoiceBlock(doc, data, left, right);
 
+      drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text('System-generated tax invoice.', { align: 'center' });
       doc.end();
@@ -648,22 +694,7 @@ export class PdfService {
       const left = doc.page.margins.left;
       const right = doc.page.width - doc.page.margins.right;
 
-      drawLogoBand(doc, data, left, doc.page.margins.top);
-      doc.fontSize(17).font('Helvetica-Bold').text(data.companyName);
-      doc.fontSize(9).font('Helvetica').fillColor('#555');
-      if (data.legalName && data.legalName !== data.companyName) doc.text(data.legalName);
-      if (data.companyAddress) doc.text(data.companyAddress);
-      const idLine = [
-        data.companyGstin ? `GSTIN: ${data.companyGstin}` : null,
-        data.companyPan ? `PAN: ${data.companyPan}` : null,
-      ].filter(Boolean).join('   ');
-      if (idLine) doc.text(idLine);
-      const contactLine = [
-        data.companyPhone ? `Ph: ${data.companyPhone}` : null,
-        data.companyEmail ? data.companyEmail : null,
-      ].filter(Boolean).join('   ');
-      if (contactLine) doc.text(contactLine);
-      doc.fillColor('#000');
+      drawCompanyHeader(doc, data, left);
 
       doc.moveDown(0.3);
       doc.fontSize(14).font('Helvetica-Bold').text('RECEIPT', { align: 'right' });
@@ -737,7 +768,8 @@ export class PdfService {
         doc.font('Helvetica-Bold').fontSize(9.5).text('Subject to realisation of the cheque / instrument.', left, doc.y);
       }
 
-      doc.moveDown(2);
+      drawSignatoryBlock(doc, data.companyName, left, right);
+      doc.moveDown(1.5);
       doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated receipt.', left, doc.y, { align: 'center' });
       doc.end();
     });

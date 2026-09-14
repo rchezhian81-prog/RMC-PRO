@@ -50,7 +50,14 @@ test('the guards run BEFORE a number is drawn', () => {
   assert.ok(gstinAt < numberAt, 'a refused invoice must not consume an invoice number');
 });
 
-test('the PDF still prints the supplier GSTIN when there is one', () => {
-  const pdf = readFileSync(resolve(here, '../../src/sales/pdf.service.ts'), 'utf8');
-  assert.match(pdf, /if \(data\.companyGstin\) doc\.text\(`GSTIN: \$\{data\.companyGstin\}`\)/);
+test('the PDF still prints the supplier GSTIN when there is one', async () => {
+  // Behavioural, not a source-shape check: every document's header goes
+  // through one drawer now, so render one and read the GSTIN back.
+  const { PdfService } = await import('../../dist/sales/pdf.service.js');
+  const { pdfText } = await import('../helpers/pdf-text.mjs');
+  const text = pdfText(await new PdfService().invoicePdf({
+    companyName: 'Mix Nova RMC', companyGstin: '33AABCA1234B1ZO', invoiceNo: 'INV-1', invoiceStatus: 'issued', customerName: 'BuildCo', isInterstate: false,
+    items: [], taxableAmount: 0, cgstAmount: 0, sgstAmount: 0, igstAmount: 0, cessAmount: 0, roundOff: 0, totalAmount: 0,
+  }));
+  assert.ok(text.includes('GSTIN: 33AABCA1234B1ZO'), 'the supplier GSTIN is on the invoice');
 });

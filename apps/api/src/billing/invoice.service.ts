@@ -19,13 +19,13 @@ import {
 import { isYmdDate, resolveGstStateCode } from '@rmc/shared';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
-import type { InvoicePdfData } from '../sales/pdf.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { computeLineTax, round2, isInterstateSupply } from './tax.util';
 import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy } from './return-billing.util';
 import { invoiceBalanceAfter } from './receipt-allocation.util';
 import { gstStateCode, isGstin } from '../compliance/gst-payload.util';
 import { documentDate, plantDateTime } from '../common/business-date.util';
+import { companyBlock, type InvoicePdfData } from '../sales/pdf.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -684,25 +684,8 @@ export class InvoiceService {
       const site = full.siteId ? await m.getRepository(Site).findOne({ where: { id: full.siteId } }) : null;
       const joinAddress = (...parts: (string | null | undefined)[]) =>
         parts.map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null;
-      const addr = [
-        company?.addressLine1, company?.addressLine2,
-        [company?.city, company?.state, company?.pincode].filter(Boolean).join(', '),
-      ].filter((s) => s && String(s).trim()).join(', ');
       const data: InvoicePdfData = {
-        companyName: company?.companyName ?? 'Company',
-        legalName: company?.legalName ?? null,
-        companyGstin: company?.gstin ?? null,
-        companyPan: company?.pan ?? null,
-        companyState: company?.state ?? null,
-        companyAddress: addr || null,
-        companyPhone: company?.phone ?? null,
-        companyEmail: company?.email ?? null,
-        bankName: company?.bankName ?? null,
-        bankAccountNo: company?.bankAccountNo ?? null,
-        bankIfsc: company?.bankIfsc ?? null,
-        bankBranch: company?.bankBranch ?? null,
-        logoMime: company?.logoMime ?? null,
-        logoData: company?.logoData ?? null,
+        ...companyBlock(company),
         // A draft has no number until it is issued; say so on the document
         // rather than printing an empty field or a null.
         invoiceNo: full.invoiceNo ?? 'DRAFT',

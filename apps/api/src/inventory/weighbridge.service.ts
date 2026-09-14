@@ -7,8 +7,8 @@ import { Company, Material, MaterialInward, Supplier, UomConversion, Weighbridge
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
 import { weighbridgeQuantity } from './weighbridge-uom.util';
-import type { WeighbridgePdfData } from '../sales/pdf.service';
 import { plantDateTime } from '../common/business-date.util';
+import { companyBlock, type WeighbridgePdfData } from '../sales/pdf.service';
 
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Weighbridge entry not found' });
@@ -167,7 +167,7 @@ export class WeighbridgeService {
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];
       const supplier = entry.supplierId ? await m.getRepository(Supplier).findOne({ where: { id: entry.supplierId } }) : null;
       const data: WeighbridgePdfData = {
-        companyName: company?.companyName ?? 'Company',
+        ...companyBlock(company),
         slipNo: entry.slipNo,
         // The slip's time is what a supplier dispute is settled on; print it
         // on the plant clock, not UTC.

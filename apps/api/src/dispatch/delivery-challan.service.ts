@@ -21,10 +21,10 @@ import {
 } from '../core/database/entities';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
-import type { ChallanPdfData } from '../sales/pdf.service';
 import { recordDeliveryHistory } from './delivery-history.util';
 import { wastageSummary, type WastageRow } from './wastage.util';
 import { assertDispatchLive, assertNotInvoiced, assertTransition, deliverChallan } from './challan-transition.util';
+import { companyBlock, type ChallanPdfData } from '../sales/pdf.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Challan not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -280,9 +280,7 @@ export class DeliveryChallanService {
         : null;
       const batchedAt = ticket?.batchStartTime ?? null;
       const data: ChallanPdfData = {
-        companyName: company?.companyName ?? 'Company',
-        companyGstin: company?.gstin ?? null,
-        companyState: company?.state ?? null,
+        ...companyBlock(company),
         challanNo: challan.challanNo,
         challanStatus: challan.challanStatus,
         dispatchTime: plantDateTime(challan.dispatchTime),

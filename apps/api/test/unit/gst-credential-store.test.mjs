@@ -18,8 +18,8 @@ process.env.GST_CRED_ENC_KEY = 'a1'.repeat(32); // 64 hex chars → 32 bytes
 
 const { GstCredentialStore } = await import('../../dist/compliance/gst-credential-store.service.js');
 
-const GSTIN_A = '33ABCDE1234F1Z5';
-const GSTIN_B = '29ZZZZZ0000Z1Z9';
+const GSTIN_A = '33ABCDE1234F1Z7';
+const GSTIN_B = '29ZZZZZ0000Z1ZM';
 const PW = 'sup3r-s3cret-portal-pw';
 const USER = 'plant.portal.user';
 

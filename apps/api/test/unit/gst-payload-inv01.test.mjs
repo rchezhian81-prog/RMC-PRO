@@ -15,11 +15,11 @@ import assert from 'node:assert/strict';
 import { buildIrnRequest, pinNum } from '../../dist/compliance/gst-payload.util.js';
 
 const seller = {
-  gstin: '33ABCDE1234F1Z5', legalName: 'Mix Nova RMC', tradeName: 'MixNova',
+  gstin: '33ABCDE1234F1Z7', legalName: 'Mix Nova RMC', tradeName: 'MixNova',
   address1: 'Plant Rd', address2: 'Zone 2', location: 'Chennai', pincode: '600001', stateCode: '33',
 };
 const buyer = {
-  gstin: '33XYZAB6789K1Z2', legalName: 'BuildCo', posStateCode: '33',
+  gstin: '33XYZAB6789K1ZQ', legalName: 'BuildCo', posStateCode: '33',
   address1: 'Site 1', location: 'Chennai', pincode: '600002', stateCode: '33',
 };
 // The UAT ₹2,95,000 intra-state invoice (50 m³ × ₹5,000 @ 18%).
@@ -139,7 +139,7 @@ test('inter-state supply uses IGST only (CGST/SGST zero) in items and ValDtls', 
   const interLines = [
     { slNo: 1, hsn: '38245010', qty: 10, unit: 'CUM', unitPrice: 4500, taxable: 45000, gstRate: 18, cgst: 0, sgst: 0, igst: 8100, cess: 0, total: 53100 },
   ];
-  const interBuyer = { ...buyer, gstin: '29XYZAB6789K1Z2', posStateCode: '29', stateCode: '29' };
+  const interBuyer = { ...buyer, gstin: '29XYZAB6789K1ZF', posStateCode: '29', stateCode: '29' };
   const req = buildIrnRequest(interHeader, interLines, seller, interBuyer);
   const it = req.ItemList[0];
   assert.equal(it.IgstAmt, 8100);

@@ -37,7 +37,7 @@ export const IMPORT_DEFS: ImportDef[] = [
     columns: [
       { key: 'customerCode', label: 'Customer Code', required: true, example: 'CUST-100' },
       { key: 'customerName', label: 'Customer Name', required: true, example: 'Acme Constructions' },
-      { key: 'gstin', label: 'GSTIN', example: '33ABCDE1234F1Z5' },
+      { key: 'gstin', label: 'GSTIN', example: '33ABCDE1234F1Z7' },
       { key: 'customerType', label: 'Customer Type', example: 'credit' },
       { key: 'city', label: 'City', example: 'Chennai' },
       { key: 'state', label: 'State', example: 'Tamil Nadu' },
@@ -69,7 +69,7 @@ export const IMPORT_DEFS: ImportDef[] = [
     columns: [
       { key: 'supplierCode', label: 'Supplier Code', required: true, example: 'SUP-100' },
       { key: 'supplierName', label: 'Supplier Name', required: true, example: 'Ultra Cement Dealers' },
-      { key: 'gstin', label: 'GSTIN', example: '33ABCDE1234F1Z5' },
+      { key: 'gstin', label: 'GSTIN', example: '33ABCDE1234F1Z7' },
       { key: 'contactPerson', label: 'Contact Person', example: 'R. Kumar' },
       { key: 'mobile', label: 'Mobile', example: '9876543210' },
       { key: 'email', label: 'Email', example: 'sales@ultra.example' },

@@ -68,7 +68,7 @@ async function seedInvoice({ hsn = '38245010' } = {}) {
     `INSERT INTO invoices (id, tenant_id, invoice_no, invoice_date, place_of_supply, gstin,
         taxable_amount, cgst_amount, sgst_amount, igst_amount, cess_amount, round_off, total_amount,
         distance_km, transport_mode, vehicle_no, invoice_status, einvoice_status, eway_status)
-     VALUES ($1,$2,$3,current_date,'33','33XYZAB6789K1Z2',
+     VALUES ($1,$2,$3,current_date,'33','33XYZAB6789K1ZQ',
         250000,22500,22500,0,0,0,295000,350,'road','TN01AB1234','issued','not_generated','not_generated')`,
     [invId, TENANT, 'GSTINV-' + s],
   );
@@ -97,13 +97,13 @@ async function prepareApproveExecute(compliance, invId, extra = {}) {
   const [company] = await owner.query(`SELECT id FROM companies WHERE tenant_id = $1 LIMIT 1`, [TENANT]);
   if (company) {
     await owner.query(
-      `UPDATE companies SET gstin='33ABCDE1234F1Z5', legal_name='CI Seller', address_line1='Plant Rd', city='Chennai', pincode='600001' WHERE id=$1`,
+      `UPDATE companies SET gstin='33ABCDE1234F1Z7', legal_name='CI Seller', address_line1='Plant Rd', city='Chennai', pincode='600001' WHERE id=$1`,
       [company.id],
     );
   } else {
     await owner.query(
       `INSERT INTO companies (tenant_id, company_name, legal_name, gstin, address_line1, city, pincode)
-       VALUES ($1,'CI Seller','CI Seller','33ABCDE1234F1Z5','Plant Rd','Chennai','600001')`,
+       VALUES ($1,'CI Seller','CI Seller','33ABCDE1234F1Z7','Plant Rd','Chennai','600001')`,
       [TENANT],
     );
   }

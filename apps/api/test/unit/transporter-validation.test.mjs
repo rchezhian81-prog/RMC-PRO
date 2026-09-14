@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { isValidTransporterId, validateMasterFields } from '@rmc/shared';
 
 test('isValidTransporterId accepts a 15-char GSTIN-shaped id', () => {
-  assert.equal(isValidTransporterId('29ABCDE1234F1Z5'), true);
+  assert.equal(isValidTransporterId('29ABCDE1234F1ZW'), true);
 });
 
 test('isValidTransporterId accepts an enrolled TRANSIN (lowercased, spaces trimmed)', () => {
@@ -31,7 +31,7 @@ test('validateMasterFields flags a malformed transin', () => {
 });
 
 test('validateMasterFields passes a well-formed transin', () => {
-  assert.deepEqual(validateMasterFields({ transin: '29ABCDE1234F1Z5' }), {});
+  assert.deepEqual(validateMasterFields({ transin: '29ABCDE1234F1ZW' }), {});
 });
 
 test('validateMasterFields ignores an absent or empty transin (required-ness is enforced elsewhere)', () => {

@@ -12,8 +12,8 @@ import { buildIrnRequest } from '../../dist/compliance/gst-payload.util.js';
 import { mapIrnData } from '../../dist/compliance/nic-protocol.util.js';
 import { FakeGstProvider } from '../../dist/compliance/fake.provider.js';
 
-const seller = { gstin: '33ABCDE1234F1Z5', legalName: 'Mix Nova RMC', address1: 'Plant Rd', location: 'Chennai', pincode: '600001', stateCode: '33' };
-const buyer = { gstin: '33XYZAB6789K1Z2', legalName: 'BuildCo', posStateCode: '33', address1: 'Site 1', location: 'Chennai', pincode: '600002', stateCode: '33' };
+const seller = { gstin: '33ABCDE1234F1Z7', legalName: 'Mix Nova RMC', address1: 'Plant Rd', location: 'Chennai', pincode: '600001', stateCode: '33' };
+const buyer = { gstin: '33XYZAB6789K1ZQ', legalName: 'BuildCo', posStateCode: '33', address1: 'Site 1', location: 'Chennai', pincode: '600002', stateCode: '33' };
 const header = {
   docNo: 'INV-001', docDate: '2026-08-01', taxable: 250000, cgst: 22500, sgst: 22500, igst: 0, cess: 0, roundOff: 0,
   total: 295000, distanceKm: 350, transportMode: 'road', vehicleNo: 'TN01AB1234', transporterName: 'Mix Nova Transport',

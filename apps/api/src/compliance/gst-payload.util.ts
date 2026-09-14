@@ -1,3 +1,4 @@
+import { isValidGstin } from '@rmc/shared';
 import type { EwbRequest, IrnRequest } from './gst.types';
 
 /**
@@ -120,10 +121,14 @@ export function num(v: unknown): number {
 }
 const round2 = (v: number): number => Math.round((v + Number.EPSILON) * 100) / 100;
 
-/** 15-char GSTIN: 2-digit state, 10-char PAN, entity digit, 'Z', checksum. */
-const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+/**
+ * 15-char GSTIN, shape and check digit. One rule for the whole system: the
+ * shared validator the masters and the web forms use. A second regex here was
+ * how the portal-facing payloads could accept a number the customer form would
+ * not, or vice versa.
+ */
 export function isGstin(g: string | null | undefined): boolean {
-  return typeof g === 'string' && GSTIN_RE.test(g);
+  return typeof g === 'string' && isValidGstin(g);
 }
 export function stateCodeOf(gstin: string): string {
   return gstin.slice(0, 2);

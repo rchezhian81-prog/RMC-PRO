@@ -33,11 +33,11 @@ import { FakeGstProvider } from '../../dist/compliance/fake.provider.js';
 import { DisabledGstProvider } from '../../dist/compliance/disabled.provider.js';
 
 const seller = {
-  gstin: '33ABCDE1234F1Z5', legalName: 'Mix Nova RMC', address1: 'Plant Rd', location: 'Chennai',
+  gstin: '33ABCDE1234F1Z7', legalName: 'Mix Nova RMC', address1: 'Plant Rd', location: 'Chennai',
   pincode: '600001', stateCode: '33',
 };
 const buyer = {
-  gstin: '33XYZAB6789K1Z2', legalName: 'BuildCo', posStateCode: '33', address1: 'Site 1',
+  gstin: '33XYZAB6789K1ZQ', legalName: 'BuildCo', posStateCode: '33', address1: 'Site 1',
   location: 'Chennai', pincode: '600002', stateCode: '33',
 };
 const header = {
@@ -49,9 +49,9 @@ const lines = [
 ];
 
 test('GSTIN + state-code + validity + date helpers', () => {
-  assert.equal(isGstin('33ABCDE1234F1Z5'), true);
+  assert.equal(isGstin('33ABCDE1234F1Z7'), true);
   assert.equal(isGstin('nope'), false);
-  assert.equal(stateCodeOf('33ABCDE1234F1Z5'), '33');
+  assert.equal(stateCodeOf('33ABCDE1234F1Z7'), '33');
   assert.equal(ewayValidityDays(350), 2); // ceil(350/200)
   assert.equal(ewayValidityDays(200), 1);
   assert.equal(ewayValidityDays(0), 1);
@@ -92,7 +92,7 @@ test('buildIrnRequest emits INV-01 essentials', () => {
   assert.equal(req.Version, '1.1');
   assert.equal(req.DocDtls.No, 'INV-001');
   assert.equal(req.DocDtls.Dt, '01/08/2026');
-  assert.equal(req.SellerDtls.Gstin, '33ABCDE1234F1Z5');
+  assert.equal(req.SellerDtls.Gstin, '33ABCDE1234F1Z7');
   assert.equal(req.BuyerDtls.Pos, '33');
   assert.equal(req.ItemList[0].HsnCd, '38245010');
   assert.equal(req.ValDtls.TotInvVal, 295000);
@@ -126,5 +126,5 @@ test('fake provider round-trips a deterministic IRN + e-way (and reconciles a du
 test('disabled provider is off and throws if invoked', async () => {
   const p = new DisabledGstProvider();
   assert.equal(p.isConfigured(), false);
-  await assert.rejects(() => p.authenticate('tenant-1', '33ABCDE1234F1Z5'), (e) => e.code === 'PROVIDER_DISABLED');
+  await assert.rejects(() => p.authenticate('tenant-1', '33ABCDE1234F1Z7'), (e) => e.code === 'PROVIDER_DISABLED');
 });

@@ -87,7 +87,7 @@ test('a numeric code is taken as given', () => {
 });
 
 test('a GSTIN supplies the state when the name cannot', () => {
-  // 33AABCS1429B1ZQ — the first two digits ARE the state code.
-  assert.equal(gstStateCode('', '33AABCS1429B1ZQ'), '33');
+  // 33AABCS1429B1Z1 — the first two digits ARE the state code.
+  assert.equal(gstStateCode('', '33AABCS1429B1Z1'), '33');
   assert.equal(gstStateCode('Nowhere', '29AABCS1429B1ZQ'), '29');
 });

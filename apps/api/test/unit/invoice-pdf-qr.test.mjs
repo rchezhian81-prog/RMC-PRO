@@ -14,7 +14,7 @@ const svc = new PdfService();
 
 const base = {
   companyName: 'Mix Nova RMC',
-  companyGstin: '33ABCDE1234F1Z5',
+  companyGstin: '33ABCDE1234F1Z7',
   invoiceNo: 'INV-001',
   invoiceStatus: 'issued',
   customerName: 'BuildCo',

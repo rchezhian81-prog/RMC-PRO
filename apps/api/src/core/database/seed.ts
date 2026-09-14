@@ -79,7 +79,7 @@ async function main() {
         tenantId: tenant.id,
         companyName: name,
         state: 'Tamil Nadu',
-        gstin: code === 'ALPHA' ? '33AABCA1234B1Z5' : '33AABCB5678C1Z9',
+        gstin: code === 'ALPHA' ? '33AABCA1234B1ZO' : '33AABCB5678C1ZX',
       }),
     );
     const plants = await m.save([
@@ -199,7 +199,7 @@ async function main() {
       tenantId: at,
       customerCode: 'CUST001',
       customerName: 'L&T Construction',
-      gstin: '33AAAAA0000A1Z5',
+      gstin: '33AAAAA0000A1Z9',
       state: 'TN',
       contactPerson: 'S. Kumar',
       mobile: '9840000001',
@@ -227,7 +227,7 @@ async function main() {
       tenantId: at,
       supplierCode: 'SUP001',
       supplierName: 'UltraTech Cement Ltd',
-      gstin: '27BBBBB1111B1Z5',
+      gstin: '27BBBBB1111B1ZN',
       state: 'MH',
       paymentTerms: '30 days',
     }),

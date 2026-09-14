@@ -17,7 +17,7 @@ const ok = (name, cond) => { console.log((cond ? '  PASS ' : '  FAIL ') + name);
 
 console.log('=== A. shared validators (unit) ===');
 ok('rejects GSTIN "INVALIDGSTIN123"', !isValidGstin('INVALIDGSTIN123'));
-ok('accepts a real GSTIN', isValidGstin('33ABCDE1234F1Z5'));
+ok('accepts a real GSTIN', isValidGstin('33ABCDE1234F1Z7'));
 ok('rejects mobile "12345"', !isValidMobile('12345'));
 ok('accepts mobile "9943602633"', isValidMobile('9943602633'));
 {
@@ -27,7 +27,7 @@ ok('accepts mobile "9943602633"', isValidMobile('9943602633'));
   ok('invalid customer flags creditDays (negative)', !!e.creditDays);
   ok('invalid customer flags mobile', !!e.mobile);
 }
-ok('valid customer has no field errors', Object.keys(validateMasterFields({ gstin: '33ABCDE1234F1Z5', creditLimit: 5000, creditDays: 30, mobile: '9943602633' })).length === 0);
+ok('valid customer has no field errors', Object.keys(validateMasterFields({ gstin: '33ABCDE1234F1Z7', creditLimit: 5000, creditDays: 30, mobile: '9943602633' })).length === 0);
 ok('vehicle negative capacity flagged', !!validateMasterFields({ capacityM3: -3 }).capacityM3);
 ok('uom-conversion factor 0 flagged (÷0 makes an unusable row)', !!validateMasterFields({ factor: 0 }).factor);
 ok('uom-conversion factor negative flagged', !!validateMasterFields({ factor: -2 }).factor);
@@ -46,7 +46,7 @@ ok('email "not-an-email" rejected', !isValidEmail('not-an-email'));
   ok('company bad email flagged', !!e.email);
   ok('company bad phone flagged', !!e.phone);
 }
-ok('valid company profile has no errors', Object.keys(validateCompanyProfile({ gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F', pincode: '600001', email: 'ops@acme.co', phone: '9943602633' })).length === 0);
+ok('valid company profile has no errors', Object.keys(validateCompanyProfile({ gstin: '33ABCDE1234F1Z7', pan: 'ABCDE1234F', pincode: '600001', email: 'ops@acme.co', phone: '9943602633' })).length === 0);
 
 // Date-param shape guard (E-tier: malformed dates must 400, not 500).
 ok('isYmdDate accepts a real date', isYmdDate('2026-09-04'));
@@ -101,7 +101,7 @@ ok('error.fields.pan present', !!badPan.body?.error?.fields?.pan);
 
 // Good: accepted, and the buyer PIN + PAN round-trip (KYC / GST BuyerDtls.Pin).
 const code = 'QA-OK-' + Date.now();
-const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F', creditLimit: 5000, creditDays: 30, mobile: '9943602633', pincode: '600002' }, tok);
+const good = await j('POST', '/customers', { customerCode: code, customerName: 'Good Co', gstin: '33ABCDE1234F1Z7', pan: 'ABCDE1234F', creditLimit: 5000, creditDays: 30, mobile: '9943602633', pincode: '600002' }, tok);
 ok('valid customer created (2xx)', good.status >= 200 && good.status < 300 && good.body?.success === true);
 ok('the buyer pincode is persisted + returned', good.body?.data?.pincode === '600002');
 ok('the buyer PAN is persisted + returned', good.body?.data?.pan === 'ABCDE1234F');

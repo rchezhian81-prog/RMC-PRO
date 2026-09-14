@@ -242,7 +242,7 @@ async function main() {
   // blank — they must be the operator's real numbers — and issuing a tax invoice
   // now refuses without them, since the supplier GSTIN is mandatory under Rule 46
   // and the state is the seller side of the CGST+SGST vs IGST decision.
-  await api('PATCH', '/company', { gstin: '33AABCA1234B1Z5', state: 'Tamil Nadu' }, ownerTok);
+  await api('PATCH', '/company', { gstin: '33AABCA1234B1ZO', state: 'Tamil Nadu' }, ownerTok);
   const plants = await api('GET', '/plants', null, ownerTok);
   const materials = await api('GET', '/materials', null, ownerTok);
   const fixtures = {

@@ -113,7 +113,7 @@ export default function ChallanDetail() {
             </Button>
           )}
           <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/delivery-challans/${id}/pdf`).catch((e) => setError(String(e)))}>
-            Download PDF
+            Print / PDF
           </Button>
           <Button
             variant="secondary"

@@ -5,6 +5,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
+  Company,
   ExpenseHead,
   ExpenseVoucher,
   ExpenseVoucherLine,
@@ -16,6 +17,7 @@ import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { allocationSummary, categorySummary } from './expenses.util';
 import { documentDate } from '../common/business-date.util';
+import { companyBlock, type ExpenseVoucherPdfData } from '../sales/pdf.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Expense voucher not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -52,6 +54,34 @@ export class ExpenseVoucherService {
 
   get(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
+  }
+
+  /** Everything the printed voucher needs, in one place. */
+  async pdfData(tenantId: string, id: string): Promise<{ data: ExpenseVoucherPdfData; voucherNo: string }> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const plant = full.plantId ? await m.getRepository(Plant).findOne({ where: { id: full.plantId } }) : null;
+      const data: ExpenseVoucherPdfData = {
+        ...companyBlock(company),
+        voucherNo: full.voucherNo,
+        voucherDate: full.voucherDate,
+        status: full.status,
+        payee: full.payee,
+        paymentMode: full.paymentMode,
+        plantName: plant?.plantName ?? null,
+        narration: full.narration,
+        remarks: full.remarks,
+        lines: full.lines.map((l) => ({
+          head: l.expenseHeadLabel ?? '',
+          description: l.description,
+          allocation: l.allocationLabel ?? (l.allocationType && l.allocationType !== 'general' ? l.allocationType : null),
+          amount: l.amount,
+        })),
+        totalAmount: full.totalAmount,
+      };
+      return { data, voucherNo: full.voucherNo };
+    });
   }
 
   /** Resolve the display label for a cost object from its master. */

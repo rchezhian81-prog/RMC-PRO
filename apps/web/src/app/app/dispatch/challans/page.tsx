@@ -1,10 +1,11 @@
 'use client';
 
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
-import { challansApi, type Row } from '../../../../lib/api';
+import { challansApi, type Row, openPdf } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
@@ -89,9 +90,12 @@ export default function ChallansPage() {
                   <Td>{String(r.invoiceStatus ?? '')}</Td>
                   <Td><StatusBadge status={String(r.challanStatus)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
-                    <Link href={`/app/dispatch/challans/${r.id}`}>
-                      <Button variant="secondary" size="sm">Open</Button>
-                    </Link>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/delivery-challans/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                      <Link href={`/app/dispatch/challans/${r.id}`}>
+                        <Button variant="secondary" size="sm">Open</Button>
+                      </Link>
+                    </div>
                   </Td>
                 </tr>
               ))}

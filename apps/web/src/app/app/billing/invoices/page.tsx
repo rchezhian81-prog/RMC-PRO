@@ -1,12 +1,13 @@
 'use client';
 
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { crud, invoicesApi, type Row } from '../../../../lib/api';
+import { crud, invoicesApi, type Row, openPdf } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
@@ -197,9 +198,12 @@ export default function InvoicesPage() {
                   <Td><StatusBadge status={String(r.paymentStatus ?? '')} /></Td>
                   <Td><StatusBadge status={String(r.invoiceStatus)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
-                    <Link href={`/app/billing/invoices/${r.id}`}>
-                      <Button variant="secondary" size="sm">Open</Button>
-                    </Link>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/invoices/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                      <Link href={`/app/billing/invoices/${r.id}`}>
+                        <Button variant="secondary" size="sm">Open</Button>
+                      </Link>
+                    </div>
                   </Td>
                 </tr>
               ))}

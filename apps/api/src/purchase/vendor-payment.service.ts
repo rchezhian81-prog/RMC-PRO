@@ -4,7 +4,9 @@ import { round2 } from '../common/money.util';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Supplier, VendorBill, VendorPayment, VendorPaymentAllocation } from '../core/database/entities';
+import { In } from 'typeorm';
+import { Company, Supplier, VendorBill, VendorPayment, VendorPaymentAllocation } from '../core/database/entities';
+import { companyBlock, type VendorPaymentPdfData } from '../sales/pdf.service';
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { billPaymentStatus } from './purchase.util';
@@ -40,6 +42,40 @@ export class VendorPaymentService {
 
   get(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
+  }
+
+  /** Everything the printed payment advice needs: supplier, bills paid, balance. */
+  async pdfData(tenantId: string, id: string): Promise<{ data: VendorPaymentPdfData; paymentNo: string }> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const supplier = full.supplierId ? await m.getRepository(Supplier).findOne({ where: { id: full.supplierId } }) : null;
+      const billIds = full.allocations.map((a) => a.vendorBillId);
+      const bills = billIds.length ? await m.getRepository(VendorBill).find({ where: { id: In(billIds) } }) : [];
+      const byId = new Map(bills.map((b) => [b.id, b]));
+      const data: VendorPaymentPdfData = {
+        ...companyBlock(company),
+        paymentNo: full.paymentNo,
+        paymentDate: full.paymentDate,
+        status: full.status,
+        supplierName: supplier?.supplierName ?? 'Supplier',
+        supplierGstin: supplier?.gstin ?? null,
+        amount: full.amount,
+        paymentMode: full.paymentMode,
+        bankReference: full.bankReference,
+        remarks: full.remarks,
+        bills: full.allocations
+          .filter((a) => num(a.allocatedAmount) > 0)
+          .map((a) => ({
+            billNo: byId.get(a.vendorBillId)?.billNo ?? '-',
+            supplierBillNo: byId.get(a.vendorBillId)?.supplierBillNo ?? null,
+            billDate: byId.get(a.vendorBillId)?.billDate ?? null,
+            amount: a.allocatedAmount,
+          })),
+        unallocatedAmount: full.unallocatedAmount,
+      };
+      return { data, paymentNo: full.paymentNo };
+    });
   }
 
   /** Record a payment to a supplier and allocate it across their approved bills. */

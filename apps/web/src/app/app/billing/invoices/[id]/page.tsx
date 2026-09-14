@@ -144,7 +144,7 @@ export default function InvoiceDetail() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {status === 'draft' && <Button onClick={() => run(() => invoicesApi.issue(id), 'Invoice issued')}>Issue</Button>}
           <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/invoices/${id}/pdf`).catch((e) => setError(String(e)))}>
-            Download PDF
+            Print / PDF
           </Button>
           <Button
             variant="secondary"

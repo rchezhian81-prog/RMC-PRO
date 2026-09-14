@@ -1,9 +1,10 @@
 'use client';
 
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { purchaseApi, type Row } from '../../../../lib/api';
+import { purchaseApi, type Row, openPdf } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -211,9 +212,12 @@ export default function VendorBillsPage() {
                       <Td numeric>{Number(p.unallocatedAmount) > 0.001 ? <b>₹{money(p.unallocatedAmount)}</b> : `₹${money(p.unallocatedAmount)}`}</Td>
                       <Td><StatusBadge status={pstatus} /></Td>
                       <Td style={{ textAlign: 'right' }}>
-                        {canPay && pstatus === 'posted' && (
-                          <Button variant="ghost" size="sm" onClick={() => reverse(p)}>Reverse</Button>
-                        )}
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/vendor-payments/${String(p.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                          {canPay && pstatus === 'posted' && (
+                            <Button variant="ghost" size="sm" onClick={() => reverse(p)}>Reverse</Button>
+                          )}
+                        </div>
                       </Td>
                     </tr>
                   );

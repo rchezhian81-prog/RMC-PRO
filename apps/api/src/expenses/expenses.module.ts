@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { NumberingService } from '../sales/numbering.service';
+import { PdfService } from '../sales/pdf.service';
 import { ExpenseGroupController, ExpenseHeadController, ExpenseVoucherController } from './expenses.controllers';
 import { ExpenseGroupService, ExpenseHeadService } from './expense-master.service';
 import { ExpenseVoucherService } from './expense-voucher.service';
@@ -20,6 +21,7 @@ import { ExpenseVoucherService } from './expense-voucher.service';
     ExpenseHeadService,
     ExpenseVoucherService,
     NumberingService,
+    PdfService,
     TenantGuard,
     PermissionsGuard,
   ],

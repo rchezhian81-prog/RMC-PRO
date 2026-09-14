@@ -36,6 +36,10 @@ export interface ChallanPdfData {
   challanNo: string;
   challanStatus: string;
   dispatchTime?: string | null;
+  /** When the load was batched — the start of its working life. */
+  batchedAt?: string | null;
+  /** Batched time plus the concrete's working life: place it by then. */
+  useBy?: string | null;
   customerName: string;
   siteName?: string | null;
   vehicleNo?: string | null;
@@ -348,6 +352,7 @@ export class PdfService {
       doc.fontSize(9).font('Helvetica');
       doc.text(`No: ${data.challanNo}`, { align: 'right' });
       doc.text(`Status: ${data.challanStatus}`, { align: 'right' });
+      if (data.batchedAt) doc.text(`Batched: ${data.batchedAt}`, { align: 'right' });
       if (data.dispatchTime) doc.text(`Dispatched: ${data.dispatchTime}`, { align: 'right' });
 
       doc.moveDown(0.6);
@@ -362,6 +367,12 @@ export class PdfService {
       row('Site / Project', data.siteName ?? '-');
       row('Vehicle', data.vehicleNo ?? '-');
       row('Driver', data.driverName ?? '-');
+      // The one line the site engineer must read: the concrete's working life
+      // runs from batching, and pouring after it is a rejected pour.
+      if (data.useBy) {
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#b91c1c').text(`Use by: ${data.useBy}`);
+        doc.fillColor('#000').fontSize(10);
+      }
       // E-way bill must travel with the goods — print it on the dispatch document.
       if (data.ewayBillNo) {
         const validity = data.ewayValidUntil ? ` (valid till ${data.ewayValidUntil})` : '';

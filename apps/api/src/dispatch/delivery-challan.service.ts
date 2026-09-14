@@ -1,9 +1,12 @@
 import { REPORT_FETCH_LIMIT, assertReportSize, listLimit } from '../common/list-limit.util';
 import { hasEwayBill } from '../common/eway-status.util';
+import { addMinutes, plantDateTime } from '../common/business-date.util';
+import { CONCRETE_SLA_MINUTES } from '../alerts/concrete-sla.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
+  BatchTicket,
   Company,
   Customer,
   DeliveryChallan,
@@ -268,13 +271,23 @@ export class DeliveryChallanService {
       // the number the driver must be able to show. It belongs on the document
       // exactly as much as one this system transmitted.
       const eway = invoice && hasEwayBill(invoice.ewayStatus) ? invoice : null;
+      // The batching time is the clock that matters on site: ready-mix has a
+      // working life from the moment it is batched (IS 4926, ~90–120 min), and
+      // the delivery ticket is where the site engineer reads it. Both the time
+      // it was batched and the time it must be placed by are printed.
+      const ticket = challan.batchTicketId
+        ? await m.getRepository(BatchTicket).findOne({ where: { id: challan.batchTicketId } })
+        : null;
+      const batchedAt = ticket?.batchStartTime ?? null;
       const data: ChallanPdfData = {
         companyName: company?.companyName ?? 'Company',
         companyGstin: company?.gstin ?? null,
         companyState: company?.state ?? null,
         challanNo: challan.challanNo,
         challanStatus: challan.challanStatus,
-        dispatchTime: challan.dispatchTime ? challan.dispatchTime.toISOString().slice(0, 16).replace('T', ' ') : null,
+        dispatchTime: plantDateTime(challan.dispatchTime),
+        batchedAt: plantDateTime(batchedAt),
+        useBy: plantDateTime(addMinutes(batchedAt, CONCRETE_SLA_MINUTES)),
         customerName: customer?.customerName ?? 'Customer',
         siteName: site?.siteName ?? null,
         vehicleNo: vehicle?.vehicleNo ?? null,
@@ -284,9 +297,7 @@ export class DeliveryChallanService {
         slump: challan.slump ?? null,
         receiverName: challan.receiverName ?? null,
         ewayBillNo: eway?.ewayBillNo ?? null,
-        ewayValidUntil: eway?.ewayValidUntil
-          ? new Date(eway.ewayValidUntil).toISOString().replace('T', ' ').slice(0, 16)
-          : null,
+        ewayValidUntil: plantDateTime(eway?.ewayValidUntil),
       };
       return { data, challan };
     });

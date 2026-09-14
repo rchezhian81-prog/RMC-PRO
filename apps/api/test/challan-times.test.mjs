@@ -91,6 +91,9 @@ const dispatched = onPlantClock(challan.dispatchTime);
 ok(`Batched: ${batched} — the batch ticket's start time, on the plant clock`, text.includes(`Batched: ${batched}`));
 ok(`Dispatched: ${dispatched} — the challan's dispatch time, on the plant clock`, text.includes(`Dispatched: ${dispatched}`));
 ok(`Use by: ${useBy} — batched plus the ${WORKING_LIFE_MINUTES}-minute working life`, text.includes(`Use by: ${useBy}`));
+const siteAddress = site ? [site.address, site.city, site.state, site.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') : '';
+if (siteAddress) ok(`Site address: ${siteAddress} — the driver's copy says where to go`, text.includes(siteAddress));
+else console.log('  (fixture site has no address — the address row has nothing to print)');
 if (asUtc(challan.dispatchTime) !== dispatched) {
   ok(`the UTC rendering (${asUtc(challan.dispatchTime)}) is nowhere on the document`, !text.includes(asUtc(challan.dispatchTime)));
 } else {

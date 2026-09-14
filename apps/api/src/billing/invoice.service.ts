@@ -16,7 +16,7 @@ import {
   Site,
   Transporter,
 } from '../core/database/entities';
-import { isYmdDate } from '@rmc/shared';
+import { isYmdDate, resolveGstStateCode } from '@rmc/shared';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import type { InvoicePdfData } from '../sales/pdf.service';
@@ -681,6 +681,9 @@ export class InvoiceService {
       const full = await this.loadFull(m, id);
       const company = (await m.getRepository(Company).find({ take: 1 }))[0];
       const customer = full.customerId ? await m.getRepository(Customer).findOne({ where: { id: full.customerId } }) : null;
+      const site = full.siteId ? await m.getRepository(Site).findOne({ where: { id: full.siteId } }) : null;
+      const joinAddress = (...parts: (string | null | undefined)[]) =>
+        parts.map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null;
       const addr = [
         company?.addressLine1, company?.addressLine2,
         [company?.city, company?.state, company?.pincode].filter(Boolean).join(', '),
@@ -706,7 +709,14 @@ export class InvoiceService {
         invoiceDate: full.invoiceDate, dueDate: full.dueDate,
         invoiceStatus: full.invoiceStatus,
         customerName: customer?.customerName ?? 'Customer', customerGstin: full.gstin,
+        // The address as it stood when the invoice was issued (snapshotted on
+        // the invoice), else the customer's current one.
+        customerAddress: joinAddress(full.billingAddress, customer?.city, customer?.state, customer?.pincode)
+          ?? joinAddress(customer?.billingAddress, customer?.city, customer?.state, customer?.pincode),
+        shipToName: site?.siteName ?? null,
+        shipToAddress: site ? joinAddress(site.address, site.city, site.state, site.pincode) : null,
         placeOfSupply: full.placeOfSupply, isInterstate: full.isInterstate,
+        placeOfSupplyCode: resolveGstStateCode(full.placeOfSupply) || null,
         items: full.items.map((it) => ({
           description: it.description ?? '', hsnSac: it.hsnSac ?? '', uom: it.uom ?? '',
           quantity: it.quantity, rate: it.rate, taxableAmount: it.taxableAmount, gstRate: it.gstRate,

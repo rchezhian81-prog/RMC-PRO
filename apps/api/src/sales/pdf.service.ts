@@ -43,6 +43,9 @@ export interface ChallanPdfData {
   useBy?: string | null;
   customerName: string;
   siteName?: string | null;
+  /** Where the truck is going, and who to call at the gate. */
+  siteAddress?: string | null;
+  siteContact?: string | null;
   vehicleNo?: string | null;
   driverName?: string | null;
   gradeLabel: string;
@@ -107,7 +110,14 @@ export interface InvoicePdfData extends CompanyBlock {
   invoiceStatus: string;
   customerName: string;
   customerGstin?: string | null;
+  /** The recipient's address — CGST Rule 46 requires it on every tax invoice. */
+  customerAddress?: string | null;
+  /** Where the concrete went: the site, when the invoice has one. */
+  shipToName?: string | null;
+  shipToAddress?: string | null;
   placeOfSupply?: string | null;
+  /** Two-digit GST state code for the place of supply, when the state is known. */
+  placeOfSupplyCode?: string | null;
   isInterstate: boolean;
   items: InvoicePdfItem[];
   taxableAmount: string | number;
@@ -390,6 +400,9 @@ export class PdfService {
       };
       row('Customer', data.customerName);
       row('Site / Project', data.siteName ?? '-');
+      // The driver's copy is the one that has to find the site.
+      if (data.siteAddress) row('Site address', data.siteAddress);
+      if (data.siteContact) row('Site contact', data.siteContact);
       row('Vehicle', data.vehicleNo ?? '-');
       row('Driver', data.driverName ?? '-');
       // The one line the site engineer must read: the concrete's working life
@@ -533,8 +546,18 @@ export class PdfService {
       doc.moveDown(0.5);
       doc.font('Helvetica-Bold').fontSize(10).text('Bill to: ', { continued: true });
       doc.font('Helvetica').text(data.customerName);
+      // Name, address and GSTIN of the recipient — CGST Rule 46(c)/(d). The
+      // address used to be missing from every invoice.
+      if (data.customerAddress) doc.font('Helvetica').fontSize(9).text(data.customerAddress);
       if (data.customerGstin) doc.font('Helvetica').fontSize(9).text(`GSTIN: ${data.customerGstin}`);
-      doc.fontSize(9).text(`Place of supply: ${data.placeOfSupply ?? '-'} (${data.isInterstate ? 'Inter-state / IGST' : 'Intra-state / CGST+SGST'})`);
+      if (data.shipToName || data.shipToAddress) {
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(10).text('Ship to: ', { continued: true });
+        doc.font('Helvetica').text(data.shipToName ?? '-');
+        if (data.shipToAddress) doc.fontSize(9).text(data.shipToAddress);
+      }
+      const pos = data.placeOfSupply ?? '-';
+      doc.font('Helvetica').fontSize(9).text(`Place of supply: ${pos}${data.placeOfSupplyCode ? ` (${data.placeOfSupplyCode})` : ''} — ${data.isInterstate ? 'Inter-state / IGST' : 'Intra-state / CGST+SGST'}`);
       doc.moveDown(0.6);
 
       const cols = [

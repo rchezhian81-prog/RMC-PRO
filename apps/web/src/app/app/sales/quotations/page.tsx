@@ -1,11 +1,12 @@
 'use client';
 
+import { Download } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
-import { crud, quotationsApi, type Row } from '../../../../lib/api';
+import { crud, quotationsApi, type Row, openPdf } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatusBadge } from '../../../../components/ui/Badge';
@@ -147,9 +148,12 @@ export default function QuotationsPage() {
                   <Td numeric>{String(r.revisionNo ?? 0)}</Td>
                   <Td><StatusBadge status={String(r.approvalStatus)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
-                    <Link href={`/app/sales/quotations/${r.id}`}>
-                      <Button variant="secondary" size="sm">Open</Button>
-                    </Link>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/quotations/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                      <Link href={`/app/sales/quotations/${r.id}`}>
+                        <Button variant="secondary" size="sm">Open</Button>
+                      </Link>
+                    </div>
                   </Td>
                 </tr>
               ))}

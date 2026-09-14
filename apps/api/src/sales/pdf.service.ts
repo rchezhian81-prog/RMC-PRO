@@ -181,6 +181,47 @@ export interface PurchaseOrderPdfData extends CompanyBlock {
   remarks?: string | null;
 }
 
+export interface ExpenseVoucherPdfLine {
+  head: string;
+  description?: string | null;
+  allocation?: string | null;
+  amount: string | number;
+}
+/** A payment voucher — cash or bank paid out, signed by the payee. */
+export interface ExpenseVoucherPdfData extends CompanyBlock {
+  voucherNo: string;
+  voucherDate?: string | null;
+  status: string;
+  payee?: string | null;
+  paymentMode?: string | null;
+  plantName?: string | null;
+  narration?: string | null;
+  remarks?: string | null;
+  lines: ExpenseVoucherPdfLine[];
+  totalAmount: string | number;
+}
+
+export interface VendorPaymentPdfBill {
+  billNo: string;
+  supplierBillNo?: string | null;
+  billDate?: string | null;
+  amount: string | number;
+}
+/** A payment advice — what was paid to a supplier and against which bills. */
+export interface VendorPaymentPdfData extends CompanyBlock {
+  paymentNo: string;
+  paymentDate?: string | null;
+  status: string;
+  supplierName: string;
+  supplierGstin?: string | null;
+  amount: string | number;
+  paymentMode?: string | null;
+  bankReference?: string | null;
+  remarks?: string | null;
+  bills: VendorPaymentPdfBill[];
+  unallocatedAmount: string | number;
+}
+
 export interface StatementPdfRow {
   date?: string | null;
   particulars: string;
@@ -998,6 +1039,174 @@ export class PdfService {
       drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated purchase order.', left, doc.y, { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /**
+   * Payment voucher (expenses). Cash or bank paid out of the plant: to whom,
+   * for what, allocated where, and the three signatures a voucher carries —
+   * prepared, authorised, received. A draft says it is not yet posted; a
+   * cancelled one says so in red.
+   */
+  expenseVoucherPdf(data: ExpenseVoucherPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      drawCompanyHeader(doc, data, left);
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text('PAYMENT VOUCHER', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.voucherNo}`, { align: 'right' });
+      if (data.voucherDate) doc.text(`Date: ${data.voucherDate}`, { align: 'right' });
+      doc.text(`Status: ${data.status}`, { align: 'right' });
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+      if (data.status === 'cancelled') {
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#b91c1c').text('CANCELLED — no payment was made against this voucher.');
+        doc.fillColor('#000').moveDown(0.5);
+      } else if (data.status === 'draft') {
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#92400e').text('DRAFT — not yet posted; the amount is not booked until it is.');
+        doc.fillColor('#000').moveDown(0.5);
+      }
+      doc.font('Helvetica-Bold').fontSize(10).text('Paid to: ', { continued: true });
+      doc.font('Helvetica').text(data.payee ?? '-');
+      const bits = [
+        data.paymentMode ? `Mode: ${data.paymentMode}` : null,
+        data.plantName ? `Plant: ${data.plantName}` : null,
+      ].filter(Boolean).join('   ');
+      if (bits) doc.fontSize(9).text(bits);
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(13).text(`INR ${money(data.totalAmount)}`);
+      doc.font('Helvetica').fontSize(9.5).text(`Amount in words: ${amountInWords(data.totalAmount)}`);
+      doc.moveDown(0.6);
+
+      const cols = [
+        { key: 'head', label: 'Expense head', w: 150, align: 'left' as const },
+        { key: 'desc', label: 'Description', w: 165, align: 'left' as const },
+        { key: 'alloc', label: 'Allocated to', w: 120, align: 'left' as const },
+        { key: 'amt', label: 'Amount', w: 80, align: 'right' as const },
+      ];
+      let y = doc.y;
+      const rowH = 18;
+      const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+        if (fill) doc.rect(left, y - 2, right - left, rowH).fill(fill).fillColor('#000');
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+        let x = left;
+        cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align, lineBreak: false }); x += c.w; });
+        y += rowH;
+      };
+      drawRow(cols.map((c) => c.label), true, '#eef1f6');
+      for (const l of data.lines) {
+        if (y > doc.page.height - 170) { doc.addPage(); y = doc.page.margins.top; drawRow(cols.map((c) => c.label), true, '#eef1f6'); }
+        drawRow([l.head || '-', l.description ?? '', l.allocation ?? '-', money(l.amount)], false);
+      }
+      drawRow(['', '', 'Total', money(data.totalAmount)], true, '#f6f7f9');
+      doc.y = y + 8;
+      doc.x = left;
+      if (data.narration) { doc.font('Helvetica-Bold').fontSize(9).text('Narration: ', left, doc.y, { continued: true }); doc.font('Helvetica').text(data.narration); }
+      if (data.remarks) { doc.font('Helvetica-Bold').fontSize(9).text('Remarks: ', left, doc.y, { continued: true }); doc.font('Helvetica').text(data.remarks); }
+
+      // The three signatures a voucher carries, on one line.
+      doc.moveDown(3);
+      const sigY = doc.y;
+      const w = (right - left) / 3;
+      doc.font('Helvetica').fontSize(9).fillColor('#555');
+      doc.text('Prepared by: ______________', left, sigY, { width: w, align: 'left' });
+      doc.text('Authorised by: ______________', left + w, sigY, { width: w, align: 'center' });
+      doc.text('Received by (payee): ______________', left + 2 * w, sigY, { width: w, align: 'right' });
+      doc.fillColor('#000');
+      doc.x = left;
+      doc.moveDown(2);
+      doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated payment voucher.', left, doc.y, { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /**
+   * Payment advice (vendor payment). What was paid to a supplier, how, and
+   * against which of their bills — the document a supplier's accounts desk
+   * asks for when a credit lands in their bank. A reversed payment says so
+   * in red.
+   */
+  vendorPaymentPdf(data: VendorPaymentPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      drawCompanyHeader(doc, data, left);
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text('PAYMENT ADVICE', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.paymentNo}`, { align: 'right' });
+      if (data.paymentDate) doc.text(`Date: ${data.paymentDate}`, { align: 'right' });
+      doc.text(`Status: ${data.status}`, { align: 'right' });
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+      if (data.status === 'reversed') {
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#b91c1c').text('REVERSED — this payment has been withdrawn and the bills below remain payable.');
+        doc.fillColor('#000').moveDown(0.5);
+      }
+      doc.font('Helvetica-Bold').fontSize(10).text('Paid to: ', { continued: true });
+      doc.font('Helvetica').text(data.supplierName);
+      if (data.supplierGstin) doc.fontSize(9).text(`GSTIN: ${data.supplierGstin}`);
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(13).text(`INR ${money(data.amount)}`);
+      doc.font('Helvetica').fontSize(9.5).text(`Amount in words: ${amountInWords(data.amount)}`);
+      const bits = [
+        data.paymentMode ? `Mode: ${data.paymentMode}` : null,
+        data.bankReference ? `Ref: ${data.bankReference}` : null,
+      ].filter(Boolean).join('   ');
+      if (bits) doc.fontSize(9).text(bits);
+      if (data.remarks) doc.fontSize(9).fillColor('#555').text(`Remarks: ${data.remarks}`).fillColor('#000');
+      doc.moveDown(0.8);
+
+      if (data.bills.length) {
+        doc.font('Helvetica-Bold').fontSize(10).text('Against your bills');
+        doc.moveDown(0.2);
+        const cols = [
+          { key: 'our', label: 'Our bill no', w: 130, align: 'left' as const },
+          { key: 'yours', label: 'Your invoice no', w: 150, align: 'left' as const },
+          { key: 'date', label: 'Date', w: 100, align: 'left' as const },
+          { key: 'amt', label: 'Amount', w: 100, align: 'right' as const },
+        ];
+        let y = doc.y;
+        const rowH = 18;
+        const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+          if (fill) doc.rect(left, y - 2, cols.reduce((a, c) => a + c.w, 0), rowH).fill(fill).fillColor('#000');
+          doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+          let x = left;
+          cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align, lineBreak: false }); x += c.w; });
+          y += rowH;
+        };
+        drawRow(cols.map((c) => c.label), true, '#eef1f6');
+        for (const b of data.bills) {
+          if (y > doc.page.height - 150) { doc.addPage(); y = doc.page.margins.top; drawRow(cols.map((c) => c.label), true, '#eef1f6'); }
+          drawRow([b.billNo, b.supplierBillNo ?? '-', b.billDate ?? '-', money(b.amount)], false);
+        }
+        doc.y = y + 6;
+        doc.x = left;
+      }
+      if (Number(data.unallocatedAmount) > 0) {
+        doc.font('Helvetica').fontSize(9.5).text(`Unallocated: INR ${money(data.unallocatedAmount)} — held as an advance against your future bills.`, left, doc.y);
+      }
+
+      drawSignatoryBlock(doc, data.companyName, left, right);
+      doc.moveDown(1.5);
+      doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated payment advice.', left, doc.y, { align: 'center' });
       doc.end();
     });
   }

@@ -202,6 +202,15 @@ const payment = await api('POST', '/vendor-payments', {
 });
 ok('payment records the allocation', near(payment.allocatedAmount, 5900));
 ok('payment fully allocated (nothing left)', near(payment.unallocatedAmount, 0));
+{
+  // The payment prints as a payment advice naming the bill it settled.
+  const res = await fetch(`${API_BASE}/vendor-payments/${payment.id}/pdf`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const buf = Buffer.from(await res.arrayBuffer());
+  ok(`payment advice PDF renders (${res.status})`, res.ok && buf.subarray(0, 5).toString() === '%PDF-');
+  const { pdfText } = await import('./helpers/pdf-text.mjs');
+  const text = pdfText(buf);
+  for (const s of ['PAYMENT ADVICE', `No: ${payment.paymentNo}`, supplier.supplierName, 'Against your bills', bill.billNo, '5,900.00', 'Ref: UTR-TEST', 'Authorised Signatory']) ok(`advice prints "${s}"`, text.includes(s));
+}
 
 bill = await api('GET', `/vendor-bills/${bill.id}`);
 ok('bill is now paid', bill.paymentStatus === 'paid');

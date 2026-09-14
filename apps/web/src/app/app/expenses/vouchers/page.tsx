@@ -1,10 +1,11 @@
 'use client';
 
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { crud, expensesApi, type Row } from '../../../../lib/api';
+import { crud, expensesApi, type Row, openPdf } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -187,6 +188,7 @@ export default function ExpenseVouchersPage() {
                       <Td><StatusBadge status={status} /></Td>
                       <Td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/expense-vouchers/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
                           {canPost && status === 'draft' && (
                             <Button variant="secondary" size="sm" onClick={() => act(() => expensesApi.postVoucher(String(r.id)), `Voucher ${String(r.voucherNo)} posted.`)}>Post</Button>
                           )}

@@ -83,6 +83,16 @@ ok('expense head label denormalised onto the line', plantLine.expenseHeadLabel =
 // ---- C. Post commits it; a posted voucher cannot be cancelled ----
 const posted = await api('POST', `/expense-vouchers/${voucher.id}/post`);
 ok('voucher posts', posted.status === 'posted');
+{
+  // The posted voucher prints as a payment voucher.
+  const res = await fetch(`${API_BASE}/expense-vouchers/${voucher.id}/pdf`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const buf = Buffer.from(await res.arrayBuffer());
+  ok(`voucher PDF renders (${res.status})`, res.ok && buf.subarray(0, 5).toString() === '%PDF-');
+  const { pdfText } = await import('./helpers/pdf-text.mjs');
+  const text = pdfText(buf);
+  for (const s of ['PAYMENT VOUCHER', `No: ${voucher.voucherNo}`, 'IOCL Pump', 'Genset diesel', 'Amount in words:', 'Received by (payee):']) ok(`voucher prints "${s}"`, text.includes(s));
+  ok('a posted voucher carries no DRAFT caveat', !text.includes('DRAFT'));
+}
 let blocked = false;
 try { await api('POST', `/expense-vouchers/${voucher.id}/cancel`); } catch { blocked = true; }
 ok('a posted voucher cannot be cancelled', blocked);

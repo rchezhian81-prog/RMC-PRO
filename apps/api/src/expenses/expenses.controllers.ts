@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
+import { PdfService } from '../sales/pdf.service';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -56,7 +58,10 @@ export class ExpenseHeadController {
 @RequireModule('expenses')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class ExpenseVoucherController {
-  constructor(private readonly service: ExpenseVoucherService) {}
+  constructor(
+    private readonly service: ExpenseVoucherService,
+    private readonly pdf: PdfService,
+  ) {}
 
   @Get() @RequirePermissions('expenses.view')
   list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
@@ -82,4 +87,13 @@ export class ExpenseVoucherController {
 
   @Post(':id/cancel') @RequirePermissions('expenses.manage')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.cancel(tid(u), id); }
+
+  @Get(':id/pdf') @RequirePermissions('expenses.view')
+  async pdfDoc(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const { data, voucherNo } = await this.service.pdfData(tid(u), id);
+    const buffer = await this.pdf.expenseVoucherPdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${voucherNo}.pdf"`);
+    res.end(buffer);
+  }
 }

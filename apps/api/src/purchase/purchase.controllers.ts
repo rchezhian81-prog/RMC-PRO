@@ -106,7 +106,10 @@ export class VendorBillController {
 @RequireModule('purchase')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class VendorPaymentController {
-  constructor(private readonly service: VendorPaymentService) {}
+  constructor(
+    private readonly service: VendorPaymentService,
+    private readonly pdf: PdfService,
+  ) {}
 
   @Get() @RequirePermissions('purchase.view')
   list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) { return this.service.list(tid(u), limit); }
@@ -125,6 +128,15 @@ export class VendorPaymentController {
   @Post(':id/apply-advance') @RequirePermissions('vendor_payments.create')
   applyAdvance(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
     return this.service.applyAdvance(tid(u), id, dto.allocations, u.userId);
+  }
+
+  @Get(':id/pdf') @RequirePermissions('purchase.view')
+  async pdfDoc(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const { data, paymentNo } = await this.service.pdfData(tid(u), id);
+    const buffer = await this.pdf.vendorPaymentPdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${paymentNo}.pdf"`);
+    res.end(buffer);
   }
 }
 

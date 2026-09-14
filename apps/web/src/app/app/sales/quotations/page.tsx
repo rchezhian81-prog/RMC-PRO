@@ -149,7 +149,7 @@ export default function QuotationsPage() {
                   <Td><StatusBadge status={String(r.approvalStatus)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/quotations/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/quotations/${String(r.id)}/pdf`, String(r.quotationNo ?? '')).catch((e) => setError(String(e)))}>Print</Button>
                       <Link href={`/app/sales/quotations/${r.id}`}>
                         <Button variant="secondary" size="sm">Open</Button>
                       </Link>

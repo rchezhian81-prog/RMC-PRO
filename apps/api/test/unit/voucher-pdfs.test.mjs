@@ -63,8 +63,14 @@ test('every document is printable from the screen that lists it — one Print bu
     const at = src.indexOf(call);
     assert.ok(at > 0, `${f} has a Print button for ${path}`);
     assert.ok(src.slice(at, at + 200).includes('}/pdf`'), `${f} points that button at the /pdf route`);
+    assert.ok(/}\/pdf`, String\(/.test(src.slice(at, at + 200)), `${f} passes the document number so the tab and the saved file carry it`);
     assert.match(src, />\s*Print\s*</, `${f} calls it Print`);
   }
+  const lib = codeOnly(readFileSync(resolve(repoRoot, 'apps/web/src/lib/api.ts'), 'utf8'));
+  assert.match(lib, /documentViewerHtml\(\{ url, filename \}\)/, 'the tab is the viewer page, not the bare blob');
+  assert.match(lib, /documentFilename\(res\.headers\.get\('content-disposition'\), name\)/, 'the name comes from the API header, else the caller');
+  const openPdfBody = lib.slice(lib.indexOf('export async function openPdf'), lib.indexOf('export', lib.indexOf('export async function openPdf') + 10));
+  assert.doesNotMatch(openPdfBody, /tab\.location\.href = url/, 'the tab is never navigated to the bare blob (random title, random file name)');
   for (const f of ['sales/quotations/[id]/page.tsx', 'billing/invoices/[id]/page.tsx', 'dispatch/challans/[id]/page.tsx']) {
     const src = readFileSync(resolve(repoRoot, 'apps/web/src/app/app', f), 'utf8');
     assert.ok(src.includes('Print / PDF') && !src.includes('Download PDF'), `${f} says Print / PDF`);

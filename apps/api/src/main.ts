@@ -56,6 +56,10 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // The PDF routes name the file in Content-Disposition; the web reads it to
+    // title the viewer tab and name the saved file. Cross-origin, that header is
+    // invisible to scripts unless it is exposed.
+    exposedHeaders: ['Content-Disposition'],
   });
 
   const port = process.env.API_PORT ? Number(process.env.API_PORT) : 4000;

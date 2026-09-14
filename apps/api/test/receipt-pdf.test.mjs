@@ -98,6 +98,13 @@ ok(`receipt recorded ${receipt.receiptNo}, clearing ${receipt.clearingStatus}`, 
     ok(`prints "${s}"`, r.text.includes(s));
   }
   ok('and nothing about a reversal', !r.text.includes('REVERSED') && !r.text.includes('INSTRUMENT RETURNED'));
+  ok('the customer address is on the receipt', r.text.includes('12 Anna Salai, Chennai, Tamil Nadu, 600002'));
+  // The web titles the viewer tab from Content-Disposition; cross-origin that
+  // header is invisible unless the API exposes it.
+  const cors = await fetch(`${BASE}/receipts/${receipt.id}/pdf`, { headers: { Authorization: `Bearer ${TOKEN}`, Origin: 'http://localhost:3000' } });
+  const exposed = String(cors.headers.get('access-control-expose-headers') ?? '');
+  ok(`Content-Disposition is exposed to the browser (${exposed || 'none'})`, /content-disposition/i.test(exposed));
+  ok(`and names the file after the receipt (${cors.headers.get('content-disposition')})`, /filename="RCPT/.test(String(cors.headers.get('content-disposition'))));
 }
 
 console.log('\n[2] once the cheque is realised the caveat goes');

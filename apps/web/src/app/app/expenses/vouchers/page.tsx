@@ -188,7 +188,7 @@ export default function ExpenseVouchersPage() {
                       <Td><StatusBadge status={status} /></Td>
                       <Td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/expense-vouchers/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/expense-vouchers/${String(r.id)}/pdf`, String(r.voucherNo ?? '')).catch((e) => setError(String(e)))}>Print</Button>
                           {canPost && status === 'draft' && (
                             <Button variant="secondary" size="sm" onClick={() => act(() => expensesApi.postVoucher(String(r.id)), `Voucher ${String(r.voucherNo)} posted.`)}>Post</Button>
                           )}

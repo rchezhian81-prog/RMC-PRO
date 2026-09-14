@@ -213,7 +213,7 @@ export default function VendorBillsPage() {
                       <Td><StatusBadge status={pstatus} /></Td>
                       <Td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/vendor-payments/${String(p.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/vendor-payments/${String(p.id)}/pdf`, String(p.paymentNo ?? '')).catch((e) => setError(String(e)))}>Print</Button>
                           {canPay && pstatus === 'posted' && (
                             <Button variant="ghost" size="sm" onClick={() => reverse(p)}>Reverse</Button>
                           )}

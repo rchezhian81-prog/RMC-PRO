@@ -91,7 +91,7 @@ export default function ChallansPage() {
                   <Td><StatusBadge status={String(r.challanStatus)} /></Td>
                   <Td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/delivery-challans/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                      <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/delivery-challans/${String(r.id)}/pdf`, String(r.challanNo ?? '')).catch((e) => setError(String(e)))}>Print</Button>
                       <Link href={`/app/dispatch/challans/${r.id}`}>
                         <Button variant="secondary" size="sm">Open</Button>
                       </Link>

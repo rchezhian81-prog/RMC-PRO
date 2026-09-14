@@ -23,7 +23,7 @@ const svc = new PdfService();
 const base = {
   companyName: 'Mix Nova RMC', companyGstin: '33AABCA1234B1ZO',
   receiptNo: 'RC-0007', receiptDate: '2026-09-14', status: 'posted', clearingStatus: null,
-  customerName: 'BuildCo Constructions', customerGstin: '33AAACB1234C1Z5',
+  customerName: 'BuildCo Constructions', customerGstin: '33AAACB1234C1Z5', customerAddress: '12 Anna Salai, Chennai, Tamil Nadu, 600002',
   amount: '12345.50', paymentMode: 'neft', bankReference: 'UTR-77',
   allocations: [{ invoiceNo: 'INV-0001', invoiceDate: '2026-09-10', amount: '10000.00' }, { invoiceNo: 'INV-0002', invoiceDate: '2026-09-12', amount: '2345.50' }],
   unallocatedAmount: '0.00',
@@ -31,7 +31,7 @@ const base = {
 
 test('a posted receipt says who paid what, in figures and in words, and what it was set against', async () => {
   const text = pdfText(await svc.receiptPdf(base));
-  for (const s of ['RECEIPT', 'No: RC-0007', 'Date: 2026-09-14', 'Received from:', 'BuildCo Constructions', 'GSTIN: 33AAACB1234C1Z5',
+  for (const s of ['RECEIPT', 'No: RC-0007', 'Date: 2026-09-14', 'Received from:', 'BuildCo Constructions', '12 Anna Salai, Chennai, Tamil Nadu, 600002', 'GSTIN: 33AAACB1234C1Z5',
     'INR 12,345.50', 'Amount in words: Rupees Twelve Thousand Three Hundred Forty-Five and Paise Fifty Only',
     'Mode: neft', 'Ref: UTR-77', 'Set against', 'INV-0001', 'INV-0002', '2,345.50']) {
     assert.ok(text.includes(s), `receipt must print "${s}"`);

@@ -169,7 +169,7 @@ export default function QuotationDetail() {
           {status === 'rejected' && <Button onClick={() => run(() => quotationsApi.submit(id), 'Re-submitted')}>Re-submit</Button>}
           {status === 'submitted' && <Button onClick={() => run(() => quotationsApi.approve(id), 'Approved')}>Approve</Button>}
           {status === 'submitted' && <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'Reject quotation', label: 'Rejection reason (why the quote was lost)', defaultValue: '' }); if (reason !== null) await quotationsApi.reject(id, reason || 'Not accepted'); }, 'Quotation rejected')}>Reject</Button>}
-          <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/quotations/${id}/pdf`).catch((e) => setError(String(e)))}>Print / PDF</Button>
+          <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/quotations/${id}/pdf`, String(q?.quotationNo ?? '')).catch((e) => setError(String(e)))}>Print / PDF</Button>
           <Button variant="secondary" icon={<Share2 size={16} />} onClick={() => run(async () => { const m = await prompt({ title: 'Share on WhatsApp', label: 'Recipient mobile (WhatsApp)', defaultValue: '' }); if (m === null) return 'Not shared.'; return openWhatsAppShare(() => quotationsApi.share(id, m)); })}>Share on WhatsApp</Button>
           <Button variant="secondary" onClick={() => run(async () => { const reason = await prompt({ title: 'New revision', label: 'Revision reason', defaultValue: '' }); if (reason !== null) await quotationsApi.createRevision(id, reason); }, 'New revision created')}>New revision</Button>
           {status === 'approved' && (

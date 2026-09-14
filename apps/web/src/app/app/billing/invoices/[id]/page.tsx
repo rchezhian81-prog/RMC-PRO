@@ -143,7 +143,7 @@ export default function InvoiceDetail() {
       <Card title="Actions">
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {status === 'draft' && <Button onClick={() => run(() => invoicesApi.issue(id), 'Invoice issued')}>Issue</Button>}
-          <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/invoices/${id}/pdf`).catch((e) => setError(String(e)))}>
+          <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(`/invoices/${id}/pdf`, String(inv.invoiceNo ?? 'Draft invoice')).catch((e) => setError(String(e)))}>
             Print / PDF
           </Button>
           <Button

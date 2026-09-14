@@ -349,6 +349,7 @@ export class ReceiptService {
         clearingStatus: full.clearingStatus,
         customerName: customer?.customerName ?? 'Customer',
         customerGstin: customer?.gstin ?? null,
+        customerAddress: [customer?.billingAddress, customer?.city, customer?.state, customer?.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null,
         amount: full.amount,
         paymentMode: full.paymentMode,
         bankReference: full.bankReference,

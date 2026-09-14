@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatDate } from '../../../../lib/format-date';
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { crud, purchaseReportsApi, type Row, type VendorLedger } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -17,6 +17,9 @@ const qty = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFrac
 
 export default function PurchaseReportsPage() {
   const [aging, setAging] = useState<{ rows: Row[]; totals: Row } | null>(null);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [register, setRegister] = useState<{ rows: Row[]; byVendor: Row[]; byMaterial: Row[]; totals: Row } | null>(null);
   const [ledger, setLedger] = useState<VendorLedger | null>(null);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
@@ -36,6 +39,7 @@ export default function PurchaseReportsPage() {
     ]);
     setAging(settledValue(out[0]));
     setRegister(settledValue(out[1]));
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -137,7 +141,7 @@ export default function PurchaseReportsPage() {
             </Table>
           </div>
         ) : (
-          <EmptyState title="Nothing outstanding" description="Approved vendor bills with a balance appear here, aged by bill date." />
+          failed[0] ? <ErrorState message={failed[0] ?? "This report did not load."} /> : <EmptyState title="Nothing outstanding" description="Approved vendor bills with a balance appear here, aged by bill date." />
         )}
       </Card>
 
@@ -202,7 +206,7 @@ export default function PurchaseReportsPage() {
             </Table>
           </div>
         ) : (
-          <EmptyState title="No purchases" description="Approved bills booked in the period appear here." />
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No purchases" description="Approved bills booked in the period appear here." />
         )}
       </Card>
 
@@ -229,7 +233,7 @@ export default function PurchaseReportsPage() {
               </Table>
             </div>
           ) : (
-            <EmptyState title="No material lines" description="Material-wise purchase totals appear here." />
+            failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No material lines" description="Material-wise purchase totals appear here." />
           )}
         </Card>
 
@@ -255,7 +259,7 @@ export default function PurchaseReportsPage() {
               </Table>
             </div>
           ) : (
-            <EmptyState title="No vendors" description="Vendor-wise purchase totals appear here." />
+            failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No vendors" description="Vendor-wise purchase totals appear here." />
           )}
         </Card>
       </div>

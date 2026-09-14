@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatDate } from '../../../../lib/format-date';
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { qcApi, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -17,6 +17,9 @@ const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFracti
 
 export default function QcRegisterPage() {
   const [cube, setCube] = useState<{ rows: Row[]; count: number; accepted: number; rejected: number } | null>(null);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [slump, setSlump] = useState<{ rows: Row[]; count: number; passed: number; failed: number } | null>(null);
   const [sampling, setSampling] = useState<Awaited<ReturnType<typeof qcApi.samplingReport>> | null>(null);
   // Opens on the current month: both registers are capped at 5,000 rows.
@@ -36,6 +39,7 @@ export default function QcRegisterPage() {
     setCube(settledValue(out[0]));
     setSlump(settledValue(out[1]));
     setSampling(settledValue(out[2]));
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -103,7 +107,7 @@ export default function QcRegisterPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No cube sets" description="Cube sets cast in the period will appear here." />
+          failed[0] ? <ErrorState message={failed[0] ?? "This report did not load."} /> : <EmptyState title="No cube sets" description="Cube sets cast in the period will appear here." />
         )}
       </Card>
 
@@ -146,7 +150,7 @@ export default function QcRegisterPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No slump tests" description="Slump tests recorded in the period will appear here." />
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No slump tests" description="Slump tests recorded in the period will appear here." />
         )}
       </Card>
 
@@ -213,7 +217,7 @@ export default function QcRegisterPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No production in the period" description="Confirmed batch tickets in the period are judged here against the cube sets cast." />
+          failed[2] ? <ErrorState message={failed[2] ?? "This report did not load."} /> : <EmptyState title="No production in the period" description="Confirmed batch tickets in the period are judged here against the cube sets cast." />
         )}
       </Card>
     </div>

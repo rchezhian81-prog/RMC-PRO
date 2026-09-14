@@ -1,6 +1,6 @@
 'use client';
 
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { formatDate } from '../../../../lib/format-date';
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
@@ -18,6 +18,9 @@ const qty = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFrac
 
 export default function BillingReportsPage() {
   const [gst, setGst] = useState<Row | null>(null);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [sales, setSales] = useState<SalesRegister | null>(null);
   const [hsn, setHsn] = useState<{ rows: Row[]; totals: Row } | null>(null);
   const [receipts, setReceipts] = useState<Row[]>([]);
@@ -54,6 +57,7 @@ export default function BillingReportsPage() {
     setDayBook(settledValue(out[5]));
     setMargin(settledValue(out[6]));
     setCollection(settledValue(out[7]));
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -209,7 +213,7 @@ export default function BillingReportsPage() {
             )}
           </Table>
         ) : (
-          <EmptyState title="No line items" description="Issued invoices in the period will summarise here by HSN and rate." />
+          failed[2] ? <ErrorState message={failed[2] ?? "This report did not load."} /> : <EmptyState title="No line items" description="Issued invoices in the period will summarise here by HSN and rate." />
         )}
       </Card>
 
@@ -269,7 +273,7 @@ export default function BillingReportsPage() {
             </Table>
           </div>
         ) : (
-          <EmptyState title="No issued invoices" />
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No issued invoices" />
         )}
       </Card>
 
@@ -310,7 +314,7 @@ export default function BillingReportsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No receipts" />
+          failed[3] ? <ErrorState message={failed[3] ?? "This report did not load."} /> : <EmptyState title="No receipts" />
         )}
       </Card>
 
@@ -388,7 +392,7 @@ export default function BillingReportsPage() {
             </Table>
           </div>
         ) : (
-          <EmptyState title="No movements" description="Receipts, vendor payments and expense vouchers in the period appear here." />
+          failed[5] ? <ErrorState message={failed[5] ?? "This report did not load."} /> : <EmptyState title="No movements" description="Receipts, vendor payments and expense vouchers in the period appear here." />
         )}
       </Card>
 
@@ -434,7 +438,7 @@ export default function BillingReportsPage() {
           </Table>
           </>
         ) : (
-          <EmptyState title="No invoiced grades in range" description="Needs issued invoices with grade lines and an approved mix design to cost against." />
+          failed[6] ? <ErrorState message={failed[6] ?? "This report did not load."} /> : <EmptyState title="No invoiced grades in range" description="Needs issued invoices with grade lines and an approved mix design to cost against." />
         )}
       </Card>
 
@@ -491,7 +495,7 @@ export default function BillingReportsPage() {
           </div>
           </>
         ) : (
-          <EmptyState title="No billing activity in range" description="Issue invoices and record receipts to measure collection efficiency." />
+          failed[7] ? <ErrorState message={failed[7] ?? "This report did not load."} /> : <EmptyState title="No billing activity in range" description="Issue invoices and record receipts to measure collection efficiency." />
         )}
       </Card>
     </div>

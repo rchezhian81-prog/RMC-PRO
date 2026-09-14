@@ -1,6 +1,6 @@
 'use client';
 
-import { currentMonthRange, settledFailure, settledValue } from '../../../../lib/report-range';
+import { currentMonthRange, settledFailure, settledValue, settledReason } from '../../../../lib/report-range';
 import { formatDate } from '../../../../lib/format-date';
 import { useEffect, useState } from 'react';
 import { challansApi, dispatchApi, type Row } from '../../../../lib/api';
@@ -16,6 +16,9 @@ const m3 = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFract
 
 export default function DeliveryRegisterPage() {
   const [data, setData] = useState<{ rows: Row[]; totalM3: number; count: number } | null>(null);
+  // Per report: why it failed to load, or null. Keeps a refused fetch from
+  // rendering as "No X" — a lie about data that exists and could not be read.
+  const [failed, setFailed] = useState<(string | null)[]>([]);
   const [cycle, setCycle] = useState<{ rows: Row[]; averages: Row; count: number } | null>(null);
   // Opens on the current month rather than every challan ever — see report-range.ts.
   const [range, setRange] = useState(currentMonthRange());
@@ -32,6 +35,7 @@ export default function DeliveryRegisterPage() {
     ]);
     setData(settledValue(out[0]));
     setCycle(settledValue(out[1]));
+    setFailed(out.map(settledReason));
     const why = settledFailure(out);
     if (why) setError(why);
   }
@@ -107,7 +111,7 @@ export default function DeliveryRegisterPage() {
             )}
           </Table>
         ) : (
-          <EmptyState title="No deliveries" description="Delivered challans in the period will appear here." />
+          failed[0] ? <ErrorState message={failed[0] ?? "This report did not load."} /> : <EmptyState title="No deliveries" description="Delivered challans in the period will appear here." />
         )}
       </Card>
 
@@ -156,7 +160,7 @@ export default function DeliveryRegisterPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="No completed trips" description="Completed dispatches with pour times appear here (travel, on-site wait, pour, turnaround)." />
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No completed trips" description="Completed dispatches with pour times appear here (travel, on-site wait, pour, turnaround)." />
         )}
       </Card>
     </div>

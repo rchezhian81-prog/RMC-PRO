@@ -26,6 +26,7 @@ import { invoiceBalanceAfter } from './receipt-allocation.util';
 import { gstStateCode, isGstin } from '../compliance/gst-payload.util';
 import { documentDate, plantDateTime } from '../common/business-date.util';
 import { companyBlock, type InvoicePdfData } from '../sales/pdf.service';
+import { invoiceShareMessage } from '../common/share-messages.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -728,8 +729,11 @@ export class InvoiceService {
       if (!invoice.invoiceNo) throw badReq('Issue the invoice before sharing it — a draft has no invoice number yet.');
       const customer = invoice.customerId ? await m.getRepository(Customer).findOne({ where: { id: invoice.customerId } }) : null;
       const mobile = (dto.mobile as string) ?? customer?.mobile ?? null;
-      const message = (dto.message as string) ??
-        `Invoice ${invoice.invoiceNo} for ₹${invoice.totalAmount}. Status: ${invoice.invoiceStatus}. Thank you.`;
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const message = (dto.message as string) ?? invoiceShareMessage({
+        companyName: company?.companyName ?? 'Your supplier', invoiceNo: invoice.invoiceNo, invoiceDate: invoice.invoiceDate,
+        dueDate: invoice.dueDate, totalAmount: invoice.totalAmount, invoiceStatus: invoice.invoiceStatus,
+      });
       return this.whatsapp.logWithin(m, tenantId, {
         recipientMobile: mobile, moduleKey: 'billing', eventKey: 'invoice_share',
         referenceType: 'invoice', referenceId: id, message,

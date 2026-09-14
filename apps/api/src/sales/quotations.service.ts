@@ -17,6 +17,7 @@ import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
 import { WhatsAppService } from './whatsapp.service';
 import { companyBlock, type QuotationPdfData } from './pdf.service';
+import { quotationShareMessage } from '../common/share-messages.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) =>
@@ -336,9 +337,11 @@ export class QuotationsService {
         ? await m.getRepository(Customer).findOne({ where: { id: full.customerId } })
         : null;
       const mobile = (dto.mobile as string) ?? customer?.mobile ?? null;
-      const message =
-        (dto.message as string) ??
-        `Quotation ${full.quotationNo} (rev ${full.revisionNo}) from us. Status: ${full.approvalStatus}. Please review.`;
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const message = (dto.message as string) ?? quotationShareMessage({
+        companyName: company?.companyName ?? 'Your supplier', quotationNo: full.quotationNo, revisionNo: full.revisionNo,
+        quotationDate: full.quotationDate, validUntil: full.validUntil,
+      });
       return this.whatsapp.logWithin(m, tenantId, {
         recipientMobile: mobile,
         moduleKey: 'sales',

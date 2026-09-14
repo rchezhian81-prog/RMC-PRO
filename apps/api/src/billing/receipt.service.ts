@@ -11,6 +11,7 @@ import { round2 } from './tax.util';
 import { allocateAcrossInvoices, invoiceBalanceAfter } from './receipt-allocation.util';
 import { documentDate } from '../common/business-date.util';
 import { companyBlock, type ReceiptPdfData } from '../sales/pdf.service';
+import { receiptShareMessage } from '../common/share-messages.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Receipt not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -372,8 +373,12 @@ export class ReceiptService {
       if (!payment) throw notFound();
       const customer = payment.customerId ? await m.getRepository(Customer).findOne({ where: { id: payment.customerId } }) : null;
       const mobile = (dto.mobile as string) ?? customer?.mobile ?? null;
-      const message = (dto.message as string) ??
-        `Receipt ${payment.receiptNo} for ₹${payment.amount} received. Thank you.`;
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const message = (dto.message as string) ?? receiptShareMessage({
+        companyName: company?.companyName ?? 'Your supplier', receiptNo: payment.receiptNo, receiptDate: payment.receiptDate,
+        amount: payment.amount, paymentMode: payment.paymentMode, bankReference: payment.bankReference,
+        status: payment.status, clearingStatus: payment.clearingStatus,
+      });
       return this.whatsapp.logWithin(m, tenantId, {
         recipientMobile: mobile, moduleKey: 'billing', eventKey: 'receipt_share',
         referenceType: 'receipt', referenceId: id, message,

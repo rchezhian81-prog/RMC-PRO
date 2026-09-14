@@ -25,6 +25,7 @@ import { recordDeliveryHistory } from './delivery-history.util';
 import { wastageSummary, type WastageRow } from './wastage.util';
 import { assertDispatchLive, assertNotInvoiced, assertTransition, deliverChallan } from './challan-transition.util';
 import { companyBlock, type ChallanPdfData } from '../sales/pdf.service';
+import { challanShareMessage } from '../common/share-messages.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Challan not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -309,9 +310,14 @@ export class DeliveryChallanService {
       if (!challan) throw notFound();
       const customer = challan.customerId ? await m.getRepository(Customer).findOne({ where: { id: challan.customerId } }) : null;
       const mobile = (dto.mobile as string) ?? customer?.mobile ?? null;
-      const message =
-        (dto.message as string) ??
-        `Delivery challan ${challan.challanNo}: ${challan.gradeLabel ?? ''} ${challan.quantityM3} m³. Status: ${challan.challanStatus}.`;
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const vehicle = challan.vehicleId ? await m.getRepository(Vehicle).findOne({ where: { id: challan.vehicleId } }) : null;
+      const ticket = challan.batchTicketId ? await m.getRepository(BatchTicket).findOne({ where: { id: challan.batchTicketId } }) : null;
+      const message = (dto.message as string) ?? challanShareMessage({
+        companyName: company?.companyName ?? 'Your supplier', challanNo: challan.challanNo, gradeLabel: challan.gradeLabel,
+        quantityM3: challan.quantityM3, vehicleNo: vehicle?.vehicleNo ?? null, dispatchedAt: plantDateTime(challan.dispatchTime),
+        useBy: plantDateTime(addMinutes(ticket?.batchStartTime ?? null, CONCRETE_SLA_MINUTES)), challanStatus: challan.challanStatus,
+      });
       return this.whatsapp.logWithin(m, tenantId, {
         recipientMobile: mobile, moduleKey: 'dispatch', eventKey: 'challan_share',
         referenceType: 'delivery_challan', referenceId: id, message,

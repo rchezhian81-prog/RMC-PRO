@@ -1169,6 +1169,36 @@ export const correctionsApi = {
 };
 
 /**
+ * Share a document on WhatsApp. The API composes the text, logs it under
+ * Notifications and returns a wa.me link; that link is opened in a tab so the
+ * person's own WhatsApp opens with the message ready to send. "Logged" used to
+ * be the end of it — the text sat in a table and nobody was told it had not
+ * gone anywhere.
+ *
+ * The tab is opened inside the click (the dialog's OK) so it is not blocked
+ * as a pop-up, and filled once the link arrives; closed again if the API
+ * refuses. Returns the sentence to show the person.
+ */
+export async function openWhatsAppShare(call: () => Promise<Row>): Promise<string> {
+  const tab = window.open('', '_blank');
+  try {
+    const log = await call();
+    const url = String(log?.shareUrl ?? '');
+    if (!url) {
+      tab?.close();
+      return 'The message is saved under Notifications, but there is no mobile number to send it to.';
+    }
+    if (tab) tab.location.href = url;
+    else if (!window.open(url, '_blank')) throw new Error('Your browser blocked the WhatsApp window. Allow pop-ups for this site and try again.');
+    const to = log?.recipientMobile ? ` for ${String(log.recipientMobile)}` : '';
+    return `WhatsApp opened with the message${to} — press Send there. A copy is saved under Notifications.`;
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+}
+
+/**
  * Fetch a PDF (the auth header is required, so a plain link cannot do it) and
  * show it in a new tab.
  *

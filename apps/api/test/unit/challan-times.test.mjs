@@ -11,6 +11,8 @@
  * (IS 4926) and the batch ticket is one lookup from the challan.
  */
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
@@ -86,4 +88,29 @@ test('the challan service formats no time as UTC and takes the working life from
   assert.match(src, /plantDateTime\(eway\?\.ewayValidUntil\)/, 'e-way validity on the plant clock');
   assert.match(src, /addMinutes\(batchedAt, CONCRETE_SLA_MINUTES\)/, 'use-by from the shared working-life constant, not a literal');
   assert.doesNotMatch(src, /addMinutes\([^,]+,\s*\d+\)/, 'no second copy of the working life as a number');
+});
+
+test('no document anywhere in the API formats a moment as UTC', () => {
+  // The challan was not alone: the weighbridge slip's date/time and the
+  // invoice's IRN ack date were formatted the same way. Any moment a person
+  // reads goes through plantDateTime(); the helper's own fallback is the one
+  // permitted toISOString().slice in the tree.
+  const { execSync } = require('node:child_process');
+  const files = execSync('git ls-files apps/api/src', { cwd: repoRoot, encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.ts'));
+  const offenders = [];
+  for (const f of files) {
+    if (f.endsWith('common/business-date.util.ts')) continue;
+    const src = codeOnly(readFileSync(resolve(repoRoot, f), 'utf8'));
+    if (/toISOString\(\)\s*\.(slice\(0,\s*16\)|replace\('T',\s*' '\))/.test(src)) offenders.push(f);
+  }
+  assert.deepEqual(offenders, [], 'format these with plantDateTime()');
+  for (const f of ['apps/api/src/billing/invoice.service.ts', 'apps/api/src/inventory/weighbridge.service.ts']) {
+    assert.match(codeOnly(readFileSync(resolve(repoRoot, f), 'utf8')), /plantDateTime\(/, `${f} prints its time on the plant clock`);
+  }
+});
+
+test('the weighbridge slip prints its date/time as given', async () => {
+  const svc = new PdfService();
+  const text = pdfText(await svc.weighbridgePdf({ companyName: 'Mix Nova RMC', slipNo: 'WB-001', entryDatetime: '14/09/2026 06:40', vehicleNo: 'TN01AB1234', grossWeight: 32000, tareWeight: 12000, netWeight: 20000, status: 'weighed' }));
+  assert.ok(text.includes('Date/time: 14/09/2026 06:40'), 'the slip carries the plant-clock time it was handed');
 });

@@ -25,7 +25,7 @@ import { computeLineTax, round2, isInterstateSupply } from './tax.util';
 import { resolveReturnBilling, isReturnBillingPolicy, type ReturnBillingPolicy } from './return-billing.util';
 import { invoiceBalanceAfter } from './receipt-allocation.util';
 import { gstStateCode, isGstin } from '../compliance/gst-payload.util';
-import { documentDate } from '../common/business-date.util';
+import { documentDate, plantDateTime } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Invoice not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -718,7 +718,9 @@ export class InvoiceService {
         irn: full.irn ?? null,
         signedQrCode: full.signedQrCode ?? null,
         ackNo: full.ackNumber ?? null,
-        ackDate: full.ackDate ? new Date(full.ackDate).toISOString().replace('T', ' ').slice(0, 16) : null,
+        // The IRP acknowledges in Indian time; print it as the portal shows it,
+        // not shifted to UTC, so the document and the portal agree.
+        ackDate: plantDateTime(full.ackDate),
       };
       return { data, invoice: full };
     });

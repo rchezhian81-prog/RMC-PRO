@@ -8,6 +8,7 @@ import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
 import { weighbridgeQuantity } from './weighbridge-uom.util';
 import type { WeighbridgePdfData } from '../sales/pdf.service';
+import { plantDateTime } from '../common/business-date.util';
 
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Weighbridge entry not found' });
@@ -168,7 +169,9 @@ export class WeighbridgeService {
       const data: WeighbridgePdfData = {
         companyName: company?.companyName ?? 'Company',
         slipNo: entry.slipNo,
-        entryDatetime: entry.entryDatetime ? entry.entryDatetime.toISOString().slice(0, 16).replace('T', ' ') : null,
+        // The slip's time is what a supplier dispute is settled on; print it
+        // on the plant clock, not UTC.
+        entryDatetime: plantDateTime(entry.entryDatetime),
         vehicleNo: entry.vehicleNo ?? null,
         supplierName: supplier?.supplierName ?? null,
         materialLabel: entry.materialLabel ?? null,

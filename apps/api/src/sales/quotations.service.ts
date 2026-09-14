@@ -16,7 +16,7 @@ import { summariseGst, isInterstateSupply } from '../billing/tax.util';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
 import { WhatsAppService } from './whatsapp.service';
-import type { QuotationPdfData } from './pdf.service';
+import { companyBlock, type QuotationPdfData } from './pdf.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) =>
@@ -303,15 +303,14 @@ export class QuotationsService {
         ? await m.getRepository(Site).findOne({ where: { id: full.siteId } })
         : null;
       const data: QuotationPdfData = {
-        companyName: company?.companyName ?? 'Company',
-        companyGstin: company?.gstin ?? null,
-        companyState: company?.state ?? null,
+        ...companyBlock(company),
         quotationNo: full.quotationNo,
         quotationDate: full.quotationDate,
         validUntil: full.validUntil,
         revisionNo: full.revisionNo,
         approvalStatus: full.approvalStatus,
         customerName: customer?.customerName ?? 'Customer',
+        customerAddress: [customer?.billingAddress, customer?.city, customer?.state, customer?.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null,
         siteName: site?.siteName ?? null,
         paymentTerms: full.paymentTerms,
         remarks: full.remarks,

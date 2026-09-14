@@ -4,13 +4,13 @@ import { In } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Company, Customer, Invoice, Payment, PaymentAllocation } from '../core/database/entities';
-import type { ReceiptPdfData } from '../sales/pdf.service';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { round2 } from './tax.util';
 import { allocateAcrossInvoices, invoiceBalanceAfter } from './receipt-allocation.util';
 import { documentDate } from '../common/business-date.util';
+import { companyBlock, type ReceiptPdfData } from '../sales/pdf.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Receipt not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -340,20 +340,8 @@ export class ReceiptService {
       const invoiceIds = full.allocations.map((a) => a.invoiceId);
       const invoices = invoiceIds.length ? await m.getRepository(Invoice).find({ where: { id: In(invoiceIds) } }) : [];
       const byId = new Map(invoices.map((i) => [i.id, i]));
-      const addr = [
-        company?.addressLine1, company?.addressLine2,
-        [company?.city, company?.state, company?.pincode].filter(Boolean).join(', '),
-      ].filter((v) => v && String(v).trim()).join(', ');
       const data: ReceiptPdfData = {
-        companyName: company?.companyName ?? 'Company',
-        legalName: company?.legalName ?? null,
-        companyGstin: company?.gstin ?? null,
-        companyPan: company?.pan ?? null,
-        companyAddress: addr || null,
-        companyPhone: company?.phone ?? null,
-        companyEmail: company?.email ?? null,
-        logoMime: company?.logoMime ?? null,
-        logoData: company?.logoData ?? null,
+        ...companyBlock(company),
         receiptNo: full.receiptNo,
         receiptDate: full.receiptDate,
         status: full.status,

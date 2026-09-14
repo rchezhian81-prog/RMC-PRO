@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Download, Share2 } from 'lucide-react';
 import { formatDate } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import Link from 'next/link';
-import { crud, purchaseApi, type Row } from '../../../../lib/api';
+import { crud, purchaseApi, openPdf, openWhatsAppShare, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -22,7 +23,7 @@ interface LineDraft { materialId: string; quantity: string; rate: string; gstRat
 const emptyLine = (): LineDraft => ({ materialId: '', quantity: '', rate: '', gstRate: '18' });
 
 export default function PurchaseOrdersPage() {
-  const { confirm } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
   const [materials, setMaterials] = useState<Row[]>([]);
@@ -163,6 +164,22 @@ export default function PurchaseOrdersPage() {
                     <Td><StatusBadge status={status} /></Td>
                     <Td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/purchase-orders/${String(r.id)}/pdf`).catch((e) => setError(String(e)))}>Print</Button>
+                        {status !== 'draft' && status !== 'cancelled' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Share2 size={14} />}
+                            onClick={async () => {
+                              const m = await prompt({ title: 'Send PO to supplier', label: 'Supplier mobile (WhatsApp)', defaultValue: '' });
+                              if (m === null) return;
+                              setError(null);
+                              try { setMsg(await openWhatsAppShare(() => purchaseApi.shareOrder(String(r.id), m))); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+                            }}
+                          >
+                            Share
+                          </Button>
+                        )}
                         {canCreate && status === 'draft' && (
                           <Button variant="secondary" size="sm" onClick={() => act(() => purchaseApi.issueOrder(String(r.id)), `PO ${String(r.poNo)} issued.`)}>Issue</Button>
                         )}

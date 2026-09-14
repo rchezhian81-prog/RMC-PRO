@@ -90,6 +90,18 @@ ok('PO created with a line', po.items.length === 1);
 ok('PO total = taxable + GST (5000 + 900)', near(po.totalAmount, 5900));
 po = await api('POST', `/purchase-orders/${po.id}/issue`);
 ok('PO issued', po.status === 'issued');
+{
+  // The PO can be printed and sent to the supplier.
+  const res = await fetch(`${API_BASE}/purchase-orders/${po.id}/pdf`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const buf = Buffer.from(await res.arrayBuffer());
+  ok(`PO PDF renders (${res.status})`, res.ok && buf.subarray(0, 5).toString() === '%PDF-');
+  const { pdfText } = await import('./helpers/pdf-text.mjs');
+  const text = pdfText(buf);
+  for (const s of ['PURCHASE ORDER', `No: ${po.poNo}`, supplier.supplierName, label, 'Amount in words:', 'Please quote the PO number', 'Authorised Signatory']) ok(`PO prints "${s}"`, text.includes(s));
+  const log = await api('POST', `/purchase-orders/${po.id}/share`, { mobile: '98765 43210' });
+  const body = String(log?.messageBody ?? '');
+  ok(`PO share text: ${body.slice(0, 100)}…`, body.includes(`Purchase order ${po.poNo}`) && body.includes(label) && /total ₹5,900\.00/.test(body) && String(log?.shareUrl ?? '').startsWith('https://wa.me/919876543210?'));
+}
 const poItemId = po.items[0].id;
 
 // ---- C. Goods receipt (multi-line GRN) → posts to stock ----

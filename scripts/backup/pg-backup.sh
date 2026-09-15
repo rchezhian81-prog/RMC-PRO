@@ -28,6 +28,9 @@ COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"
 # Off-box target helpers (bucket-root derivation + read-only existence probe).
 # shellcheck source=scripts/backup/lib-offbox.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib-offbox.sh"
+# One alert channel for every script (RMC_ALERT_WEBHOOK, or ALERT_WEBHOOK_URL).
+# shellcheck source=scripts/ops/lib-alert.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../ops/lib-alert.sh"
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups/postgres}"
 PG_SERVICE="${PG_SERVICE:-postgres}"
 # GFS retention (counts):
@@ -109,12 +112,13 @@ log "done: $(basename "$OUT") ($SIZE) + .sha256"
 # the box is the failure mode that loses everything when the box does.
 RMC_OFFBOX_RCLONE="${RMC_OFFBOX_RCLONE:-$(getenv RMC_OFFBOX_RCLONE)}"
 RMC_OFFBOX_SCP="${RMC_OFFBOX_SCP:-$(getenv RMC_OFFBOX_SCP)}"
-RMC_ALERT_WEBHOOK="${RMC_ALERT_WEBHOOK:-$(getenv RMC_ALERT_WEBHOOK)}"
+RMC_ALERT_WEBHOOK="$(rmc_alert_webhook)"
 
 offbox_alert() {  # $1 = message; POST to the webhook if one is configured
   log "WARN: $1"
-  [ -n "${RMC_ALERT_WEBHOOK:-}" ] && curl -fsS -m 8 -X POST -H 'Content-Type: application/json' \
-    -d "{\"text\":\"RMC off-box backup FAILED: $1\"}" "$RMC_ALERT_WEBHOOK" >/dev/null 2>&1 || true
+  if [ -n "${RMC_ALERT_WEBHOOK:-}" ]; then
+    rmc_alert "RMC off-box backup FAILED: $1" || log "WARN: alert webhook POST failed (HTTP ${RMC_ALERT_HTTP:-none})"
+  fi
 }
 
 if [ -n "$RMC_OFFBOX_RCLONE" ]; then

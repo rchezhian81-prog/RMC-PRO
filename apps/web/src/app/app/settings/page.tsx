@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { settings, gstCredentialsApi, type SettingRow, type GstCredentialStatus } from '../../../lib/api';
+import { settings, gstCredentialsApi, gstApi, opsApi, type SettingRow, type GstCredentialStatus, type GstStatus, type AlertingStatus } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Field, Input } from '../../../components/ui/Field';
@@ -106,7 +106,62 @@ export default function SettingsPage() {
       </Card>
 
       <GstCredentialsCard />
+      <AlertingCard />
     </div>
+  );
+}
+
+/**
+ * Whether the server pages someone when it fails — and a button to prove it.
+ * The webhook lives in the server's env file (RMC_ALERT_WEBHOOK), never here;
+ * this card only reads whether one is wired and sends a test through it.
+ */
+function AlertingCard() {
+  const [status, setStatus] = useState<AlertingStatus | null | undefined>(undefined);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    opsApi.alerting().then(setStatus).catch(() => setStatus(null));
+  }, []);
+  if (status === null) return null; // not permitted → nothing to show
+  async function sendTest() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await opsApi.alertTest();
+      setMsg(r.delivered
+        ? `Test alert delivered (HTTP ${r.status ?? 200}). Check the channel — the message reads "${r.message}".`
+        : `Not delivered: ${r.error ?? 'unknown reason'}`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card title="Error alerts">
+      <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 10px' }}>
+        When the server fails a request, the health monitor sees the site down, or a backup does not leave the box, a message goes to your alert channel.
+      </p>
+      {status === undefined ? (
+        <p style={{ fontSize: 13, margin: 0 }}>Checking…</p>
+      ) : status.configured ? (
+        <>
+          <p style={{ fontSize: 13, margin: '0 0 10px' }}>
+            <strong style={{ color: 'var(--mn-success)' }}>Wired</strong> on this server (via {status.source ?? 'the env file'}).
+            {status.digestEnabled ? ' A daily digest of dashboard alerts is on too.' : ''}
+          </p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button variant="secondary" onClick={sendTest} disabled={busy}>{busy ? 'Sending…' : 'Send test alert'}</Button>
+            {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('Test alert delivered') ? 'var(--mn-success)' : 'var(--mn-danger)' }}>{msg}</span>}
+          </div>
+        </>
+      ) : (
+        <p style={{ fontSize: 13, margin: 0 }}>
+          <strong style={{ color: 'var(--mn-warning)' }}>Not wired.</strong> Alerts only reach the server log. To turn them on, set RMC_ALERT_WEBHOOK in the server's .env.production, restart the api, and run scripts/ops/alert-test.sh on the server.
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -119,6 +174,11 @@ export default function SettingsPage() {
 function GstCredentialsCard() {
   const { confirm } = useConfirm();
   const [creds, setCreds] = useState<GstCredentialStatus[]>([]);
+  const [gstLive, setGstLive] = useState<GstStatus | null | undefined>(undefined);
+  useEffect(() => {
+    // Best-effort: 403 for users without the agents permissions → say nothing.
+    gstApi.status().then(setGstLive).catch(() => setGstLive(undefined));
+  }, []);
   const [form, setForm] = useState({ gstin: '', username: '', password: '' });
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -165,6 +225,13 @@ function GstCredentialsCard() {
       <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px', maxWidth: 700 }}>
         Your GSTIN portal login, used to file e-invoices (IRN) and e-way bills live. The password is encrypted and never shown again — re-enter it to change.
       </p>
+      {gstLive !== undefined && (
+        <p style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+          Live filing on this server: {gstLive?.configured
+            ? <strong style={{ color: 'var(--mn-success)' }}>enabled ({String(gstLive.provider)})</strong>
+            : <><strong style={{ color: 'var(--mn-warning)' }}>not enabled</strong> — invoices are prepared but not filed with the portal. It is switched on from the server (scripts/ops/gst-enable.sh) once your GSP sandbox credentials are in hand.</>}
+        </p>
+      )}
       {err && <div style={{ marginBottom: 12 }}><ErrorState message={err} /></div>}
       {msg && (
         <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '8px 12px', fontSize: 13, margin: '0 0 12px' }}>{msg}</p>

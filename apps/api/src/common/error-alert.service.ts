@@ -45,7 +45,10 @@ const num = (v: string | undefined, d: number) => {
 
 function configFromEnv(env: NodeJS.ProcessEnv): ErrorAlertConfig {
   return {
-    webhookUrl: env.ALERT_WEBHOOK_URL?.trim() || undefined,
+    // One webhook for the whole box: ALERT_WEBHOOK_URL when set, else
+    // RMC_ALERT_WEBHOOK — the name the on-box scripts (health monitor, backups)
+    // read — so a single line in .env.production wires everything.
+    webhookUrl: env.ALERT_WEBHOOK_URL?.trim() || env.RMC_ALERT_WEBHOOK?.trim() || undefined,
     minStatus: num(env.ALERT_MIN_STATUS, 500),
     dedupWindowMs: num(env.ALERT_DEDUP_WINDOW_MS, 5 * 60_000),
     maxPerWindow: num(env.ALERT_MAX_PER_WINDOW, 60),
@@ -85,6 +88,28 @@ export class ErrorAlertService {
 
   constructor(config?: Partial<ErrorAlertConfig>, private readonly env: NodeJS.ProcessEnv = process.env) {
     this.cfg = { ...configFromEnv(env), ...config };
+  }
+
+  /** Whether a webhook is configured — never the URL itself, which carries a secret. */
+  webhookConfigured(): boolean {
+    return Boolean(this.cfg.webhookUrl);
+  }
+
+  /**
+   * Send one test message through the real delivery path, so an operator can
+   * see the channel works before an incident does. Not deduped (every test is
+   * its own event) and never throws; says exactly what happened.
+   */
+  async sendTest(origin = 'api'): Promise<{ configured: boolean; delivered: boolean; status?: number; error?: string; message: string }> {
+    const now = Date.now();
+    const message = `🔔 Test alert from Mix Nova RMC (${origin}) — alerts are wired. ${new Date(now).toISOString()}`;
+    if (!this.cfg.webhookUrl) {
+      return { configured: false, delivered: false, message, error: 'No alert webhook is configured on the server — set RMC_ALERT_WEBHOOK in .env.production and restart the api.' };
+    }
+    const payload = { level: 'info', msg: 'alert_test', service: 'rmc-api', at: new Date(now).toISOString(), origin, text: message, content: message };
+    this.emitLog(payload);
+    const r = await this.deliverResult(payload);
+    return { configured: true, delivered: r.ok, status: r.status, error: r.error, message };
   }
 
   private signature(e: ErrorAlertEvent): string {
@@ -218,6 +243,16 @@ export class ErrorAlertService {
 
   private async deliver(payload: Record<string, unknown>): Promise<void> {
     if (!this.cfg.webhookUrl) return;
+    const r = await this.deliverResult(payload);
+    if (!r.ok) {
+      if (r.status !== undefined) this.emitLog({ level: 'warn', msg: 'error_alert_delivery_failed', status: r.status });
+      else this.emitLog({ level: 'warn', msg: 'error_alert_delivery_error', error: r.error });
+    }
+  }
+
+  /** POST the payload; report the outcome instead of throwing (alerting is best-effort). */
+  private async deliverResult(payload: Record<string, unknown>): Promise<{ ok: boolean; status?: number; error?: string }> {
+    if (!this.cfg.webhookUrl) return { ok: false, error: 'no webhook configured' };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.cfg.timeoutMs);
     try {
@@ -227,15 +262,10 @@ export class ErrorAlertService {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
-      if (!res.ok) {
-        this.emitLog({ level: 'warn', msg: 'error_alert_delivery_failed', status: res.status });
-      }
+      return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: `the webhook answered HTTP ${res.status}` };
     } catch (err) {
-      this.emitLog({
-        level: 'warn',
-        msg: 'error_alert_delivery_error',
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: /abort/i.test(msg) ? `no answer from the webhook within ${this.cfg.timeoutMs} ms` : msg };
     } finally {
       clearTimeout(timer);
     }

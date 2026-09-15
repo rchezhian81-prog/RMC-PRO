@@ -610,8 +610,30 @@ fi
 # when every backup is fresh.
 if [ -f "$ENV_FILE" ]; then
   offbox="$(grep -E '^RMC_OFFBOX_(RCLONE|SCP)=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' | head -1)"
-  if [ -n "$offbox" ]; then ok "off-box target" "configured"
-  else warn "off-box target" "unset — every backup lives only on this box (scripts/backup/README.md)"; fi
+  if [ -n "$offbox" ]; then
+    ok "off-box target" "configured"
+    # A configured target that nothing has reached in days is the same failure
+    # as no target — the copy step has been alerting into a void, or the
+    # remote's key expired. Read-only: rclone lsf lists, it never creates.
+    rc_target="$(grep -E '^RMC_OFFBOX_RCLONE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' | head -1)"
+    if [ -n "$rc_target" ]; then
+      if ! command -v rclone >/dev/null 2>&1; then
+        bad "off-box copies" "rclone is not installed, so no dump has left the box — run scripts/backup/offbox-setup.sh"
+      else
+        newest_off="$(rclone lsf --files-only --format tp --include 'rmc-*.dump' "$rc_target" 2>/dev/null | sort | tail -1)"
+        if [ -z "$newest_off" ]; then
+          bad "off-box copies" "no rmc-*.dump in $rc_target — the copy step is failing or has never run (scripts/backup/offbox-setup.sh --verify)"
+        else
+          off_ts="${newest_off%%;*}"; off_name="${newest_off#*;}"
+          off_epoch="$(date -d "${off_ts%%.*}" +%s 2>/dev/null || echo 0)"
+          off_age_h=$(( ( $(date +%s) - off_epoch ) / 3600 ))
+          if   [ "$off_epoch" = "0" ]; then warn "off-box copies" "$off_name present (age unreadable)"
+          elif [ "$off_age_h" -le 48 ]; then ok "off-box copies" "$off_name — ${off_age_h}h old"
+          else bad "off-box copies" "$off_name — ${off_age_h}h old; recent dumps are not reaching $rc_target"; fi
+        fi
+      fi
+    fi
+  else warn "off-box target" "unset — every backup lives only on this box (scripts/backup/offbox-setup.sh)"; fi
 
   # health-check.sh returns silently when no webhook is set, so the monitor cron
   # runs and alerts nowhere. Say so here rather than letting it stay invisible.

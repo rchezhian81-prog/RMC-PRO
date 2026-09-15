@@ -20,6 +20,7 @@ const GUARDED = [
   ['invoice_cancellation.approve', 'POST', '/credit-notes/00000000-0000-0000-0000-000000000000/issue'],
   ['invoice_cancellation.approve', 'POST', '/credit-notes/00000000-0000-0000-0000-000000000000/cancel'],
   ['whatsapp.send', 'POST', '/credit-notes/00000000-0000-0000-0000-000000000000/share'],
+  ['settings.manage', 'POST', '/ops/alert-test'],
   ['receipts.create', 'POST', '/receipts'],
   ['tally_export.generate', 'GET', '/billing-reports/tally-export'],
   ['sync.manage', 'POST', '/sync/devices/register'],

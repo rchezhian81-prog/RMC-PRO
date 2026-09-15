@@ -34,6 +34,8 @@ LOG_FILE="/var/log/rmc-rsc-monitor.log"
 log() { printf '[rsc-monitor] %s\n' "$*"; }
 die() { printf '[rsc-monitor] ERROR: %s\n' "$*" >&2; exit 1; }
 getenv() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- ; }
+# shellcheck source=scripts/ops/lib-alert.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-alert.sh"
 
 install_cron() {
   [ "$(id -u)" = "0" ] || die "run as root to (un)install cron — use: sudo $0 --install-cron"
@@ -74,11 +76,9 @@ check() {
   if [ "${count:-0}" -gt 0 ]; then
     printf '[%s] RSC 5xx in last %s: %s  <-- ATTENTION\n' "$ts" "$WINDOW" "$count"
     printf '%s\n' "$hits" | sed -E 's/^/    /' | tail -20
-    local hook; hook="$(getenv RMC_ALERT_WEBHOOK)"
-    if [ -n "${hook:-}" ]; then
-      curl -fsS -m 8 -X POST -H 'Content-Type: application/json' \
-        -d "{\"text\":\"RMC: ${count} RSC prefetch 5xx in last ${WINDOW} on $(getenv DOMAIN 2>/dev/null || echo host)\"}" \
-        "$hook" >/dev/null 2>&1 && log "alert sent" || log "WARN: alert webhook POST failed"
+    if [ -n "$(rmc_alert_webhook)" ]; then
+      rmc_alert "RMC: ${count} RSC prefetch 5xx in last ${WINDOW} on $(getenv DOMAIN 2>/dev/null || echo host)" \
+        && log "alert sent" || log "WARN: alert webhook POST failed (HTTP ${RMC_ALERT_HTTP:-none})"
     fi
   else
     printf '[%s] RSC 5xx in last %s: 0 (clean)\n' "$ts" "$WINDOW"

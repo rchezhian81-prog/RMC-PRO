@@ -90,29 +90,35 @@ On-box copies die with the box. Every dump is copied off VM3 to **Backblaze B2**
 silently logged (see `RMC_ALERT_WEBHOOK`) — a backup that never leaves the box is
 the failure that loses everything when the box does.
 
-**One-time setup on the VPS:**
+**One-time setup on the VPS — one command** (as the user the backup cron runs
+as, root on the pilot box):
 
 ```bash
-# 1. Install rclone (Debian/Ubuntu)
-sudo apt-get update && sudo apt-get install -y rclone   # or: curl https://rclone.org/install.sh | sudo bash
+# Create a PRIVATE bucket in the Backblaze console first (e.g. rmc-offbox-backups)
+# and an application key scoped to it (Account → App Keys). Then:
+./scripts/backup/offbox-setup.sh --bucket rmc-offbox-backups
+#   installs rclone if missing → prompts for the keyID and the applicationKey
+#   (typed hidden, stored only in ~/.config/rclone/rclone.conf) → checks the
+#   bucket exists (read-only) → writes RMC_OFFBOX_RCLONE to .env.production →
+#   takes a trial dump, copies it and reads it back → prints OFF-BOX BACKUP OK.
 
-# 2. Create a B2 application key in the Backblaze console (Account → App Keys),
-#    scoped to a single private bucket (e.g. rmc-offbox-backups). Note the
-#    keyID and applicationKey — keep them OFF chat and out of git.
-
-# 3. Configure an rclone remote named "b2" (interactive, secrets go to
-#    ~/.config/rclone/rclone.conf on the box only):
-rclone config
-#    n) New remote  → name: b2  → storage: "Backblaze B2"
-#    account: <keyID>   key: <applicationKey>   (leave the rest default)
-
-# 4. Verify rclone can see the bucket:
-rclone lsd b2:
-
-# 5. Point the backup at it in .env.production (already in the template):
-#    RMC_OFFBOX_RCLONE=b2:rmc-offbox-backups
-#    RMC_ALERT_WEBHOOK=https://hooks.example.com/...   # optional but recommended
+# Any time later — is it still working? (read-only; newest dump in the bucket, its age)
+./scripts/backup/offbox-setup.sh --verify
 ```
+
+Any S3-compatible store works too: `--type s3 --endpoint https://… --bucket NAME`.
+`verify-app.sh` also checks the bucket on every deploy and fails when the newest
+off-box dump is older than 48 hours.
+
+<details><summary>Manual steps (what the script does)</summary>
+
+```bash
+sudo apt-get update && sudo apt-get install -y rclone   # or: curl https://rclone.org/install.sh | sudo bash
+rclone config      # n) New remote → name: b2 → storage: "Backblaze B2" → account: <keyID>, key: <applicationKey>
+rclone lsd b2:     # the bucket must be listed
+# .env.production:  RMC_OFFBOX_RCLONE=b2:rmc-offbox-backups
+```
+</details>
 
 After that, `pg-backup.sh` uploads each `.dump` + `.sha256` to B2 and **reads it
 back** to confirm it landed (it doesn't just trust a zero exit code).

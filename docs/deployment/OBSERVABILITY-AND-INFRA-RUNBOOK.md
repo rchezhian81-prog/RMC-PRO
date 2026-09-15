@@ -92,7 +92,7 @@ These are the pieces the audit flagged that a sandbox/CI cannot provision:
 | **Staging environment** | The RLS-on-users change and any auth-touching work must be smoke-tested against a prod-like DB before production. | Stand up one small staging stack (same compose, separate DB) and point a staging domain at it. |
 | **Secrets management** | JWT/DB/B2 secrets currently live in env files. | Adopt `sops` + `age` (or the host's secret store); keep the encrypted file in the repo, decrypt at deploy. Covered in `WAVE1-HARDENING-RUNBOOK.md`. |
 | **Log/metrics backend** | §2 above — logs are ready to ship but no aggregator is running yet. | Pick Option A or B and wire it. |
-| **Error alerting** | Built in — see §6. Set `ALERT_WEBHOOK_URL` to page on 5xx, or add a log-based rule on `level=alert`. | Paste an incoming-webhook URL into `ALERT_WEBHOOK_URL`. |
+| **Error alerting** | Built in — see §6. Set `RMC_ALERT_WEBHOOK` (one line for the API, the health monitor and the backups; `ALERT_WEBHOOK_URL` is accepted too) to page on 5xx, or add a log-based rule on `level=alert`. | Paste an incoming-webhook URL into `RMC_ALERT_WEBHOOK`, recreate the api, run `scripts/ops/alert-test.sh`. |
 | **Uptime check** | Nothing watches the box from outside. | Point an external monitor at `/health/ready`. |
 
 ## 6. Error alerting (built-in)

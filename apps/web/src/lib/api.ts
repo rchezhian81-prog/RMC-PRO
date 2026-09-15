@@ -805,6 +805,19 @@ export const invoicesApi = {
   setTransport: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/invoices/${id}/transport`, { method: 'PATCH', body: JSON.stringify(b) }),
 };
 
+// ---- Credit / debit notes (GST Rule 53) — against an issued invoice ----
+export const creditNotesApi = {
+  list: (status?: string, limit?: number) => apiFetch<Row[]>(`/credit-notes${listQs(status, limit)}`),
+  get: (id: string) => apiFetch<Row>(`/credit-notes/${id}`),
+  forInvoice: (invoiceId: string) => apiFetch<Row[]>(`/credit-notes/for-invoice/${invoiceId}`),
+  invoiceLines: (invoiceId: string) => apiFetch<Row[]>(`/credit-notes/invoice-lines/${invoiceId}`),
+  reasons: () => apiFetch<{ value: string; label: string }[]>('/credit-notes/reasons'),
+  create: (b: Record<string, unknown>) => post('/credit-notes', b),
+  issue: (id: string) => post(`/credit-notes/${id}/issue`),
+  cancel: (id: string, reason: string) => post(`/credit-notes/${id}/cancel`, { reason }),
+  share: (id: string, mobile: string) => post(`/credit-notes/${id}/share`, { mobile }),
+};
+
 // ---- GST live compliance (IRP / e-way) — prepare → approve → execute ----
 export interface GstStatus {
   configured: boolean;
@@ -888,7 +901,7 @@ export type StatementRow = { date: string | null; type: string; ref: string; par
 export type CustomerStatement = { customerName: string; opening: number; rows: StatementRow[]; totalDebit: number; totalCredit: number; closing: number; from: string | null; to: string | null };
 
 export type GstBucket = { count: number; taxable: number; total: number };
-export type SalesRegister = { rows: Row[]; total: number; taxable: number; count: number; summary: { b2b: GstBucket; b2c: GstBucket } };
+export type SalesRegister = { rows: Row[]; total: number; taxable: number; count: number; summary: { b2b: GstBucket; b2c: GstBucket }; notes?: Row[] };
 export const billingReportsApi = {
   outstanding: () => apiFetch<{ rows: Row[]; totals: Row }>('/billing-reports/outstanding'),
   salesRegister: (from?: string, to?: string) => apiFetch<SalesRegister>(`/billing-reports/sales-register${dateQs(from, to)}`),

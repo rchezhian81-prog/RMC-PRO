@@ -72,6 +72,7 @@ import { BacklogUniqueness1720000066000 } from './migrations/1720000066000-Backl
 import { UserEmailCaseInsensitive1720000067000 } from './migrations/1720000067000-UserEmailCaseInsensitive';
 import { BackfillDocumentDates1720000068000 } from './migrations/1720000068000-BackfillDocumentDates';
 import { EinvoiceApplicable1720000069000 } from './migrations/1720000069000-EinvoiceApplicable';
+import { CreditNotes1720000070000 } from './migrations/1720000070000-CreditNotes';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -158,6 +159,7 @@ export const AppDataSource = new DataSource({
   UserEmailCaseInsensitive1720000067000,
   BackfillDocumentDates1720000068000,
   EinvoiceApplicable1720000069000,
+  CreditNotes1720000070000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

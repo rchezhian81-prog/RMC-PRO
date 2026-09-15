@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
-import { invoicesApi, gstApi, crud, openPdf, type GstStatus, type Row, openWhatsAppShare } from '../../../../../lib/api';
+import { invoicesApi, gstApi, crud, creditNotesApi, openPdf, type GstStatus, type Row, openWhatsAppShare } from '../../../../../lib/api';
 import { Card } from '../../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../../components/ui/Table';
 import { StatusBadge } from '../../../../../components/ui/Badge';
@@ -12,6 +13,7 @@ import { Field, Input } from '../../../../../components/ui/Field';
 import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 import { getAccess } from '../../../../../lib/session';
+import { formatDate } from '../../../../../lib/format-date';
 
 const TRANSPORT_MODES = [
   { value: 'road', label: 'Road' },
@@ -58,6 +60,9 @@ export default function InvoiceDetail() {
   const [transporters, setTransporters] = useState<Row[]>([]);
   const [tp, setTp] = useState({ transporterId: '', vehicleNo: '', transportMode: '', distanceKm: '', ewayBillNo: '', ewayValidUntil: '' });
   const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Row[]>([]);
+  const [noteForm, setNoteForm] = useState<{ open: boolean; noteType: 'credit' | 'debit'; reason: string; remarks: string; lines: { description: string; hsnSac: string; uom: string; quantity: string; rate: string; gstRate: string }[] } | null>(null);
+  const [reasons, setReasons] = useState<{ value: string; label: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -73,6 +78,9 @@ export default function InvoiceDetail() {
       ewayBillNo: String(full.ewayBillNo ?? ''),
       ewayValidUntil: full.ewayValidUntil ? String(full.ewayValidUntil).slice(0, 10) : '',
     });
+    // Notes against this invoice ride along with every reload (issue / cancel
+    // of a note changes the invoice balance shown above).
+    creditNotesApi.forInvoice(id).then(setNotes).catch(() => setNotes([]));
   }, [id]);
   useEffect(() => {
     load().catch((e) => setError(String(e)));
@@ -109,6 +117,42 @@ export default function InvoiceDetail() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed');
     }
+  }
+
+  /**
+   * A credit note starts from the invoice's own lines (edit quantity or rate
+   * down to what is being credited); a debit note starts empty. Raised only
+   * against an issued invoice; the API refuses otherwise.
+   */
+  async function openNoteForm(noteType: 'credit' | 'debit') {
+    setError(null);
+    try {
+      const [lines, rs] = await Promise.all([creditNotesApi.invoiceLines(id), reasons.length ? Promise.resolve(reasons) : creditNotesApi.reasons()]);
+      setReasons(rs);
+      const blank = { description: '', hsnSac: '', uom: '', quantity: '', rate: '', gstRate: '18' };
+      setNoteForm({
+        open: true, noteType, reason: noteType === 'debit' ? 'additional_charge' : 'rate_difference', remarks: '',
+        lines: noteType === 'credit' && lines.length
+          ? lines.map((l) => ({ description: String(l.description ?? ''), hsnSac: String(l.hsnSac ?? ''), uom: String(l.uom ?? ''), quantity: String(l.quantity ?? ''), rate: String(l.rate ?? ''), gstRate: String(l.gstRate ?? '18') }))
+          : [blank],
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+  function setLine(i: number, k: string, v: string) {
+    setNoteForm((f) => (f ? { ...f, lines: f.lines.map((l, j) => (j === i ? { ...l, [k]: v } : l)) } : f));
+  }
+  async function createNote() {
+    if (!noteForm) return;
+    await run(async () => {
+      const lines = noteForm.lines.filter((l) => Number(l.quantity) > 0 && Number(l.rate) > 0).map((l) => ({
+        description: l.description, hsnSac: l.hsnSac, uom: l.uom, quantity: Number(l.quantity), rate: Number(l.rate), gstRate: Number(l.gstRate || 0),
+      }));
+      const n = await creditNotesApi.create({ invoiceId: id, noteType: noteForm.noteType, reason: noteForm.reason, remarks: noteForm.remarks, lines });
+      setNoteForm(null);
+      return `${noteForm.noteType === 'debit' ? 'Debit' : 'Credit'} note drafted for ₹${money(n.totalAmount)} — issue it below to make it count.`;
+    });
   }
 
   if (!inv) return error ? <ErrorState message={error} /> : <Loading label="Loading invoice…" />;
@@ -159,6 +203,12 @@ export default function InvoiceDetail() {
           >
             Share on WhatsApp
           </Button>
+          {status === 'issued' && (
+            <>
+              <Button variant="secondary" onClick={() => openNoteForm('credit')}>Credit note</Button>
+              <Button variant="secondary" onClick={() => openNoteForm('debit')}>Debit note</Button>
+            </>
+          )}
           {status !== 'cancelled' && Number(inv.amountPaid) === 0 && (
             <Button
               variant="secondary"
@@ -220,6 +270,102 @@ export default function InvoiceDetail() {
           )}
         </div>
       </Card>
+
+      {noteForm?.open && (
+        <Card title={noteForm.noteType === 'debit' ? 'New debit note' : 'New credit note'}>
+          <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px' }}>
+            {noteForm.noteType === 'debit'
+              ? 'What is being added to this invoice — an extra charge, an under-billed quantity or rate.'
+              : 'What is being credited back — set each line to the quantity and rate being credited, and remove lines that are not.'}
+            {' '}The note is a draft until it is issued.
+          </p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+            <div style={{ minWidth: 220 }}>
+              <Field label="Reason">
+                <select className="mn-input" value={noteForm.reason} onChange={(e) => setNoteForm({ ...noteForm, reason: e.target.value })}>
+                  {reasons.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div style={{ minWidth: 320, flex: 1 }}>
+              <Field label="Remarks (printed on the note)">
+                <Input value={noteForm.remarks} onChange={(e) => setNoteForm({ ...noteForm, remarks: e.target.value })} />
+              </Field>
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <Table>
+              <thead>
+                <tr><Th>Description</Th><Th>HSN/SAC</Th><Th>UOM</Th><Th numeric>Qty</Th><Th numeric>Rate</Th><Th numeric>GST %</Th><Th /></tr>
+              </thead>
+              <tbody>
+                {noteForm.lines.map((l, i) => (
+                  <tr key={i}>
+                    <Td><Input value={l.description} onChange={(e) => setLine(i, 'description', e.target.value)} /></Td>
+                    <Td><Input value={l.hsnSac} onChange={(e) => setLine(i, 'hsnSac', e.target.value)} style={{ width: 90 }} /></Td>
+                    <Td><Input value={l.uom} onChange={(e) => setLine(i, 'uom', e.target.value)} style={{ width: 70 }} /></Td>
+                    <Td numeric><Input type="number" step="any" value={l.quantity} onChange={(e) => setLine(i, 'quantity', e.target.value)} style={{ width: 100, textAlign: 'right' }} /></Td>
+                    <Td numeric><Input type="number" step="any" value={l.rate} onChange={(e) => setLine(i, 'rate', e.target.value)} style={{ width: 110, textAlign: 'right' }} /></Td>
+                    <Td numeric><Input type="number" step="any" value={l.gstRate} onChange={(e) => setLine(i, 'gstRate', e.target.value)} style={{ width: 70, textAlign: 'right' }} /></Td>
+                    <Td><Button variant="ghost" size="sm" onClick={() => setNoteForm({ ...noteForm, lines: noteForm.lines.filter((_, j) => j !== i) })}>Remove</Button></Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Button variant="secondary" onClick={() => setNoteForm({ ...noteForm, lines: [...noteForm.lines, { description: '', hsnSac: '', uom: '', quantity: '', rate: '', gstRate: '18' }] })}>Add line</Button>
+            <Button onClick={createNote}>Create draft</Button>
+            <Button variant="ghost" onClick={() => setNoteForm(null)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
+
+      {notes.length > 0 && (
+        <Card title="Credit / debit notes against this invoice" padded={false}>
+          <Table>
+            <thead>
+              <tr><Th>Note</Th><Th>Type</Th><Th>Date</Th><Th>Reason</Th><Th numeric>Total</Th><Th>Status</Th><Th /></tr>
+            </thead>
+            <tbody>
+              {notes.map((n) => {
+                const nid = String(n.id); const nst = String(n.status); const no = String(n.noteNo ?? '');
+                return (
+                  <tr key={nid}>
+                    <Td style={{ fontWeight: 600 }}>{no || 'Draft'}</Td>
+                    <Td>{n.noteType === 'debit' ? 'Debit' : 'Credit'}</Td>
+                    <Td>{formatDate(n.noteDate)}</Td>
+                    <Td>{String(n.reason ?? '—').replace(/_/g, ' ')}</Td>
+                    <Td numeric>₹{money(n.totalAmount)}</Td>
+                    <Td><StatusBadge status={nst} /></Td>
+                    <Td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/credit-notes/${nid}/pdf`, no || 'Draft note').catch((e) => setError(String(e)))}>Print</Button>
+                        {getAccess().has('invoice_cancellation.approve') && nst === 'draft' && (
+                          <Button size="sm" onClick={async () => {
+                            if (!(await confirm({ title: 'Issue note', message: `Issue this note for ₹${money(n.totalAmount)}? It takes a number and changes what the customer owes.`, confirmLabel: 'Issue' }))) return;
+                            run(() => creditNotesApi.issue(nid), 'Note issued.');
+                          }}>Issue</Button>
+                        )}
+                        {getAccess().has('invoice_cancellation.approve') && nst !== 'cancelled' && (
+                          <Button variant="ghost" size="sm" onClick={async () => {
+                            const reason = await prompt({ title: 'Cancel note', label: 'Reason', defaultValue: '' });
+                            if (reason === null) return;
+                            run(() => creditNotesApi.cancel(nid, reason), 'Note cancelled.');
+                          }}>Cancel</Button>
+                        )}
+                      </div>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+          <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: 0, padding: '10px 14px' }}>
+            All notes: <Link href="/app/billing/credit-notes">Billing → Credit notes</Link>.
+          </p>
+        </Card>
+      )}
 
       <Card title="Line items" padded={false}>
         <Table>

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { inr, dmy, invoiceShareMessage, receiptShareMessage, challanShareMessage, quotationShareMessage } from '../../dist/common/share-messages.util.js';
+import { inr, dmy, invoiceShareMessage, receiptShareMessage, challanShareMessage, quotationShareMessage, creditNoteShareMessage } from '../../dist/common/share-messages.util.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../../..');
@@ -77,4 +77,19 @@ test('the five services use the helpers — no inline "Status: …" text left', 
     assert.match(src, new RegExp(`\\(dto\\.message as string\\) \\?\\? ${fn}\\(`), `${f} builds its share text with ${fn}`);
     assert.doesNotMatch(src, /Status: \$\{/, `${f} no longer sends an internal status word`);
   }
+});
+
+test('a credit note says what was credited and why; a debit note what was added; a cancelled one says so', () => {
+  assert.equal(
+    creditNoteShareMessage({ companyName: co, noteType: 'credit', noteNo: 'CN-0001', noteDate: '2026-09-15', invoiceNo: 'INV-0017', totalAmount: '4720.00', reason: 'Rate difference', status: 'issued' }),
+    'Mix Nova RMC: Credit note CN-0001 dated 15/09/2026 against invoice INV-0017 for ₹4,720.00 (Rate difference), credited to your account. Thank you.',
+  );
+  assert.equal(
+    creditNoteShareMessage({ companyName: co, noteType: 'debit', noteNo: 'DN-0001', noteDate: '2026-09-15', invoiceNo: 'INV-0017', totalAmount: 1180, reason: 'Additional charge', status: 'issued' }),
+    'Mix Nova RMC: Debit note DN-0001 dated 15/09/2026 against invoice INV-0017 for ₹1,180.00 (Additional charge), added to your account. Thank you.',
+  );
+  assert.equal(
+    creditNoteShareMessage({ companyName: co, noteType: 'credit', noteNo: 'CN-0001', noteDate: '2026-09-15', invoiceNo: 'INV-0017', totalAmount: 4720, status: 'cancelled' }),
+    'Mix Nova RMC: Credit note CN-0001 dated 15/09/2026 against invoice INV-0017 has been CANCELLED. Please disregard it.',
+  );
 });

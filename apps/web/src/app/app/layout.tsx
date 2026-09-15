@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Building2, Factory, Users, ShieldCheck, Hash, Settings, MapPin, Package,
   Store, Truck, IdCard, Layers, UserPlus, FileText, FileSignature, FilePlus, ClipboardList,
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
-  Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X,
+  Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X, FileMinus,
   Ruler, ArrowLeftRight,
   Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine, Navigation,
   ChevronDown, PanelLeft, MessageSquare, Bot,
@@ -168,6 +168,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/billing/invoices', label: 'Invoices', icon: <ReceiptText size={IS} />, module: 'billing' },
       { href: '/app/billing/receipts', label: 'Receipts', icon: <Wallet size={IS} />, module: 'billing' },
+      { href: '/app/billing/credit-notes', label: 'Credit notes', icon: <FileMinus size={IS} />, module: 'billing' },
       { href: '/app/billing/outstanding', label: 'Outstanding', icon: <Clock size={IS} />, module: 'billing' },
       { href: '/app/billing/statement', label: 'Statements', icon: <ScrollText size={IS} />, module: 'billing' },
       { href: '/app/billing/reports', label: 'Billing Reports', icon: <BarChart3 size={IS} />, module: 'billing' },

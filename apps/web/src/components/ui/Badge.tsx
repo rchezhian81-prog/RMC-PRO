@@ -26,7 +26,9 @@ export function statusTone(status: string): Tone {
       // A cheque that has cleared the bank.
       'realised', 'cleared',
       // Purchase: goods fully received, and a bill whose 3-way match is clean.
-      'received', 'matched'].includes(s)
+      'received', 'matched',
+      // An invoice settled by credit note alone: nothing owed, nothing received.
+      'credited'].includes(s)
   )
     return 'success';
   if (

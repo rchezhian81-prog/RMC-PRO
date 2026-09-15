@@ -9,6 +9,7 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions, RequireAnyPermission } from '../rbac/permissions.decorator';
 import { InvoiceService } from './invoice.service';
 import { ReceiptService } from './receipt.service';
+import { CreditNoteService } from './credit-note.service';
 import { BillingReportsService } from './billing-reports.service';
 import { PdfService } from '../sales/pdf.service';
 
@@ -107,6 +108,47 @@ export class ReceiptController {
     const buffer = await this.pdf.receiptPdf(data);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${receiptNo}.pdf"`);
+    res.end(buffer);
+  }
+}
+
+@Controller('credit-notes')
+@RequireModule('billing')
+// Notes are read by whoever reads invoices; raising one is the invoicing
+// clerk's job; issuing or cancelling one changes revenue and is the same
+// approver tier as cancelling an invoice.
+@RequireAnyPermission('invoices.create', 'reports.view')
+@UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
+export class CreditNoteController {
+  constructor(
+    private readonly service: CreditNoteService,
+    private readonly pdf: PdfService,
+  ) {}
+
+  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
+  @Get('reasons') reasons() { return this.service.reasons(); }
+  @Get('for-invoice/:invoiceId') forInvoice(@CurrentUser() u: AuthUser, @Param('invoiceId') invoiceId: string) { return this.service.forInvoice(tid(u), invoiceId); }
+  @Get('invoice-lines/:invoiceId') invoiceLines(@CurrentUser() u: AuthUser, @Param('invoiceId') invoiceId: string) { return this.service.invoiceLines(tid(u), invoiceId); }
+  @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
+
+  @Post() @RequirePermissions('invoices.create')
+  create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto, u.userId); }
+
+  @Post(':id/issue') @RequirePermissions('invoice_cancellation.approve')
+  issue(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.issue(tid(u), id, u.userId); }
+
+  @Post(':id/cancel') @RequirePermissions('invoice_cancellation.approve')
+  cancel(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.cancel(tid(u), id, u.userId, dto.reason as string); }
+
+  @Post(':id/share') @RequirePermissions('whatsapp.send')
+  share(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.share(tid(u), id, dto); }
+
+  @Get(':id/pdf')
+  async pdfDoc(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const { data, noteNo } = await this.service.pdfData(tid(u), id);
+    const buffer = await this.pdf.creditNotePdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${noteNo}.pdf"`);
     res.end(buffer);
   }
 }

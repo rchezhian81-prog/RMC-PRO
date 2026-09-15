@@ -1,9 +1,10 @@
 import { REPORT_FETCH_LIMIT, assertReportSize } from '../common/list-limit.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { companyBlock, type StatementPdfData } from '../sales/pdf.service';
-import { Company, Customer, Invoice, Payment, Supplier, VendorBill } from '../core/database/entities';
+import { Company, CreditNote, Customer, Invoice, Payment, Supplier, VendorBill } from '../core/database/entities';
 import { round2, isInterstateSupply } from './tax.util';
 import { deriveGstSplit } from '../purchase/purchase.util';
 import { computeCustomerExposure } from '../orders/exposure.util';
@@ -233,14 +234,22 @@ export class BillingReportsService {
       });
       const isB2b = (i: Invoice) => !!(i.gstin && String(i.gstin).trim());
       const summary = { b2b: bucket(rows.filter(isB2b)), b2c: bucket(rows.filter((i) => !isB2b(i))) };
-      return { rows, total, taxable, count: rows.length, summary };
+      // The party's name rides on each row — the accountant's export had the
+      // GSTIN and no name — and the period's credit / debit notes are listed
+      // beneath the invoices, as GSTR-1 reports them (Table 9B).
+      const customers = await m.getRepository(Customer).find();
+      const nameOf = new Map(customers.map((c) => [c.id, c.customerName]));
+      const named = rows.map((i) => ({ ...i, customerName: nameOf.get(i.customerId ?? '') ?? '' }));
+      const notes = await this.issuedNotesInRange(m, from, to);
+      const noteRows = notes.map((n) => ({ ...n, customerName: nameOf.get(n.customerId ?? '') ?? '', invoiceNo: n.invoiceNo }));
+      return { rows: named, total, taxable, count: rows.length, summary, notes: noteRows };
     });
   }
 
   /** GST summary (tax heads) over issued invoices, optionally date-bounded. */
   gstSummary(tenantId: string, from?: string, to?: string) {
     return this.db.runInTenant(tenantId, async (m) => ({
-      ...(await this.invoiceTaxHeads(m, from, to)),
+      ...(await this.outputTaxHeads(m, from, to)),
       // Cancelled invoices carry no tax and are rightly outside the totals, but
       // they were invisible here — while their numbers stayed consumed. That
       // left a gap in the series with nothing in the return to explain it, and
@@ -301,6 +310,58 @@ export class BillingReportsService {
     };
   }
 
+  /** Issued credit / debit notes in [from, to] with the invoice number they amend. */
+  private async issuedNotesInRange(m: EntityManager, from?: string, to?: string): Promise<Array<CreditNote & { invoiceNo: string | null }>> {
+    const qb = m.getRepository(CreditNote).createQueryBuilder('n').where("n.status = 'issued'");
+    if (from) qb.andWhere('n.noteDate >= :from', { from });
+    if (to) qb.andWhere('n.noteDate <= :to', { to });
+    const notes = await qb.orderBy('n.noteDate', 'ASC').addOrderBy('n.createdAt', 'ASC').take(REPORT_FETCH_LIMIT).getMany();
+    const ids = [...new Set(notes.map((n) => n.invoiceId))];
+    const invoices = ids.length ? await m.getRepository(Invoice).find({ where: { id: In(ids) } }) : [];
+    const invNo = new Map(invoices.map((i) => [i.id, i.invoiceNo]));
+    return notes.map((n) => Object.assign(n, { invoiceNo: invNo.get(n.invoiceId) ?? null }));
+  }
+
+  /** Tax heads of issued credit or debit notes in [from, to], summed in the DB. */
+  private async noteTaxHeads(m: EntityManager, noteType: 'credit' | 'debit', from?: string, to?: string) {
+    const where = ["status = 'issued'", 'note_type = $1'];
+    const params: unknown[] = [noteType];
+    if (from) { params.push(from); where.push(`note_date >= $${params.length}`); }
+    if (to) { params.push(to); where.push(`note_date <= $${params.length}`); }
+    const [r] = await m.query(
+      `SELECT COUNT(*)::int AS count,
+              COALESCE(SUM(taxable_amount), 0)::float AS taxable,
+              COALESCE(SUM(cgst_amount), 0)::float    AS cgst,
+              COALESCE(SUM(sgst_amount), 0)::float    AS sgst,
+              COALESCE(SUM(igst_amount), 0)::float    AS igst,
+              COALESCE(SUM(cess_amount), 0)::float    AS cess,
+              COALESCE(SUM(total_amount), 0)::float   AS total
+         FROM credit_notes WHERE ${where.join(' AND ')}`,
+      params,
+    );
+    return {
+      count: Number(r.count ?? 0), taxable: round2(num(r.taxable)), cgst: round2(num(r.cgst)), sgst: round2(num(r.sgst)),
+      igst: round2(num(r.igst)), cess: round2(num(r.cess)), total: round2(num(r.total)),
+    };
+  }
+
+  /**
+   * Output tax for the period: issued invoices, less issued credit notes, plus
+   * issued debit notes (GSTR-1 reports the notes in Table 9B; GSTR-3B carries
+   * the net). The three parts are returned as well as the net, so the return
+   * can be filled from one screen and the numbers reconcile.
+   */
+  private async outputTaxHeads(m: EntityManager, from?: string, to?: string) {
+    const [invoices, creditNotes, debitNotes] = await Promise.all([
+      this.invoiceTaxHeads(m, from, to),
+      this.noteTaxHeads(m, 'credit', from, to),
+      this.noteTaxHeads(m, 'debit', from, to),
+    ]);
+    const heads = ['taxable', 'cgst', 'sgst', 'igst', 'cess', 'total'] as const;
+    const net = Object.fromEntries(heads.map((h) => [h, round2(invoices[h] - creditNotes[h] + debitNotes[h])])) as Record<(typeof heads)[number], number>;
+    return { ...net, invoices, creditNotes, debitNotes };
+  }
+
   /**
    * Issued invoices in [from, to], ordered by invoice_date ASC — the row set the
    * sales register and the Tally export return. Pushes the date filter into the
@@ -328,20 +389,36 @@ export class BillingReportsService {
       const params: unknown[] = [];
       if (from) { params.push(from); where.push(`i.invoice_date >= $${params.length}`); }
       if (to) { params.push(to); where.push(`i.invoice_date <= $${params.length}`); }
+      // Issued credit notes subtract from, and debit notes add to, the same
+      // HSN/rate buckets — GSTR-1 Table 12 is reported net of notes. Values
+      // always; quantity only when goods actually moved (a return or a short
+      // supply) — a rate difference or a discount changes the money, not the
+      // cubic metres supplied.
+      const noteWhere = where.map((w) => w.replace('i.invoice_status', 'n.status').replace('i.invoice_date', 'n.note_date'));
       const rows: Array<Record<string, number | string>> = await m.query(
-        `SELECT COALESCE(NULLIF(ii.hsn_sac, ''), '—') AS hsn,
-                ii.gst_rate::float                    AS "gstRate",
-                SUM(ii.quantity)::float               AS quantity,
-                SUM(ii.taxable_amount)::float         AS taxable,
-                SUM(ii.cgst_amount)::float            AS cgst,
-                SUM(ii.sgst_amount)::float            AS sgst,
-                SUM(ii.igst_amount)::float            AS igst,
-                SUM(ii.cess_amount)::float            AS cess,
-                SUM(ii.line_total)::float             AS total
-           FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
-          WHERE ${where.join(' AND ')}
-          GROUP BY ii.hsn_sac, ii.gst_rate
+        `SELECT hsn, "gstRate",
+                SUM(quantity)::float AS quantity, SUM(taxable)::float AS taxable,
+                SUM(cgst)::float AS cgst, SUM(sgst)::float AS sgst, SUM(igst)::float AS igst,
+                SUM(cess)::float AS cess, SUM(total)::float AS total
+           FROM (
+             SELECT COALESCE(NULLIF(ii.hsn_sac, ''), '—') AS hsn, ii.gst_rate::float AS "gstRate",
+                    ii.quantity AS quantity, ii.taxable_amount AS taxable, ii.cgst_amount AS cgst, ii.sgst_amount AS sgst,
+                    ii.igst_amount AS igst, ii.cess_amount AS cess, ii.line_total AS total
+               FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+              WHERE ${where.join(' AND ')}
+             UNION ALL
+             SELECT COALESCE(NULLIF(ni.hsn_sac, ''), '—'), ni.gst_rate::float,
+                    ni.quantity * s.sign * (CASE WHEN n.reason IN ('return', 'quantity_shortfall') THEN 1 ELSE 0 END),
+                    ni.taxable_amount * s.sign, ni.cgst_amount * s.sign, ni.sgst_amount * s.sign,
+                    ni.igst_amount * s.sign, ni.cess_amount * s.sign, ni.line_total * s.sign
+               FROM credit_note_items ni
+               JOIN credit_notes n ON n.id = ni.credit_note_id
+               JOIN (SELECT 'credit' AS t, -1 AS sign UNION ALL SELECT 'debit', 1) s ON s.t = n.note_type
+              WHERE ${noteWhere.join(' AND ')}
+           ) u
+          GROUP BY hsn, "gstRate"
           ORDER BY hsn, "gstRate"`,
+        // The same $n placeholders serve both halves of the union; bind once.
         params,
       );
       const totals = ['quantity', 'taxable', 'cgst', 'sgst', 'igst', 'cess', 'total'].reduce(
@@ -377,10 +454,12 @@ export class BillingReportsService {
       if (!customerId) return empty;
       const customer = await m.getRepository(Customer).findOne({ where: { id: customerId } });
       if (!customer) return empty;
-      const [invoices, payments] = await Promise.all([
+      const [invoices, payments, notes] = await Promise.all([
         m.getRepository(Invoice).find({ where: { customerId, invoiceStatus: 'issued' } }),
         m.getRepository(Payment).find({ where: { customerId } }),
+        m.getRepository(CreditNote).find({ where: { customerId, status: 'issued' } }),
       ]);
+      const invNoOf = new Map(invoices.map((i) => [i.id, i.invoiceNo ?? '']));
       const iso = (v: unknown): string => { try { return new Date(v as string | number | Date).toISOString(); } catch { return ''; } };
       const sk = (date: string | null, createdAt: unknown) => `${date ?? '9999-99-99'}#${iso(createdAt)}`;
       const txns: StatementTxn[] = [
@@ -394,6 +473,16 @@ export class BillingReportsService {
           date: p.receiptDate, sortKey: sk(p.receiptDate, p.createdAt), type: 'receipt' as const,
           ref: p.receiptNo, particulars: `Receipt ${p.receiptNo}${p.paymentMode ? ` (${p.paymentMode})` : ''}`,
           debit: 0, credit: num(p.amount),
+        })),
+        // A credit note is a credit against the party; a debit note a debit —
+        // each names the invoice it amends.
+        ...notes.map((n) => ({
+          date: n.noteDate, sortKey: sk(n.noteDate, n.createdAt),
+          type: (n.noteType === 'debit' ? 'debit_note' : 'credit_note') as 'debit_note' | 'credit_note',
+          ref: n.noteNo ?? '',
+          particulars: `${n.noteType === 'debit' ? 'Debit note' : 'Credit note'} ${n.noteNo ?? ''} against ${invNoOf.get(n.invoiceId) ?? 'invoice'}`.trim(),
+          debit: n.noteType === 'debit' ? num(n.totalAmount) : 0,
+          credit: n.noteType === 'debit' ? 0 : num(n.totalAmount),
         })),
       ];
       const st = buildStatement({ openingBalance: num(customer.openingBalance), txns, from, to });
@@ -429,15 +518,24 @@ export class BillingReportsService {
       const customers = await m.getRepository(Customer).find();
       const nameOf = new Map(customers.map((c) => [c.id, c.customerName]));
       const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-      const header = ['Date', 'VoucherType', 'InvoiceNo', 'Party', 'GSTIN', 'Taxable', 'CGST', 'SGST', 'IGST', 'Cess', 'RoundOff', 'Total'];
+      // Credit / debit notes ride along as their own voucher types, naming the
+      // invoice they amend in the last column (blank for a sale).
+      const notes = await this.issuedNotesInRange(m, from, to);
+      const header = ['Date', 'VoucherType', 'InvoiceNo', 'Party', 'GSTIN', 'Taxable', 'CGST', 'SGST', 'IGST', 'Cess', 'RoundOff', 'Total', 'AgainstInvoice'];
       const lines = [header.join(',')];
       for (const i of invoices) {
         lines.push([
           esc(i.invoiceDate), esc('Sales'), esc(i.invoiceNo), esc(nameOf.get(i.customerId ?? '') ?? ''), esc(i.gstin),
-          i.taxableAmount, i.cgstAmount, i.sgstAmount, i.igstAmount, i.cessAmount, i.roundOff, i.totalAmount,
+          i.taxableAmount, i.cgstAmount, i.sgstAmount, i.igstAmount, i.cessAmount, i.roundOff, i.totalAmount, esc(''),
         ].join(','));
       }
-      return { csv: lines.join('\n'), count: invoices.length };
+      for (const n of notes) {
+        lines.push([
+          esc(n.noteDate), esc(n.noteType === 'debit' ? 'Debit Note' : 'Credit Note'), esc(n.noteNo), esc(nameOf.get(n.customerId ?? '') ?? ''), esc(n.gstin),
+          n.taxableAmount, n.cgstAmount, n.sgstAmount, n.igstAmount, n.cessAmount, n.roundOff, n.totalAmount, esc(n.invoiceNo ?? ''),
+        ].join(','));
+      }
+      return { csv: lines.join('\n'), count: invoices.length + notes.length };
     });
   }
 
@@ -453,7 +551,8 @@ export class BillingReportsService {
     return this.db.runInTenant(tenantId, async (m) => {
       // Output tax — issued invoices' stored header tax heads, summed in the DB
       // (same query the GST summary uses; was: load all issued invoices + reduce).
-      const output = await this.invoiceTaxHeads(m, from, to);
+      // Net of credit and debit notes — 3B carries the net output tax.
+      const output = await this.outputTaxHeads(m, from, to);
 
       // Input tax credit — approved AND ITC-eligible bills only; blocked-credit
       // bills (Sec 17(5)) are excluded from the claimable ITC. Split derived from

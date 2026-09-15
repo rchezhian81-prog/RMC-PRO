@@ -4,9 +4,10 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import { PdfService } from '../sales/pdf.service';
-import { InvoiceController, ReceiptController, BillingReportsController } from './billing.controllers';
+import { InvoiceController, ReceiptController, CreditNoteController, BillingReportsController } from './billing.controllers';
 import { InvoiceService } from './invoice.service';
 import { ReceiptService } from './receipt.service';
+import { CreditNoteService } from './credit-note.service';
 import { BillingReportsService } from './billing-reports.service';
 
 /**
@@ -16,10 +17,11 @@ import { BillingReportsService } from './billing-reports.service';
  * receipt WhatsApp share. No live GSTN / e-way / Tally / gateway integration.
  */
 @Module({
-  controllers: [InvoiceController, ReceiptController, BillingReportsController],
+  controllers: [InvoiceController, ReceiptController, CreditNoteController, BillingReportsController],
   providers: [
     InvoiceService,
     ReceiptService,
+    CreditNoteService,
     BillingReportsService,
     NumberingService,
     WhatsAppService,

@@ -36,6 +36,10 @@ export class Invoice extends TenantScopedEntity {
   @Column({ name: 'amount_paid', type: 'numeric', precision: 16, scale: 2, default: 0 }) amountPaid!: string;
   @Column({ name: 'outstanding_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) outstandingAmount!: string;
   @Column({ name: 'written_off_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) writtenOffAmount!: string;
+  /** Issued credit notes against this invoice — reduce what is owed (GST Rule 53). */
+  @Column({ name: 'credit_note_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) creditNoteAmount!: string;
+  /** Issued debit notes against this invoice — add to what is owed. */
+  @Column({ name: 'debit_note_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) debitNoteAmount!: string;
   @Column({ name: 'payment_status', type: 'varchar', default: 'unpaid' }) paymentStatus!: string;
   @Column({ name: 'invoice_status', type: 'varchar', default: 'draft' }) invoiceStatus!: string;
   // E-invoice-ready (Doc 6 §13.4) — stored only.
@@ -114,4 +118,57 @@ export class PaymentAllocation extends TenantScopedEntity {
   @Column({ name: 'payment_id', type: 'uuid' }) paymentId!: string;
   @Column({ name: 'invoice_id', type: 'uuid' }) invoiceId!: string;
   @Column({ name: 'allocated_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) allocatedAmount!: string;
+}
+
+/**
+ * A GST credit or debit note against an issued invoice (CGST Rule 53). A
+ * credit note reduces what the customer owes — a rate difference, a shortfall,
+ * a return after billing; a debit note adds to it. Each is its own numbered
+ * document; the invoice it amends is never edited.
+ */
+@Entity('credit_notes')
+export class CreditNote extends TenantScopedEntity {
+  /** Null until issued — a draft does not consume a number. */
+  @Column({ name: 'note_no', type: 'varchar', nullable: true }) noteNo!: string | null;
+  /** credit | debit */
+  @Column({ name: 'note_type', type: 'varchar' }) noteType!: string;
+  @Column({ name: 'invoice_id', type: 'uuid' }) invoiceId!: string;
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true }) customerId!: string | null;
+  @Column({ name: 'note_date', type: 'date', nullable: true }) noteDate!: string | null;
+  @Column({ name: 'reason', type: 'varchar', nullable: true }) reason!: string | null;
+  @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
+  @Column({ name: 'place_of_supply', type: 'varchar', nullable: true }) placeOfSupply!: string | null;
+  @Column({ name: 'gstin', type: 'varchar', nullable: true }) gstin!: string | null;
+  @Column({ name: 'is_interstate', type: 'boolean', default: false }) isInterstate!: boolean;
+  @Column({ name: 'taxable_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxableAmount!: string;
+  @Column({ name: 'cgst_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) cgstAmount!: string;
+  @Column({ name: 'sgst_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) sgstAmount!: string;
+  @Column({ name: 'igst_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) igstAmount!: string;
+  @Column({ name: 'cess_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) cessAmount!: string;
+  @Column({ name: 'round_off', type: 'numeric', precision: 8, scale: 2, default: 0 }) roundOff!: string;
+  @Column({ name: 'total_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) totalAmount!: string;
+  /** draft | issued | cancelled */
+  @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
+  @Column({ name: 'cancel_reason', type: 'varchar', nullable: true }) cancelReason!: string | null;
+}
+
+@Entity('credit_note_items')
+export class CreditNoteItem extends TenantScopedEntity {
+  @Column({ name: 'credit_note_id', type: 'uuid' }) creditNoteId!: string;
+  @Column({ name: 'description', type: 'varchar', nullable: true }) description!: string | null;
+  @Column({ name: 'hsn_sac', type: 'varchar', nullable: true }) hsnSac!: string | null;
+  @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;
+  @Column({ name: 'quantity', type: 'numeric', precision: 16, scale: 3, default: 0 }) quantity!: string;
+  @Column({ name: 'rate', type: 'numeric', precision: 14, scale: 2, default: 0 }) rate!: string;
+  @Column({ name: 'taxable_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxableAmount!: string;
+  @Column({ name: 'gst_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) gstRate!: string;
+  @Column({ name: 'cgst_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) cgstRate!: string;
+  @Column({ name: 'cgst_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) cgstAmount!: string;
+  @Column({ name: 'sgst_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) sgstRate!: string;
+  @Column({ name: 'sgst_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) sgstAmount!: string;
+  @Column({ name: 'igst_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) igstRate!: string;
+  @Column({ name: 'igst_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) igstAmount!: string;
+  @Column({ name: 'cess_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) cessRate!: string;
+  @Column({ name: 'cess_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) cessAmount!: string;
+  @Column({ name: 'line_total', type: 'numeric', precision: 16, scale: 2, default: 0 }) lineTotal!: string;
 }

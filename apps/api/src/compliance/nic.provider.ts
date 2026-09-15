@@ -339,7 +339,10 @@ export class NicGstProvider implements GstComplianceProvider {
   }
 
   private env(name: string): string {
-    const v = process.env[name]?.trim();
+    let v = process.env[name]?.trim();
+    // A PEM kept in .env.production is one quoted line with literal "\n"
+    // sequences (that is how gst-enable.sh writes it); restore the line breaks.
+    if (v && name === 'GST_RSA_PUBLIC_KEY_PEM') v = v.replace(/\\n/g, '\n');
     if (!v) throw new GstProviderError('NOT_IMPLEMENTED', `missing required env ${name}`);
     return v;
   }

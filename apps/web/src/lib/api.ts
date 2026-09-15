@@ -877,6 +877,15 @@ export interface GstCredentialStatus {
   lastTestSuccess: boolean | null;
   lastTestMessage: string | null;
 }
+// Operator self-checks (Settings → Error alerts). The server never returns the
+// webhook URL, only whether one is wired and what a test delivery did.
+export type AlertingStatus = { configured: boolean; source: string | null; digestEnabled: boolean };
+export type AlertTestResult = { configured: boolean; delivered: boolean; status?: number; error?: string; message: string };
+export const opsApi = {
+  alerting: () => apiFetch<AlertingStatus>('/ops/alerting'),
+  alertTest: () => apiFetch<AlertTestResult>('/ops/alert-test', { method: 'POST' }),
+};
+
 export const gstCredentialsApi = {
   list: () => apiFetch<GstCredentialStatus[]>('/compliance/gst-credentials'),
   set: (gstin: string, username: string, password: string) =>

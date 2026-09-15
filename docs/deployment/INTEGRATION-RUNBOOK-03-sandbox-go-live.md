@@ -81,6 +81,13 @@ test a path that can't run:
 
 ## 2. Set the environment (host / compose env — never the repo)
 
+> **One command does this section and the restart:** `./scripts/ops/gst-enable.sh --sandbox`
+> prompts for the four values (the secret hidden), generates `GST_CRED_ENC_KEY`
+> if it is missing, writes the lines below to `.env.production`, sets
+> `GST_WORKER_ENABLED=true`, recreates the api and confirms the encryption line
+> in its log. `--status` shows what is set (never the values); `--off` returns
+> to prepare-only; `--production` is the same switch for the live portal.
+
 Names below are read by `nic.provider.ts` (`isConfigured()` + `env()`) and
 `gst-cred-crypto.util.ts`. Values come from your GSP and `openssl`.
 

@@ -132,6 +132,25 @@ services:
       GST_IRP_MAX_RETRIES: ${GST_IRP_MAX_RETRIES:-2}
       # AES-256-GCM master key for per-tenant GST-portal credentials (at rest).
       GST_CRED_ENC_KEY: ${GST_CRED_ENC_KEY:-}
+      GST_IRP_TIMEOUT_MS: ${GST_IRP_TIMEOUT_MS:-30000}
+      # The in-process worker that drains approved GST actions (off = manual drain).
+      GST_WORKER_ENABLED: ${GST_WORKER_ENABLED:-false}
+      GST_WORKER_INTERVAL_MS: ${GST_WORKER_INTERVAL_MS:-5000}
+      # Ops alerting: ONE webhook for the whole box. The API reads
+      # ALERT_WEBHOOK_URL, else RMC_ALERT_WEBHOOK (the scripts' name) — so the
+      # line the health monitor and backups use also pages on API 5xx. These
+      # were not passed through before, which left the API silent whatever the
+      # env file said.
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      RMC_ALERT_WEBHOOK: ${RMC_ALERT_WEBHOOK:-}
+      ALERT_MIN_STATUS: ${ALERT_MIN_STATUS:-500}
+      ALERT_DEDUP_WINDOW_MS: ${ALERT_DEDUP_WINDOW_MS:-300000}
+      ALERT_MAX_PER_WINDOW: ${ALERT_MAX_PER_WINDOW:-60}
+      ALERT_TIMEOUT_MS: ${ALERT_TIMEOUT_MS:-3000}
+      ALERT_DIGEST_ENABLED: ${ALERT_DIGEST_ENABLED:-false}
+      ALERT_DIGEST_HOUR: ${ALERT_DIGEST_HOUR:-8}
+      ALERT_DIGEST_MIN_SEVERITY: ${ALERT_DIGEST_MIN_SEVERITY:-danger}
+      ALERT_DIGEST_INTERVAL_MS: ${ALERT_DIGEST_INTERVAL_MS:-900000}
     expose: ['4000']
     depends_on:
       postgres:

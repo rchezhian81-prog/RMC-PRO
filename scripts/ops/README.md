@@ -37,17 +37,33 @@ sudo ./scripts/ops/install-monitor-cron.sh
 Writes `/etc/cron.d/rmc-monitor`, logs to `/var/log/rmc-monitor.log`, runs one
 check immediately. Idempotent.
 
-### Alerts (optional, no external account required if you already have a webhook)
+### Alerts — one line wires everything
 
-Set a webhook in `.env.production` and the monitor POSTs `{"text":"…"}` to it on
-each state change — works with Slack, Discord, a Telegram bot bridge, n8n, etc.:
+Set ONE webhook in `.env.production` and every alerting path uses it: this
+monitor (on each state change), the backups (a failed off-box copy), the restore
+drill, and the API itself (5xx errors, GST portal auth failures, dead-lettered
+jobs, the daily digest). The body carries both `text` and `content`, so Slack,
+Google Chat, Discord and any generic relay all render it:
 
 ```
-RMC_ALERT_WEBHOOK=https://hooks.slack.com/services/…
+RMC_ALERT_WEBHOOK=https://discord.com/api/webhooks/…      # or hooks.slack.com/…
 ```
 
-With no webhook set, alerts still land in the log; the external monitor (Layer 1)
-is what reaches your phone.
+Where to get one, free, with a phone app that buzzes: **Discord** — your server
+→ channel → Edit channel → Integrations → Webhooks → New webhook → Copy URL.
+**Slack** — api.slack.com/apps → your app → Incoming Webhooks → Add to workspace.
+
+The API reads the value at start, so recreate it after adding the line, then
+prove both paths in one go (two test messages land in the channel):
+
+```bash
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d api
+./scripts/ops/alert-test.sh
+```
+
+The same test is available to the company owner in the app: Settings → Error
+alerts → **Send test alert**. With no webhook set, alerts still land in the log;
+the external monitor (Layer 1) is what reaches your phone.
 
 ### Tuning
 

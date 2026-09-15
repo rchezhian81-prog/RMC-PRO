@@ -33,8 +33,11 @@ COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"
 STATE_FILE="${STATE_FILE:-/var/lib/rmc/health.state}"
 
 getenv() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true; }
+# One alert channel for every script (RMC_ALERT_WEBHOOK, or ALERT_WEBHOOK_URL).
+# shellcheck source=scripts/ops/lib-alert.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-alert.sh"
 DOMAIN="${DOMAIN:-$(getenv DOMAIN)}"; DOMAIN="${DOMAIN:-mixnovas.com}"
-RMC_ALERT_WEBHOOK="${RMC_ALERT_WEBHOOK:-$(getenv RMC_ALERT_WEBHOOK)}"
+RMC_ALERT_WEBHOOK="$(rmc_alert_webhook)"
 DISK_WARN_PCT="${DISK_WARN_PCT:-85}"
 CERT_WARN_DAYS="${CERT_WARN_DAYS:-14}"
 
@@ -100,10 +103,7 @@ echo "$status" > "$STATE_FILE" 2>/dev/null || true
 notify() {
   local msg="$1"
   [ -n "$RMC_ALERT_WEBHOOK" ] || return 0
-  curl -fsS --max-time 12 -X POST "$RMC_ALERT_WEBHOOK" \
-    -H 'Content-Type: application/json' \
-    --data "$(printf '{"text":"Mix Nova RMC: %s"}' "$(echo "$msg" | sed 's/"/\\"/g')")" \
-    >/dev/null 2>&1 || echo "[$(ts)] WARN: alert webhook POST failed"
+  rmc_alert "Mix Nova RMC: $msg" || echo "[$(ts)] WARN: alert webhook POST failed (HTTP ${RMC_ALERT_HTTP:-none})"
 }
 
 if [ "$status" != "$prev" ]; then

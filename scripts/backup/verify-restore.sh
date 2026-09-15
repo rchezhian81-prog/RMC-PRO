@@ -83,9 +83,9 @@ dc_psql() {  # psql inside the postgres container, as the owner role
 
 fail() {
   log "RESTORE DRILL: FAIL — $1"
-  local hook; hook="$(getenv RMC_ALERT_WEBHOOK)"
-  [ -n "${hook:-}" ] && curl -fsS -m 8 -X POST -H 'Content-Type: application/json' \
-    -d "{\"text\":\"RMC restore drill FAILED: $1\"}" "$hook" >/dev/null 2>&1
+  # shellcheck source=scripts/ops/lib-alert.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/../ops/lib-alert.sh"
+  [ -n "$(rmc_alert_webhook)" ] && { rmc_alert "RMC restore drill FAILED: $1" || log "WARN: alert webhook POST failed (HTTP ${RMC_ALERT_HTTP:-none})"; }
   dc_psql -d postgres -c "DROP DATABASE IF EXISTS \"$SCRATCH\";" >/dev/null 2>&1 || true
   exit 1
 }

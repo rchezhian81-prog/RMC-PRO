@@ -36,14 +36,26 @@ export function documentViewerHtml(opts: { url: string; filename: string }): str
   .bar a,.bar button{appearance:none;border:1px solid #666;background:#2c2c2c;color:#fff;padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;text-decoration:none}
   .bar a:hover,.bar button:hover{background:#3d3d3d}
   iframe{display:block;width:100%;height:calc(100% - 44px);border:0;background:#fff}
+  .gone{display:none!important}
+  .nopdf{margin:24px auto;max-width:520px;background:#fff;color:#222;border-radius:10px;padding:20px 22px;font-size:15px;line-height:1.5}
+  .nopdf a{display:inline-block;margin-top:12px;background:#1f6feb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}
 </style></head><body>
 <div class="bar"><b>${name}</b><button type="button" id="print">Print</button><a id="save" href="${url}" download="${file}">Save as ${file}</a></div>
 <iframe id="pdf" src="${url}" title="${name}"></iframe>
+<div id="nopdf" class="nopdf gone"><b>${name}</b> is ready. This phone's browser cannot show a PDF on the page, so save it and open it from your downloads to print or share it.<br><a href="${url}" download="${file}">Save ${file}</a></div>
 <script>
   document.getElementById('print').addEventListener('click', function () {
     var f = document.getElementById('pdf');
     try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { window.print(); }
   });
+  // Android browsers have no inline PDF viewer (navigator.pdfViewerEnabled is
+  // false): the frame would show a blank or a broken icon. Say so and offer
+  // the file instead; desktop browsers and iOS show the PDF in place.
+  if (navigator.pdfViewerEnabled === false) {
+    document.getElementById('pdf').className = 'gone';
+    document.getElementById('print').className = 'gone';
+    document.getElementById('nopdf').className = 'nopdf';
+  }
 </script>
 </body></html>`;
 }

@@ -85,3 +85,16 @@ export function purchaseOrderShareMessage(o: {
   const what = o.lines.length ? ` — ${o.lines.join('; ')}` : '';
   return `${o.companyName}: Purchase order ${o.poNo}${dated}${what}, total ₹${inr(o.totalAmount)}${by}. Please quote the PO number on your challan and invoice.`;
 }
+
+export function creditNoteShareMessage(n: {
+  companyName: string; noteType: 'credit' | 'debit'; noteNo: string; noteDate?: string | null; invoiceNo?: string | null;
+  totalAmount: string | number; reason?: string | null; status: string;
+}): string {
+  const kind = n.noteType === 'debit' ? 'Debit note' : 'Credit note';
+  const dated = n.noteDate ? ` dated ${dmy(n.noteDate)}` : '';
+  const against = n.invoiceNo ? ` against invoice ${n.invoiceNo}` : '';
+  if (n.status === 'cancelled') return `${n.companyName}: ${kind} ${n.noteNo}${dated}${against} has been CANCELLED. Please disregard it.`;
+  const why = n.reason ? ` (${n.reason})` : '';
+  const effect = n.noteType === 'debit' ? 'added to your account' : 'credited to your account';
+  return `${n.companyName}: ${kind} ${n.noteNo}${dated}${against} for ₹${inr(n.totalAmount)}${why}, ${effect}. Thank you.`;
+}

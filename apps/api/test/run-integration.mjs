@@ -52,7 +52,7 @@ const OWNER_PW = 'OwnerCI#12345';
 const BASE = `http://localhost:${E.API_PORT}/api/v1`;
 const childEnv = { ...process.env, ...E };
 
-const TESTS = [
+const ALL_TESTS = [
   'test/stock-ledger.integration.test.mjs',
   'test/master-validation.test.mjs',
   'test/rls-isolation.test.mjs',
@@ -128,6 +128,10 @@ const TESTS = [
   // Receipt corrections: general reverse for any mode (I4) and the one-live-
   // receipt-per-bank-reference guard + index (I5). Seeds its own customers.
   'test/receipt-corrections.test.mjs',
+  // GST credit / debit notes (Rule 53): raised against an issued invoice,
+  // moving its balance through the one formula; refusals (headroom, over-
+  // payment, live note blocks invoice cancel); statement, GST, HSN, Tally.
+  'test/credit-notes.test.mjs',
   // Order cancel with live downstream (I14): in-flight concrete blocks the
   // cancel, harmless leftovers go with it, downstream creates refuse a
   // cancelled order. Seeds its own orders.
@@ -166,6 +170,9 @@ const TESTS = [
   // nothing after it may depend on the old password.
   'test/refresh-rotation.test.mjs',
 ];
+// ONLY=<substring>[,<substring>…] runs the matching files alone (in suite order) while working on a test.
+const only = (process.env.ONLY ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+const TESTS = only.length ? ALL_TESTS.filter((t) => only.some((o) => t.includes(o))) : ALL_TESTS;
 
 function step(name, cmd, args, extraEnv = {}) {
   console.log(`\n── ${name} ──`);

@@ -154,7 +154,7 @@ export class ReceiptService {
       m.getRepository(PaymentAllocation).create({ tenantId, paymentId, invoiceId: invoice.id, allocatedAmount: String(amt) }),
     );
     const paid = round2(num(invoice.amountPaid) + amt);
-    const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
+    const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount, { credited: invoice.creditNoteAmount, debited: invoice.debitNoteAmount });
     await m.getRepository(Invoice).update(invoice.id, {
       amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,
     });
@@ -267,7 +267,7 @@ export class ReceiptService {
         // can't push outstanding above the invoice total on reversal — the
         // vendor-payment reversal clamps the same way.
         const paid = Math.max(0, round2(num(invoice.amountPaid) - num(a.allocatedAmount)));
-        const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount);
+        const { outstanding, paymentStatus } = invoiceBalanceAfter(invoice.totalAmount, paid, invoice.writtenOffAmount, { credited: invoice.creditNoteAmount, debited: invoice.debitNoteAmount });
         await invoiceRepo.update(invoice.id, {
           amountPaid: String(paid), outstandingAmount: String(outstanding), paymentStatus,
         });

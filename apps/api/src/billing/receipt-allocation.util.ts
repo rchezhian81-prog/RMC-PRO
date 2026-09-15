@@ -29,27 +29,41 @@ export function allocateAcrossInvoices(amount: number, invoices: AllocatableInvo
   return out;
 }
 
-export type PaymentStatus = 'paid' | 'partially_paid' | 'unpaid';
+export type PaymentStatus = 'paid' | 'partially_paid' | 'unpaid' | 'credited';
+
+/** Issued credit / debit note totals against an invoice (DB numerics allowed). */
+export interface InvoiceNotes {
+  credited?: number | string | null;
+  debited?: number | string | null;
+}
 
 /**
- * An invoice's balance after its paid figure changes, honouring any write-off.
+ * An invoice's balance after its paid figure changes, honouring any write-off
+ * and any credit / debit notes issued against it.
  *
- *   outstanding = total − paid − writtenOff
- *   status = 'paid' once outstanding clears, 'partially_paid' while any money
- *            has been received, else 'unpaid'
+ *   outstanding = total + debited − credited − paid − writtenOff
+ *   status = 'paid' once outstanding clears and money was received,
+ *            'credited' once it clears by credit note alone,
+ *            'partially_paid' while any money has been received, else 'unpaid'
  *
  * The single source of truth for post-allocation invoice balances: receipt
- * create, advance apply, and cheque bounce all settle through here, so none can
- * drift (e.g. forget the write-off and resurrect a written-off balance). Pure so
- * the arithmetic is unit-testable. Inputs may be numeric strings (DB numerics).
+ * create, advance apply, cheque bounce, write-off and credit / debit notes all
+ * settle through here, so none can drift. The notes are part of the formula
+ * for a reason: a note that only edited the outstanding would be undone the
+ * next time a receipt recomputed it from the invoice's figures. Pure so the
+ * arithmetic is unit-testable. Inputs may be numeric strings (DB numerics).
  */
 export function invoiceBalanceAfter(
   totalAmount: number | string,
   amountPaid: number | string,
   writtenOffAmount: number | string,
+  notes: InvoiceNotes = {},
 ): { outstanding: number; paymentStatus: PaymentStatus } {
   const paid = round2(Number(amountPaid) || 0);
-  const outstanding = round2((Number(totalAmount) || 0) - paid - (Number(writtenOffAmount) || 0));
-  const paymentStatus: PaymentStatus = outstanding <= 0.001 ? 'paid' : paid > 0.001 ? 'partially_paid' : 'unpaid';
+  const credited = round2(Number(notes.credited) || 0);
+  const debited = round2(Number(notes.debited) || 0);
+  const outstanding = round2((Number(totalAmount) || 0) + debited - credited - paid - (Number(writtenOffAmount) || 0));
+  const paymentStatus: PaymentStatus =
+    outstanding <= 0.001 ? (paid > 0.001 ? 'paid' : credited > 0.001 ? 'credited' : 'paid') : paid > 0.001 ? 'partially_paid' : 'unpaid';
   return { outstanding, paymentStatus };
 }

@@ -30,3 +30,12 @@ test('a document name is escaped on the way into the page', () => {
   assert.ok(html.includes('<title>Statement - &lt;BuildCo &amp; Sons&gt;</title>'));
   assert.ok(!html.includes('<BuildCo'), 'no raw angle brackets from the name');
 });
+
+test('a phone browser with no PDF viewer is told to save the file instead of shown a blank frame', () => {
+  const html = documentViewerHtml({ url: 'blob:x', filename: 'CN-0001.pdf' });
+  assert.ok(html.includes("navigator.pdfViewerEnabled === false"), 'detects the missing viewer (Android Chrome)');
+  assert.ok(html.includes('id="nopdf" class="nopdf gone"'), 'the notice is hidden until then');
+  assert.ok(html.includes('cannot show a PDF on the page'), 'and says what to do');
+  assert.ok(html.includes('download="CN-0001.pdf">Save CN-0001.pdf</a>'), 'with the file under its own name');
+  assert.ok(html.includes('.gone{display:none!important}'), 'hiding beats the iframe\'s display:block');
+});

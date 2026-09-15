@@ -21,7 +21,7 @@ export interface StatementTxn {
   /** Stable tiebreak for same-date ordering (e.g. date + created-at). */
   sortKey: string;
   /** Document kind — sales ledger uses invoice/receipt, vendor ledger bill/payment. */
-  type: 'invoice' | 'receipt' | 'bill' | 'payment';
+  type: 'invoice' | 'receipt' | 'bill' | 'payment' | 'credit_note' | 'debit_note';
   ref: string;
   particulars: string;
   debit: number;

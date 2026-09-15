@@ -223,6 +223,32 @@ export interface VendorPaymentPdfData extends CompanyBlock {
   unallocatedAmount: string | number;
 }
 
+/** A GST credit or debit note — the invoice's lines shape, plus what it amends and why. */
+export interface CreditNotePdfData extends CompanyBlock {
+  noteType: 'credit' | 'debit';
+  noteNo: string;
+  noteDate?: string | null;
+  status: string;
+  invoiceNo?: string | null;
+  invoiceDate?: string | null;
+  reason?: string | null;
+  remarks?: string | null;
+  customerName: string;
+  customerAddress?: string | null;
+  customerGstin?: string | null;
+  placeOfSupply?: string | null;
+  placeOfSupplyCode?: string | null;
+  isInterstate: boolean;
+  items: InvoicePdfItem[];
+  taxableAmount: string | number;
+  cgstAmount: string | number;
+  sgstAmount: string | number;
+  igstAmount: string | number;
+  cessAmount: string | number;
+  roundOff: string | number;
+  totalAmount: string | number;
+}
+
 export interface StatementPdfRow {
   date?: string | null;
   particulars: string;
@@ -1209,6 +1235,95 @@ export class PdfService {
       drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.font('Helvetica').fontSize(8).fillColor('#777').text('System-generated payment advice.', left, doc.y, { align: 'center' });
+      doc.end();
+    });
+  }
+
+  /**
+   * Credit / debit note (CGST Rule 53): the supplier block, the note's own
+   * number and date, the invoice it amends, the recipient with address and
+   * GSTIN, the place of supply, the lines with HSN and tax, totals in figures
+   * and words, the reason, and the signature block. A cancelled note says so.
+   */
+  creditNotePdf(data: CreditNotePdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+      const title = data.noteType === 'debit' ? 'DEBIT NOTE' : 'CREDIT NOTE';
+
+      drawCompanyHeader(doc, data, left);
+      doc.moveDown(0.3);
+      doc.fontSize(14).font('Helvetica-Bold').text(title, { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.noteNo}`, { align: 'right' });
+      if (data.noteDate) doc.text(`Date: ${data.noteDate}`, { align: 'right' });
+      if (data.invoiceNo) doc.text(`Against invoice: ${data.invoiceNo}${data.invoiceDate ? ` dated ${data.invoiceDate}` : ''}`, { align: 'right' });
+      doc.text(`Status: ${data.status}`, { align: 'right' });
+      doc.moveDown(0.5);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.5);
+      if (data.status === 'cancelled') {
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#b91c1c').text('CANCELLED — this note has no effect. Please disregard it.');
+        doc.fillColor('#000').moveDown(0.5);
+      } else if (data.status === 'draft') {
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#92400e').text('DRAFT — not yet issued; it has no number and no effect until it is.');
+        doc.fillColor('#000').moveDown(0.5);
+      }
+      doc.font('Helvetica-Bold').fontSize(10).text(`${data.noteType === 'debit' ? 'Debited to' : 'Credited to'}: `, { continued: true });
+      doc.font('Helvetica').text(data.customerName);
+      if (data.customerAddress) doc.fontSize(9).text(data.customerAddress);
+      if (data.customerGstin) doc.fontSize(9).text(`GSTIN: ${data.customerGstin}`);
+      doc.font('Helvetica').fontSize(9).text(`Place of supply: ${data.placeOfSupply ?? '-'}${data.placeOfSupplyCode ? ` (${data.placeOfSupplyCode})` : ''} — ${data.isInterstate ? 'Inter-state / IGST' : 'Intra-state / CGST+SGST'}`);
+      if (data.reason) { doc.font('Helvetica-Bold').fontSize(9.5).text('Reason: ', { continued: true }); doc.font('Helvetica').text(data.reason); }
+      doc.moveDown(0.6);
+
+      const cols = [
+        { key: 'desc', label: 'Description', w: 150, align: 'left' as const },
+        { key: 'hsn', label: 'HSN/SAC', w: 60, align: 'left' as const },
+        { key: 'uom', label: 'UOM', w: 40, align: 'left' as const },
+        { key: 'qty', label: 'Qty', w: 52, align: 'right' as const },
+        { key: 'rate', label: 'Rate', w: 58, align: 'right' as const },
+        { key: 'taxable', label: 'Taxable', w: 70, align: 'right' as const },
+        { key: 'gst', label: 'GST%', w: 40, align: 'right' as const },
+        { key: 'total', label: 'Total', w: 75, align: 'right' as const },
+      ];
+      let y = doc.y;
+      const rowH = 18;
+      const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+        if (fill) doc.rect(left, y - 2, right - left, rowH).fill(fill).fillColor('#000');
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor('#000');
+        let x = left;
+        cols.forEach((c, i) => { doc.text(cells[i] ?? '', x + 3, y + 3, { width: c.w - 6, align: c.align, lineBreak: false }); x += c.w; });
+        y += rowH;
+      };
+      drawRow(cols.map((c) => c.label), true, '#eef1f6');
+      for (const it of data.items) {
+        if (y > doc.page.height - 200) { doc.addPage(); y = doc.page.margins.top; drawRow(cols.map((c) => c.label), true, '#eef1f6'); }
+        drawRow([it.description || '-', it.hsnSac || '-', it.uom || '-', money(it.quantity), money(it.rate), money(it.taxableAmount), String(Number(it.gstRate)), money(it.lineTotal)], false);
+      }
+      doc.y = y + 10;
+      doc.x = left;
+      const totalLine = (lbl: string, value: string, bold = false) => {
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 9.5).text(`${lbl}   ${value}`, left, doc.y, { align: 'right' });
+      };
+      totalLine('Taxable', money(data.taxableAmount));
+      if (Number(data.cgstAmount) > 0) totalLine('CGST', money(data.cgstAmount));
+      if (Number(data.sgstAmount) > 0) totalLine('SGST', money(data.sgstAmount));
+      if (Number(data.igstAmount) > 0) totalLine('IGST', money(data.igstAmount));
+      if (Number(data.cessAmount) > 0) totalLine('Cess', money(data.cessAmount));
+      if (Number(data.roundOff) !== 0) totalLine('Round off', money(data.roundOff));
+      totalLine(data.noteType === 'debit' ? 'Total debited' : 'Total credited', `INR ${money(data.totalAmount)}`, true);
+      doc.font('Helvetica').fontSize(9).text(`Amount in words: ${amountInWords(data.totalAmount)}`, left, doc.y, { align: 'right' });
+      if (data.remarks) { doc.moveDown(0.5); doc.font('Helvetica-Bold').fontSize(9).text('Remarks: ', left, doc.y, { continued: true }); doc.font('Helvetica').text(data.remarks); }
+
+      drawSignatoryBlock(doc, data.companyName, left, right);
+      doc.moveDown(1.5);
+      doc.font('Helvetica').fontSize(8).fillColor('#777').text(`System-generated ${title.toLowerCase()}.`, left, doc.y, { align: 'center' });
       doc.end();
     });
   }

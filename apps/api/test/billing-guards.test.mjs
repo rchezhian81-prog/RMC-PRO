@@ -280,12 +280,16 @@ console.log('\n[B7] cancelled invoices are declared on the GST summary');
   ok(!!listed, `the cancelled number is declared (${no}) — it used to vanish while staying consumed`);
   ok(gst.data?.cancelled?.count >= 1, `with a count (${gst.data?.cancelled?.count})`);
   ok(Number(gst.data?.cancelled?.voidedValue) > 0, `and the voided value for reconciliation (${gst.data?.cancelled?.voidedValue})`);
-  // It must not have leaked into the liability.
+  // It must not have leaked into the liability: the taxable total is issued
+  // invoices, less issued credit notes, plus issued debit notes (the return's
+  // net) — a cancelled invoice contributes nothing.
   const taxable = Number(gst.data?.taxable ?? 0);
   const issuedOnly = await one(
-    `SELECT COALESCE(SUM(taxable_amount),0)::float AS t FROM invoices WHERE invoice_status = 'issued'`,
+    `SELECT (SELECT COALESCE(SUM(taxable_amount),0) FROM invoices WHERE invoice_status = 'issued')
+          - (SELECT COALESCE(SUM(taxable_amount),0) FROM credit_notes WHERE status = 'issued' AND note_type = 'credit')
+          + (SELECT COALESCE(SUM(taxable_amount),0) FROM credit_notes WHERE status = 'issued' AND note_type = 'debit') AS t`,
   );
-  ok(Math.abs(taxable - Number(issuedOnly.t)) < 0.01, `the taxable total still counts issued invoices only (${taxable})`);
+  ok(Math.abs(taxable - Number(issuedOnly.t)) < 0.01, `the taxable total counts issued invoices net of issued notes only (${taxable})`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -98,13 +98,24 @@ export default function BillingReportsPage() {
         </Button>
       </Card>
 
-      <Card title="GST summary (issued invoices)" actions={gst ? <ExportButton rows={[gst]} columns={['taxable', 'cgst', 'sgst', 'igst', 'cess', 'total']} filename="gst-summary" /> : null}>
+      <Card title="GST summary (net of credit / debit notes)" actions={gst ? <ExportButton rows={[gst]} columns={['taxable', 'cgst', 'sgst', 'igst', 'cess', 'total']} filename="gst-summary" /> : null}>
         {gst && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
-            {(['taxable', 'cgst', 'sgst', 'igst', 'cess', 'total'] as const).map((k) => (
-              <StatCard key={k} label={k} value={money(gst[k])} tone={k === 'total' ? 'info' : 'neutral'} />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+              {(['taxable', 'cgst', 'sgst', 'igst', 'cess', 'total'] as const).map((k) => (
+                <StatCard key={k} label={k} value={money(gst[k])} tone={k === 'total' ? 'info' : 'neutral'} />
+              ))}
+            </div>
+            {(() => {
+              const part = (k: string) => ((gst as Row)[k] as Row | undefined) ?? null;
+              const inv = part('invoices'); const cn = part('creditNotes'); const dn = part('debitNotes');
+              return inv ? (
+                <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '12px 0 0' }}>
+                  Invoices {money(inv.total)} − credit notes {money(cn?.total)} ({String(cn?.count ?? 0)}) + debit notes {money(dn?.total)} ({String(dn?.count ?? 0)}) = {money(gst.total)}. GSTR-1 reports the notes in Table 9B; GSTR-3B carries the net.
+                </p>
+              ) : null;
+            })()}
+          </>
         )}
       </Card>
 
@@ -232,7 +243,7 @@ export default function BillingReportsPage() {
         actions={
           <ExportButton
             rows={sales?.rows ?? []}
-            columns={['invoiceNo', 'invoiceDate', 'gstin', 'placeOfSupply', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'igstAmount', 'totalAmount']}
+            columns={['invoiceNo', 'invoiceDate', 'customerName', 'gstin', 'placeOfSupply', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'igstAmount', 'totalAmount']}
             filename="sales-register"
           />
         }
@@ -246,6 +257,7 @@ export default function BillingReportsPage() {
                 <tr>
                   <Th>Invoice</Th>
                   <Th>Date</Th>
+                  <Th>Customer</Th>
                   <Th>GSTIN</Th>
                   <Th>Place of supply</Th>
                   <Th numeric>Taxable</Th>
@@ -260,6 +272,7 @@ export default function BillingReportsPage() {
                   <tr key={r.id}>
                     <Td style={{ fontWeight: 600 }}>{String(r.invoiceNo)}</Td>
                     <Td>{formatDate(r.invoiceDate)}</Td>
+                    <Td>{String(r.customerName ?? '—')}</Td>
                     <Td>{r.gstin ? String(r.gstin) : <span style={{ color: 'var(--mn-muted)' }}>B2C</span>}</Td>
                     <Td>{String(r.placeOfSupply ?? '—')}</Td>
                     <Td numeric>{money(r.taxableAmount)}</Td>
@@ -274,6 +287,41 @@ export default function BillingReportsPage() {
           </div>
         ) : (
           failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No issued invoices" />
+        )}
+      </Card>
+
+      <Card
+        title={`Credit / debit notes (GSTR-1 Table 9B)${sales?.notes ? ` — ${sales.notes.length}` : ''}`}
+        padded={false}
+        actions={<ExportButton rows={sales?.notes ?? []} columns={['noteNo', 'noteType', 'noteDate', 'invoiceNo', 'customerName', 'gstin', 'reason', 'taxableAmount', 'cgstAmount', 'sgstAmount', 'igstAmount', 'totalAmount']} filename="credit-debit-notes" />}
+      >
+        {!loaded ? (
+          <TableSkeleton cols={7} />
+        ) : sales?.notes?.length ? (
+          <div style={{ overflowX: 'auto' }}>
+            <Table>
+              <thead>
+                <tr><Th>Note</Th><Th>Type</Th><Th>Date</Th><Th>Against invoice</Th><Th>Customer</Th><Th>Reason</Th><Th numeric>Taxable</Th><Th numeric>Tax</Th><Th numeric>Total</Th></tr>
+              </thead>
+              <tbody>
+                {sales.notes.map((n) => (
+                  <tr key={String(n.id)}>
+                    <Td style={{ fontWeight: 600 }}>{String(n.noteNo)}</Td>
+                    <Td>{n.noteType === 'debit' ? 'Debit' : 'Credit'}</Td>
+                    <Td>{formatDate(n.noteDate)}</Td>
+                    <Td>{String(n.invoiceNo ?? '—')}</Td>
+                    <Td>{String(n.customerName ?? '—')}</Td>
+                    <Td>{String(n.reason ?? '—').replace(/_/g, ' ')}</Td>
+                    <Td numeric>{money(n.taxableAmount)}</Td>
+                    <Td numeric>{money(Number(n.cgstAmount ?? 0) + Number(n.sgstAmount ?? 0) + Number(n.igstAmount ?? 0) + Number(n.cessAmount ?? 0))}</Td>
+                    <Td numeric>{money(n.totalAmount)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        ) : (
+          failed[1] ? <ErrorState message={failed[1] ?? "This report did not load."} /> : <EmptyState title="No credit or debit notes in the period" description="Notes issued against invoices in the period list here for GSTR-1 Table 9B." />
         )}
       </Card>
 

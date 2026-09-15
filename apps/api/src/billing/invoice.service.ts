@@ -1,5 +1,6 @@
 import { listLimit } from '../common/list-limit.util';
 import { hasEwayBill } from '../common/eway-status.util';
+import { CreditNoteService } from './credit-note.service';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { In, type EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -407,6 +408,11 @@ export class InvoiceService {
       if (hasEwayBill(invoice.ewayStatus)) {
         throw badReq('This invoice has a live e-way bill — cancel it on the portal before cancelling the invoice.');
       }
+      // A credit or debit note against this invoice is a GST document of its
+      // own; cancelling the invoice under it would leave the note amending
+      // nothing. Cancel the notes first.
+      const liveNotes = await CreditNoteService.liveNoteCount(m, id);
+      if (liveNotes > 0) throw badReq(`This invoice has ${liveNotes} credit / debit note(s) against it — cancel those first.`);
       if (num(invoice.amountPaid) > 0) throw badReq('Cannot cancel an invoice with receipts allocated');
       // The allocation rows are the authoritative record — refuse on them too,
       // so a drifted amount_paid can never let a receipted invoice be cancelled.
@@ -487,7 +493,7 @@ export class InvoiceService {
       // Recompute from the locked row's authoritative figures (total − paid −
       // written-off) rather than subtracting from the outstanding snapshot, so
       // the result can never disagree with a receipt settled via the same helper.
-      const balance = invoiceBalanceAfter(invoice.totalAmount, invoice.amountPaid, newWrittenOff);
+      const balance = invoiceBalanceAfter(invoice.totalAmount, invoice.amountPaid, newWrittenOff, { credited: invoice.creditNoteAmount, debited: invoice.debitNoteAmount });
       const newOutstanding = balance.outstanding;
       // Nothing left to collect → bad debt; else the paid figure still decides.
       const paymentStatus = newOutstanding <= 0.001 ? 'written_off' : balance.paymentStatus;
@@ -529,7 +535,7 @@ export class InvoiceService {
       const amt = round2(amount);
       if (amt > writtenOff + 0.001) throw badReq(`Reversal ${amt} exceeds the written-off amount ${writtenOff}`);
       const newWrittenOff = round2(writtenOff - amt);
-      const balance = invoiceBalanceAfter(invoice.totalAmount, invoice.amountPaid, newWrittenOff);
+      const balance = invoiceBalanceAfter(invoice.totalAmount, invoice.amountPaid, newWrittenOff, { credited: invoice.creditNoteAmount, debited: invoice.debitNoteAmount });
       // Still nothing to collect AND some write-off remains → still bad debt;
       // otherwise the paid figure decides again (paid / partially_paid / unpaid).
       const paymentStatus = balance.outstanding <= 0.001 && newWrittenOff > 0.001 ? 'written_off' : balance.paymentStatus;

@@ -1,0 +1,20 @@
+<!-- @dsCard group="Surfaces" height=120 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Surface — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, fontSize: 14 } },
+    h(M.Surface, { padded: true }, "Plain surface"), h(M.Surface, { variant: "raised", padded: true }, "Raised surface"), h(M.Surface, { variant: "command", padded: true }, "Command surface")); });
+})();
+</script>
+</body>
+</html>

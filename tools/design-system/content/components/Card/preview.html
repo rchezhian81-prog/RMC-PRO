@@ -1,0 +1,20 @@
+<!-- @dsCard group="Surfaces" height=190 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Card — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h(M.Card, { title: "Order-to-cash funnel", actions: h(M.Button, { variant: "ghost", size: "sm", icon: h(I.Download, { size: 15 }) }, "Export") },
+    h("div", { style: { fontSize: 14, color: "var(--mn-muted)" } }, "Leads 64 → Quotations 38 → Confirmed 128 → Batch tickets 46 → Dispatches 7 → Delivered 35 → Invoiced 94.")); });
+})();
+</script>
+</body>
+</html>

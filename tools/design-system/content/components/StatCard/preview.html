@@ -1,0 +1,23 @@
+<!-- @dsCard group="Surfaces" height=150 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>StatCard — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h(M.SummaryStrip, null,
+    h(M.StatCard, { label: "Confirmed orders", value: "128", icon: h(I.ClipboardList, { size: 16 }), tone: "success", href: "#" }),
+    h(M.StatCard, { label: "Credit holds", value: "2", icon: h(I.Lock, { size: 16 }), tone: "warning" }),
+    h(M.StatCard, { label: "Dispatches active", value: "7", icon: h(I.Truck, { size: 16 }), tone: "info" }),
+    h(M.StatCard, { label: "Receipts total", value: "₹52.1L", icon: h(I.Wallet, { size: 16 }), gradient: true })); });
+})();
+</script>
+</body>
+</html>

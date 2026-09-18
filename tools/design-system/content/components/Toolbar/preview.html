@@ -1,0 +1,28 @@
+<!-- @dsCard group="Command" height=130 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Toolbar — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Demo() {
+    var s = React.useState(3); var n = s[0], setN = s[1];
+    return h("div", { style: { display: "grid", gap: 12 } },
+      h(M.Toolbar, { count: "128 challans", actions: h(M.Button, { variant: "ghost", size: "sm", icon: h(I.Download, { size: 15 }) }, "Export") }),
+      h(M.Toolbar, { selectedCount: n, actions: h(F, null,
+        h(M.Button, { variant: "ghost", size: "sm", icon: h(I.Check, { size: 15 }), onClick: function () { setN(0); } }, "Approve"),
+        h(M.Button, { variant: "danger", size: "sm", icon: h(I.Trash2, { size: 15 }), onClick: function () { setN(0); } }, "Delete")) },
+        n === 0 ? h(M.Button, { variant: "ghost", size: "sm", onClick: function () { setN(3); } }, "Select 3 rows") : null));
+  }
+  M.mount(document.getElementById("root"), function () { return h(Demo); });
+})();
+</script>
+</body>
+</html>

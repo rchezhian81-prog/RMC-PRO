@@ -1,0 +1,22 @@
+<!-- @dsCard group="Data" height=240 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Table — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  var rows = [["DC-10421", "Sri Balaji Constructions", "M25", "12.00", "in_transit"], ["DC-10422", "अग्रवाल बिल्डर्स", "M30", "8.50", "delivered"], ["DC-10423", "கோவை கட்டுமானம்", "M20", "6.00", "credit_hold"]];
+  M.mount(document.getElementById("root"), function () { return h(M.Card, { padded: false }, h(M.Table, null,
+    h("thead", null, h("tr", null, h(M.Th, null, "Challan"), h(M.Th, null, "Customer"), h(M.Th, null, "Grade"), h(M.Th, { numeric: true }, "Qty (m³)"), h(M.Th, null, "Status"))),
+    h("tbody", null, rows.map(function (r) { return h("tr", { key: r[0] }, h(M.Td, null, r[0]), h(M.Td, null, r[1]), h(M.Td, null, r[2]), h(M.Td, { numeric: true }, r[3]), h(M.Td, null, h(M.StatusBadge, { status: r[4] }))); })))); });
+})();
+</script>
+</body>
+</html>

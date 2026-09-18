@@ -1,0 +1,61 @@
+<!-- @dsCard height=300 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mix Nova</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--mn-bg); color: var(--mn-text); font-family: var(--mn-font-display); overflow: hidden; }
+  .cover { position: relative; height: 300px; overflow: hidden; }
+  .art { position: absolute; top: 0; left: 480px; width: 480px; height: 300px; overflow: hidden; }
+  .art svg { display: block; width: 496px; height: 300px; }
+  .brand { fill: var(--mn-purple-600); }
+  .accent { fill: var(--mn-purple-500); }
+  .lav { fill: var(--mn-purple-300); }
+  .ink { fill: var(--mn-text); }
+  .blk { rx: var(--mn-radius-lg); }
+  .tile { rx: var(--mn-radius-md); }
+  .tile.deep { fill: var(--mn-purple-700); }
+  .tile.pale { fill: var(--mn-purple-50); }
+  .words { position: absolute; left: 24px; bottom: 24px; max-width: 440px; }
+  .name { margin: 0; font-size: 88px; line-height: 0.92; font-weight: 600; letter-spacing: -0.02em; color: var(--mn-text); white-space: nowrap; }
+  .tag { margin: 8px 0 0 4px; font-family: var(--mn-font-body); font-size: 14px; line-height: 20px; color: var(--mn-muted); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 496 300" width="496" height="300">
+<!--
+  blocks      mn-purple-600 160×232 bled off the top (Primary Purple, the identity, largest) · mn-purple-300 304×236 bleeding off the right (Soft Lavender, the relief) · mn-text 160×52 (Deep Navy in light, the pale ink in dark, so it never sinks into the ground) · mn-purple-500 120×48 bled off the top (Electric Violet) — ≈42% of 960×300
+  arrangement one tall violet slab with a navy bar under it, a lavender field to its right with a violet satellite above; every bottom edge on one line 16px (mn-space-4) above the edge, 16px gutters
+  pattern     KPI tiles, from "dashboard-first, KPI cards" and the Owner Command Centre's auto-fit tile grid: 56×40 tiles at a 12px (mn-space-3) gap over the lavender field, three merged two-wide the way a summary strip lets a long rupee figure span, in mn-purple-700 and mn-purple-50
+  scales      block corners mn-radius-lg (12), tile corners mn-radius-md (8); tile pitch 68 = 56 + mn-space-3; margins mn-space-4
+-->
+<rect class="brand blk" x="16" y="-16" width="160" height="232" rx="12"/>
+<rect class="ink blk" x="16" y="232" width="160" height="52" rx="12"/>
+<rect class="accent blk" x="192" y="-16" width="120" height="48" rx="12"/>
+<rect class="lav blk" x="192" y="48" width="320" height="236" rx="12"/>
+<rect class="tile deep" x="208" y="64" width="124" height="40" rx="8"/>
+<rect class="tile pale" x="344" y="64" width="56" height="40" rx="8"/>
+<rect class="tile deep" x="412" y="64" width="56" height="40" rx="8"/>
+<rect class="tile pale" x="208" y="116" width="56" height="40" rx="8"/>
+<rect class="tile deep" x="276" y="116" width="56" height="40" rx="8"/>
+<rect class="tile pale" x="344" y="116" width="124" height="40" rx="8"/>
+<rect class="tile deep" x="208" y="168" width="56" height="40" rx="8"/>
+<rect class="tile pale" x="276" y="168" width="56" height="40" rx="8"/>
+<rect class="tile deep" x="344" y="168" width="56" height="40" rx="8"/>
+<rect class="tile pale" x="412" y="168" width="56" height="40" rx="8"/>
+<rect class="tile pale" x="208" y="220" width="56" height="40" rx="8"/>
+<rect class="tile deep" x="276" y="220" width="124" height="40" rx="8"/>
+<rect class="tile pale" x="412" y="220" width="56" height="40" rx="8"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">Mix Nova</h1>
+<p class="tag">Smart Mix. Stronger Future.</p>
+</div>
+</div>
+</body>
+</html>

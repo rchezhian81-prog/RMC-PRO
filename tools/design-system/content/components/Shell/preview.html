@@ -1,0 +1,56 @@
+<!-- @dsCard group="Navigation" height=420 width=1120 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Shell — preview</title>
+<style>
+body { padding: 16px; }
+body { padding: 0; } .logo-dark { display: none; } [data-theme='dark'] .logo-light, [data-theme^='v2-'] .logo-light { display: none; } [data-theme='dark'] .logo-dark, [data-theme^='v2-'] .logo-dark { display: inline; }
+</style></head>
+<body class="mn-app">
+
+<div class="mn-shell" style="min-height: 388px">
+  <a href="#main" class="mn-skip">Skip to content</a>
+  <aside class="mn-sidebar">
+    <div class="mn-rail-head" style="padding: 18px 16px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <span class="mn-rail-brand"><span class="logo-light"><svg height="26" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 52" role="img" aria-label="Mix Nova RMC Software">
+  <defs>
+    <linearGradient id="mnPurple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6C2BD9"/>
+      <stop offset="1" stop-color="#8A4FFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="6" width="40" height="40" rx="11" fill="url(#mnPurple)"/>
+  <text x="20" y="34" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">MN</text>
+  <text x="52" y="28" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="-0.5" fill="#1E1E2E">MIX <tspan fill="#6C2BD9">NOVA</tspan></text>
+  <text x="53" y="43" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="9" font-weight="600" letter-spacing="3" fill="#8E8E9A">RMC SOFTWARE</text>
+</svg></span><span class="logo-dark"><svg height="26" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 52" role="img" aria-label="Mix Nova RMC Software">
+  <rect x="0" y="6" width="40" height="40" rx="11" fill="#ffffff" fill-opacity="0.16"/>
+  <text x="20" y="34" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">MN</text>
+  <text x="52" y="28" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="-0.5" fill="#ffffff">MIX <tspan fill="#E9DDFF">NOVA</tspan></text>
+  <text x="53" y="43" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="9" font-weight="600" letter-spacing="3" fill="rgba(255,255,255,0.72)">RMC SOFTWARE</text>
+</svg></span></span>
+      <button type="button" class="mn-iconbtn mn-rail-toggle" aria-label="Collapse sidebar"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+    </div>
+    <div style="overflow-y: auto; padding: 4px 12px 16px; flex: 1">
+      <div style="margin-bottom: 6px"><button type="button" class="mn-navgroup" aria-expanded="true"><span>Operations</span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="mn-navgroup-chev"><path d="m6 9 6 6 6-6"/></svg></button>
+        <nav aria-label="Operations" style="display: grid; gap: 2px"><a href="#" class="mn-nav"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg><span class="mn-nav-label">Dashboard</span></a><a href="#" class="mn-nav"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg><span class="mn-nav-label">Orders</span></a><a href="#" class="mn-nav mn-nav-active" aria-current="page"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg><span class="mn-nav-label">Dispatch</span></a><a href="#" class="mn-nav"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span class="mn-nav-label">Challans</span></a></nav></div>
+      <div style="margin-bottom: 6px"><button type="button" class="mn-navgroup" aria-expanded="false"><span>Billing</span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="mn-navgroup-chev"><path d="m6 9 6 6 6-6"/></svg></button></div>
+      <div style="margin-bottom: 6px"><button type="button" class="mn-navgroup" aria-expanded="false"><span>Inventory</span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="mn-navgroup-chev"><path d="m6 9 6 6 6-6"/></svg></button></div>
+    </div>
+  </aside>
+  <div style="display: flex; flex-direction: column; min-width: 0">
+    <header class="mn-topbar">
+      <button type="button" class="mn-iconbtn mn-hamburger" aria-label="Open menu"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg></button>
+      <div style="font-family: var(--mn-font-display); font-weight: 600; font-size: 16px">Dispatch</div>
+      <div style="flex: 1"></div>
+      <button type="button" class="mn-iconbtn" aria-label="Toggle light/dark theme"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+      <span class="mn-topbar-email" style="font-size: 13px; color: var(--mn-muted)">ops@plant-a.example</span>
+      <button type="button" class="mn-btn mn-btn-ghost mn-btn-sm"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>Logout</button>
+    </header>
+    <main id="main" class="mn-main" tabindex="-1">
+      <div class="mn-cmdbar"><div><h1 class="mn-cmdbar-title">Dispatch</h1><div class="mn-cmdbar-sub">Today · Plant A</div></div><div class="mn-cmdbar-actions"><button type="button" class="mn-btn mn-btn-primary mn-btn-sm"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New Challan</button></div></div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

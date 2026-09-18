@@ -1,0 +1,30 @@
+<!-- @dsCard group="Brand" height=150 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Logo — preview</title>
+<style>
+body { padding: 16px; }
+.fallback-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--mn-gradient); display: inline-grid; place-items: center; font-family: var(--mn-font-display); font-weight: 700; font-size: 16px; line-height: 1; color: #fff; box-shadow: 0 2px 8px rgba(108, 43, 217, 0.35); }
+</style></head>
+<body class="mn-app">
+<div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr">
+  <div class="mn-card" style="padding: 18px; display: grid; gap: 14px; align-content: start">
+    <div id="light"></div>
+    <div style="display: inline-flex; align-items: center; gap: 10px" title="The typographic fallback the component draws when no logo file loads">
+      <span class="fallback-mark" aria-hidden="true">M</span>
+      <span style="display: grid; line-height: 1.05"><span style="font-family: var(--mn-font-display); font-weight: 700; font-size: 19px; letter-spacing: -0.02em; color: var(--mn-text)">Mix <span class="mn-gradient-text">Nova</span></span><span style="font-size: 10px; color: var(--mn-muted); letter-spacing: 0.01em; margin-top: 2px">Smart Mix. Stronger Future.</span></span>
+    </div>
+  </div>
+  <div class="mn-gradient" style="padding: 18px; border-radius: var(--mn-radius-lg); display: grid; align-content: center"><div id="dark"></div></div>
+</div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  window.MixNovaBrand = { light: ["data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgNTIiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0iTWl4IE5vdmEgUk1DIFNvZnR3YXJlIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ibW5QdXJwbGUiIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNkMyQkQ5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzhBNEZGRiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3QgeD0iMCIgeT0iNiIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iMTEiIGZpbGw9InVybCgjbW5QdXJwbGUpIi8+CiAgPHRleHQgeD0iMjAiIHk9IjM0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iU2Vnb2UgVUksIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjEiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiNmZmZmZmYiPk1OPC90ZXh0PgogIDx0ZXh0IHg9IjUyIiB5PSIyOCIgZm9udC1mYW1pbHk9IlNlZ29lIFVJLCBIZWx2ZXRpY2EsIEFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjIyIiBmb250LXdlaWdodD0iNzAwIiBsZXR0ZXItc3BhY2luZz0iLTAuNSIgZmlsbD0iIzFFMUUyRSI+TUlYIDx0c3BhbiBmaWxsPSIjNkMyQkQ5Ij5OT1ZBPC90c3Bhbj48L3RleHQ+CiAgPHRleHQgeD0iNTMiIHk9IjQzIiBmb250LWZhbWlseT0iU2Vnb2UgVUksIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iOSIgZm9udC13ZWlnaHQ9IjYwMCIgbGV0dGVyLXNwYWNpbmc9IjMiIGZpbGw9IiM4RThFOUEiPlJNQyBTT0ZUV0FSRTwvdGV4dD4KPC9zdmc+Cg=="], dark: ["data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgNTIiIHJvbGU9ImltZyIgYXJpYS1sYWJlbD0iTWl4IE5vdmEgUk1DIFNvZnR3YXJlIj4KICA8cmVjdCB4PSIwIiB5PSI2IiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMSIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjE2Ii8+CiAgPHRleHQgeD0iMjAiIHk9IjM0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iU2Vnb2UgVUksIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjEiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiNmZmZmZmYiPk1OPC90ZXh0PgogIDx0ZXh0IHg9IjUyIiB5PSIyOCIgZm9udC1mYW1pbHk9IlNlZ29lIFVJLCBIZWx2ZXRpY2EsIEFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjIyIiBmb250LXdlaWdodD0iNzAwIiBsZXR0ZXItc3BhY2luZz0iLTAuNSIgZmlsbD0iI2ZmZmZmZiI+TUlYIDx0c3BhbiBmaWxsPSIjRTlEREZGIj5OT1ZBPC90c3Bhbj48L3RleHQ+CiAgPHRleHQgeD0iNTMiIHk9IjQzIiBmb250LWZhbWlseT0iU2Vnb2UgVUksIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iOSIgZm9udC13ZWlnaHQ9IjYwMCIgbGV0dGVyLXNwYWNpbmc9IjMiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC43MikiPlJNQyBTT0ZUV0FSRTwvdGV4dD4KPC9zdmc+Cg=="] };
+  M.mount(document.getElementById("light"), function () { return h(M.Logo, { size: "md", onDark: dark() }); });
+  M.mount(document.getElementById("dark"), function () { return h(M.Logo, { size: "md", onDark: true }); });
+})();
+</script>
+</body>
+</html>

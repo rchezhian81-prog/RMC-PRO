@@ -1,0 +1,29 @@
+<!-- @dsCard group="Overlays" height=360 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Drawer — preview</title>
+<style>
+body { padding: 16px; }
+html, body { height: 100%; } body { position: relative; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Row(k, v) { return h("div", { style: { display: "flex", justifyContent: "space-between" } }, h("span", { style: { color: "var(--mn-muted)" } }, k), v); }
+  function Demo() {
+    var o = React.useState(true); var open = o[0], setOpen = o[1];
+    return h("div", null,
+      h(M.Button, { variant: "secondary", onClick: function () { setOpen(true); } }, "Open drawer"),
+      h(M.Drawer, { open: open, onClose: function () { setOpen(false); }, title: "Challan DC-10421",
+        footer: h(F, null, h(M.Button, { variant: "secondary", onClick: function () { setOpen(false); } }, "Close"), h(M.Button, { onClick: function () { setOpen(false); } }, "Mark delivered")) },
+        h("div", { style: { fontSize: 14, display: "grid", gap: 12 } }, Row("Customer", "Sri Balaji Constructions"), Row("Grade · Qty", "M25 · 12.00 m³"), Row("Status", h(M.StatusBadge, { status: "in_transit" })))));
+  }
+  M.mount(document.getElementById("root"), function () { return h(Demo); });
+})();
+</script>
+</body>
+</html>

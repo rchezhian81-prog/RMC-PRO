@@ -40,7 +40,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <a href="#main" className="mn-skip">Skip to content</a>
       <aside className="mn-sidebar">
         <div style={{ padding: '18px 16px 12px' }}>
-          <Logo size="sm" onDark={isUiV2()} />
+          <Logo size="sm" onDark={isUiV2() || undefined} />
           <div style={{ fontSize: 11, color: 'var(--mn-subtle)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginTop: 8 }}>
             Super Admin
           </div>

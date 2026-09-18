@@ -43,15 +43,32 @@ function useLogoSrc(onDark: boolean): string | null {
   return src;
 }
 
+/** True while <html data-theme="dark">; follows the theme toggle live. */
+function useDarkTheme(): boolean {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const read = () => setDark(root.getAttribute('data-theme') === 'dark');
+    read();
+    const mo = new MutationObserver(read);
+    mo.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, []);
+  return dark;
+}
+
 export function Logo({
   size = 'md',
   showTagline = false,
-  onDark = false,
+  onDark: onDarkProp,
 }: {
   size?: 'sm' | 'md' | 'lg';
   showTagline?: boolean;
+  /** Use the on-dark lockup. Omitted: follows the page theme (dark theme → on-dark lockup). */
   onDark?: boolean;
 }) {
+  const themeDark = useDarkTheme();
+  const onDark = onDarkProp ?? themeDark;
   const src = useLogoSrc(onDark);
   const imgH = size === 'lg' ? 42 : size === 'sm' ? 26 : 32;
 

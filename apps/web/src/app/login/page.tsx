@@ -1,15 +1,26 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, BLOCKED_REASON_KEY } from '../../lib/api';
 import { saveSession } from '../../lib/session';
 import { Logo } from '../../components/ui/Logo';
+import { Button } from '../../components/ui/Button';
+import { Field, Input } from '../../components/ui/Field';
+import { AlertSurface } from '../../components/ui/AlertSurface';
 import { isUiV2 } from '../../lib/ui-flag';
 
-/** Functional login (Design Doc 5 §3) wired to the live API — Mix Nova branded. */
-export default function LoginPage() {
+/**
+ * Functional login (Design Doc 5 §3) wired to the live API — Mix Nova branded.
+ *
+ * One form, two frames: the default is a centred card with the Nova-gradient
+ * brand header; under the UI V2 flag it becomes the split-screen hero + panel.
+ * Both build on the shared primitives (Field, Input, Button, AlertSurface), so
+ * the sign-in controls look and behave exactly like every other form in the
+ * app: the same focus ring, the same busy spinner, the same error surface.
+ */
+function useLogin() {
   const router = useRouter();
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
@@ -51,28 +62,50 @@ export default function LoginPage() {
     }
   }
 
-  const field: CSSProperties = {
-    padding: '11px 13px',
-    borderRadius: 'var(--mn-radius-md)',
-    border: '1px solid var(--mn-border-strong)',
-    background: 'var(--mn-surface)',
-    color: 'var(--mn-text)',
-    fontSize: 14,
-    width: '100%',
-    margin: '6px 0 16px',
-  };
-  const label: CSSProperties = { fontSize: 13, fontWeight: 500, color: 'var(--mn-muted)' };
+  return { login, setLogin, password, setPassword, error, busy, onSubmit };
+}
 
-  // V2: premium split-screen — violet brand hero + clean sign-in panel. Gated by
-  // the flag so the flag-OFF login stays byte-for-byte unchanged (below).
+function LoginForm() {
+  const { login, setLogin, password, setPassword, error, busy, onSubmit } = useLogin();
+  return (
+    <form onSubmit={onSubmit} className="mn-login-form">
+      <Field label="Email, mobile or user ID">
+        <Input
+          id="mn-login"
+          value={login}
+          onChange={(e) => setLogin(e.target.value)}
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          autoFocus
+          required
+        />
+      </Field>
+      <Field label="Password">
+        <Input
+          id="mn-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </Field>
+      {error && (
+        <div className="mn-login-error">
+          <AlertSurface tone="danger">{error}</AlertSurface>
+        </div>
+      )}
+      <Button type="submit" loading={busy} style={{ width: '100%' }}>
+        {busy ? 'Signing in…' : 'Sign in'}
+      </Button>
+    </form>
+  );
+}
+
+export default function LoginPage() {
+  // V2: premium split-screen — violet brand hero + clean sign-in panel.
   if (isUiV2()) {
-    const v2Label: CSSProperties = {
-      display: 'block',
-      fontSize: 13,
-      fontWeight: 600,
-      color: 'var(--mn-muted)',
-      marginBottom: 6,
-    };
     return (
       <main className="mn-app mn-login-v2">
         <aside className="mn-login-hero">
@@ -87,68 +120,10 @@ export default function LoginPage() {
         </aside>
         <div className="mn-login-panel">
           <div className="mn-login-card">
-            <h1
-              style={{
-                margin: '0 0 6px',
-                fontFamily: 'var(--mn-font-display)',
-                fontSize: 26,
-                letterSpacing: '-0.02em',
-                color: 'var(--mn-text)',
-              }}
-            >
-              Welcome back
-            </h1>
-            <p style={{ margin: '0 0 24px', color: 'var(--mn-muted)', fontSize: 14 }}>
-              Sign in to your Mix Nova workspace.
-            </p>
-            <form onSubmit={onSubmit}>
-              <label htmlFor="mn-login" style={v2Label}>
-                Email / Mobile / User ID
-              </label>
-              <input
-                id="mn-login"
-                className="mn-input"
-                style={{ marginBottom: 16 }}
-                value={login}
-                onChange={(e) => setLogin(e.target.value)}
-                autoComplete="username"
-                aria-label="login-identifier"
-                required
-              />
-              <label htmlFor="mn-password" style={v2Label}>
-                Password
-              </label>
-              <input
-                id="mn-password"
-                className="mn-input"
-                style={{ marginBottom: 16 }}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                aria-label="password"
-                required
-              />
-              {error && (
-                <p
-                  role="alert"
-                  style={{
-                    color: 'var(--mn-danger)',
-                    background: 'var(--mn-danger-tint)',
-                    border: '1px solid var(--mn-danger)',
-                    borderRadius: 'var(--mn-radius-sm)',
-                    padding: '8px 10px',
-                    fontSize: 13,
-                    margin: '0 0 14px',
-                  }}
-                >
-                  {error}
-                </p>
-              )}
-              <button className="mn-btn mn-btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={busy}>
-                {busy ? 'Signing in…' : 'Sign in'}
-              </button>
-            </form>
+            <h1 className="mn-login-title mn-login-title-lg">Welcome back</h1>
+            <p className="mn-login-sub">Sign in to your Mix Nova workspace.</p>
+            <LoginForm />
+            <p className="mn-login-help">Forgotten your password? Ask your company admin to reset it.</p>
           </div>
         </div>
       </main>
@@ -156,95 +131,26 @@ export default function LoginPage() {
   }
 
   return (
-    <main
-      className="mn-app"
-      style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '1fr', placeItems: 'center', padding: 24 }}
-    >
-      <section
-        style={{
-          width: '100%',
-          maxWidth: 420,
-          background: 'var(--mn-surface)',
-          border: '1px solid var(--mn-border)',
-          borderRadius: 'var(--mn-radius-lg)',
-          boxShadow: 'var(--mn-shadow-card)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Nova-gradient brand header */}
-        <div className="mn-gradient" style={{ padding: '26px 28px 22px' }}>
-          <Link href="/" aria-label="Mix Nova home" className="mn-login-home">
-            <Logo size="lg" showTagline onDark />
-          </Link>
-        </div>
-
-        <div style={{ padding: 28 }}>
-          <h1 style={{ margin: '0 0 4px', fontSize: 20, color: 'var(--mn-text)' }}>Sign in</h1>
-          <p style={{ margin: '0 0 20px', color: 'var(--mn-muted)', fontSize: 14 }}>
-            Mix Nova RMC Software — plant operating system
-          </p>
-          <form onSubmit={onSubmit}>
-            <label htmlFor="mn-login" style={label}>
-              Email / Mobile / User ID
-            </label>
-            <input
-              id="mn-login"
-              style={field}
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
-              autoComplete="username"
-              aria-label="login-identifier"
-              required
-            />
-            <label htmlFor="mn-password" style={label}>
-              Password
-            </label>
-            <input
-              id="mn-password"
-              style={field}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              aria-label="password"
-              required
-            />
-            {error && (
-              <p
-                role="alert"
-                style={{
-                  color: 'var(--mn-danger)',
-                  background: 'var(--mn-danger-tint)',
-                  border: '1px solid var(--mn-danger)',
-                  borderRadius: 'var(--mn-radius-sm)',
-                  padding: '8px 10px',
-                  fontSize: 13,
-                  margin: '0 0 14px',
-                }}
-              >
-                {error}
-              </p>
-            )}
-            <button
-              style={{
-                width: '100%',
-                padding: '11px 14px',
-                borderRadius: 'var(--mn-radius-md)',
-                border: 'none',
-                background: 'var(--mn-primary)',
-                color: 'var(--mn-on-primary)',
-                fontWeight: 600,
-                fontSize: 14,
-                cursor: busy ? 'default' : 'pointer',
-                opacity: busy ? 0.65 : 1,
-              }}
-              disabled={busy}
-            >
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-        </div>
-      </section>
+    <main className="mn-app mn-login">
+      <div className="mn-login-stack">
+        <section className="mn-login-box">
+          {/* Nova-gradient brand header */}
+          <div className="mn-gradient mn-login-brand">
+            <Link href="/" aria-label="Mix Nova home" className="mn-login-home">
+              <Logo size="lg" showTagline onDark />
+            </Link>
+          </div>
+          <div className="mn-login-body">
+            <h1 className="mn-login-title">Sign in</h1>
+            <p className="mn-login-sub">Your plant workspace — orders, batching, dispatch and billing.</p>
+            <LoginForm />
+          </div>
+        </section>
+        <p className="mn-login-help">
+          Forgotten your password? Ask your company admin to reset it.
+          <Link href="/" className="mn-login-help-link">Back to the home page</Link>
+        </p>
+      </div>
     </main>
   );
 }

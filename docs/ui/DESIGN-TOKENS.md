@@ -21,9 +21,10 @@ variable names** carry the new values, so every component that already reads
 | Token | v2 Light | v2 Dark (violet-black) |
 |---|---|---|
 | `--mn-bg` / `--mn-surface` / `--mn-surface-2` | `#f6f7fb` / `#ffffff` / `#f4f3fa` | `#17172a` / `#21213a` / `#272743` |
-| `--mn-text` / `--mn-muted` / `--mn-subtle` | `#1c1c2e` / `#56566a` / `#8a8a99` | `#e8e6f2` / `#a8a6c0` / `#8b89a8` |
+| `--mn-text` / `--mn-muted` / `--mn-subtle` | `#1c1c2e` / `#56566a` / `#66667a` | `#e8e6f2` / `#a8a6c0` / `#8b89a8` |
 | `--mn-border` / `--mn-border-strong` | `rgba(20,20,45,.08)` / `.14` | `rgba(138,79,255,.18)` (ambient violet) / `.30` |
 | `--mn-primary` / `-hover` / `-on` / `--mn-focus` | `#6c2bd9` / `#5a1fb8` / `#fff` / `#6c2bd9` | `#8a4fff` / `#9e6bff` / `#fff` / `#8a4fff` |
+| `--mn-on-danger` (label on a danger fill) | `#ffffff` (6.5:1) | `#14141f` (6.6:1; white would be 2.8:1) |
 | status success / warning / danger / info | `#0f6f34` / `#8a4409` / `#b91c1c` / `#6c2bd9` (+ light tints) | `#34d399` / `#fbbf24` / `#f87171` / `#b78cff` (+ dark tints) |
 | **elevation** `--mn-shadow-1/2/card/pop` | soft multi-layer, low-reflection | dark equivalents |
 | **`--mn-glow-primary`** | `0 6px 20px rgba(108,43,217,.18)` — selected/primary only | `0 6px 22px rgba(138,79,255,.28)` |

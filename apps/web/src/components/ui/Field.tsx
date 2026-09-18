@@ -62,7 +62,7 @@ export function Field({
       {error ? (
         <div id={descId} style={{ fontSize: 12, color: 'var(--mn-danger)', marginTop: 5 }}>{error}</div>
       ) : help ? (
-        <div id={descId} style={{ fontSize: 12, color: 'var(--mn-subtle)', marginTop: 5 }}>{help}</div>
+        <div id={descId} style={{ fontSize: 12, color: 'var(--mn-muted)', marginTop: 5 }}>{help}</div>
       ) : null}
     </div>
   );

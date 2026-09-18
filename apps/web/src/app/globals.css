@@ -31,11 +31,12 @@
   --mn-border-strong: #d3d3df;
   --mn-text: #1e1e2e;
   --mn-muted: #5b5b6b; /* AA on white */
-  --mn-subtle: #8e8e9a; /* non-text / large only */
+  --mn-subtle: #6b6b7b; /* AA (5.2:1) on white — help text, table headers, group labels */
   --mn-primary: #6c2bd9;
   --mn-primary-hover: #5a1fb8;
   --mn-on-primary: #ffffff;
-  --mn-focus: #b78cff;
+  --mn-on-danger: #ffffff; /* label on an mn-danger fill (6.5:1) */
+  --mn-focus: #6c2bd9; /* 7:1 on white; the lavender ring was 2.6:1 */
 
   --mn-success: #15803d;
   --mn-success-tint: #dcfce7;
@@ -87,7 +88,8 @@
   --mn-subtle: #8e8e9a;
   --mn-primary: #8a4fff;
   --mn-primary-hover: #9e6bff;
-  --mn-on-primary: #14141f;
+  --mn-on-primary: #ffffff; /* 4.5:1 on #8a4fff; the navy ink was 4.0:1 */
+  --mn-on-danger: #14141f; /* white on #f87171 is 2.8:1; navy ink is 6.6:1 */
   --mn-focus: #b78cff;
 
   --mn-success: #4ade80;
@@ -117,10 +119,11 @@
   --mn-border-strong: rgba(20, 20, 45, 0.14);
   --mn-text: #1c1c2e;
   --mn-muted: #56566a; /* AA on white */
-  --mn-subtle: #8a8a99;
+  --mn-subtle: #66667a; /* AA on white and on the v2 ground */
   --mn-primary: #6c2bd9;
   --mn-primary-hover: #5a1fb8;
   --mn-on-primary: #ffffff;
+  --mn-on-danger: #ffffff;
   --mn-focus: #6c2bd9;
 
   --mn-success: #0f6f34; /* AA on success-tint */
@@ -177,6 +180,7 @@
   --mn-primary: #8a4fff;
   --mn-primary-hover: #9e6bff;
   --mn-on-primary: #ffffff;
+  --mn-on-danger: #14141f;
   --mn-focus: #8a4fff;
 
   --mn-success: #34d399;
@@ -377,7 +381,7 @@ main:focus-visible {
 }
 .mn-btn-danger {
   background: var(--mn-danger);
-  color: #fff;
+  color: var(--mn-on-danger, #fff);
 }
 
 .mn-card {
@@ -1344,7 +1348,7 @@ main:focus-visible {
   --mn-border: rgba(30, 24, 64, 0.07);
   --mn-border-strong: rgba(30, 24, 64, 0.13);
   --mn-muted: #55566b;
-  --mn-subtle: #8a8aa0;
+  --mn-subtle: #66667a;
 
   --mn-radius-sm: 9px;
   --mn-radius-md: 12px;
@@ -2120,7 +2124,8 @@ main:focus-visible {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--mn-surface);
+  background: color-mix(in srgb, var(--mn-surface) 88%, transparent);
+  backdrop-filter: saturate(1.2) blur(8px);
   border-bottom: 1px solid var(--mn-border);
 }
 .mn-lp-nav-inner {
@@ -2181,6 +2186,7 @@ main:focus-visible {
 .mn-lp-title {
   margin: 0 0 20px;
   max-width: 18ch;
+  text-wrap: balance;
   font-family: var(--mn-font-display);
   font-size: clamp(36px, 6vw, 60px);
   line-height: 1.05;
@@ -2189,6 +2195,7 @@ main:focus-visible {
 }
 .mn-lp-lede {
   margin: 0 0 32px;
+  text-wrap: pretty;
   font-size: clamp(16px, 2.1vw, 19px);
   line-height: 1.6;
   color: #d9cff5;
@@ -2213,7 +2220,7 @@ main:focus-visible {
 }
 
 /* ---- sections ---- */
-.mn-lp-section { padding: 80px 0; }
+.mn-lp-section { padding: 80px 0; scroll-margin-top: 72px; }
 .mn-lp-section-alt { background: var(--mn-surface-2); }
 .mn-lp-h2 {
   margin: 0 0 10px;
@@ -2237,8 +2244,25 @@ main:focus-visible {
   background: var(--mn-surface);
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-lg, 14px);
-  padding: 26px 24px;
+  padding: 24px;
   box-shadow: var(--mn-shadow-card, 0 1px 2px rgba(20, 20, 45, 0.05));
+  transition: transform var(--mn-dur-std, 200ms) var(--mn-ease, ease), box-shadow var(--mn-dur-std, 200ms) var(--mn-ease, ease),
+    border-color var(--mn-dur-std, 200ms) var(--mn-ease, ease);
+}
+.mn-lp-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mn-shadow-pop);
+  border-color: var(--mn-purple-200);
+}
+.mn-lp-card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 14px;
+  border-radius: var(--mn-radius-md);
+  background: var(--mn-purple-50);
+  color: var(--mn-primary);
 }
 .mn-lp-card-title {
   margin: 0 0 10px;
@@ -2262,26 +2286,63 @@ main:focus-visible {
 .mn-lp-why { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 28px 40px; }
 .mn-lp-why-item { display: flex; gap: 18px; align-items: flex-start; }
 .mn-lp-why-num {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: var(--mn-radius-lg);
+  background: var(--mn-purple-50);
   font-family: var(--mn-font-display);
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   color: var(--mn-primary);
-  opacity: 0.55;
-  flex: 0 0 auto;
-  padding-top: 2px;
 }
 
 /* ---- closing ---- */
-.mn-lp-closing { background: var(--mn-surface); border-top: 1px solid var(--mn-border); }
+.mn-lp-closing { background: var(--mn-gradient); color: #ffffff; }
 .mn-lp-closing-inner { padding: 72px 24px; text-align: center; }
 .mn-lp-closing-title {
   margin: 0 0 8px;
   font-family: var(--mn-font-display);
   font-size: clamp(24px, 3vw, 30px);
   letter-spacing: -0.02em;
+  color: #ffffff;
 }
-.mn-lp-closing-sub { margin: 0 0 26px; color: var(--mn-muted); font-size: 16px; }
+.mn-lp-closing-sub { margin: 0 0 26px; color: #ffffff; font-size: 16px; }
+/* a white button on the gradient: Primary Purple on white is 7:1 */
+.mn-lp-cta-inverse {
+  background: #ffffff;
+  color: var(--mn-purple-600);
+  border-color: transparent;
+  box-shadow: 0 8px 24px -10px rgba(30, 17, 64, 0.5);
+}
+.mn-lp-cta-inverse:hover:not(:disabled) { background: var(--mn-purple-50); color: var(--mn-purple-700); }
+
+/* ---- hero motif: the design system's cover tiles, desktop only ---- */
+.mn-lp-hero-art {
+  position: absolute;
+  top: 50%;
+  right: max(24px, calc((100% - 1120px) / 2));
+  width: 420px;
+  height: 300px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: none;
+}
+.mn-lp-art-slab { fill: var(--mn-purple-500); opacity: 0.7; }
+.mn-lp-art-field { fill: var(--mn-purple-300); opacity: 0.16; }
+.mn-lp-art-tile-a { fill: var(--mn-purple-300); opacity: 0.85; }
+.mn-lp-art-tile-b { fill: var(--mn-purple-600); opacity: 0.9; }
+@media (min-width: 1100px) {
+  .mn-lp-hero-art { display: block; }
+  .mn-lp-hero-inner { padding-right: 480px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-lp-card, .mn-lp-card:hover { transition: none; transform: none; }
+}
 
 /* ---- footer ---- */
 .mn-lp-footer { background: var(--mn-bg); border-top: 1px solid var(--mn-border); }
@@ -2314,4 +2375,46 @@ main:focus-visible {
 .mn-login-home:focus-visible {
   outline: 2px solid var(--mn-focus, #6c2bd9);
   outline-offset: 4px;
+}
+
+/* ============================================================================
+   Login — the default (flag-OFF) frame and the pieces both frames share.
+   ========================================================================== */
+.mn-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(60% 42% at 50% 0%, rgba(108, 43, 217, 0.1), transparent 70%), var(--mn-bg);
+}
+.mn-login-stack { width: 100%; max-width: 420px; display: grid; gap: 16px; }
+.mn-login-box {
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-lg);
+  box-shadow: var(--mn-shadow-pop);
+  overflow: hidden;
+}
+.mn-login-brand { padding: 26px 28px 22px; }
+.mn-login-body { padding: 26px 28px 28px; }
+.mn-login-title {
+  margin: 0 0 4px;
+  font-family: var(--mn-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--mn-text);
+}
+.mn-login-title-lg { font-size: 26px; margin-bottom: 6px; }
+.mn-login-sub { margin: 0 0 20px; color: var(--mn-muted); font-size: 14px; line-height: 1.5; }
+.mn-login-form .mn-input { padding: 11px 13px; }
+.mn-login-error { margin: 0 0 14px; }
+.mn-login-help { margin: 0; text-align: center; font-size: 13px; line-height: 1.5; color: var(--mn-muted); }
+.mn-login-help a { color: var(--mn-primary); font-weight: 500; }
+.mn-login-help-link { display: block; margin-top: 6px; }
+.mn-login-v2 .mn-login-help { text-align: left; margin-top: 18px; }
+@media (max-width: 480px) {
+  .mn-login { padding: 16px; }
+  .mn-login-brand { padding: 22px 22px 18px; }
+  .mn-login-body { padding: 22px; }
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { ClipboardList, Factory, Truck, Scale, ReceiptText, FlaskConical, type LucideIcon } from 'lucide-react';
 import { Logo } from '../components/ui/Logo';
 
 /**
@@ -21,33 +22,39 @@ export const metadata: Metadata = {
 };
 
 /** Grouped from MODULE_CATALOG so the page describes what the product has. */
-const CAPABILITIES = [
+const CAPABILITIES: { title: string; body: string; points: string[]; icon: LucideIcon }[] = [
   {
+    icon: ClipboardList,
     title: 'Sales & orders',
     body: 'Leads, quotations with approval, rate contracts, and orders that carry the agreed rate through to the invoice.',
     points: ['Quotation approval', 'Rate contracts', 'Credit hold', 'Customer statements'],
   },
   {
+    icon: Factory,
     title: 'Production & batching',
     body: 'Mix designs with material consumption, batch tickets, and a production queue your batching operator actually works from.',
     points: ['Mix design library', 'Batch tickets', 'Controller import', 'Moisture correction'],
   },
   {
+    icon: Truck,
     title: 'Dispatch & delivery',
     body: 'Delivery challans, transit-mixer assignment, live status, and returned-concrete capture with its cost.',
     points: ['Delivery challans', 'GPS tracking', 'Driver app', 'Return & wastage'],
   },
   {
+    icon: Scale,
     title: 'Weighbridge & inventory',
     body: 'Read the indicator directly, convert to stock units, and post a GRN — gross, tare and net without retyping.',
     points: ['Indicator capture', 'Material inward', 'Stock ledger', 'Negative-stock approval'],
   },
   {
+    icon: ReceiptText,
     title: 'Billing & GST',
     body: 'Invoices from delivered challans, e-invoice IRN and e-way bill filed from inside the system, receipts and outstanding.',
     points: ['e-Invoice (IRN + QR)', 'e-Way bill', 'GST & HSN summary', 'Tally export'],
   },
   {
+    icon: FlaskConical,
     title: 'Quality & fleet',
     body: 'Slump and cube-strength records assessed against IS 456, plus vehicle maintenance, fuel and expenses.',
     points: ['IS 456 acceptance', 'Cube register', 'Service due', 'Fuel efficiency'],
@@ -73,6 +80,31 @@ const DIFFERENTIATORS = [
   },
 ];
 
+/**
+ * The KPI-tile motif from the design system's cover: a modular grid of rounded
+ * tiles cut from the radius and spacing scales, some merged two-wide the way a
+ * summary strip lets a long figure span. Pure SVG, tokens only, desktop only.
+ */
+function HeroArt() {
+  const tiles: [number, number, number, string][] = [
+    [0, 0, 124, 'a'], [136, 0, 56, 'b'], [204, 0, 56, 'a'],
+    [0, 52, 56, 'b'], [68, 52, 56, 'a'], [136, 52, 124, 'b'],
+    [0, 104, 56, 'a'], [68, 104, 56, 'b'], [136, 104, 56, 'a'], [204, 104, 56, 'b'],
+    [0, 156, 56, 'b'], [68, 156, 124, 'a'], [204, 156, 56, 'b'],
+  ];
+  return (
+    <svg className="mn-lp-hero-art" viewBox="0 0 420 300" aria-hidden="true" focusable="false">
+      <rect className="mn-lp-art-slab" x="0" y="-16" width="132" height="232" rx="12" />
+      <rect className="mn-lp-art-field" x="148" y="48" width="290" height="236" rx="12" />
+      <g transform="translate(164 64)">
+        {tiles.map(([x, y, w, k]) => (
+          <rect key={`${x}-${y}`} className={`mn-lp-art-tile mn-lp-art-tile-${k}`} x={x} y={y} width={w} height="40" rx="8" />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
 function Check() {
   return (
     <svg className="mn-lp-check" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -97,6 +129,7 @@ export default function LandingPage() {
 
       <main>
         <section className="mn-lp-hero">
+          <HeroArt />
           <div className="mn-lp-wrap mn-lp-hero-inner">
             <p className="mn-lp-eyebrow">Ready-mix concrete operations</p>
             <h1 className="mn-lp-title">Smart Mix. Stronger Future.</h1>
@@ -125,6 +158,9 @@ export default function LandingPage() {
             <div className="mn-lp-grid">
               {CAPABILITIES.map((c) => (
                 <article key={c.title} className="mn-lp-card">
+                  <span className="mn-lp-card-icon" aria-hidden="true">
+                    <c.icon size={20} strokeWidth={1.75} />
+                  </span>
                   <h3 className="mn-lp-card-title">{c.title}</h3>
                   <p className="mn-lp-card-body">{c.body}</p>
                   <ul className="mn-lp-points">
@@ -162,7 +198,7 @@ export default function LandingPage() {
           <div className="mn-lp-wrap mn-lp-closing-inner">
             <h2 className="mn-lp-closing-title">Already using Mix Nova?</h2>
             <p className="mn-lp-closing-sub">Sign in to your plant workspace.</p>
-            <Link className="mn-btn mn-btn-primary mn-lp-cta" href="/login">Sign in</Link>
+            <Link className="mn-btn mn-lp-cta mn-lp-cta-inverse" href="/login">Sign in</Link>
           </div>
         </section>
       </main>

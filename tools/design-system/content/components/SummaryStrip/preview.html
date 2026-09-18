@@ -1,0 +1,27 @@
+<!-- @dsCard group="Command" height=300 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>SummaryStrip — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h(M.SummaryStrip, null,
+    h(M.StatCard, { label: "Confirmed orders", value: "128", icon: h(I.ClipboardList, { size: 16 }), tone: "success" }),
+    h(M.StatCard, { label: "Credit holds", value: "2", icon: h(I.Lock, { size: 16 }), tone: "warning" }),
+    h(M.StatCard, { label: "Batch tickets", value: "46", icon: h(I.Ticket, { size: 16 }), tone: "info" }),
+    h(M.StatCard, { label: "Dispatches active", value: "7", icon: h(I.Truck, { size: 16 }), tone: "info" }),
+    h(M.StatCard, { label: "Uninvoiced", value: "12", icon: h(I.PackageCheck, { size: 16 }), tone: "info" }),
+    h(M.StatCard, { label: "Invoices issued", value: "94", icon: h(I.ReceiptText, { size: 16 }) }),
+    h(M.StatCard, { label: "Outstanding", value: "₹18.4L", icon: h(I.Clock, { size: 16 }), tone: "warning" }),
+    h(M.StatCard, { label: "Negative stock", value: "0", icon: h(I.AlertTriangle, { size: 16 }) })); });
+})();
+</script>
+</body>
+</html>

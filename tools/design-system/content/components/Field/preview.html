@@ -1,0 +1,28 @@
+<!-- @dsCard group="Forms" height=290 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Field — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Demo() {
+    var q = React.useState("0"); var qty = q[0], setQty = q[1];
+    var bad = !(Number(qty) > 0);
+    return h("div", { style: { maxWidth: 420 } },
+      h(M.Field, { label: "Customer name", required: true, help: "As it should appear on the invoice." }, h(M.Input, { defaultValue: "Sri Balaji Constructions" })),
+      h(M.Field, { label: "Grade" }, h(M.Select, { defaultValue: "M25" }, h("option", null, "M20"), h("option", null, "M25"), h("option", null, "M30"))),
+      h(M.Field, { label: "Quantity (m³)", error: bad ? "Enter a quantity greater than zero." : undefined, help: "Type a number to clear the error." },
+        h(M.Input, { type: "number", value: qty, "aria-invalid": bad || undefined, style: bad ? { borderColor: "var(--mn-danger)" } : undefined, onChange: function (e) { setQty(e.target.value); } })));
+  }
+  M.mount(document.getElementById("root"), function () { return h(Demo); });
+})();
+</script>
+</body>
+</html>

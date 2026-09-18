@@ -1,0 +1,24 @@
+<!-- @dsCard group="Feedback" height=380 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>States — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, alignItems: "start" } },
+    h(M.Surface, null, h(M.Loading, null), h(M.TableSkeleton, { rows: 2, cols: 3 })),
+    h(M.Surface, null, h(M.EmptyState, { title: "No challans today", description: "Dispatches appear here as batches leave the plant.", action: h(M.Button, { size: "sm", icon: h(I.Plus, { size: 15 }) }, "New Challan") })),
+    h("div", { style: { display: "grid", gap: 12 } },
+      h(M.ErrorState, { message: "Could not load challans. Check the connection and try again.", action: h(M.Button, { variant: "secondary", size: "sm" }, "Retry") }),
+      h(M.Surface, null, h(M.PermissionDenied, null)))); });
+})();
+</script>
+</body>
+</html>

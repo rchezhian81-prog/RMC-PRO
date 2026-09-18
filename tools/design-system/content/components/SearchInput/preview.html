@@ -1,0 +1,25 @@
+<!-- @dsCard group="Forms" height=80 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>SearchInput — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Demo() {
+    var a = React.useState(""), b = React.useState("Balaji");
+    return h("div", { style: { display: "flex", gap: 12, flexWrap: "wrap" } },
+      h(M.SearchInput, { value: a[0], onChange: a[1], placeholder: "Search challans…", ariaLabel: "Search challans" }),
+      h(M.SearchInput, { value: b[0], onChange: b[1], placeholder: "Search customers…", ariaLabel: "Search customers" }));
+  }
+  M.mount(document.getElementById("root"), function () { return h(Demo); });
+})();
+</script>
+</body>
+</html>

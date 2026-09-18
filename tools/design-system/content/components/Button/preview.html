@@ -1,0 +1,32 @@
+<!-- @dsCard group="Actions" height=110 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Button — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Demo() {
+    var slow = function () { return new Promise(function (r) { setTimeout(r, 1800); }); };
+    return h("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" } },
+      h(M.Button, { onClick: slow }, "Primary"),
+      h(M.Button, { variant: "secondary", onClick: slow }, "Secondary"),
+      h(M.Button, { variant: "ghost", onClick: slow }, "Ghost"),
+      h(M.Button, { variant: "danger", onClick: slow }, "Danger"),
+      h(M.Button, { disabled: true }, "Disabled"),
+      h(M.Button, { loading: true }, "Saving…"),
+      h(M.Button, { size: "sm", icon: h(I.Plus, { size: 15 }), onClick: slow }, "New Challan"),
+      h(M.Button, { variant: "secondary", size: "sm", icon: h(I.Download, { size: 15 }), onClick: slow }, "Export"),
+      h("span", { style: { fontSize: 12, color: "var(--mn-subtle)" } }, "Click one: it goes busy for 1.8s and refuses a second click."));
+  }
+  M.mount(document.getElementById("root"), function () { return h(Demo); });
+})();
+</script>
+</body>
+</html>

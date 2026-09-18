@@ -1,0 +1,20 @@
+<!-- @dsCard group="Command" height=100 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>CommandBar — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h(M.CommandBar, { title: "Delivery Challans", subtitle: "Today · Plant A",
+    actions: h(F, null, h(M.Button, { variant: "secondary", size: "sm", icon: h(I.Download, { size: 15 }) }, "Export"), h(M.Button, { size: "sm", icon: h(I.Plus, { size: 15 }) }, "New Challan")) }); });
+})();
+</script>
+</body>
+</html>

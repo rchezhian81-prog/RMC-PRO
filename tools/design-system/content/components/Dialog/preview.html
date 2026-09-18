@@ -1,0 +1,33 @@
+<!-- @dsCard group="Overlays" height=330 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Dialog — preview</title>
+<style>
+body { padding: 16px; }
+html, body { height: 100%; } body { position: relative; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Demo() {
+    var o = React.useState(true); var open = o[0], setOpen = o[1];
+    var r = React.useState(""); var result = r[0], setResult = r[1];
+    var api = M.useConfirm();
+    return h("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" } },
+      h(M.Button, { variant: "secondary", onClick: function () { setOpen(true); } }, "Open dialog"),
+      h(M.Button, { variant: "secondary", onClick: function () { return api.confirm({ title: "Delete challan?", message: "DC-10421 will be removed.", danger: true, confirmLabel: "Delete" }).then(function (ok) { setResult(ok ? "confirm → yes" : "confirm → cancelled"); }); } }, "useConfirm().confirm"),
+      h(M.Button, { variant: "secondary", onClick: function () { return api.prompt({ title: "Hold reason", label: "Reason", placeholder: "Why is this order on hold?" }).then(function (v) { setResult(v === null ? "prompt → cancelled" : "prompt → " + JSON.stringify(v)); }); } }, "useConfirm().prompt"),
+      result ? h("span", { style: { fontSize: 13, color: "var(--mn-muted)" } }, result) : null,
+      h(M.Dialog, { open: open, onClose: function () { setOpen(false); }, title: "Cancel order ORD-2041?",
+        footer: h(F, null, h(M.Button, { variant: "secondary", onClick: function () { setOpen(false); } }, "Keep order"), h(M.Button, { variant: "danger", onClick: function () { setOpen(false); } }, "Cancel order")) },
+        h("div", { style: { fontSize: 14, color: "var(--mn-muted)" } }, "The batch ticket will be voided and the customer's credit released. This cannot be undone.")));
+  }
+  M.mount(document.getElementById("root"), function () { return h(M.ConfirmProvider, null, h(Demo)); });
+})();
+</script>
+</body>
+</html>

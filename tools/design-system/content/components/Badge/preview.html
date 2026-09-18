@@ -1,0 +1,23 @@
+<!-- @dsCard group="Data" height=80 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Badge — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } },
+    h(M.Badge, { tone: "success" }, "Delivered"), h(M.Badge, { tone: "warning" }, "On hold"), h(M.Badge, { tone: "danger" }, "Cancelled"),
+    h(M.Badge, { tone: "info" }, "In transit"), h(M.Badge, { tone: "neutral" }, "Draft"),
+    h(M.StatusBadge, { status: "credit_hold" }), h(M.StatusBadge, { status: "partially_paid" }), h(M.StatusBadge, { status: "batching" }),
+    h(M.Badge, { tone: "success", icon: h(I.Check, { size: 14 }) }, "Paid")); });
+})();
+</script>
+</body>
+</html>

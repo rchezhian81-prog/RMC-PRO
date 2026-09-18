@@ -1,0 +1,23 @@
+<!-- @dsCard group="Feedback" height=370 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>AlertSurface — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  M.mount(document.getElementById("root"), function () { return h("div", { style: { display: "grid", gap: 12 } },
+    h(M.AlertSurface, { tone: "info", title: "Info" }, "Weighbridge sync completed 4 minutes ago."),
+    h(M.AlertSurface, { tone: "success", title: "Approved" }, "Order ORD-2043 approved and scheduled."),
+    h(M.AlertSurface, { tone: "warning", title: "2 credit holds pending approval", actions: h(M.Button, { variant: "ghost", size: "sm" }, "Review") }, "Orders ORD-2041, ORD-2044 exceed their customer credit limit."),
+    h(M.AlertSurface, { tone: "danger", title: "Approval required", actions: h(F, null, h(M.Button, { variant: "danger", size: "sm", icon: h(I.Check, { size: 15 }) }, "Approve override"), h(M.Button, { variant: "secondary", size: "sm", icon: h(I.X, { size: 15 }) }, "Reject")) }, "This dispatch exceeds the credit hold. Approve to proceed.")); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!-- @dsCard group="Command" height=100 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FilterBar — preview</title>
+<style>
+body { padding: 16px; }
+</style></head>
+<body class="mn-app">
+<div id="root"></div>
+<script>
+(function () {
+  var h = React.createElement, M = window.MixNova, F = React.Fragment;
+  var I = M.Icons;
+  function dark() { return /dark/.test(document.documentElement.getAttribute("data-theme") || ""); }
+  function Demo() {
+    var s = React.useState("");
+    return h(M.FilterBar, { actions: h(M.Button, { variant: "ghost", size: "sm", icon: h(I.Filter, { size: 15 }) }, "More filters") },
+      h(M.SearchInput, { value: s[0], onChange: s[1], placeholder: "Search challans…", ariaLabel: "Search challans" }),
+      h(M.Select, { "aria-label": "Status", defaultValue: "", style: { width: "auto" } }, h("option", { value: "" }, "All statuses"), h("option", { value: "dispatched" }, "Dispatched"), h("option", { value: "delivered" }, "Delivered")),
+      h(M.Select, { "aria-label": "Plant", defaultValue: "", style: { width: "auto" } }, h("option", { value: "" }, "All plants"), h("option", { value: "a" }, "Plant A")));
+  }
+  M.mount(document.getElementById("root"), function () { return h(Demo); });
+})();
+</script>
+</body>
+</html>

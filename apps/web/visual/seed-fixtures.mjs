@@ -53,6 +53,12 @@ async function main() {
   TOKEN = auth.access_token;
   const tenantId = auth.tenant?.id ?? auth.tenantId ?? '';
 
+  // 0.2) company profile — a tax invoice cannot be issued (step 9) until the
+  // seller's GSTIN and state are set; same fixture values as the API
+  // integration harness. Throwaway VISUAL tenant only.
+  await api('PATCH', '/company', { gstin: '33AABCA1234B1ZO', state: 'Tamil Nadu' });
+  log('company GSTIN + state set');
+
   // 0.5) existing master ids
   const customer = find(await api('GET', '/customers'), 'customerCode', 'CUST-001');
   const site = find(await api('GET', '/sites'), 'siteCode', 'SITE-001');

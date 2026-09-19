@@ -61,9 +61,14 @@ for (const s of SCREENS) {
   });
 }
 
-// Login screen — captured unauthenticated (no session).
+// Public screens — captured unauthenticated (no session). The landing page's
+// scroll-reveal and ambient animations collapse under the reduced-motion
+// emulation stabilize() applies, so every section renders in its final state.
 test.describe('unauthenticated', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+  test('baseline: landing', async ({ page }) => {
+    await capture(page, 'landing', '/');
+  });
   test('baseline: login', async ({ page }) => {
     await capture(page, 'login', '/login');
   });

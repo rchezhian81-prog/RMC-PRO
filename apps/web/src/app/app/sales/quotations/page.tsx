@@ -314,7 +314,7 @@ export default function QuotationsPage() {
                         aria-label={`Print ${String(r.quotationNo ?? '')}`}
                         onClick={() => openPdf(`/quotations/${String(r.id)}/pdf`, String(r.quotationNo ?? '')).catch((e) => setError(String(e)))}
                       >
-                        PDF
+                        Print
                       </Button>
                     </span>
                     <ChevronRight size={18} aria-hidden />

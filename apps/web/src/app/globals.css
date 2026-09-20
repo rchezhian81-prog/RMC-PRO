@@ -2670,11 +2670,11 @@ main:focus-visible {
 .mn-donut-t { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mn-subtle); }
 .mn-donut-v { font-family: var(--mn-font-display); font-weight: 700; font-size: 16px; margin-top: 2px; font-variant-numeric: tabular-nums; color: var(--mn-text); }
 .mn-legend { display: flex; flex-direction: column; gap: 9px; flex: 1; min-width: 132px; }
-.mn-lg { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+.mn-lg { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .mn-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; background: currentColor; }
-.mn-lg-nm { color: var(--mn-muted); }
+.mn-lg-nm { color: var(--mn-muted); white-space: nowrap; }
 .mn-lg-amt { margin-left: auto; font-family: var(--mn-font-display); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mn-text); }
-.mn-lg-pc { width: 40px; text-align: right; color: var(--mn-subtle); font-variant-numeric: tabular-nums; }
+.mn-lg-pc { width: 34px; text-align: right; color: var(--mn-subtle); font-variant-numeric: tabular-nums; }
 
 /* collections gauge */
 .mn-gauge { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }

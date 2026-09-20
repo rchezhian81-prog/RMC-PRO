@@ -3218,7 +3218,7 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
 .mn-ord-how { font-size: 12.5px; color: var(--mn-muted); max-width: 46ch; line-height: 1.45; }
 .mn-ord-how a { color: var(--mn-primary); font-weight: 600; text-decoration: none; }
 .mn-ord-how a:hover { text-decoration: underline; }
-.mn-ord-how--foot { display: none; margin: 0; padding: 10px 16px 12px 18px; border-top: 1px solid var(--mn-border); }
+.mn-ord-how--foot { display: none; max-width: none; margin: 0; padding: 10px 16px 12px 18px; border-top: 1px solid var(--mn-border); }
 .mn-ord .mn-board-card-title { white-space: nowrap; }
 .mn-ord-skel { padding: 4px 0; }
 

@@ -118,7 +118,15 @@ export class QuotationsService {
       })),
       interstate,
     );
-    return { ...quotation, items, taxSummary };
+    // Names for the screen header: who the quotation is for and where it pours.
+    const site = quotation.siteId ? await m.getRepository(Site).findOne({ where: { id: quotation.siteId } }) : null;
+    return {
+      ...quotation,
+      customerName: customer?.customerName ?? null,
+      siteName: site?.siteName ?? null,
+      items,
+      taxSummary,
+    };
   }
 
   get(tenantId: string, id: string) {

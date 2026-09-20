@@ -3573,3 +3573,27 @@ a.mn-ord-no { text-decoration: none; }
   .mn-cu-search { width: 100%; }
   .mn-cu-tools { width: 100%; }
 }
+
+/* ============================================================================
+   QUOTATION DETAIL — shares the order detail layout (.mn-od-*)
+   ============================================================================ */
+.mn-qd-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mn-od-fact[data-tone='warning'] .mn-qd-validity { color: var(--mn-warning); font-weight: 600; }
+.mn-od-fact[data-tone='danger'] .mn-qd-validity { color: var(--mn-danger); font-weight: 600; }
+.mn-od-fact[data-tone='success'] .mn-qd-validity { color: var(--mn-success); font-weight: 600; }
+.mn-qd-item-wrap { padding: 12px 16px 4px; border-top: 1px solid var(--mn-border); }
+.mn-qd-item-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.mn-qd-item-submit { display: flex; gap: 6px; padding-bottom: 14px; white-space: nowrap; }
+.mn-qd-item-submit button { white-space: nowrap; }
+.mn-qd-locked { margin: 0; padding: 12px 16px; border-top: 1px solid var(--mn-border); }
+.mn-qd-editing td { background: color-mix(in srgb, var(--mn-primary) 6%, var(--mn-surface)); }
+.mn-qd-details { display: grid; gap: 4px; }
+.mn-qd-details-submit { padding-top: 4px; }
+@media (max-width: 1180px) {
+  .mn-qd-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .mn-qd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mn-qd-item-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mn-qd-item-submit { grid-column: 1 / -1; padding-bottom: 12px; }
+}

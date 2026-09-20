@@ -3203,3 +3203,152 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
 .mn-lp-closing .mn-lp-mesh { display: none; }
 .mn-login-hero .mn-lp-blob { opacity: 0.5; }
 .mn-login-hero .mn-lp-blob-c { opacity: 0.2; }
+
+/* ============================================================================
+   ORDERS LIST — the order book as tappable rows, both skins, light + dark
+   ----------------------------------------------------------------------------
+   Reuses the board header, status strip and chips (.mn-board-*). Each order is
+   one row that is a link: a status-coloured rail, the number and date, the
+   customer, the agreed value with the GST-inclusive figure under it, then the
+   credit verdict and the status. Six columns on a desk, two on a phone.
+   ============================================================================ */
+.mn-ord { display: grid; gap: 16px; }
+.mn-ord-sum svg { color: var(--mn-primary); }
+.mn-ord-link { text-decoration: none; }
+.mn-ord-how { font-size: 12.5px; color: var(--mn-muted); max-width: 46ch; line-height: 1.45; }
+.mn-ord-how a { color: var(--mn-primary); font-weight: 600; text-decoration: none; }
+.mn-ord-how a:hover { text-decoration: underline; }
+.mn-ord-how--foot { display: none; margin: 0; padding: 10px 16px 12px 18px; border-top: 1px solid var(--mn-border); }
+.mn-ord .mn-board-card-title { white-space: nowrap; }
+.mn-ord-skel { padding: 4px 0; }
+
+/* ---- attention note ---- */
+.mn-ord-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--mn-radius-md);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-text);
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+}
+.mn-ord-note svg { flex: none; }
+.mn-ord-note--warn { background: var(--mn-warning-tint, color-mix(in srgb, var(--mn-warning) 10%, var(--mn-surface))); border-color: color-mix(in srgb, var(--mn-warning) 40%, var(--mn-border)); }
+.mn-ord-note--warn svg { color: var(--mn-warning); }
+
+/* ---- rows ---- */
+.mn-ord-list { display: grid; }
+.mn-ord-cols,
+.mn-ord-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.6fr) minmax(150px, 0.9fr) minmax(112px, auto) minmax(112px, auto) 28px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px 12px 18px;
+}
+.mn-ord-cols {
+  padding-top: 10px;
+  padding-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-subtle);
+  border-bottom: 1px solid var(--mn-border);
+}
+.mn-ord-cols .is-num { text-align: right; }
+.mn-ord-row {
+  --rail: var(--mn-muted);
+  position: relative;
+  min-width: 0;
+  color: var(--mn-text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--mn-border);
+  transition: background 0.15s;
+}
+.mn-ord-row > * { min-width: 0; }
+.mn-ord-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--rail);
+}
+.mn-ord-row[data-tone='success'] { --rail: var(--mn-success); }
+.mn-ord-row[data-tone='warning'] { --rail: var(--mn-warning); }
+.mn-ord-row[data-tone='danger'] { --rail: var(--mn-danger); }
+.mn-ord-row[data-tone='info'] { --rail: var(--mn-info, var(--mn-primary)); }
+.mn-ord-row:last-child { border-bottom: 0; }
+.mn-ord-row:hover { background: color-mix(in srgb, var(--mn-primary) 5%, var(--mn-surface)); }
+.mn-ord-row:hover .mn-ord-go { color: var(--mn-primary); transform: translateX(2px); }
+.mn-ord-row:focus-visible { outline: 2px solid var(--mn-primary); outline-offset: -2px; border-radius: var(--mn-radius-sm, 6px); }
+.mn-ord-row[data-tone='warning'] { background: color-mix(in srgb, var(--mn-warning) 4%, var(--mn-surface)); }
+.mn-ord-row[data-tone='danger'] .mn-ord-cust,
+.mn-ord-row[data-tone='danger'] .mn-ord-amt { color: var(--mn-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--mn-danger) 55%, transparent); }
+
+.mn-ord-id, .mn-ord-who, .mn-ord-val { display: grid; gap: 3px; }
+.mn-ord-no {
+  font-family: var(--mn-font-display);
+  font-weight: 700;
+  font-size: 14.5px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-text);
+}
+.mn-ord-cust {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--mn-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mn-ord-meta {
+  font-size: 12px;
+  color: var(--mn-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mn-ord-dot { margin: 0 6px; color: var(--mn-subtle); }
+.mn-ord-val { text-align: right; }
+.mn-ord-amt {
+  font-family: var(--mn-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-text);
+}
+.mn-ord-credit, .mn-ord-status { display: flex; }
+.mn-ord-go { display: grid; place-items: center; color: var(--mn-subtle); transition: color 0.15s, transform 0.15s; }
+
+/* ---- phone: two columns, badges wrap under the customer ---- */
+@media (max-width: 860px) {
+  .mn-ord-cols { display: none; }
+  .mn-ord-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id go'
+      'who who'
+      'val val'
+      'badges badges';
+    gap: 6px 10px;
+    padding: 12px 14px 12px 16px;
+  }
+  .mn-ord-id { grid-area: id; }
+  .mn-ord-go { grid-area: go; }
+  .mn-ord-who { grid-area: who; }
+  .mn-ord-val { grid-area: val; text-align: left; display: flex; align-items: baseline; gap: 8px; }
+  .mn-ord-credit { grid-area: badges; }
+  .mn-ord-status { grid-area: badges; justify-self: end; }
+  .mn-ord-cust { white-space: normal; }
+  .mn-ord-how { display: none; }
+  .mn-ord-how--foot { display: block; }
+}

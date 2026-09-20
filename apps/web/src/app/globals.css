@@ -1528,8 +1528,10 @@ main:focus-visible {
 }
 .mn-login-hero > * {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
+.mn-login-hero .mn-lp-mesh, .mn-login-hero .mn-lp-dots, .mn-login-hero .mn-lp-grain, .mn-login-hero .mn-lp-watermark { z-index: 0; }
+.mn-login-hero .mn-lp-grain { z-index: 1; }
 .mn-login-hero-title {
   font-family: var(--mn-font-display);
   font-size: 30px;
@@ -2202,22 +2204,7 @@ main:focus-visible {
 .mn-lp-plant .mn-lp-mesh { filter: blur(50px); }
 .mn-lp-plant .mn-lp-blob { opacity: 0.55; }
 .mn-lp-scene { position: relative; z-index: 2; display: block; width: 100%; height: auto; }
-.ps-belt { animation: ps-belt 1.4s linear infinite; }
-@keyframes ps-belt { to { stroke-dashoffset: -48; } }
-.ps-flow { animation: ps-flow 2.4s linear infinite; }
-@keyframes ps-flow { to { stroke-dashoffset: -44; } }
-.ps-vanes { transform-box: fill-box; transform-origin: center; animation: ps-spin 5s linear infinite; }
-@keyframes ps-spin { to { transform: rotate(360deg); } }
-.ps-stripes { animation: ps-roll 1.3s linear infinite; }
-@keyframes ps-roll { to { transform: translateX(28px); } }
-.ps-truck { animation: ps-bob 5s ease-in-out infinite; }
-@keyframes ps-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-.ps-glow { animation: ps-pulse 4s ease-in-out infinite; }
-@keyframes ps-pulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
-.ps-bar { transform-box: fill-box; transform-origin: bottom; animation: ps-bars 2.2s ease-in-out infinite; }
-.ps-bar-2 { animation-delay: -0.5s; } .ps-bar-3 { animation-delay: -1.1s; } .ps-bar-4 { animation-delay: -1.6s; }
-@keyframes ps-bars { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.55); } }
-.ps-stars circle { animation: ps-pulse 3s ease-in-out infinite; }
+/* the plant illustration is a still: no belt, drum, vane or bar motion */
 .mn-lp-callout {
   position: absolute;
   z-index: 3;
@@ -2427,7 +2414,7 @@ main:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .mn-reveal.is-armed { opacity: 1; transform: none; transition: none; }
-  .mn-lp-blob, .mn-lp-float, .mn-lp-float-dot, .mn-lp-fbar, .ps-belt, .ps-flow, .ps-vanes, .ps-stripes, .ps-truck, .ps-glow, .ps-bar, .ps-stars circle { animation: none; }
+  .mn-lp-blob, .mn-lp-float, .mn-lp-float-dot, .mn-lp-fbar { animation: none; }
   .mn-lp-card, .mn-lp-card:hover { transition: none; transform: none; }
 }
 
@@ -2448,26 +2435,41 @@ main:focus-visible {
    Login — the default (flag-OFF) frame and the pieces both frames share.
    ========================================================================== */
 .mn-login {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(60% 42% at 50% 0%, rgba(108, 43, 217, 0.1), transparent 70%), var(--mn-bg);
+  background: #0f0a22;
 }
+.mn-login > .mn-login-stack { position: relative; z-index: 2; }
 .mn-login-stack { width: 100%; max-width: 420px; display: grid; gap: 16px; }
 .mn-login-box {
   background: var(--mn-surface);
-  border: 1px solid var(--mn-border);
-  border-radius: var(--mn-radius-lg);
-  box-shadow: var(--mn-shadow-pop);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
+  box-shadow: 0 40px 90px -34px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(138, 79, 255, 0.18);
   overflow: hidden;
 }
 .mn-login-brand {
-  padding: 26px 28px 22px;
+  position: relative;
+  padding: 28px 28px 24px;
   /* the brand board sets the on-dark logo on deep navy, never on violet: the
      emblem's own violet would vanish on the brand gradient */
   background: linear-gradient(135deg, #1b1630 0%, #2e1160 58%, #45209a 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
+.mn-login-brand::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(183, 140, 255, 0.7), transparent);
+}
+.mn-login .mn-login-help { color: #cfc4ee; }
+.mn-login .mn-login-help a { color: #e9ddff; }
 .mn-login-body { padding: 26px 28px 28px; }
 .mn-login-title {
   margin: 0 0 4px;
@@ -3111,3 +3113,93 @@ main:focus-visible {
   :root[data-ui='v2'] .mn-sidebar .mn-rail-brand, :root[data-ui='v2'] .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 36px; }
 }
 @media (prefers-reduced-motion: reduce) { .mn-logo { transition: none; } }
+
+/* ============================================================================
+   BRAND PLATE + PREMIUM PASS — the lockup on one deep-navy plate everywhere,
+   a soft emblem watermark behind the dark surfaces, section kickers, and a
+   brighter aurora. Both skins, light + dark.
+   ============================================================================ */
+.mn-brand-plate {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 13px 7px 10px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1b1630 0%, #26184f 55%, #3a1f86 100%);
+  box-shadow:
+    0 12px 28px -14px rgba(60, 20, 140, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px rgba(138, 79, 255, 0.26);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+a:hover > .mn-brand-plate, .mn-brand-plate:hover {
+  box-shadow:
+    0 16px 34px -14px rgba(90, 40, 200, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 1px rgba(160, 110, 255, 0.45);
+}
+/* the sidebar rail: the plate replaces the earlier translucent pill */
+:root[data-ui='v2'] .mn-rail-brand { padding: 0; background: none; box-shadow: none; }
+.mn-sidebar .mn-rail-brand .mn-brand-plate { padding: 6px 11px 6px 8px; }
+
+/* soft emblem watermark on the dark surfaces */
+.mn-lp-watermark {
+  position: absolute;
+  z-index: 0;
+  right: -6%;
+  top: -12%;
+  width: min(62vw, 720px);
+  aspect-ratio: 380 / 344;
+  pointer-events: none;
+  opacity: 0.09;
+  background: url('/brand/mix-nova-mark.png') center / contain no-repeat;
+  filter: saturate(0.6) blur(0.4px);
+  -webkit-mask-image: radial-gradient(60% 60% at 50% 50%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(60% 60% at 50% 50%, #000 30%, transparent 100%);
+}
+.mn-login .mn-lp-watermark { right: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(90vw, 820px); opacity: 0.07; }
+.mn-login-hero .mn-lp-watermark { right: -18%; top: auto; bottom: -12%; width: min(70vw, 560px); }
+.mn-lp-closing .mn-lp-watermark { right: -4%; top: -30%; width: min(50vw, 520px); opacity: 0.12; }
+
+/* section kickers */
+.mn-lp-kicker {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #6c2bd9, #8a4fff 60%, #b78cff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.mn-lp-kicker-light { background: linear-gradient(90deg, #d6c2ff, #e9ddff); -webkit-background-clip: text; background-clip: text; }
+
+/* a brighter, more vivid aurora and a livelier glass */
+.mn-lp-blob { opacity: 0.9; }
+.mn-lp-blob-a { background: radial-gradient(circle, #7c3aed 0%, rgba(124, 58, 237, 0) 62%); }
+.mn-lp-blob-b { background: radial-gradient(circle, #a78bfa 0%, rgba(167, 139, 250, 0) 60%); }
+.mn-lp-blob-c { background: radial-gradient(circle, #5eead4 0%, rgba(94, 234, 212, 0) 58%); opacity: 0.32; }
+.mn-lp-hero { background: radial-gradient(120% 80% at 80% 0%, #2a1660 0%, #120b2a 55%, #0b0719 100%); }
+.mn-lp-eyebrow { background: linear-gradient(135deg, rgba(138, 79, 255, 0.28), rgba(255, 255, 255, 0.06)); border-color: rgba(183, 140, 255, 0.4); }
+.mn-lp-title-accent { background: linear-gradient(92deg, #f3ecff 0%, #c4b5fd 35%, #8ee6d8 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.mn-lp-window { box-shadow: 0 48px 100px -34px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(167, 139, 250, 0.22), 0 0 80px -20px rgba(138, 79, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.mn-lp-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: 20px 20px 0 0;
+  background: linear-gradient(90deg, #6c2bd9, #8a4fff 50%, #b78cff);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.mn-lp-card:hover::before { opacity: 1; }
+.mn-lp-closing { position: relative; isolation: isolate; overflow: hidden; }
+.mn-lp-closing-inner { position: relative; z-index: 2; display: grid; justify-items: center; gap: 14px; }
+.mn-lp-closing-inner .mn-brand-plate { margin-bottom: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .mn-brand-plate, .mn-lp-card::before { transition: none; }
+}
+.mn-lp-closing .mn-lp-mesh { display: none; }
+.mn-login-hero .mn-lp-blob { opacity: 0.5; }
+.mn-login-hero .mn-lp-blob-c { opacity: 0.2; }

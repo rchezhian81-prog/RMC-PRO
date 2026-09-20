@@ -172,7 +172,7 @@ export default function OrdersPage() {
             {rows.map((r) => {
               const status = String(r.orderStatus ?? '');
               return (
-                <Link key={String(r.id)} href={`/app/orders/${r.id}`} className="mn-ord-row" data-tone={toneOf(status)} role="listitem">
+                <Link key={String(r.id)} href={`/app/orders/${r.id}`} className={`mn-ord-row${status === 'cancelled' ? ' is-void' : ''}`} data-tone={toneOf(status)} role="listitem">
                   <div className="mn-ord-id">
                     <span className="mn-ord-no">{String(r.orderNo ?? '')}</span>
                     <span className="mn-ord-meta">

@@ -171,3 +171,77 @@ export async function computeCustomerExposure(
     creditLimit,
   });
 }
+
+/**
+ * Every customer's live exposure in four grouped queries — the same four terms
+ * as computeCustomerExposure, summed per customer_id — for the customers list,
+ * which would otherwise need one round trip per row. Must run inside a tenant
+ * transaction (RLS scopes each query). Customers with nothing owed still get a
+ * row so the caller can show "nothing outstanding" rather than a blank.
+ */
+export async function computeAllExposures(m: EntityManager): Promise<Record<string, CustomerExposure>> {
+  const customers = await m.getRepository(Customer).find();
+  const byId = new Map<string, { opening: number; limit: number; orders: number; invoices: number; pending: number; advances: number }>();
+  for (const c of customers) byId.set(c.id, { opening: num(c.openingBalance), limit: num(c.creditLimit), orders: 0, invoices: 0, pending: 0, advances: 0 });
+  const take = (rows: Array<{ customerId: string | null; total: number | string | null }>, key: 'orders' | 'invoices' | 'pending' | 'advances') => {
+    for (const r of rows) {
+      const e = r.customerId ? byId.get(r.customerId) : undefined;
+      if (e) e[key] = num(r.total);
+    }
+  };
+  take(
+    await m.query(
+      `SELECT o.customer_id AS "customerId",
+              COALESCE(SUM(GREATEST(0,
+                COALESCE(o.estimated_order_value_incl_gst, o.estimated_order_value) - COALESCE(b.billed, 0))), 0)::float AS total
+         FROM orders o
+         LEFT JOIN (
+           SELECT dc.order_id, SUM(ii.line_total) AS billed
+             FROM invoice_items ii
+             JOIN invoices i ON i.id = ii.invoice_id AND i.invoice_status = 'issued'
+             JOIN delivery_challans dc ON dc.id = ii.challan_id
+            GROUP BY dc.order_id
+         ) b ON b.order_id = o.id
+        WHERE o.order_status = 'confirmed' AND o.customer_id IS NOT NULL
+        GROUP BY o.customer_id`,
+    ),
+    'orders',
+  );
+  take(
+    await m.query(
+      `SELECT customer_id AS "customerId", COALESCE(SUM(outstanding_amount), 0)::float AS total
+         FROM invoices WHERE invoice_status = 'issued' AND customer_id IS NOT NULL GROUP BY customer_id`,
+    ),
+    'invoices',
+  );
+  take(
+    await m.query(
+      `SELECT p.customer_id AS "customerId", COALESCE(SUM(pa.allocated_amount), 0)::float AS total
+         FROM payment_allocations pa
+         JOIN payments p ON p.id = pa.payment_id
+        WHERE p.status <> 'reversed' AND COALESCE(p.clearing_status, '') = 'pending' AND p.customer_id IS NOT NULL
+        GROUP BY p.customer_id`,
+    ),
+    'pending',
+  );
+  take(
+    await m.query(
+      `SELECT customer_id AS "customerId", COALESCE(SUM(unallocated_amount), 0)::float AS total
+         FROM payments
+        WHERE status <> 'reversed' AND COALESCE(clearing_status, '') <> 'pending' AND customer_id IS NOT NULL
+        GROUP BY customer_id`,
+    ),
+    'advances',
+  );
+  const out: Record<string, CustomerExposure> = {};
+  for (const [id, e] of byId) {
+    out[id] = assembleExposure({
+      openingBalance: e.opening,
+      unInvoicedOrderValue: e.orders,
+      invoiceOutstanding: e.invoices + e.pending,
+      advanceCredit: e.advances,
+      creditLimit: e.limit,
+    });
+  }
+  return out;
+}

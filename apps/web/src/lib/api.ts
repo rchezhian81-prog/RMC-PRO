@@ -393,6 +393,8 @@ export type CustomerExposure = {
 
 export const customersApi = {
   exposure: (id: string) => apiFetch<CustomerExposure>(`/customers/${id}/exposure`),
+  /** Every customer's exposure keyed by customer id, for the customers list. */
+  exposures: () => apiFetch<Record<string, CustomerExposure>>('/customer-exposure'),
 };
 
 export const company = {

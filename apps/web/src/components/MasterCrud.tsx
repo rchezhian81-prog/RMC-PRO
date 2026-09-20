@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Download, Upload, FileText } from 'lucide-react';
 import { validateMasterFields } from '@rmc/shared';
 import { crud, ApiError, type Row } from '../lib/api';
@@ -28,49 +28,57 @@ const blankForm = (config: EntityConfig): Record<string, string> => {
 };
 
 /**
- * Config-driven master screen: list + create + edit + deactivate, with actions
- * gated by the user's permissions (the company owner sees everything). Number
- * series uses its own `number_series.manage` key; every other master uses the
- * granular `masters.<action>` keys.
+ * The create / edit form for one master, on its own so a bespoke master screen
+ * (the customers list) can reuse it beside its own list. It owns the field
+ * state, the client-side validation (the same rules the server enforces) and
+ * the ref-field pick-lists; the caller decides where it sits and what happens
+ * after a save.
  */
-export function MasterCrud({ config }: { config: EntityConfig }) {
-  const { confirm } = useConfirm();
+export function MasterForm({
+  config,
+  editingId,
+  initial,
+  onSaved,
+  onCancel,
+  title,
+  onError,
+}: {
+  config: EntityConfig;
+  /** The row being edited, or null for a new record. */
+  editingId: string | null;
+  /** The row's current values when editing. */
+  initial?: Row | null;
+  onSaved: () => void | Promise<void>;
+  onCancel: () => void;
+  title?: ReactNode;
+  /** Optional hook so the parent can show a general error where it prefers. */
+  onError?: (message: string | null) => void;
+}) {
   const client = crud(config.path);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [form, setForm] = useState<Record<string, string>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, string>>(() => blankForm(config));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [localError, setLocalError] = useState<string | null>(null);
   // Dropdown options for relational (`ref`) fields, keyed by field key. Fetched
   // from the referenced master so the operator picks a real record, not an id.
   const [refOptions, setRefOptions] = useState<Record<string, { value: string; label: string }[]>>({});
   const [busy, setBusy] = useState(false);
-  const [importMsg, setImportMsg] = useState<string | null>(null);
-  const [access, setAccess] = useState<Access>(NO_ACCESS);
-  const [loaded, setLoaded] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const setError = (m: string | null) => { setLocalError(m); onError?.(m); };
 
-  const isNumberSeries = config.path === 'number-series';
-  const can = (action: 'create' | 'edit' | 'delete') =>
-    isNumberSeries ? access.has('number_series.manage') : access.has(`masters.${action}`);
-  const fieldKeys = config.fields.map((f) => f.key);
-  // Columns backed by a boolean field render as Yes/No instead of raw true/false.
-  const boolCols = new Set(config.fields.filter((f) => f.type === 'boolean').map((f) => f.key));
-  const cell = (c: string, r: Row) => (boolCols.has(c) ? (r[c] ? 'Yes' : 'No') : String(r[c] ?? ''));
-
-  async function reload() {
-    setRows(await client.list());
-  }
+  // Fill from the row being edited, or start blank for a new record.
   useEffect(() => {
-    setAccess(getAccess());
-    setForm(blankForm(config));
-    setEditingId(null);
-    setError(null);
-    setLoaded(false);
-    reload()
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoaded(true));
-  }, [config.path]);
+    if (editingId && initial) {
+      const next: Record<string, string> = {};
+      for (const f of config.fields) {
+        const v = initial[f.key];
+        next[f.key] = v === null || v === undefined ? '' : String(v);
+      }
+      setForm(next);
+    } else {
+      setForm(blankForm(config));
+    }
+    setFieldErrors({});
+    setLocalError(null);
+  }, [editingId, initial, config]);
 
   // Populate dropdown options for relational (`ref`) fields from their masters.
   // One fetch per distinct referenced path; a failure (e.g. no read permission)
@@ -104,27 +112,7 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     return () => {
       cancelled = true;
     };
-  }, [config.path]);
-
-  function startEdit(r: Row) {
-    const next: Record<string, string> = {};
-    for (const f of config.fields) {
-      const v = r[f.key];
-      next[f.key] = v === null || v === undefined ? '' : String(v);
-    }
-    setForm(next);
-    setEditingId(r.id);
-    setError(null);
-    setFieldErrors({});
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(blankForm(config));
-    setError(null);
-    setFieldErrors({});
-  }
+  }, [config]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -149,8 +137,8 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     try {
       if (editingId) await client.update(editingId, body);
       else await client.create(body);
-      cancelEdit();
-      await reload();
+      setForm(blankForm(config));
+      await onSaved();
     } catch (err) {
       // Surface the server's per-field errors (source of truth) when present.
       if (err instanceof ApiError && err.fields && Object.keys(err.fields).length) {
@@ -162,6 +150,139 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  const singular = config.title.replace(/s$/, '');
+  return (
+    <Card title={title ?? (editingId ? `Edit ${singular}` : `New ${singular}`)}>
+      {localError && !onError && (
+        <div style={{ marginBottom: 12 }}>
+          <ErrorState message={localError} />
+        </div>
+      )}
+      <Form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+        {config.fields.map((f) => {
+          // A static option list, or one fetched from a referenced master.
+          const opts = f.options ?? (f.ref ? refOptions[f.key] ?? [] : undefined);
+          return (
+          <div key={f.key} style={{ minWidth: 150 }}>
+            <Field label={f.label} required={f.required}>
+              {f.type === 'boolean' ? (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={form[f.key] === 'true'}
+                    onChange={(e) => setForm((p) => ({ ...p, [f.key]: String(e.target.checked) }))}
+                    style={{ width: 16, height: 16, accentColor: 'var(--mn-primary)' }}
+                  />
+                  <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>{form[f.key] === 'true' ? 'Yes' : 'No'}</span>
+                </label>
+              ) : opts ? (
+                <select
+                  value={form[f.key] ?? ''}
+                  onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                  required={f.required}
+                  aria-invalid={fieldErrors[f.key] ? true : undefined}
+                  style={{
+                    width: '100%',
+                    padding: '9px 11px',
+                    borderRadius: 8,
+                    border: `1px solid ${fieldErrors[f.key] ? 'var(--mn-danger)' : 'var(--mn-border, #d9d9e3)'}`,
+                    background: 'var(--mn-surface, #fff)',
+                    color: 'inherit',
+                  }}
+                >
+                  <option value="">—</option>
+                  {opts.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                  value={form[f.key] ?? ''}
+                  onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                  required={f.required}
+                  aria-invalid={fieldErrors[f.key] ? true : undefined}
+                  style={fieldErrors[f.key] ? { borderColor: 'var(--mn-danger)' } : undefined}
+                />
+              )}
+            </Field>
+            {fieldErrors[f.key] && (
+              <p style={{ color: 'var(--mn-danger)', fontSize: 12, margin: '4px 0 0' }}>{fieldErrors[f.key]}</p>
+            )}
+          </div>
+          );
+        })}
+        <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
+          <Button type="submit" loading={busy}>
+            {editingId ? 'Update' : 'Create'}
+          </Button>
+          {editingId && (
+            <Button type="button" variant="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+        </div>
+      </Form>
+    </Card>
+  );
+}
+
+/**
+ * Config-driven master screen: list + create + edit + deactivate, with actions
+ * gated by the user's permissions (the company owner sees everything). Number
+ * series uses its own `number_series.manage` key; every other master uses the
+ * granular `masters.<action>` keys.
+ */
+export function MasterCrud({ config }: { config: EntityConfig }) {
+  const { confirm } = useConfirm();
+  const client = crud(config.path);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRow, setEditingRow] = useState<Row | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [access, setAccess] = useState<Access>(NO_ACCESS);
+  const [loaded, setLoaded] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const isNumberSeries = config.path === 'number-series';
+  const can = (action: 'create' | 'edit' | 'delete') =>
+    isNumberSeries ? access.has('number_series.manage') : access.has(`masters.${action}`);
+  const fieldKeys = config.fields.map((f) => f.key);
+  // Columns backed by a boolean field render as Yes/No instead of raw true/false.
+  const boolCols = new Set(config.fields.filter((f) => f.type === 'boolean').map((f) => f.key));
+  const cell = (c: string, r: Row) => (boolCols.has(c) ? (r[c] ? 'Yes' : 'No') : String(r[c] ?? ''));
+
+  async function reload() {
+    setRows(await client.list());
+  }
+  useEffect(() => {
+    setAccess(getAccess());
+    setEditingId(null);
+    setEditingRow(null);
+    setError(null);
+    setLoaded(false);
+    reload()
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoaded(true));
+  }, [config.path]);
+
+  function startEdit(r: Row) {
+    setEditingRow(r);
+    setEditingId(r.id);
+    setError(null);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditingRow(null);
+    setError(null);
   }
 
   async function deactivate(r: Row) {
@@ -266,75 +387,14 @@ export function MasterCrud({ config }: { config: EntityConfig }) {
       <div className={showForm ? 'mn-crud' : undefined}>
         {showForm && (
           <div className="mn-crud-aside">
-            <Card title={editingId ? `Edit ${singular}` : `New ${singular}`}>
-            <Form onSubmit={submit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
-              {config.fields.map((f) => {
-                // A static option list, or one fetched from a referenced master.
-                const opts = f.options ?? (f.ref ? refOptions[f.key] ?? [] : undefined);
-                return (
-                <div key={f.key} style={{ minWidth: 150 }}>
-                  <Field label={f.label} required={f.required}>
-                    {f.type === 'boolean' ? (
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={form[f.key] === 'true'}
-                          onChange={(e) => setForm((p) => ({ ...p, [f.key]: String(e.target.checked) }))}
-                          style={{ width: 16, height: 16, accentColor: 'var(--mn-primary)' }}
-                        />
-                        <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>{form[f.key] === 'true' ? 'Yes' : 'No'}</span>
-                      </label>
-                    ) : opts ? (
-                      <select
-                        value={form[f.key] ?? ''}
-                        onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                        required={f.required}
-                        aria-invalid={fieldErrors[f.key] ? true : undefined}
-                        style={{
-                          width: '100%',
-                          padding: '9px 11px',
-                          borderRadius: 8,
-                          border: `1px solid ${fieldErrors[f.key] ? 'var(--mn-danger)' : 'var(--mn-border, #d9d9e3)'}`,
-                          background: 'var(--mn-surface, #fff)',
-                          color: 'inherit',
-                        }}
-                      >
-                        <option value="">—</option>
-                        {opts.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-                        value={form[f.key] ?? ''}
-                        onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                        required={f.required}
-                        aria-invalid={fieldErrors[f.key] ? true : undefined}
-                        style={fieldErrors[f.key] ? { borderColor: 'var(--mn-danger)' } : undefined}
-                      />
-                    )}
-                  </Field>
-                  {fieldErrors[f.key] && (
-                    <p style={{ color: 'var(--mn-danger)', fontSize: 12, margin: '4px 0 0' }}>{fieldErrors[f.key]}</p>
-                  )}
-                </div>
-                );
-              })}
-              <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
-                <Button type="submit" loading={busy}>
-                  {editingId ? 'Update' : 'Create'}
-                </Button>
-                {editingId && (
-                  <Button type="button" variant="secondary" onClick={cancelEdit}>
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            </Form>
-          </Card>
+            <MasterForm
+              config={config}
+              editingId={editingId}
+              initial={editingRow}
+              onSaved={async () => { cancelEdit(); await reload(); }}
+              onCancel={cancelEdit}
+              onError={setError}
+            />
         </div>
       )}
 

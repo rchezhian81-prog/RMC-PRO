@@ -10,6 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Field, Input } from '../../components/ui/Field';
 import { AlertSurface } from '../../components/ui/AlertSurface';
 import { isUiV2 } from '../../lib/ui-flag';
+import { Aurora } from '../../components/Aurora';
 
 /**
  * Functional login (Design Doc 5 §3) wired to the live API — Mix Nova branded.
@@ -109,6 +110,7 @@ export default function LoginPage() {
     return (
       <main className="mn-app mn-login-v2">
         <aside className="mn-login-hero">
+          <Aurora watermark />
           <Link href="/" aria-label="Mix Nova home" className="mn-login-home">
             <Logo size="lg" onDark />
           </Link>
@@ -132,6 +134,7 @@ export default function LoginPage() {
 
   return (
     <main className="mn-app mn-login">
+      <Aurora watermark />
       <div className="mn-login-stack">
         <section className="mn-login-box">
           {/* Nova-gradient brand header */}

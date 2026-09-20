@@ -312,7 +312,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <aside className={`mn-sidebar ${open ? 'mn-open' : ''}`}>
         <div className="mn-rail-head" style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           {/* On V2 the sidebar is a deep-violet rail, so the logo uses its on-dark tone. */}
-          <span className="mn-rail-brand"><Logo size="sm" onDark={isUiV2() || undefined} /></span>
+          <span className="mn-rail-brand"><Logo size="sm" plate /></span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="mn-iconbtn mn-rail-toggle" onClick={toggleRail} aria-label={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
               <PanelLeft size={17} />

@@ -7,6 +7,7 @@ import {
 import { Logo } from '../components/ui/Logo';
 import { Badge } from '../components/ui/Badge';
 import { Reveal } from '../components/Reveal';
+import { Aurora } from '../components/Aurora';
 
 /**
  * Public landing page.
@@ -121,21 +122,6 @@ function Check() {
   );
 }
 
-/** Aurora mesh + grain + dot grid: the textured ground behind the dark sections. */
-function Texture({ dots = true }: { dots?: boolean }) {
-  return (
-    <>
-      <div className="mn-lp-mesh" aria-hidden="true">
-        <span className="mn-lp-blob mn-lp-blob-a" />
-        <span className="mn-lp-blob mn-lp-blob-b" />
-        <span className="mn-lp-blob mn-lp-blob-c" />
-      </div>
-      {dots && <div className="mn-lp-dots" aria-hidden="true" />}
-      <div className="mn-lp-grain" aria-hidden="true" />
-    </>
-  );
-}
-
 /** A glimpse of the owner dashboard, built from the app's own visual language. Sample data. */
 function ProductPreview() {
   const funnel: [string, number, number][] = [
@@ -191,7 +177,7 @@ function ProductPreview() {
   );
 }
 
-/** A stylised ready-mix plant: silos, aggregate bins, conveyor, batching tower, transit mixer, weighbridge. */
+/** A still, stylised ready-mix plant: silos, aggregate bins, conveyor, batching tower, transit mixer, weighbridge. (Replaced by a photograph of the plant when one is supplied.) */
 function PlantScene() {
   const silos = [70, 140, 210];
   const hoppers = [305, 368, 431];
@@ -297,7 +283,7 @@ export default function LandingPage() {
     <div className="mn-app mn-lp">
       <header className="mn-lp-nav">
         <div className="mn-lp-wrap mn-lp-nav-inner">
-          <Logo size="md" />
+          <Logo size="md" plate />
           <nav aria-label="Primary">
             <a className="mn-lp-nav-link" href="#plant">The plant</a>
             <a className="mn-lp-nav-link" href="#capabilities">Capabilities</a>
@@ -309,7 +295,7 @@ export default function LandingPage() {
 
       <main>
         <section className="mn-lp-hero">
-          <Texture />
+          <Aurora watermark />
           <div className="mn-lp-wrap mn-lp-hero-inner">
             <div className="mn-lp-hero-copy">
               <p className="mn-lp-eyebrow"><Sparkles size={14} aria-hidden="true" /> Ready-mix concrete operations</p>
@@ -349,6 +335,7 @@ export default function LandingPage() {
         <section id="plant" className="mn-lp-section">
           <div className="mn-lp-wrap">
             <Reveal>
+              <p className="mn-lp-kicker">The plant</p>
               <h2 className="mn-lp-h2">Built for the plant floor</h2>
               <p className="mn-lp-sub">
                 Every part of the plant has a screen that speaks its language: the store posts a GRN from the
@@ -357,7 +344,7 @@ export default function LandingPage() {
             </Reveal>
             <Reveal delay={120}>
               <div className="mn-lp-plant">
-                <Texture dots={false} />
+                <Aurora dots={false} />
                 <PlantScene />
                 {CALLOUTS.map((c) => (
                   <div className={`mn-lp-callout mn-lp-callout-${c.cls}`} key={c.cls}>
@@ -378,6 +365,7 @@ export default function LandingPage() {
         <section id="capabilities" className="mn-lp-section mn-lp-section-alt">
           <div className="mn-lp-wrap">
             <Reveal>
+              <p className="mn-lp-kicker">Capabilities</p>
               <h2 className="mn-lp-h2">What it covers</h2>
               <p className="mn-lp-sub">
                 The whole order-to-cash path, so a delivery does not get re-keyed three times on its way
@@ -424,9 +412,10 @@ export default function LandingPage() {
         </section>
 
         <section id="why" className="mn-lp-section mn-lp-why-section mn-lp-on-dark">
-          <Texture />
+          <Aurora watermark />
           <div className="mn-lp-wrap mn-lp-why-inner">
             <Reveal>
+              <p className="mn-lp-kicker mn-lp-kicker-light">Why Mix Nova</p>
               <h2 className="mn-lp-h2">Why plants choose it</h2>
               <p className="mn-lp-sub">
                 Four things that tend to decide it, once the feature lists start looking alike.
@@ -449,8 +438,9 @@ export default function LandingPage() {
         </section>
 
         <section className="mn-lp-closing">
-          <div className="mn-lp-grain" aria-hidden="true" />
+          <Aurora dots={false} watermark />
           <div className="mn-lp-wrap mn-lp-closing-inner">
+            <Logo size="lg" plate />
             <h2 className="mn-lp-closing-title">Already using Mix Nova?</h2>
             <p className="mn-lp-closing-sub">Sign in to your plant workspace.</p>
             <Link className="mn-btn mn-lp-cta mn-lp-cta-inverse" href="/login">Sign in</Link>
@@ -460,7 +450,7 @@ export default function LandingPage() {
 
       <footer className="mn-lp-footer">
         <div className="mn-lp-wrap mn-lp-footer-inner">
-          <Logo size="sm" />
+          <Logo size="sm" plate />
           <p className="mn-lp-footer-note">
             Mix Nova — software for ready-mix concrete plants.
           </p>

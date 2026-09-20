@@ -80,14 +80,17 @@ export function Logo({
   size = 'md',
   showTagline = false,
   onDark: onDarkProp,
+  plate = false,
 }: {
   size?: 'sm' | 'md' | 'lg';
   showTagline?: boolean;
   /** Use the on-dark lockup. Omitted: follows the page theme (dark theme → on-dark lockup). */
   onDark?: boolean;
+  /** Sit the lockup on the brand plate (deep navy, soft violet glow) so it reads the same on every surface. */
+  plate?: boolean;
 }) {
   const themeDark = useDarkTheme();
-  const onDark = onDarkProp ?? themeDark;
+  const onDark = plate ? true : (onDarkProp ?? themeDark);
   const src = useLogoSrc(onDark);
   const stacked = useStackedSrc(onDark, showTagline);
 
@@ -101,7 +104,8 @@ export function Logo({
     // The height is a CSS variable with a per-size default, so a container can
     // resize the lockup (the app sidebar grows it and shrinks it under the cursor).
     const h = size === 'lg' ? 56 : size === 'sm' ? 38 : 44;
-    return <img src={src} alt="Mix Nova RMC Software" className="mn-logo" style={{ height: `var(--mn-logo-h, ${h}px)`, width: 'auto', display: 'block' }} />;
+    const img = <img src={src} alt="Mix Nova RMC Software" className="mn-logo" style={{ height: `var(--mn-logo-h, ${h}px)`, width: 'auto', display: 'block' }} />;
+    return plate ? <span className="mn-brand-plate">{img}</span> : img;
   }
 
   // Typographic stand-in, only while no file has loaded.

@@ -5,42 +5,61 @@ import { useEffect, useState, type CSSProperties } from 'react';
 /**
  * Mix Nova brand lockup.
  *
- * Uses the REAL logo the moment a file exists in `apps/web/public/brand/`
- * (see README there) — no code change needed. Until then it renders a
- * typographic wordmark placeholder. We never recreate the supplied artwork.
+ * Renders the real logo from `apps/web/public/brand/` (see README there): the
+ * horizontal lockup (emblem + "MIX NOVA / RMC SOFTWARE") everywhere, and the
+ * stacked lockup with the tagline where `showTagline` asks for it. An SVG with
+ * the same name wins over the PNG the moment one is exported from the design
+ * source. Should every file be missing, a typographic wordmark stands in so
+ * the brand never disappears.
  *
- * Expected files (first that loads wins):
+ * Files (first that loads wins):
  *   light surfaces → /brand/mix-nova-logo.svg | .png
  *   dark surfaces  → /brand/mix-nova-logo-white.svg | .png (falls back to the above)
+ *   stacked + tagline → /brand/mix-nova-lockup(-white).svg | .png
  */
 const LIGHT = ['/brand/mix-nova-logo.svg', '/brand/mix-nova-logo.png'];
 const DARK = ['/brand/mix-nova-logo-white.svg', '/brand/mix-nova-logo-white.png', ...LIGHT];
+const STACKED = ['/brand/mix-nova-lockup.svg', '/brand/mix-nova-lockup.png'];
+const STACKED_DARK = ['/brand/mix-nova-lockup-white.svg', '/brand/mix-nova-lockup-white.png', ...STACKED];
+
+function probe(candidates: string[], apply: (src: string) => void): () => void {
+  let cancelled = false;
+  (async () => {
+    for (const c of candidates) {
+      const ok = await new Promise<boolean>((res) => {
+        const img = new window.Image();
+        img.onload = () => res(true);
+        img.onerror = () => res(false);
+        img.src = c;
+      });
+      if (cancelled) return;
+      if (ok) {
+        apply(c);
+        return;
+      }
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}
 
 function useLogoSrc(onDark: boolean): string | null {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
-    let cancelled = false;
     const candidates = onDark ? DARK : LIGHT;
-    (async () => {
-      for (const c of candidates) {
-        const ok = await new Promise<boolean>((res) => {
-          const img = new window.Image();
-          img.onload = () => res(true);
-          img.onerror = () => res(false);
-          img.src = c;
-        });
-        if (cancelled) return;
-        if (ok) {
-          setSrc(c);
-          return;
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    return probe(candidates, setSrc);
   }, [onDark]);
   return src;
+}
+
+function useStackedSrc(onDark: boolean, wanted: boolean): string | null {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!wanted) return;
+    return probe(onDark ? STACKED_DARK : STACKED, setSrc);
+  }, [onDark, wanted]);
+  return wanted ? src : null;
 }
 
 /** True while <html data-theme="dark">; follows the theme toggle live. */
@@ -70,14 +89,20 @@ export function Logo({
   const themeDark = useDarkTheme();
   const onDark = onDarkProp ?? themeDark;
   const src = useLogoSrc(onDark);
-  const imgH = size === 'lg' ? 42 : size === 'sm' ? 26 : 32;
+  const stacked = useStackedSrc(onDark, showTagline);
 
-  // Real asset present → use it (the supplied lockup already includes wordmark/tagline).
+  // Stacked lockup (emblem over wordmark and tagline) where the tagline is wanted.
+  if (stacked) {
+    const h = size === 'lg' ? 168 : size === 'sm' ? 96 : 128;
+    return <img src={stacked} alt="Mix Nova RMC Software — Smart Mix. Stronger Future." style={{ height: h, width: 'auto', display: 'block' }} />;
+  }
+  // Horizontal lockup everywhere else.
   if (src) {
-    return <img src={src} alt="Mix Nova RMC Software" style={{ height: imgH, width: 'auto', display: 'block' }} />;
+    const h = size === 'lg' ? 52 : size === 'sm' ? 34 : 40;
+    return <img src={src} alt="Mix Nova RMC Software" style={{ height: h, width: 'auto', display: 'block' }} />;
   }
 
-  // Placeholder wordmark until the asset lands.
+  // Typographic stand-in, only while no file has loaded.
   const s = size === 'lg' ? 34 : size === 'sm' ? 24 : 28;
   const word = size === 'lg' ? 24 : size === 'sm' ? 16 : 19;
   const mark: CSSProperties = {

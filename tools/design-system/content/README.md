@@ -60,8 +60,8 @@ Mix Nova is the operating system for a Ready Mix Concrete plant: orders, batchin
 
 ## Logo
 
-- The real mark is on the brand board under `assets/LOGO/`: the initials M and N carrying a concrete mixer, a circular sweep, a skyline and a nova star, over the wordmark and "RMC SOFTWARE". It has not yet been exported as a standalone file, so the app ships the two simplified SVG lockups under `assets/Logos/`: `mix-nova-logo.svg` on light surfaces, `mix-nova-logo-white.svg` on the violet gradient or the v2 rail. Never redraw or recolour either, and never add a second tagline; the lockups already carry "RMC SOFTWARE". When the standalone mark is exported, drop it in `apps/web/public/brand/` under those two names and the `Logo` component picks it up with no code change.
-- Render it at 26px tall in the sidebar, 32px in headers and 42px on the login page. If the file is unavailable the `Logo` component falls back to a typographic wordmark: a gradient rounded square holding "M" beside "Mix **Nova**" in the display face, with "Nova" in `mn-gradient` text.
+- The mark is the initials M and N carrying a concrete mixer, a circular sweep, a skyline and a nova star, over the wordmark and "RMC SOFTWARE"; the brand board is under `assets/LOGO/` and the production lockups cut from it under `assets/Logos/`: `mix-nova-logo.png` on light surfaces, `mix-nova-logo-white.png` on the violet gradient, the v2 rail and the dark theme, and the stacked `mix-nova-lockup(-white).png` with the tagline where the tagline is wanted. Never redraw or recolour them, and never add a second tagline beside the horizontal lockup; it already carries "RMC SOFTWARE". SVG exports with the same names take precedence automatically.
+- Render the horizontal lockup at 34px tall in the sidebar, 40px in headers and 52px on the login hero, and the stacked lockup at 168px on the login card. If the file is unavailable the `Logo` component falls back to a typographic wordmark: a gradient rounded square holding "M" beside "Mix **Nova**" in the display face, with "Nova" in `mn-gradient` text.
 
 ## Not synced
 

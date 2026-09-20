@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { BookOpen, ChevronRight, ClipboardList, FileText, RefreshCw, ShieldAlert } from 'lucide-react';
 import { formatDate, formatDateTime } from '../../../lib/format-date';
 import { useListWindow } from '../../../lib/list-window';
+import { money, moneyShort } from '../../../lib/money';
 import { ListCap } from '../../../components/ListCap';
 import { ordersApi, type Row } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
@@ -22,13 +23,6 @@ import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/St
  * status. Same layout in both skins; every colour reads the semantic tokens.
  */
 
-const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
-/** Indian short form for the summary pill: ₹9.8 L, ₹1.71 Cr. */
-function moneyShort(v: number): string {
-  if (v >= 1e7) return '₹' + (v / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' Cr';
-  if (v >= 1e5) return '₹' + (v / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + ' L';
-  return money(v);
-}
 const num = (v: unknown) => (v == null || v === '' ? 0 : Number(v)) || 0;
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';

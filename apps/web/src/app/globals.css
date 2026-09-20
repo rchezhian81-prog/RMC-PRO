@@ -3205,12 +3205,15 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
 .mn-login-hero .mn-lp-blob-c { opacity: 0.2; }
 
 /* ============================================================================
-   ORDERS LIST — the order book as tappable rows, both skins, light + dark
+   DOCUMENT LISTS — orders and quotations as tappable rows, both skins
    ----------------------------------------------------------------------------
-   Reuses the board header, status strip and chips (.mn-board-*). Each order is
-   one row that is a link: a status-coloured rail, the number and date, the
-   customer, the agreed value with the GST-inclusive figure under it, then the
-   credit verdict and the status. Six columns on a desk, two on a phone.
+   Reuses the board header, status strip and chips (.mn-board-*). Each document
+   is one row: a status-coloured rail, the number and date, the customer, the
+   value with a secondary figure under it, a fourth column (credit verdict, or
+   validity for a quotation), the status, and the way in (the whole row is a
+   link, or a stretched link plus row actions with --acts). Six columns on a
+   desk, two on a phone. Written for orders first; the quotations list shares
+   every rule.
    ============================================================================ */
 .mn-ord { display: grid; gap: 16px; }
 .mn-ord-sum svg { color: var(--mn-primary); }
@@ -3327,7 +3330,35 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
   color: var(--mn-text);
 }
 .mn-ord-credit, .mn-ord-status { display: flex; }
-.mn-ord-go { display: grid; place-items: center; color: var(--mn-subtle); transition: color 0.15s, transform 0.15s; }
+.mn-ord-go { display: flex; align-items: center; justify-content: flex-end; gap: 4px; color: var(--mn-subtle); transition: color 0.15s, transform 0.15s; }
+.mn-ord-status { gap: 6px; flex-wrap: wrap; }
+
+/* ---- rows with actions: the number carries a stretched link, buttons sit above it ---- */
+.mn-ord-cols--acts,
+.mn-ord-row--acts { grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.5fr) minmax(150px, 0.9fr) minmax(150px, 0.9fr) minmax(112px, auto) auto; }
+a.mn-ord-no { text-decoration: none; }
+.mn-ord-stretch::after { content: ''; position: absolute; inset: 0; }
+.mn-ord-act { position: relative; z-index: 1; }
+.mn-ord-row--acts:hover .mn-ord-go > svg { color: var(--mn-primary); transform: translateX(2px); }
+.mn-ord-go > svg { transition: color 0.15s, transform 0.15s; }
+.mn-ord-when { display: grid; gap: 3px; }
+.mn-ord-when-d { font-size: 13px; font-weight: 600; color: var(--mn-text); }
+.mn-ord-when[data-tone='warning'] .mn-ord-when-m { color: var(--mn-warning); font-weight: 600; }
+.mn-ord-when[data-tone='danger'] .mn-ord-when-m { color: var(--mn-danger); font-weight: 600; }
+.mn-ord-when[data-tone='success'] .mn-ord-when-m { color: var(--mn-success); }
+
+/* ---- notes that are also filters ---- */
+.mn-ord-notes { display: grid; gap: 8px; }
+.mn-ord-note--btn { width: 100%; font: inherit; text-align: left; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
+.mn-ord-note--btn:hover { transform: translateY(-1px); }
+.mn-ord-note--warn.mn-ord-note--btn:hover { border-color: var(--mn-warning); }
+.mn-ord-note--ok { background: var(--mn-success-tint, color-mix(in srgb, var(--mn-success) 10%, var(--mn-surface))); border-color: color-mix(in srgb, var(--mn-success) 40%, var(--mn-border)); }
+.mn-ord-note--ok svg { color: var(--mn-success); }
+.mn-ord-note--ok.mn-ord-note--btn:hover { border-color: var(--mn-success); }
+
+/* ---- new-quotation form ---- */
+.mn-qt-form { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(170px, 1.2fr) minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(170px, 1fr) auto; gap: 12px; align-items: end; }
+.mn-qt-form-submit { padding-bottom: 14px; }
 
 /* ---- phone: two columns, badges wrap under the customer ---- */
 @media (max-width: 860px) {
@@ -3351,4 +3382,19 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
   .mn-ord-cust { white-space: normal; }
   .mn-ord-how { display: none; }
   .mn-ord-how--foot { display: block; }
+  .mn-ord-row--acts {
+    grid-template-areas:
+      'id go'
+      'who who'
+      'val val'
+      'when when'
+      'badges badges';
+  }
+  .mn-ord-when { grid-area: when; display: flex; align-items: baseline; gap: 8px; }
+  .mn-ord-row--acts .mn-ord-status { justify-self: start; }
+  .mn-qt-form { grid-template-columns: 1fr 1fr; }
+  .mn-qt-form-submit { grid-column: 1 / -1; padding-bottom: 0; }
+}
+@media (max-width: 480px) {
+  .mn-qt-form { grid-template-columns: 1fr; }
 }

@@ -1,4 +1,5 @@
 import { listLimit } from '../common/list-limit.util';
+import { attachCustomerName } from '../common/attach-customer-name';
 import { assertSalesRefs } from './sales-refs.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
@@ -56,10 +57,43 @@ export class QuotationsService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Newest quotations first, each with the customer and site names and a
+   * summary of its lines (grade count, total m³ and the ex-GST value, priced
+   * per m³ exactly as the order draft prices them) so the list can show what
+   * a quotation is worth without opening it.
+   */
   list(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Quotation).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(Quotation).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      const named = await attachCustomerName(m, rows);
+      const siteIds = [...new Set(rows.map((r) => r.siteId).filter((v): v is string => !!v))];
+      const sites: Array<{ id: string; siteName: string }> = siteIds.length
+        ? await m.query(`SELECT id, site_name AS "siteName" FROM sites WHERE id = ANY($1)`, [siteIds])
+        : [];
+      const siteName = new Map(sites.map((s) => [s.id, s.siteName]));
+      const ids = rows.map((r) => r.id);
+      const sums: Array<{ quotationId: string; itemCount: number; totalM3: number; estimatedValue: number }> = ids.length
+        ? await m.query(
+            `SELECT quotation_id AS "quotationId", COUNT(*)::int AS "itemCount",
+                    COALESCE(SUM(estimated_quantity), 0)::float AS "totalM3",
+                    COALESCE(SUM(estimated_quantity * (rate_per_m3 + transport_charge + pump_charge + waiting_charge)), 0)::float AS "estimatedValue"
+               FROM quotation_items WHERE quotation_id = ANY($1) GROUP BY quotation_id`,
+            [ids],
+          )
+        : [];
+      const sum = new Map(sums.map((s) => [s.quotationId, s]));
+      return named.map((r) => {
+        const s = sum.get(r.id);
+        return {
+          ...r,
+          siteName: r.siteId ? siteName.get(r.siteId) ?? null : null,
+          itemCount: s?.itemCount ?? 0,
+          totalM3: s?.totalM3 ?? 0,
+          estimatedValue: s?.estimatedValue ?? 0,
+        };
+      });
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

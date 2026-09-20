@@ -2664,12 +2664,12 @@ main:focus-visible {
 .mn-fconv { grid-column: 2; font-size: 10.5px; color: var(--mn-subtle); font-variant-numeric: tabular-nums; }
 
 /* aging donut */
-.mn-donut-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mn-donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .mn-donut { position: relative; width: 132px; height: 132px; flex: none; }
 .mn-donut-c { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
 .mn-donut-t { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mn-subtle); }
 .mn-donut-v { font-family: var(--mn-font-display); font-weight: 700; font-size: 16px; margin-top: 2px; font-variant-numeric: tabular-nums; color: var(--mn-text); }
-.mn-legend { display: flex; flex-direction: column; gap: 9px; flex: 1; min-width: 132px; }
+.mn-legend { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 260px; }
 .mn-lg { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .mn-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; background: currentColor; }
 .mn-lg-nm { color: var(--mn-muted); white-space: nowrap; }

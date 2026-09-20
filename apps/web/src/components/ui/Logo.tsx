@@ -98,7 +98,7 @@ export function Logo({
   }
   // Horizontal lockup everywhere else.
   if (src) {
-    const h = size === 'lg' ? 52 : size === 'sm' ? 34 : 40;
+    const h = size === 'lg' ? 56 : size === 'sm' ? 38 : 44;
     return <img src={src} alt="Mix Nova RMC Software" style={{ height: h, width: 'auto', display: 'block' }} />;
   }
 

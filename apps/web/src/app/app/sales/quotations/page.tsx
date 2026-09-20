@@ -278,7 +278,7 @@ export default function QuotationsPage() {
               const rev = num(r.revisionNo);
               const items = num(r.itemCount);
               return (
-                <div key={String(r.id)} className="mn-ord-row mn-ord-row--acts" data-tone={toneOf(stage)} role="listitem">
+                <div key={String(r.id)} className={`mn-ord-row mn-ord-row--acts${stage === 'rejected' ? ' is-void' : ''}`} data-tone={toneOf(stage)} role="listitem">
                   <div className="mn-ord-id">
                     <Link href={`/app/sales/quotations/${r.id}`} className="mn-ord-no mn-ord-stretch">{String(r.quotationNo ?? '')}</Link>
                     <span className="mn-ord-meta">

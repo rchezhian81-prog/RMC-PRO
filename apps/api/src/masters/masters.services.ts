@@ -4,7 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { assertFields } from '../common/validation';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { computeCustomerExposure } from '../orders/exposure.util';
+import { computeAllExposures, computeCustomerExposure } from '../orders/exposure.util';
 import {
   ConcreteGrade,
   Customer,
@@ -36,6 +36,11 @@ export class CustomersService extends TenantCrudService<Customer> {
    */
   exposure(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => computeCustomerExposure(m, id));
+  }
+
+  /** Every customer's exposure keyed by id, for the customers list (four grouped queries, not one per row). */
+  exposures(tenantId: string) {
+    return this.db.runInTenant(tenantId, (m) => computeAllExposures(m));
   }
 }
 

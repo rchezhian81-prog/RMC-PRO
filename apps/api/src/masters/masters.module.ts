@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { CrudPermissionsGuard } from '../rbac/crud-permissions.guard';
 import {
+  CustomerExposureController,
   CustomersController,
   DriversController,
   GradesController,
@@ -28,6 +29,7 @@ import {
 
 @Module({
   controllers: [
+    CustomerExposureController,
     CustomersController,
     SitesController,
     MaterialsController,

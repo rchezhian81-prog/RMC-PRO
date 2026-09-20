@@ -3292,8 +3292,9 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
 .mn-ord-row:hover .mn-ord-go { color: var(--mn-primary); transform: translateX(2px); }
 .mn-ord-row:focus-visible { outline: 2px solid var(--mn-primary); outline-offset: -2px; border-radius: var(--mn-radius-sm, 6px); }
 .mn-ord-row[data-tone='warning'] { background: color-mix(in srgb, var(--mn-warning) 4%, var(--mn-surface)); }
-.mn-ord-row[data-tone='danger'] .mn-ord-cust,
-.mn-ord-row[data-tone='danger'] .mn-ord-amt { color: var(--mn-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--mn-danger) 55%, transparent); }
+/* A voided document (cancelled order, rejected quotation): struck through, not just red. */
+.mn-ord-row.is-void .mn-ord-cust,
+.mn-ord-row.is-void .mn-ord-amt { color: var(--mn-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--mn-danger) 55%, transparent); }
 
 .mn-ord-id, .mn-ord-who, .mn-ord-val { display: grid; gap: 3px; }
 .mn-ord-no {
@@ -3516,4 +3517,59 @@ a.mn-ord-no { text-decoration: none; }
   .mn-od-check { padding-bottom: 8px; }
   .mn-od-fact { white-space: normal; }
   .mn-od-legend-pct { margin-left: 0; }
+}
+
+/* ============================================================================
+   CUSTOMERS — the master with its credit picture, both skins
+   ----------------------------------------------------------------------------
+   Shares the document-list rows (.mn-ord-*): customer, a credit-used meter
+   against the limit, the exposure with its make-up, terms and GSTIN, status,
+   and the row actions. Worst standing sorts first. One column on a phone.
+   ============================================================================ */
+.mn-cu-cols,
+.mn-cu-row { grid-template-columns: minmax(200px, 1.5fr) minmax(190px, 1.2fr) minmax(150px, 0.9fr) minmax(130px, 0.8fr) minmax(90px, auto) auto; }
+.mn-cu-row .mn-ord-who { gap: 2px; }
+.mn-cu-credit { display: grid; gap: 6px; min-width: 0; }
+.mn-cu-credit .mn-ord-meta { white-space: normal; }
+.mn-cu-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--mn-border); }
+.mn-cu-bar { display: block; height: 8px; border-radius: 999px; background: var(--mn-surface-2); overflow: hidden; }
+.mn-cu-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--mn-success); transition: width 0.3s ease; }
+.mn-cu-credit[data-tone='warning'] .mn-cu-bar > span { background: var(--mn-warning); }
+.mn-cu-credit[data-tone='danger'] .mn-cu-bar > span { background: var(--mn-danger); }
+.mn-cu-pct { color: var(--mn-text); font-variant-numeric: tabular-nums; }
+.mn-cu-credit[data-tone='warning'] .mn-cu-standing { color: var(--mn-warning); font-weight: 600; }
+.mn-cu-credit[data-tone='danger'] .mn-cu-standing { color: var(--mn-danger); font-weight: 600; }
+.mn-cu-terms { display: grid; gap: 3px; min-width: 0; }
+.mn-cu-terms .mn-ord-meta { font-variant-numeric: tabular-nums; }
+.mn-cu-acts .mn-ord-act { display: inline-flex; gap: 2px; }
+.mn-cu-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.mn-cu-search { position: relative; display: inline-flex; align-items: center; }
+.mn-cu-search svg { position: absolute; left: 10px; color: var(--mn-subtle); pointer-events: none; }
+.mn-cu-search .mn-input { padding-left: 30px; width: 260px; }
+.mn-cu-row[data-tone='danger'] { background: color-mix(in srgb, var(--mn-danger) 4%, var(--mn-surface)); }
+.mn-cu-row[data-tone='warning'] { background: color-mix(in srgb, var(--mn-warning) 4%, var(--mn-surface)); }
+.mn-cu-row[data-tone='neutral'] .mn-ord-cust { color: var(--mn-muted); }
+.mn-ord-note--bad.mn-ord-note--btn:hover { border-color: var(--mn-danger); }
+
+@media (max-width: 1100px) {
+  .mn-cu-cols { display: none; }
+  .mn-cu-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'who status'
+      'credit credit'
+      'val val'
+      'terms terms'
+      'acts acts';
+    gap: 8px 10px;
+  }
+  .mn-cu-row .mn-ord-who { grid-area: who; }
+  .mn-cu-row .mn-ord-status { grid-area: status; align-self: start; }
+  .mn-cu-credit { grid-area: credit; }
+  .mn-cu-row .mn-ord-val { grid-area: val; text-align: left; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .mn-cu-terms { grid-area: terms; display: flex; gap: 10px; align-items: baseline; }
+  .mn-cu-acts { grid-area: acts; justify-content: flex-start; }
+  .mn-cu-search .mn-input { width: 100%; }
+  .mn-cu-search { width: 100%; }
+  .mn-cu-tools { width: 100%; }
 }

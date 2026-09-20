@@ -47,6 +47,24 @@ export class CustomersController extends BaseCrudController<Customer> {
   }
 }
 
+/**
+ * Every customer's credit exposure in one call, for the customers list. Its
+ * own controller so the path can never be read as a customer id by the
+ * `:id/exposure` route above; the same masters guards apply (GET → masters.view).
+ */
+@Controller('customer-exposure')
+@CrudResource('masters')
+@RequireModule('masters')
+@UseGuards(JwtAuthGuard, TenantGuard, CrudPermissionsGuard)
+export class CustomerExposureController {
+  constructor(private readonly customers: CustomersService) {}
+
+  @Get()
+  all(@CurrentUser() u: AuthUser) {
+    return this.customers.exposures(u.tenantId as string);
+  }
+}
+
 @Controller('sites')
 @CrudResource('masters')
 @RequireModule('masters')

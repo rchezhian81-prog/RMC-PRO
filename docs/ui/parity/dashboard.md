@@ -1,5 +1,15 @@
 # Parity matrix — Dashboard (Owner Command Centre) · U2
 
+> **Superseded (2026-09-20).** The dashboard is now **one layout shared by both
+> skins** — the flag-OFF and V2 branches in `page.tsx` were replaced by a single
+> page that reads the semantic tokens (hero band with four KPI tiles, the
+> attention card, funnel / aging / collections charts, 7·30·90-day activity
+> beside the latest orders, and the operations tiles). The UI V2 flag still
+> changes only the tokens the cards read. Every KPI keeps its exact link; the
+> page reads the same summary, funnel, outstanding-report and trends endpoints
+> plus the orders list (six newest). The rows below describe the earlier
+> flag-OFF ↔ V2 comparison and are kept for history.
+
 **Route:** `/app/dashboard` — `apps/web/src/app/app/dashboard/page.tsx`
 **Change type:** presentation only — re-laid on the U1 command surfaces. No data,
 API, route, permission, or control change. Every KPI keeps its exact link.

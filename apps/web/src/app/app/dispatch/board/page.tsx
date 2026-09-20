@@ -398,7 +398,7 @@ export default function DispatchBoardPage() {
                           <span><Truck size={13} aria-hidden /> {vehicle || <em>No vehicle</em>}</span>
                           <span><UserRound size={13} aria-hidden /> {driver || <em>No driver</em>}</span>
                           {(customer || site) && (
-                            <span className="mn-dcard-where"><MapPin size={13} aria-hidden /> {[customer, site].filter(Boolean).join(' · ')}</span>
+                            <span className="mn-dcard-where"><MapPin size={13} aria-hidden /> <span className="mn-dcard-where-t" title={[customer, site].filter(Boolean).join(' · ')}>{[customer, site].filter(Boolean).join(' · ')}</span></span>
                           )}
                         </div>
                         <ol className="mn-dcard-tl" aria-label="Trip milestones">

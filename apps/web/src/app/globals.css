@@ -2943,6 +2943,9 @@ main:focus-visible {
   --lane: var(--mn-primary);
   display: grid;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 12px 12px 12px 14px;
   background: var(--mn-surface);
   border: 1px solid var(--mn-border);
@@ -2956,7 +2959,7 @@ main:focus-visible {
 .mn-dcard[data-tone='warning'] { --lane: var(--mn-warning); }
 .mn-dcard[data-tone='danger'] { --lane: var(--mn-danger); }
 .mn-dcard[data-tone='neutral'] { --lane: var(--mn-muted); }
-.mn-dcard-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-dcard-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .mn-dcard-no { font-weight: 700; font-size: 13.5px; color: var(--mn-text); font-variant-numeric: tabular-nums; }
 .mn-dcard-age { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--mn-subtle); font-variant-numeric: tabular-nums; }
 .mn-dcard-load { display: flex; align-items: baseline; gap: 10px; }
@@ -2974,7 +2977,8 @@ main:focus-visible {
 .mn-dcard-meta > span { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .mn-dcard-meta svg { color: var(--mn-subtle); flex: none; }
 .mn-dcard-meta em { font-style: normal; color: var(--mn-subtle); }
-.mn-dcard-where { color: var(--mn-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mn-dcard-where { color: var(--mn-muted); }
+.mn-dcard-where-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* four-dot trip timeline */
 .mn-dcard-tl { list-style: none; margin: 0; padding: 4px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }

@@ -9,7 +9,9 @@ import {
   Order,
   OrderItem,
   OrderStatusHistory,
+  Plant,
   PourScheduleSlot,
+  Site,
 } from '../core/database/entities';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { summariseGst, isInterstateSupply } from '../billing/tax.util';
@@ -155,6 +157,9 @@ export class OrdersService {
     const customer = order.customerId
       ? await m.getRepository(Customer).findOne({ where: { id: order.customerId } })
       : null;
+    // Names for the screen header: who the order is for, where it pours, which plant makes it.
+    const site = order.siteId ? await m.getRepository(Site).findOne({ where: { id: order.siteId } }) : null;
+    const plant = order.plantId ? await m.getRepository(Plant).findOne({ where: { id: order.plantId } }) : null;
     const taxSummary = summariseGst(
       items.map((it) => ({
         quantity: num(it.quantityM3), rate: num(it.ratePerM3),
@@ -187,7 +192,13 @@ export class OrdersService {
       returned: quantities.returnedM3,
       pendingDelivery: quantities.pendingDeliveryM3,
     };
-    return { ...order, items: itemsWithQuantities, history, creditHolds: holds, taxSummary, pourSlots, pourSummary, quantities };
+    return {
+      ...order,
+      customerName: customer?.customerName ?? null,
+      siteName: site?.siteName ?? null,
+      plantName: plant?.plantName ?? plant?.plantCode ?? null,
+      items: itemsWithQuantities, history, creditHolds: holds, taxSummary, pourSlots, pourSummary, quantities,
+    };
   }
 
   // ---- Pour schedule (Plan B1) -------------------------------------------

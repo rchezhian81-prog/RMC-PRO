@@ -345,7 +345,7 @@ function AgingDonut({ buckets, total }: { buckets: { key: string; label: string;
         })}
       </svg>
       <div className="mn-donut-c">
-        <div className="mn-donut-t">Outstanding</div>
+        <div className="mn-donut-t">Total</div>
         <div className="mn-donut-v">{compact(total)}</div>
       </div>
     </div>

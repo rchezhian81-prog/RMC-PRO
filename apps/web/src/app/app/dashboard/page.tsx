@@ -1,21 +1,20 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import {
   ClipboardList, Lock, Ticket, Truck, PackageCheck, ReceiptText, Clock, Wallet, TrendingDown,
-  AlertTriangle, MonitorSmartphone, ChevronRight,
+  AlertTriangle, MonitorSmartphone, ArrowUpRight,
 } from 'lucide-react';
-import { dashboardApi, billingReportsApi, type Row, type TrendsResult, type TrendSeries } from '../../../lib/api';
-import { StatCard } from '../../../components/ui/StatCard';
+import {
+  dashboardApi, billingReportsApi, ordersApi, type Row, type TrendsResult, type TrendSeries,
+} from '../../../lib/api';
+import { formatDate } from '../../../lib/format-date';
 import { Card } from '../../../components/ui/Card';
+import { StatusBadge } from '../../../components/ui/Badge';
 import { AlertsCard } from '../../../components/AlertsCard';
 import { InsightsCard } from '../../../components/InsightsCard';
 import { Loading, ErrorState } from '../../../components/ui/States';
-import { CommandBar } from '../../../components/ui/CommandBar';
-import { SummaryStrip } from '../../../components/ui/SummaryStrip';
-import { Surface } from '../../../components/ui/Surface';
-import type { Tone } from '../../../components/ui/Badge';
-import { isUiV2 } from '../../../lib/ui-flag';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN');
@@ -30,39 +29,55 @@ const compact = (v: unknown) => {
   return '₹' + x.toLocaleString('en-IN');
 };
 
+type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+
+/**
+ * The owner's home screen — one layout for both skins (the UI V2 flag only
+ * changes the tokens the cards and tiles read). Everything here is
+ * PRESENTATION over data the dashboard already exposed: the summary and funnel
+ * endpoints, the outstanding-aging report, the daily trend-lines and the
+ * newest orders. Every figure is a link to the screen behind it.
+ *
+ *   hero band   → the four figures an owner opens the app for, on the brand
+ *                 gradient with the landing page's aurora + dot-grid texture
+ *   attention   → the rule-based alerts (and AI insights when configured)
+ *   charts      → order-to-cash funnel · outstanding by age · collections
+ *   activity    → 7/30/90-day sparklines beside the latest orders
+ *   operations  → the remaining counters as compact tiles
+ */
 export default function DashboardPage() {
   const [s, setS] = useState<Row | null>(null);
   const [funnel, setFunnel] = useState<Row | null>(null);
   const [aging, setAging] = useState<Row | null>(null);
+  const [recent, setRecent] = useState<Row[] | null>(null);
   const [trends, setTrends] = useState<TrendsResult | null>(null);
   const [trendsDays, setTrendsDays] = useState(30);
   const [trendsBusy, setTrendsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Flag-OFF makes exactly the two calls it always has. V2 adds the existing
-    // outstanding-aging report (donut) — read-only and resilient, so a hiccup
-    // never blocks the core dashboard. Trends is fetched separately (below) so
-    // the range toggle can re-fetch it without re-loading the rest.
-    const v2 = isUiV2();
+    // Summary + funnel are the core (an error here blocks the page); the aging
+    // report and the latest orders are read-only extras, so a hiccup in either
+    // simply hides its card.
     Promise.all([
       dashboardApi.summary(),
       dashboardApi.funnel(),
-      v2 ? billingReportsApi.outstanding().catch(() => null) : Promise.resolve(null),
+      billingReportsApi.outstanding().catch(() => null),
+      ordersApi.list(undefined, 6).catch(() => null),
     ])
-      .then(([sum, f, out]) => {
+      .then(([sum, f, out, orders]) => {
         setS(sum as Row);
         setFunnel(f as Row);
         setAging(out as Row | null);
+        setRecent(Array.isArray(orders) ? orders : null);
       })
       .catch((e) => setError(String(e)));
   }, []);
 
-  // Activity trend-lines — re-fetched whenever the range toggle changes (V2 only,
-  // resilient). Old data stays on screen while the new range loads, so there's no
-  // flicker; the cancelled guard drops a stale response if the user toggles again.
+  // Activity trend-lines — re-fetched whenever the range toggle changes. Old
+  // data stays on screen while the new range loads (no flicker); the cancelled
+  // guard drops a stale response if the user toggles again.
   useEffect(() => {
-    if (!isUiV2()) return;
     let cancelled = false;
     setTrendsBusy(true);
     dashboardApi
@@ -93,77 +108,20 @@ export default function DashboardPage() {
         ['Invoiced', Number(funnel.invoicesIssued ?? 0)],
       ]
     : [];
-
-  // ---- Legacy (flag-OFF) — unchanged from before, byte-for-byte behaviour. ----
-  if (!isUiV2()) {
-    const tiles: { label: string; value: ReactNode; icon: ReactNode; tone: Tone; href: string }[] = [
-      { label: 'Confirmed orders', value: n(orders.confirmed), icon: <ClipboardList size={16} />, tone: 'success', href: '/app/orders' },
-      { label: 'Credit holds pending', value: n(s.creditHoldsPending), icon: <Lock size={16} />, tone: pos(s.creditHoldsPending) ? 'warning' : 'neutral', href: '/app/credit-holds' },
-      { label: 'Batch tickets', value: n(production.batchTicketsConfirmed), icon: <Ticket size={16} />, tone: 'info', href: '/app/production/batch-tickets' },
-      { label: 'Dispatches active', value: n(dispatch.active), icon: <Truck size={16} />, tone: 'info', href: '/app/dispatch/board' },
-      { label: 'Delivered (uninvoiced)', value: n(dispatch.uninvoiced), icon: <PackageCheck size={16} />, tone: pos(dispatch.uninvoiced) ? 'info' : 'neutral', href: '/app/billing/invoices' },
-      { label: 'Invoices issued', value: n(billing.invoicesIssued), icon: <ReceiptText size={16} />, tone: 'neutral', href: '/app/billing/invoices' },
-      { label: 'Outstanding', value: money(billing.outstandingTotal), icon: <Clock size={16} />, tone: pos(billing.outstandingTotal) ? 'warning' : 'neutral', href: '/app/billing/outstanding' },
-      { label: 'Receipts total', value: money(billing.receiptsTotal), icon: <Wallet size={16} />, tone: 'success', href: '/app/billing/receipts' },
-      { label: 'Low stock', value: n(inventory.lowStock), icon: <TrendingDown size={16} />, tone: pos(inventory.lowStock) ? 'warning' : 'neutral', href: '/app/inventory/reports' },
-      { label: 'Negative stock', value: n(inventory.negativeStock), icon: <AlertTriangle size={16} />, tone: pos(inventory.negativeStock) ? 'danger' : 'neutral', href: '/app/inventory/negative-stock' },
-      { label: 'Devices', value: n(s.devices), icon: <MonitorSmartphone size={16} />, tone: 'neutral', href: '/app/devices' },
-    ];
-    return (
-      <div style={{ display: 'grid', gap: 18 }}>
-        <CommandBar title="Dashboard" subtitle="Live operations overview — Mix Nova RMC Software" />
-        <div style={{ display: 'grid', gap: 14 }}>
-          <AlertsCard />
-          <InsightsCard />
-        </div>
-        <SummaryStrip>
-          {tiles.map((t) => (
-            <StatCard key={t.label} label={t.label} value={t.value} icon={t.icon} tone={t.tone} href={t.href} />
-          ))}
-        </SummaryStrip>
-        <Surface variant="command" padded>
-          <h2 style={{ margin: '0 0 12px', fontFamily: 'var(--mn-font-display)', fontSize: 15, letterSpacing: '-0.01em' }}>
-            Order-to-cash funnel
-          </h2>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            {funnelSteps.map(([label, val], i) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div
-                  className="mn-surface"
-                  style={{ boxShadow: 'var(--mn-elev-command)', borderRadius: 'var(--mn-radius-md)', padding: '10px 16px', textAlign: 'center', minWidth: 96 }}
-                >
-                  <div style={{ fontFamily: 'var(--mn-font-display)', fontSize: 20, fontWeight: 700 }}>{n(val)}</div>
-                  <div style={{ fontSize: 11, color: 'var(--mn-muted)', marginTop: 2 }}>{label}</div>
-                </div>
-                {i < funnelSteps.length - 1 && <ChevronRight size={16} color="var(--mn-subtle)" />}
-              </div>
-            ))}
-          </div>
-        </Surface>
-      </div>
-    );
-  }
-
-  // =====================================================================
-  // V2 — Owner command centre, redesigned: pruned 4-KPI hero, three
-  // data-backed charts (funnel / aging donut / collections gauge), and a
-  // compact operations grid for the rest. PRESENTATION ONLY — every value
-  // and href is the same data the legacy dashboard already used; the aging
-  // donut reads the existing outstanding report; nothing new server-side.
-  // =====================================================================
+  const fmax = Math.max(1, ...funnelSteps.map(([, v]) => v));
 
   // Hero — the four figures an owner opens the app for.
-  const hero: { label: string; value: ReactNode; icon: ReactNode; tone: Tone; href: string }[] = [
-    { label: 'Outstanding', value: money(billing.outstandingTotal), icon: <Clock size={16} />, tone: pos(billing.outstandingTotal) ? 'warning' : 'neutral', href: '/app/billing/outstanding' },
-    { label: 'Collected (receipts)', value: money(billing.receiptsTotal), icon: <Wallet size={16} />, tone: 'success', href: '/app/billing/receipts' },
-    { label: 'Confirmed orders', value: n(orders.confirmed), icon: <ClipboardList size={16} />, tone: 'success', href: '/app/orders' },
-    { label: 'Dispatches active', value: n(dispatch.active), icon: <Truck size={16} />, tone: 'info', href: '/app/dispatch/board' },
+  const hero: { label: string; value: ReactNode; hint: string; icon: ReactNode; tone: Tone; href: string }[] = [
+    { label: 'Outstanding', value: money(billing.outstandingTotal), hint: 'Issued invoices still unpaid', icon: <Clock size={16} />, tone: pos(billing.outstandingTotal) ? 'warning' : 'neutral', href: '/app/billing/outstanding' },
+    { label: 'Collected', value: money(billing.receiptsTotal), hint: 'Receipts recorded to date', icon: <Wallet size={16} />, tone: 'success', href: '/app/billing/receipts' },
+    { label: 'Confirmed orders', value: n(orders.confirmed), hint: 'Ready for planning and batching', icon: <ClipboardList size={16} />, tone: 'neutral', href: '/app/orders' },
+    { label: 'Dispatches active', value: n(dispatch.active), hint: 'Transit mixers on the road now', icon: <Truck size={16} />, tone: 'neutral', href: '/app/dispatch/board' },
   ];
 
-  // Operations — the rest, demoted to compact tiles. Every original href kept.
+  // Operations — the remaining counters as compact tiles. Every href kept.
   const ops: { label: string; value: ReactNode; icon: ReactNode; href: string; flag?: boolean; crit?: boolean }[] = [
     { label: 'Batch tickets', value: n(production.batchTicketsConfirmed), icon: <Ticket size={15} />, href: '/app/production/batch-tickets' },
-    { label: 'Delivered · uninvoiced', value: n(dispatch.uninvoiced), icon: <PackageCheck size={15} />, href: '/app/billing/invoices' },
+    { label: 'Delivered · uninvoiced', value: n(dispatch.uninvoiced), icon: <PackageCheck size={15} />, href: '/app/billing/invoices', flag: pos(dispatch.uninvoiced) },
     { label: 'Invoices issued', value: n(billing.invoicesIssued), icon: <ReceiptText size={15} />, href: '/app/billing/invoices' },
     { label: 'Credit holds', value: n(s.creditHoldsPending), icon: <Lock size={15} />, href: '/app/credit-holds', flag: pos(s.creditHoldsPending) },
     { label: 'Low stock', value: n(inventory.lowStock), icon: <TrendingDown size={15} />, href: '/app/inventory/reports', flag: pos(inventory.lowStock) },
@@ -171,11 +129,9 @@ export default function DashboardPage() {
     { label: 'Devices', value: n(s.devices), icon: <MonitorSmartphone size={15} />, href: '/app/devices' },
   ];
 
-  const fmax = Math.max(1, ...funnelSteps.map(([, v]) => v));
-
-  // Aging donut buckets from the existing outstanding report: three severity
-  // bands (Current 0–30 / Ageing 31–90 / Overdue 90+). Directly labelled in the
-  // legend, so colour never carries meaning alone.
+  // Aging donut buckets from the outstanding report: three severity bands
+  // (Current 0–30 / Ageing 31–90 / Overdue 90+), each directly labelled in the
+  // legend so colour never carries meaning alone.
   const at = (aging?.totals as Row | undefined) ?? undefined;
   const ageBuckets = at
     ? [
@@ -187,81 +143,106 @@ export default function DashboardPage() {
   const ageTotal = ageBuckets.reduce((a, b) => a + b.amt, 0);
 
   // Collections gauge — share of what has come due (paid + still owed) that is
-  // collected. Bounded [0,1] from two figures already on the hero above.
+  // collected. Bounded [0,1] from two figures already in the hero.
   const collected = Number(billing.receiptsTotal ?? 0);
   const owed = Number(billing.outstandingTotal ?? 0);
   const collDenom = collected + owed;
   const collRate = collDenom > 0 ? collected / collDenom : 0;
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <CommandBar title="Dashboard" subtitle="Live operations overview — Mix Nova RMC Software" />
+    <div className="mn-dash">
+      <header className="mn-dash-hero">
+        <div className="mn-dash-hero-bg" aria-hidden>
+          <span className="mn-dash-blob mn-dash-blob-a" />
+          <span className="mn-dash-blob mn-dash-blob-b" />
+          <span className="mn-dash-dots" />
+        </div>
+        <div className="mn-dash-hero-text">
+          <span className="mn-dash-eyebrow">
+            <span className="mn-dash-live" aria-hidden /> Live operations overview
+          </span>
+          <h1>Dashboard</h1>
+          <p>Orders, batching, dispatch and billing at a glance. Every figure opens the screen behind it.</p>
+        </div>
+        <div className="mn-dash-kpis">
+          {hero.map((t) => (
+            <Link key={t.label} href={t.href} className="mn-dash-kpi" data-tone={t.tone}>
+              <span className="mn-dash-kpi-top">
+                <span className="mn-dash-kpi-l">{t.label}</span>
+                <span className="mn-dash-kpi-chip" aria-hidden>{t.icon}</span>
+              </span>
+              <span className="mn-dash-kpi-v">{t.value}</span>
+              <span className="mn-dash-kpi-h">{t.hint} <ArrowUpRight size={12} aria-hidden /></span>
+            </Link>
+          ))}
+        </div>
+      </header>
 
-      <div style={{ display: 'grid', gap: 14 }}>
+      <div className="mn-dash-stack">
         <AlertsCard />
         <InsightsCard />
       </div>
 
-      <SummaryStrip>
-        {hero.map((t) => (
-          <StatCard key={t.label} label={t.label} value={t.value} icon={t.icon} tone={t.tone} href={t.href} />
-        ))}
-      </SummaryStrip>
-
-      <div className="mn-charts">
+      <div className="mn-dash-charts">
         <Card title="Order-to-cash funnel">
-          <div className="mn-funnel">
-            {funnelSteps.map(([label, val], i) => {
-              const prev = funnelSteps[i - 1];
-              const conv = prev && prev[1] > 0 ? Math.round((val / prev[1]) * 100) : null;
-              return (
-                <div className="mn-frow" key={label} title={`${label}: ${n(val)}${conv != null ? ` · ${conv}% of previous` : ''}`}>
-                  <span className="mn-fl">{label}</span>
-                  <span className="mn-ftrack">
-                    <span className="mn-fbar" style={{ width: `${Math.round((val / fmax) * 100)}%` }} />
-                  </span>
-                  <span className="mn-fv">{n(val)}</span>
-                  {conv != null && <span className="mn-fconv">{conv}%</span>}
-                </div>
-              );
-            })}
+          <div className="mn-chart-body">
+            <div className="mn-funnel">
+              {funnelSteps.map(([label, val], i) => {
+                const prev = funnelSteps[i - 1];
+                const conv = prev && prev[1] > 0 ? Math.round((val / prev[1]) * 100) : null;
+                return (
+                  <div className="mn-frow" key={label} title={`${label}: ${n(val)}${conv != null ? ` · ${conv}% of previous` : ''}`}>
+                    <span className="mn-fl">{label}</span>
+                    <span className="mn-ftrack">
+                      <span className="mn-fbar" style={{ width: `${Math.round((val / fmax) * 100)}%` }} />
+                    </span>
+                    <span className="mn-fv">{n(val)}</span>
+                    {conv != null && <span className="mn-fconv">{conv}%</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </Card>
 
         <Card title="Outstanding by age">
-          {ageTotal > 0 ? (
-            <div className="mn-donut-wrap">
-              <AgingDonut buckets={ageBuckets} total={ageTotal} />
-              <div className="mn-legend">
-                {ageBuckets.map((b) => (
-                  <div className="mn-lg" key={b.key}>
-                    <span className={`mn-sw mn-age-${b.key}`} />
-                    <span className="mn-lg-nm">{b.label}</span>
-                    <span className="mn-lg-amt">{compact(b.amt)}</span>
-                    <span className="mn-lg-pc">{Math.round((b.amt / ageTotal) * 100)}%</span>
-                  </div>
-                ))}
+          <div className="mn-chart-body">
+            {ageTotal > 0 ? (
+              <div className="mn-donut-wrap">
+                <AgingDonut buckets={ageBuckets} total={ageTotal} />
+                <div className="mn-legend">
+                  {ageBuckets.map((b) => (
+                    <div className="mn-lg" key={b.key}>
+                      <span className={`mn-sw mn-age-${b.key}`} />
+                      <span className="mn-lg-nm">{b.label}</span>
+                      <span className="mn-lg-amt">{compact(b.amt)}</span>
+                      <span className="mn-lg-pc">{Math.round((b.amt / ageTotal) * 100)}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="mn-chart-empty">{aging === null ? 'Outstanding aging unavailable right now.' : 'No outstanding — all issued invoices are settled.'}</div>
-          )}
+            ) : (
+              <div className="mn-chart-empty">{aging === null ? 'Outstanding aging unavailable right now.' : 'No outstanding — all issued invoices are settled.'}</div>
+            )}
+          </div>
         </Card>
 
         <Card title="Collections">
-          {collDenom > 0 ? (
-            <div className="mn-gauge">
-              <CollectionsGauge rate={collRate} />
-              <div className="mn-gauge-big">{Math.round(collRate * 100)}%</div>
-              <div className="mn-gauge-cap">{compact(collected)} collected · {compact(owed)} outstanding</div>
-            </div>
-          ) : (
-            <div className="mn-chart-empty">No receipts or outstanding yet.</div>
-          )}
+          <div className="mn-chart-body">
+            {collDenom > 0 ? (
+              <div className="mn-gauge">
+                <CollectionsGauge rate={collRate} />
+                <div className="mn-gauge-big">{Math.round(collRate * 100)}%</div>
+                <div className="mn-gauge-cap">{compact(collected)} collected · {compact(owed)} outstanding</div>
+              </div>
+            ) : (
+              <div className="mn-chart-empty">No receipts or outstanding yet.</div>
+            )}
+          </div>
         </Card>
       </div>
 
-      {trends && trends.series.length > 0 && (
+      <div className="mn-dash-row2">
         <Card
           title="Activity"
           actions={
@@ -280,13 +261,44 @@ export default function DashboardPage() {
             </div>
           }
         >
-          <div className={`mn-spark-grid${trendsBusy ? ' mn-spark-grid--busy' : ''}`}>
-            {trends.series.map((sr) => (
-              <Sparkline key={sr.key} series={sr} />
-            ))}
-          </div>
+          {trends && trends.series.length > 0 ? (
+            <div className={`mn-spark-grid${trendsBusy ? ' mn-spark-grid--busy' : ''}`}>
+              {trends.series.map((sr) => (
+                <Sparkline key={sr.key} series={sr} />
+              ))}
+            </div>
+          ) : (
+            <div className="mn-chart-empty">{trends === null && !trendsBusy ? 'Activity trends unavailable right now.' : 'No activity in this range yet.'}</div>
+          )}
         </Card>
-      )}
+
+        <Card
+          title="Latest orders"
+          actions={
+            <Link href="/app/orders" className="mn-dash-more">
+              All orders <ArrowUpRight size={14} aria-hidden />
+            </Link>
+          }
+        >
+          {recent && recent.length > 0 ? (
+            <div className="mn-dash-orders">
+              {recent.map((r) => (
+                <Link key={String(r.id)} href={`/app/orders/${r.id}`} className="mn-dash-order">
+                  <span className="mn-dash-order-no">{String(r.orderNo ?? '')}</span>
+                  <span className="mn-dash-order-c">
+                    <span className="mn-dash-order-cust">{String(r.customerName ?? '—')}</span>
+                    <span className="mn-dash-order-d">{formatDate(r.orderDate)}</span>
+                  </span>
+                  <span className="mn-dash-order-amt">{money(r.estimatedOrderValue)}</span>
+                  <StatusBadge status={String(r.orderStatus ?? '')} />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="mn-chart-empty">{recent === null ? 'Orders unavailable right now.' : 'No orders yet — the first one shows here.'}</div>
+          )}
+        </Card>
+      </div>
 
       <div className="mn-ops-head">
         <h2>Operations</h2>
@@ -294,10 +306,10 @@ export default function DashboardPage() {
       </div>
       <div className="mn-ops">
         {ops.map((o) => (
-          <a key={o.label} href={o.href} className={`mn-op${o.flag ? ' mn-op-flag' : ''}${o.crit ? ' mn-op-crit' : ''}`}>
+          <Link key={o.label} href={o.href} className={`mn-op${o.flag ? ' mn-op-flag' : ''}${o.crit ? ' mn-op-crit' : ''}`}>
             <span className="mn-op-l">{o.icon}{o.label}</span>
             <span className="mn-op-v">{o.value}</span>
-          </a>
+          </Link>
         ))}
       </div>
     </div>

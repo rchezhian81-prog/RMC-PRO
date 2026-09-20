@@ -2942,6 +2942,7 @@ main:focus-visible {
 .mn-dcard {
   --lane: var(--mn-primary);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
   max-width: 100%;
@@ -2954,6 +2955,7 @@ main:focus-visible {
   box-shadow: var(--mn-shadow-1, 0 1px 2px rgba(16, 17, 33, 0.06));
   transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.16s;
 }
+.mn-dcard > * { min-width: 0; }
 .mn-dcard:hover { transform: translateY(-2px); box-shadow: var(--mn-shadow-2, var(--mn-shadow-card)); }
 .mn-dcard[data-tone='success'] { --lane: var(--mn-success); }
 .mn-dcard[data-tone='warning'] { --lane: var(--mn-warning); }

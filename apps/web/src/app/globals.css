@@ -2462,7 +2462,12 @@ main:focus-visible {
   box-shadow: var(--mn-shadow-pop);
   overflow: hidden;
 }
-.mn-login-brand { padding: 26px 28px 22px; }
+.mn-login-brand {
+  padding: 26px 28px 22px;
+  /* the brand board sets the on-dark logo on deep navy, never on violet: the
+     emblem's own violet would vanish on the brand gradient */
+  background: linear-gradient(135deg, #1b1630 0%, #2e1160 58%, #45209a 100%);
+}
 .mn-login-body { padding: 26px 28px 28px; }
 .mn-login-title {
   margin: 0 0 4px;
@@ -3083,3 +3088,26 @@ main:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .mn-board-live-dot, .mn-board-chip, .mn-dcard { animation: none; transition: none; }
 }
+
+/* ---- sidebar brand: a deep ground under the lockup on the v2 violet rail ---- */
+:root[data-ui='v2'] .mn-rail-brand {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(18, 10, 44, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* ---- sidebar logo: larger while working on a page, a step smaller while the
+   cursor is over the rail so it never crowds the navigation ---- */
+.mn-logo { transition: height 0.18s ease; }
+.mn-sidebar .mn-rail-brand { --mn-logo-h: 46px; }
+.mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 38px; }
+:root[data-ui='v2'] .mn-sidebar .mn-rail-brand { --mn-logo-h: 40px; }
+:root[data-ui='v2'] .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 34px; }
+@media (hover: none) {
+  .mn-sidebar .mn-rail-brand, .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 40px; }
+  :root[data-ui='v2'] .mn-sidebar .mn-rail-brand, :root[data-ui='v2'] .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .mn-logo { transition: none; } }

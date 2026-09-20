@@ -20,7 +20,7 @@ into `tools/design-system/.deps/` (git-ignored). Node 20+.
 | `globals.css` component layer (`.mn-*`) | `components/bundle.css` | token blocks stripped, `data-ui='v2'` mapped to the two v2 themes, plus a small shim for the inline styles the React components render |
 | `apps/web/src/components/ui/*.tsx`, `OfflineBanner.tsx`, two lib hooks | `components/bundle.js` | esbuild, one classic script assigning `window.MixNova`; React from the page, `next/link` as a plain anchor, the v2 flag read from the frame's theme, `Logo` given a `window.MixNovaBrand` hook |
 | `apps/web/src/app/fonts/*.woff2` | `fonts/` | copied |
-| `apps/web/public/brand/*.svg` | `assets/Logos/` | copied (the artifact stores these as uploads) |
+| `apps/web/public/brand/*.svg|png` | `assets/Logos/` | copied (the artifact stores these as uploads) |
 | npm `react@18.3.1` | `components/lib/` | the previews' runtime |
 
 `content/` holds the authored files (brand book, token usage notes, component guides and

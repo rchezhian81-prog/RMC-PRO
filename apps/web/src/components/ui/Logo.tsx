@@ -98,8 +98,10 @@ export function Logo({
   }
   // Horizontal lockup everywhere else.
   if (src) {
+    // The height is a CSS variable with a per-size default, so a container can
+    // resize the lockup (the app sidebar grows it and shrinks it under the cursor).
     const h = size === 'lg' ? 56 : size === 'sm' ? 38 : 44;
-    return <img src={src} alt="Mix Nova RMC Software" style={{ height: h, width: 'auto', display: 'block' }} />;
+    return <img src={src} alt="Mix Nova RMC Software" className="mn-logo" style={{ height: `var(--mn-logo-h, ${h}px)`, width: 'auto', display: 'block' }} />;
   }
 
   // Typographic stand-in, only while no file has loaded.

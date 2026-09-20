@@ -3098,3 +3098,16 @@ main:focus-visible {
   background: rgba(18, 10, 44, 0.42);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
+
+/* ---- sidebar logo: larger while working on a page, a step smaller while the
+   cursor is over the rail so it never crowds the navigation ---- */
+.mn-logo { transition: height 0.18s ease; }
+.mn-sidebar .mn-rail-brand { --mn-logo-h: 46px; }
+.mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 38px; }
+:root[data-ui='v2'] .mn-sidebar .mn-rail-brand { --mn-logo-h: 40px; }
+:root[data-ui='v2'] .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 34px; }
+@media (hover: none) {
+  .mn-sidebar .mn-rail-brand, .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 40px; }
+  :root[data-ui='v2'] .mn-sidebar .mn-rail-brand, :root[data-ui='v2'] .mn-sidebar:hover .mn-rail-brand { --mn-logo-h: 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .mn-logo { transition: none; } }

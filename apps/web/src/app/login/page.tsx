@@ -112,7 +112,7 @@ export default function LoginPage() {
         <aside className="mn-login-hero">
           <Aurora watermark />
           <Link href="/" aria-label="Mix Nova home" className="mn-login-home">
-            <Logo size="lg" onDark />
+            <Logo size="lg" plate />
           </Link>
           <h2 className="mn-login-hero-title">Smart Mix. Stronger Future.</h2>
           <p className="mn-login-hero-sub">

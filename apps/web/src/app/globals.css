@@ -3201,3 +3201,5 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
   .mn-brand-plate, .mn-lp-card::before { transition: none; }
 }
 .mn-lp-closing .mn-lp-mesh { display: none; }
+.mn-login-hero .mn-lp-blob { opacity: 0.5; }
+.mn-login-hero .mn-lp-blob-c { opacity: 0.2; }

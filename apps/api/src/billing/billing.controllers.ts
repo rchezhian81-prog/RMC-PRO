@@ -108,6 +108,7 @@ export class ReceiptController {
     const buffer = await this.pdf.receiptPdf(data);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${receiptNo}.pdf"`);
+    res.setHeader('Content-Length', buffer.length);
     res.end(buffer);
   }
 }

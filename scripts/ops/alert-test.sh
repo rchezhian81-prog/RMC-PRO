@@ -11,18 +11,29 @@
 #  alerter directly inside the container rather than logging in.
 #
 #  USAGE (on the VPS, from the repo root):
-#     ./scripts/ops/alert-test.sh
+#     ./scripts/ops/alert-test.sh                    # test what is configured
+#     ./scripts/ops/alert-test.sh --set webhook.txt  # set it first, then test
 #
-#  Setup first: in .env.production set ONE line —
-#     RMC_ALERT_WEBHOOK=https://…      (Discord, Slack, Google Chat or any incoming webhook)
-#  then recreate the api so it picks the value up:
-#     docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d api
+#  --set FILE reads the webhook URL from FILE (paste it there with nano — one
+#  line, nothing else — so it never sits in your shell history), refuses
+#  anything that is not a real https webhook URL (a placeholder with "…" or a
+#  truncated copy included), writes RMC_ALERT_WEBHOOK to .env.production as the
+#  single alert setting, deletes FILE, recreates the api so it starts with the
+#  value, waits for it to be healthy, and then runs the test.
 # =============================================================================
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env.production}"
 COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker/docker-compose.prod.yml}"
 API_SERVICE="${API_SERVICE:-api}"
+SET_FILE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --set) SET_FILE="${2:?--set needs the file holding the URL}"; shift 2 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    *) break ;;
+  esac
+done
 # shellcheck source=scripts/ops/lib-args.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib-args.sh"
 reject_positional_args "$@"
@@ -33,6 +44,51 @@ c_ok=$'\033[32m'; c_bad=$'\033[31m'; c_off=$'\033[0m'
 [ -t 1 ] || { c_ok=''; c_bad=''; c_off=''; }
 ok()  { printf '  %s✓%s %s\n' "$c_ok" "$c_off" "$*"; }
 bad() { printf '  %s✗%s %s\n' "$c_bad" "$c_off" "$*"; }
+
+# set_env KEY VALUE — replace the active line or append; keeps the file's mode.
+set_env() {
+  local tmp; tmp="$(mktemp)"
+  k="$1" v="$2" awk 'BEGIN { k = ENVIRON["k"]; v = ENVIRON["v"]; done = 0 }
+    index($0, k "=") == 1 { print k "=" v; done = 1; next }
+    { print }
+    END { if (!done) print k "=" v }' "$ENV_FILE" > "$tmp" && cat "$tmp" > "$ENV_FILE"
+  rm -f "$tmp"
+}
+
+if [ -n "$SET_FILE" ]; then
+  [ -f "$ENV_FILE" ] || { bad "env file not found: $ENV_FILE"; exit 1; }
+  [ -f "$SET_FILE" ] || { bad "no such file: $SET_FILE — create it with: nano $SET_FILE (paste the URL as the only line)"; exit 1; }
+  url="$(tr -d '[:space:]' < "$SET_FILE")"
+  case "$url" in
+    *…*|*'...'*) bad "the file holds a placeholder ('…'), not a URL — copy the real one from the channel's webhook page"; exit 1 ;;
+    https://hooks.slack.com/services/T*/B*/*) kind="Slack" ;;
+    https://discord.com/api/webhooks/*/*|https://discordapp.com/api/webhooks/*/*) kind="Discord" ;;
+    https://chat.googleapis.com/v1/spaces/*) kind="Google Chat" ;;
+    https://*/*) kind="a generic" ;;
+    *) bad "the file does not hold an https webhook URL"; exit 1 ;;
+  esac
+  if [ "${#url}" -lt 60 ]; then bad "the URL is only ${#url} characters — a copy this short is truncated (Slack ≈ 80, Discord ≈ 120); copy it again with the page's Copy button"; exit 1; fi
+  set_env RMC_ALERT_WEBHOOK "$url"
+  # One setting for the whole box — an older ALERT_WEBHOOK_URL line would only confuse.
+  sed -i '/^ALERT_WEBHOOK_URL=/d' "$ENV_FILE"
+  chmod 600 "$ENV_FILE" 2>/dev/null || true
+  rm -f "$SET_FILE"
+  ok "RMC_ALERT_WEBHOOK written to $ENV_FILE ($kind webhook, ${#url} characters); $SET_FILE deleted"
+  if command -v docker >/dev/null 2>&1 && [ -f "$COMPOSE_FILE" ]; then
+    printf '[alert-test] recreating the api so it starts with the webhook…\n'
+    if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d "$API_SERVICE" >/dev/null 2>&1; then
+      for i in $(seq 1 30); do
+        docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "^$API_SERVICE healthy" && break
+        sleep 2
+      done
+      ok "api recreated"
+    else
+      bad "docker compose up -d $API_SERVICE failed — recreate it by hand, then run this script again"
+    fi
+  else
+    bad "docker or the compose file is not available here — the api was not recreated"
+  fi
+fi
 
 hook="$(rmc_alert_webhook)"
 src="$(rmc_alert_webhook_source)"

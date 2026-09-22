@@ -53,12 +53,14 @@ Where to get one, free, with a phone app that buzzes: **Discord** — your serve
 → channel → Edit channel → Integrations → Webhooks → New webhook → Copy URL.
 **Slack** — api.slack.com/apps → your app → Incoming Webhooks → Add to workspace.
 
-The API reads the value at start, so recreate it after adding the line, then
-prove both paths in one go (two test messages land in the channel):
+One command writes the line, recreates the api so it starts with it, and proves
+both paths (two test messages land in the channel). Put the URL in a scratch
+file first so it never sits in your shell history:
 
 ```bash
-docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d api
-./scripts/ops/alert-test.sh
+nano webhook.txt                              # paste the URL as the only line; Ctrl+O, Enter, Ctrl+X
+./scripts/ops/alert-test.sh --set webhook.txt # writes RMC_ALERT_WEBHOOK, deletes webhook.txt, restarts api, tests
+./scripts/ops/alert-test.sh                   # any time later: just the test
 ```
 
 The same test is available to the company owner in the app: Settings → Error

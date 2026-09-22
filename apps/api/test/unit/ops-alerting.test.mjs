@@ -88,6 +88,18 @@ test('sendTest goes through the real delivery path and reports exactly what happ
     assert.equal(r.status, 404);
     assert.match(r.error, /HTTP 404/);
   } finally { await closed(bad); }
+  // Slack answers an incomplete URL with a 302 to a help page; following it
+  // made a wrong URL look delivered (seen live: "sent" with nothing in the channel).
+  const redirecting = [];
+  const redirect = http.createServer((req, res) => { redirecting.push(req.url); res.writeHead(302, { Location: `http://127.0.0.1:${redirect.address().port}/help` }); res.end(); });
+  await listen(redirect);
+  try {
+    const r = await quiet(() => new ErrorAlertService(undefined, { RMC_ALERT_WEBHOOK: urlOf(redirect) }).sendTest('unit'));
+    assert.equal(r.delivered, false, 'a redirect is not a delivery');
+    assert.equal(r.status, 302);
+    assert.match(r.error, /redirected \(HTTP 302\).*incomplete or wrong/);
+    assert.deepEqual(redirecting, ['/hook'], 'the redirect target is never followed');
+  } finally { await closed(redirect); }
   const dead = await quiet(() => new ErrorAlertService({ timeoutMs: 300 }, { RMC_ALERT_WEBHOOK: 'http://127.0.0.1:1/closed' }).sendTest('unit'));
   assert.equal(dead.delivered, false);
   assert.ok(dead.error, 'a dead endpoint is reported, not thrown');
@@ -278,3 +290,51 @@ test('alert-test.sh explains itself when nothing is set, and never prints the UR
   r = spawnSync('bash', [script, '2f9f750'], { encoding: 'utf8', env: { PATH: process.env.PATH, ENV_FILE: join(dir, 'env') } });
   assert.equal(r.status, 2, 'a stray commit argument is refused like the other deploy-path scripts');
 });
+
+test('alert-test.sh --set FILE writes the one setting from a file, refuses placeholders and truncated copies, deletes the file', () => {
+  const script = resolve(repoRoot, 'scripts/ops/alert-test.sh');
+  const dir = mkdtempSync(join(tmpdir(), 'rmc-alertset-'));
+  const env = join(dir, 'env'); const f = join(dir, 'webhook.txt');
+  const noDocker = join(dir, 'bin'); // a PATH without docker, so the recreate step is skipped deterministically
+  execFileSyncSafe('mkdir', ['-p', noDocker]);
+  // no curl on this PATH either: the test must never reach the real Slack host
+  for (const tool of ['bash', 'tr', 'awk', 'sed', 'mktemp', 'cat', 'rm', 'chmod', 'grep', 'cut', 'head', 'date', 'printf', 'seq', 'sleep', 'dirname']) {
+    const found = process.env.PATH.split(':').map((d) => join(d, tool)).find((p) => existsSyncSafe(p));
+    if (found) execFileSyncSafe('ln', ['-sf', found, join(noDocker, tool)]);
+  }
+  const run = () => spawnSync('bash', [script, '--set', f], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: noDocker, ENV_FILE: env, COMPOSE_FILE: join(dir, 'nope.yml') } });
+  writeFileSync(env, 'POSTGRES_DB=rmc\nALERT_WEBHOOK_URL=https://old.example/x\nRMC_ALERT_WEBHOOK=https://hooks.slack.com/services/T0/B0/old-old-old-old-old-old-old-old-old-old\n');
+  // the placeholder from a note, the exact failure seen live
+  writeFileSync(f, 'https://hooks.slack.com/services/T…/B…/…\n');
+  let r = run();
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /placeholder/);
+  assert.match(readFileSync(env, 'utf8'), /old-old-old/, 'nothing written');
+  // a truncated copy
+  writeFileSync(f, 'https://hooks.slack.com/services/T0ABC/B0DEF/x\n');
+  r = run();
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /truncated/);
+  // the real thing (Slack-shaped, 80 chars)
+  // Assembled at runtime: a literal of this shape trips GitHub's secret
+  // scanning (Slack incoming webhook URL) and blocks the push.
+  const token = 'aB3dE6fG9hJ2kL5mN8pQ1rS4';
+  const good = ['https://hooks.slack.com', 'services', 'T0ABCDEFGHI', 'B0JKLMNOPQR', token].join('/');
+  writeFileSync(f, good + '\n');
+  r = run();
+  const out = readFileSync(env, 'utf8');
+  assert.equal((out.match(/^RMC_ALERT_WEBHOOK=/gm) ?? []).length, 1, 'exactly one line, the old one replaced');
+  assert.ok(out.split('\n').includes(`RMC_ALERT_WEBHOOK=${good}`), 'the full URL is the value');
+  assert.ok(!/ALERT_WEBHOOK_URL=/.test(out), 'the second name is removed so there is one setting');
+  assert.ok(!existsSyncSafe(f), 'the scratch file is deleted');
+  assert.match(r.stdout, /RMC_ALERT_WEBHOOK written .*Slack webhook, 8\d characters/);
+  assert.match(r.stdout, /curl is not installed/, 'the send step ran and stopped at the missing curl, never reaching Slack');
+  assert.ok(!r.stdout.includes(token), 'the token never appears in the output');
+  assert.match(r.stdout, /docker or the compose file is not available here/, 'without docker it says the api was not recreated');
+  // Discord is accepted too
+  writeFileSync(f, 'https://discord.com/api/webhooks/123456789012345678/' + 'x'.repeat(68) + '\n');
+  r = run();
+  assert.match(r.stdout, /Discord webhook, 1\d\d characters/);
+});
+function existsSyncSafe(p) { try { readFileSync(p); return true; } catch { return false; } }
+function execFileSyncSafe(cmd, args) { spawnSync(cmd, args); }

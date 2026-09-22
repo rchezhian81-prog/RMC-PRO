@@ -86,11 +86,12 @@ export function Logo({
   showTagline?: boolean;
   /** Use the on-dark lockup. Omitted: follows the page theme (dark theme → on-dark lockup). */
   onDark?: boolean;
-  /** Sit the lockup on the brand plate (deep navy, soft violet glow) so it reads the same on every surface. */
+  /** Sit the lockup on the brand plate (pearl white with a violet-to-lavender ring) so it reads the same on every surface. */
   plate?: boolean;
 }) {
   const themeDark = useDarkTheme();
-  const onDark = plate ? true : (onDarkProp ?? themeDark);
+  // The plate is always light, so it carries the original dark-ink lockup whatever the surface or theme.
+  const onDark = plate ? false : (onDarkProp ?? themeDark);
   const src = useLogoSrc(onDark);
   const stacked = useStackedSrc(onDark, showTagline);
 

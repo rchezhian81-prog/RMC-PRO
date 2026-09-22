@@ -61,16 +61,25 @@ export class DeliveryChallanService {
       const ids = (pick: (r: DeliveryChallan) => string | null) => [...new Set(rows.map(pick).filter((v): v is string => !!v))];
       const siteIds = ids((r) => r.siteId);
       const vehicleIds = ids((r) => r.vehicleId);
+      // A challan copies its grade label from the batch ticket; an older ticket
+      // raised without one leaves the label empty while the grade id is set,
+      // and the list would read "No grade" for a load that plainly has one.
+      const gradeIds = ids((r) => (r.gradeLabel ? null : r.gradeId));
       const sites: Array<{ id: string; siteName: string }> = siteIds.length
         ? await m.query(`SELECT id, site_name AS "siteName" FROM sites WHERE id = ANY($1)`, [siteIds])
         : [];
       const vehicles: Array<{ id: string; vehicleNo: string }> = vehicleIds.length
         ? await m.query(`SELECT id, vehicle_no AS "vehicleNo" FROM vehicles WHERE id = ANY($1)`, [vehicleIds])
         : [];
+      const grades: Array<{ id: string; gradeCode: string }> = gradeIds.length
+        ? await m.query(`SELECT id, grade_code AS "gradeCode" FROM concrete_grades WHERE id = ANY($1)`, [gradeIds])
+        : [];
       const siteName = new Map(sites.map((s) => [s.id, s.siteName]));
       const vehicleNo = new Map(vehicles.map((v) => [v.id, v.vehicleNo]));
+      const gradeCode = new Map(grades.map((g) => [g.id, g.gradeCode]));
       return named.map((r) => ({
         ...r,
+        gradeLabel: r.gradeLabel ?? (r.gradeId ? gradeCode.get(r.gradeId) ?? null : null),
         siteName: r.siteId ? siteName.get(r.siteId) ?? null : null,
         vehicleNo: r.vehicleId ? vehicleNo.get(r.vehicleId) ?? null : null,
       }));

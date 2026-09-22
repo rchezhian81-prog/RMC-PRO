@@ -120,6 +120,15 @@ test('the ops routes are guarded like Settings and never return the webhook URL;
     assert.match(api, new RegExp(`^\\s+${k}: \\$\\{${k}`, 'm'), `compose passes ${k} into the api container`);
   }
   assert.match(read('tests/rbac-authorization.mjs'), /'\/ops\/alert-test'/, 'the RBAC matrix covers the test route');
+  // MinIO: Docker Hub refused the pull on a live deploy; the image is pinned to
+  // the release the box runs, on a registry that still serves it, never `latest`.
+  const minio = compose.slice(compose.indexOf('\n  minio:\n'), compose.indexOf('\n  migrate:\n'));
+  assert.match(minio, /image: quay\.io\/minio\/minio:RELEASE\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z/, 'MinIO is pinned to a release tag on quay.io');
+  assert.ok(!/minio:latest/.test(minio), 'never a floating tag');
+  assert.match(minio, /pull_policy: missing/);
+  for (const f of ['docs/deployment/DEPLOY-RUNBOOK-01-phase1-pilot.md', 'docs/deployment/DEPLOY-GHCR-PULL-01-phase1-pilot.md']) {
+    assert.match(read(f), /docker-compose\.prod\.yml pull api web/, `${f} pulls the app images by name`);
+  }
   const settings = read('apps/web/src/app/app/settings/page.tsx');
   assert.match(settings, /opsApi\.alertTest\(\)/, 'Settings has Send test alert');
   assert.match(settings, /gstApi\.status\(\)/, 'Settings says whether live GST filing is enabled');

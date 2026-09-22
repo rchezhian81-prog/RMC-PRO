@@ -69,7 +69,7 @@ IMAGE_REPO_WEB=ghcr.io/rchezhian81-prog/rmc-pro/rmc-web
 ```
 ```bash
 echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u <user> --password-stdin  # read:packages
-docker compose --env-file .env.production -f docker/docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml pull api web   # the app images only; MinIO is no longer on Docker Hub
 ```
 > Token creation + login + rotation are documented in `DEPLOY-GHCR-PULL-01-phase1-pilot.md`.
 > `IMAGE_REPO_*` unset = the legacy on-VPS build path (fallback below). The web image

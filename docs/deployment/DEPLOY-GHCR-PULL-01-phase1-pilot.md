@@ -86,7 +86,7 @@ IMAGE_REPO_WEB=ghcr.io/rchezhian81-prog/rmc-pro/rmc-web
 Then:
 
 ```bash
-docker compose --env-file .env.production -f docker/docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml pull api web   # the app images only; MinIO is no longer on Docker Hub
 docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d
 ```
 

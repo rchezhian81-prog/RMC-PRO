@@ -45,7 +45,12 @@ services:
       retries: 5
 
   minio:
+    # Docker Hub no longer serves minio/minio (pulls are refused), so this tag
+    # only exists as the copy already on the box. Never re-pull it: `up` uses
+    # the local image, and the deploy runbook pulls the app images by name
+    # (`pull api web`) so a refused MinIO pull cannot abort the deploy.
     image: minio/minio:latest
+    pull_policy: missing
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

@@ -261,7 +261,14 @@ export class ErrorAlertService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal,
+        // Never follow a redirect: Slack answers an incomplete webhook URL with
+        // a 302 to a help page, and following it turned "wrong URL" into a 200
+        // that read as delivered while nothing reached the channel.
+        redirect: 'manual',
       });
+      if (res.type === 'opaqueredirect' || res.status === 0 || (res.status >= 300 && res.status < 400)) {
+        return { ok: false, status: res.status || 302, error: `the webhook redirected (HTTP ${res.status || 302}) — the URL is incomplete or wrong` };
+      }
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: `the webhook answered HTTP ${res.status}` };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

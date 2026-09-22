@@ -3650,3 +3650,25 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 480px) {
   .mn-inv-form { grid-template-columns: 1fr; }
 }
+
+/* ============================================================================
+   BATCH TICKETS — the document-list rows above, with an accuracy column
+   ============================================================================ */
+/* Quantity is short ("6 m³"); the accuracy column carries a sentence, so it gets the room. */
+.mn-bt .mn-ord-cols,
+.mn-bt .mn-ord-row { grid-template-columns: minmax(150px, 0.85fr) minmax(0, 1.4fr) minmax(110px, 0.6fr) minmax(200px, 1.1fr) minmax(112px, auto) 28px; }
+@media (max-width: 860px) {
+  .mn-bt .mn-ord-row {
+    grid-template-areas:
+      'id go'
+      'who who'
+      'val val'
+      'when when'
+      'badges badges';
+  }
+}
+/* Phones: the page-specific column plans above must yield to the two-column stack. */
+@media (max-width: 860px) {
+  .mn-dc .mn-ord-row--acts,
+  .mn-bt .mn-ord-row { grid-template-columns: minmax(0, 1fr) auto; }
+}

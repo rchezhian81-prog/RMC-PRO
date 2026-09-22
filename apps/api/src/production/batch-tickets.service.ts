@@ -36,14 +36,63 @@ export class BatchTicketsService {
     private readonly stock: StockService,
   ) {}
 
+  /**
+   * The ticket list with what a plant manager reads it by: the order and
+   * customer behind each batch, who ran it, and how accurate it was (how many
+   * materials were weighed, how many missed their tolerance, the worst miss).
+   * Three batched lookups for the whole page.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(BatchTicket).find({
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(BatchTicket).find({
         where: status ? { status } : {},
         order: { createdAt: 'DESC' },
         take: listLimit(limit),
-      }),
-    );
+      });
+      const ids = (pick: (r: BatchTicket) => string | null) => [...new Set(rows.map(pick).filter((v): v is string => !!v))];
+      const orderIds = ids((r) => r.orderId);
+      const userIds = ids((r) => r.operatorUserId);
+      const ticketIds = rows.map((r) => r.id);
+      const orders: Array<{ id: string; orderNo: string; customerName: string | null }> = orderIds.length
+        ? await m.query(
+            `SELECT o.id, o.order_no AS "orderNo", c.customer_name AS "customerName"
+               FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
+              WHERE o.id = ANY($1)`,
+            [orderIds],
+          )
+        : [];
+      const users: Array<{ id: string; name: string }> = userIds.length
+        ? await m.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [userIds])
+        : [];
+      const stats: Array<{ batchTicketId: string; materials: number; weighed: number; breaches: number; worstPct: number }> = ticketIds.length
+        ? await m.query(
+            `SELECT batch_ticket_id AS "batchTicketId",
+                    COUNT(*)::int AS "materials",
+                    COUNT(*) FILTER (WHERE actual_quantity > 0)::int AS "weighed",
+                    COUNT(*) FILTER (WHERE NOT within_tolerance)::int AS "breaches",
+                    COALESCE(MAX(ABS(variance_percentage)) FILTER (WHERE actual_quantity > 0), 0)::float AS "worstPct"
+               FROM batch_ticket_materials WHERE batch_ticket_id = ANY($1) GROUP BY batch_ticket_id`,
+            [ticketIds],
+          )
+        : [];
+      const order = new Map(orders.map((o) => [o.id, o]));
+      const userName = new Map(users.map((u) => [u.id, u.name]));
+      const stat = new Map(stats.map((s) => [s.batchTicketId, s]));
+      return rows.map((r) => {
+        const o = r.orderId ? order.get(r.orderId) : undefined;
+        const s = stat.get(r.id);
+        return {
+          ...r,
+          orderNo: o?.orderNo ?? null,
+          customerName: o?.customerName ?? null,
+          operatorName: r.operatorUserId ? userName.get(r.operatorUserId) ?? null : null,
+          materials: s?.materials ?? 0,
+          weighed: s?.weighed ?? 0,
+          breaches: s?.breaches ?? 0,
+          worstPct: s?.worstPct ?? 0,
+        };
+      });
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

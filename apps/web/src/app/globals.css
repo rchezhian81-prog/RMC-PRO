@@ -3632,3 +3632,21 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 /* Quantity is short ("50 m³"); the billing column carries a name, so it gets the room. */
 .mn-dc .mn-ord-cols--acts,
 .mn-dc .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.85fr) minmax(0, 1.5fr) minmax(110px, 0.6fr) minmax(190px, 1.1fr) minmax(112px, auto) auto; }
+
+/* ============================================================================
+   INVOICES — the document-list rows above, plus the "from challans" form
+   ============================================================================ */
+.mn-inv-form { display: grid; grid-template-columns: minmax(220px, 1.6fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr); gap: 12px; align-items: end; }
+.mn-inv-lines { margin-top: 14px; border-top: 1px solid var(--mn-border); padding-top: 4px; }
+.mn-inv-submit { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.mn-inv-submit-sum { font-size: 13px; color: var(--mn-muted); }
+.mn-inv-submit-sum strong { font-family: var(--mn-font-display); font-size: 15px; color: var(--mn-text); font-variant-numeric: tabular-nums; }
+.mn-inv-draft { color: var(--mn-muted); font-weight: 600; font-style: italic; }
+.mn-ord-note--bad.mn-ord-note--btn:hover { border-color: var(--mn-danger); }
+@media (max-width: 860px) {
+  .mn-inv-form { grid-template-columns: 1fr 1fr; }
+  .mn-inv-form > :first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .mn-inv-form { grid-template-columns: 1fr; }
+}

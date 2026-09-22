@@ -1,4 +1,5 @@
 import { listLimit } from '../common/list-limit.util';
+import { attachCustomerName } from '../common/attach-customer-name';
 import { hasEwayBill } from '../common/eway-status.util';
 import { CreditNoteService } from './credit-note.service';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
@@ -57,14 +58,26 @@ export class InvoiceService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * The invoice list, with the customer and site names a billing clerk reads
+   * it by. Two batched lookups for the whole page, so the screen never has to
+   * fetch every customer and site to label a row.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Invoice).find({
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(Invoice).find({
         where: status ? { invoiceStatus: status } : {},
         order: { createdAt: 'DESC' },
         take: listLimit(limit),
-      }),
-    );
+      });
+      const named = await attachCustomerName(m, rows);
+      const siteIds = [...new Set(rows.map((r) => r.siteId).filter((v): v is string => !!v))];
+      const sites: Array<{ id: string; siteName: string }> = siteIds.length
+        ? await m.query(`SELECT id, site_name AS "siteName" FROM sites WHERE id = ANY($1)`, [siteIds])
+        : [];
+      const siteName = new Map(sites.map((s) => [s.id, s.siteName]));
+      return named.map((r) => ({ ...r, siteName: r.siteId ? siteName.get(r.siteId) ?? null : null }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

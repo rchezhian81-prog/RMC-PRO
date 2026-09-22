@@ -60,6 +60,7 @@ breadth on top of that spine**, not rework of it.
 | B3 | Returned/short-load concrete & wastage | Order-to-cash | Nice | — | 1 | **done** |
 | F1 | Excel bulk import framework | Platform | Important | — | 2 | **done** |
 | F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | **done** |
+| G1 | Self-hosted licence keys | Platform | Parked | — | 1–2 | **backlog** |
 
 **Recommended order:** D1 → A1 → A2 → A3 → B2 → B1 → C1 → D2 / E1 → A4 / D3 / D4 → F1 / F2.
 
@@ -382,6 +383,33 @@ rejection).
 
 Still unbuilt from the catalog: `driver_app` (phase 2) and `customer_portal`
 (phase 4).
+
+---
+
+### G1 · Self-hosted licence keys  *(backlog — build only when a real own-server buyer is on the table)*
+**Goal:** Mix Nova stays a subscription even when it runs on a customer's own
+server. The hosted product already enforces payment through tenant status
+(`trial` / `active` / `grace` / `suspended` / `cancelled`, checked on every
+request by `TenantGuard`) and plan limits; a self-hosted copy has none of
+that leverage, so the licence key supplies it.
+- **Key:** a signed token (Ed25519, private key never leaves us) carrying the
+  licensee, the plan's user/plant caps, the modules enabled and an expiry;
+  installed as `LICENSE_KEY` in the customer's `.env.production` and verified
+  offline with the public key baked into the API image — no phone-home needed
+  for the plant to keep working.
+- **Behaviour:** the API refuses to start on a missing/invalid key; from 14 days
+  before expiry it warns on the dashboard; after expiry it goes read-only
+  (sign-in and reports allowed, no new documents) for a grace period, then
+  locks like `suspended`. Renewal = we issue a new key, they paste it, no
+  redeploy.
+- **Ops:** a `licence` CLI for us (issue / inspect / revoke list), and the
+  platform admin portal showing every key issued.
+- **Ships with:** an annual, paid-up-front licence agreement (ownership stays
+  with Mix Nova, right to use only, no resale or reverse engineering); customers
+  receive Docker images from a private registry token, never source.
+- **DoD:** key verification unit-tested (valid / expired / tampered / wrong
+  plan); start-up refusal and read-only mode covered by an integration test;
+  hosted tenants unaffected (no key required when `LICENSE_MODE` is unset).
 
 ---
 

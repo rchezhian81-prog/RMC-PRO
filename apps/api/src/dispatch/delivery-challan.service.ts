@@ -1,4 +1,5 @@
 import { REPORT_FETCH_LIMIT, assertReportSize, listLimit } from '../common/list-limit.util';
+import { attachCustomerName } from '../common/attach-customer-name';
 import { hasEwayBill } from '../common/eway-status.util';
 import { addMinutes, plantDateTime } from '../common/business-date.util';
 import { CONCRETE_SLA_MINUTES } from '../alerts/concrete-sla.util';
@@ -44,14 +45,36 @@ export class DeliveryChallanService {
     private readonly whatsapp: WhatsAppService,
   ) {}
 
+  /**
+   * The challan list, with the names a dispatcher reads it by: the customer,
+   * the site and the truck. Three batched lookups for the whole page, so the
+   * screen never has to fetch every customer, site and vehicle to label a row.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(DeliveryChallan).find({
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(DeliveryChallan).find({
         where: status ? { challanStatus: status } : {},
         order: { createdAt: 'DESC' },
         take: listLimit(limit),
-      }),
-    );
+      });
+      const named = await attachCustomerName(m, rows);
+      const ids = (pick: (r: DeliveryChallan) => string | null) => [...new Set(rows.map(pick).filter((v): v is string => !!v))];
+      const siteIds = ids((r) => r.siteId);
+      const vehicleIds = ids((r) => r.vehicleId);
+      const sites: Array<{ id: string; siteName: string }> = siteIds.length
+        ? await m.query(`SELECT id, site_name AS "siteName" FROM sites WHERE id = ANY($1)`, [siteIds])
+        : [];
+      const vehicles: Array<{ id: string; vehicleNo: string }> = vehicleIds.length
+        ? await m.query(`SELECT id, vehicle_no AS "vehicleNo" FROM vehicles WHERE id = ANY($1)`, [vehicleIds])
+        : [];
+      const siteName = new Map(sites.map((s) => [s.id, s.siteName]));
+      const vehicleNo = new Map(vehicles.map((v) => [v.id, v.vehicleNo]));
+      return named.map((r) => ({
+        ...r,
+        siteName: r.siteId ? siteName.get(r.siteId) ?? null : null,
+        vehicleNo: r.vehicleId ? vehicleNo.get(r.vehicleId) ?? null : null,
+      }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

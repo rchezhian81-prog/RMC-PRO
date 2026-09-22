@@ -278,6 +278,9 @@ function PlantScene() {
   );
 }
 
+/** Where an enterprise enquiry about a self-hosted installation goes. */
+const CONTACT_EMAIL = 'hello@mixnovas.com';
+
 export default function LandingPage() {
   return (
     <div className="mn-app mn-lp">
@@ -444,6 +447,10 @@ export default function LandingPage() {
             <h2 className="mn-lp-closing-title">Already using Mix Nova?</h2>
             <p className="mn-lp-closing-sub">Sign in to your plant workspace.</p>
             <Link className="mn-btn mn-lp-cta mn-lp-cta-inverse" href="/login">Sign in</Link>
+            <p className="mn-lp-own-server">
+              Prefer to run Mix Nova on your own server?{' '}
+              <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Mix Nova on our own server')}`}>Talk to us</a>
+            </p>
           </div>
         </section>
       </main>

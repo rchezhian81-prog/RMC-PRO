@@ -3115,27 +3115,42 @@ main:focus-visible {
 @media (prefers-reduced-motion: reduce) { .mn-logo { transition: none; } }
 
 /* ============================================================================
-   BRAND PLATE + PREMIUM PASS — the lockup on one deep-navy plate everywhere,
+   BRAND PLATE + PREMIUM PASS — the lockup on one pearl plate everywhere,
    a soft emblem watermark behind the dark surfaces, section kickers, and a
    brighter aurora. Both skins, light + dark.
    ============================================================================ */
+/* Pearl plate: a white card with a violet-to-lavender ring and a soft violet
+   glow, carrying the original dark-ink lockup. The same on a white page, the
+   violet rail and the dark theme, so the logo never sinks into its surface. */
 .mn-brand-plate {
+  position: relative;
   display: inline-flex;
   align-items: center;
   padding: 7px 13px 7px 10px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #1b1630 0%, #26184f 55%, #3a1f86 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f7f3ff 100%);
   box-shadow:
-    0 12px 28px -14px rgba(60, 20, 140, 0.75),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 1px rgba(138, 79, 255, 0.26);
+    0 14px 34px -12px rgba(108, 43, 217, 0.5),
+    0 0 22px rgba(183, 140, 255, 0.35);
   transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.mn-brand-plate::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 16px;
+  padding: 2px;
+  background: linear-gradient(120deg, #6c2bd9, #8a4fff 50%, #b78cff);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 a:hover > .mn-brand-plate, .mn-brand-plate:hover {
   box-shadow:
-    0 16px 34px -14px rgba(90, 40, 200, 0.85),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 0 0 1px rgba(160, 110, 255, 0.45);
+    0 18px 40px -12px rgba(108, 43, 217, 0.6),
+    0 0 30px rgba(183, 140, 255, 0.5);
 }
 /* the sidebar rail: the plate replaces the earlier translucent pill */
 :root[data-ui='v2'] .mn-rail-brand { padding: 0; background: none; box-shadow: none; }
@@ -3197,6 +3212,9 @@ a:hover > .mn-brand-plate, .mn-brand-plate:hover {
 .mn-lp-closing { position: relative; isolation: isolate; overflow: hidden; }
 .mn-lp-closing-inner { position: relative; z-index: 2; display: grid; justify-items: center; gap: 14px; }
 .mn-lp-closing-inner .mn-brand-plate { margin-bottom: 8px; }
+.mn-lp-own-server { margin: 18px 0 0; font-size: 14px; color: rgba(255, 255, 255, 0.82); }
+.mn-lp-own-server a { color: #ffffff; font-weight: 600; text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.5); text-underline-offset: 3px; }
+.mn-lp-own-server a:hover { text-decoration-color: #ffffff; }
 @media (prefers-reduced-motion: reduce) {
   .mn-brand-plate, .mn-lp-card::before { transition: none; }
 }

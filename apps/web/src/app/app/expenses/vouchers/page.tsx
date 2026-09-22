@@ -140,7 +140,7 @@ export default function ExpenseVouchersPage() {
                     <Td>
                       <select className="mn-input" value={l.expenseHeadId} onChange={(e) => setLine(i, { expenseHeadId: e.target.value })}>
                         <option value="">— select —</option>
-                        {heads.map((h) => <option key={String(h.id)} value={String(h.id)}>{String(h.headName)}</option>)}
+                        {heads.filter((h) => String(h.status ?? 'active') === 'active').map((h) => <option key={String(h.id)} value={String(h.id)}>{String(h.headName)}</option>)}
                       </select>
                     </Td>
                     <Td><Input style={{ width: 160 }} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} /></Td>

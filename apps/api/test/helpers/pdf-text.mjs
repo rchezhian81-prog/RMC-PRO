@@ -13,14 +13,33 @@
  */
 import { inflateSync } from 'node:zlib';
 
+/**
+ * Every stream, sliced by the /Length its dictionary declares. The old
+ * `stream…\r?\nendstream` regex cut one byte off any compressed stream whose
+ * last byte happened to be a carriage return — about one stream in 256, so a
+ * random document in a random CI run lost its text and a phrase "was not on
+ * the PDF" (seen three times). Binary data has no shape a regex can trust;
+ * the length does.
+ */
 function streams(buf) {
   const src = buf.toString('latin1');
   const out = [];
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  const re = /<<([\s\S]*?)>>\s*stream\r?\n/g;
   let m;
   while ((m = re.exec(src))) {
-    try { out.push({ ok: true, content: inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1') }); }
-    catch (e) { out.push({ ok: false, content: m[1], error: String(e?.message ?? e).slice(0, 60) }); }
+    const lengths = [...m[1].matchAll(/\/Length\s+(\d+)/g)];
+    const start = m.index + m[0].length;
+    let data;
+    if (lengths.length) {
+      data = src.slice(start, start + Number(lengths[lengths.length - 1][1]));
+    } else {
+      const end = src.indexOf('endstream', start);
+      data = src.slice(start, end < 0 ? undefined : end).replace(/\r?\n$/, '');
+    }
+    // Binary stream data can contain "<<"; resume the search after it.
+    re.lastIndex = start + data.length;
+    try { out.push({ ok: true, content: inflateSync(Buffer.from(data, 'latin1')).toString('latin1') }); }
+    catch (e) { out.push({ ok: false, content: data, error: String(e?.message ?? e).slice(0, 60) }); }
   }
   return out;
 }

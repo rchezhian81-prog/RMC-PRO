@@ -113,5 +113,24 @@ const cancelled = await api('POST', `/expense-vouchers/${draft2.id}/cancel`);
 ok('a draft voucher cancels', cancelled.status === 'cancelled');
 ok('cancelling a draft leaves the posted report unchanged', near((await api('GET', '/expense-vouchers/report/allocation')).byCostObject.total, 10000));
 
+console.log('\n[heads] edit, deactivate, refuse, reactivate');
+{
+  const renamed = await api('PUT', `/expense-heads/${bata.id}`, { headName: 'Driver Allowance', defaultCostType: 'general' });
+  ok(`a head can be edited (${renamed.headName}, ${renamed.defaultCostType})`, renamed.headName === 'Driver Allowance' && renamed.defaultCostType === 'general');
+  const off = await api('PUT', `/expense-heads/${bata.id}`, { status: 'inactive' });
+  ok('a head can be deactivated', off.status === 'inactive');
+  ok('it still lists (the screen shows it with Reactivate)', (await api('GET', '/expense-heads')).some((h) => h.id === bata.id && h.status === 'inactive'));
+  const r = await fetch(`${API_BASE}/expense-vouchers`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ lines: [{ expenseHeadId: bata.id, amount: 100, allocationType: 'general' }] }) });
+  const j = await r.json().catch(() => null);
+  ok(`a new voucher cannot use an inactive head (${r.status}: ${String(j?.error?.message ?? '').slice(0, 80)})`, r.status === 400 && /inactive/.test(String(j?.error?.message ?? '')));
+  const groupOff = await fetch(`${API_BASE}/expense-groups/${group.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ status: 'inactive' }) });
+  const gj = await groupOff.json().catch(() => null);
+  ok(`a group with active heads cannot be deactivated (${groupOff.status}: ${String(gj?.error?.message ?? '').slice(0, 80)})`, groupOff.status === 400 && /active head/.test(String(gj?.error?.message ?? '')));
+  const back = await api('PUT', `/expense-heads/${bata.id}`, { status: 'active', headName: 'Driver Bata' });
+  ok('and reactivated', back.status === 'active');
+  const bad = await fetch(`${API_BASE}/expense-heads/${bata.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }, body: JSON.stringify({ status: 'gone' }) });
+  ok(`an unknown status is refused (${bad.status})`, bad.status === 400);
+}
+
 console.log(`\nEXPENSE CAPTURE TEST: ${pass} passed ✓`);
 process.exit(0);

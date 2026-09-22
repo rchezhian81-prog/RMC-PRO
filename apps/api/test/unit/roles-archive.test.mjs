@@ -37,10 +37,13 @@ test('the service archives standard roles, deletes custom ones, refuses the core
   assert.match(read('apps/api/src/core/database/data-source.ts'), /RoleArchive1720000071000/, 'migration registered');
 });
 
-test('the screen offers Rename on every role, Archive or Delete except on the core two, and Restore for archived ones', () => {
+test('the screen offers Edit on every role (name + permissions), Archive or Delete except on the core two, and Restore for archived ones', () => {
   const page = read('apps/web/src/app/app/roles/page.tsx');
   assert.match(page, /rolesApi\.list\(true\)/, 'the page asks for archived roles too');
   assert.match(page, /\{system \? 'Archive' : 'Delete'\}/);
+  assert.match(page, /onClick=\{\(\) => selectRole\(r\)\}>\s*Edit/, 'one Edit button per row');
+  assert.match(page, /rolesApi\.update\(String\(selRole\.id\), \{ roleName: name \}\)/, 'Save renames when the name changed');
+  assert.match(page, /rolesApi\.setPerms\(String\(selRole\.id\)/, 'and saves the permissions');
   assert.match(page, /\{!core && \(/, 'no remove button on the core roles');
   assert.match(page, /restoreRole\(r\)/);
   assert.match(page, /Archived roles \(/);

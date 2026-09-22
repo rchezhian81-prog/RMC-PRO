@@ -41,9 +41,17 @@ export class ExpenseGroupService {
       const repo = m.getRepository(ExpenseGroup);
       const g = await repo.findOne({ where: { id } });
       if (!g) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Expense group not found' });
+      const status = dto.status === undefined ? g.status : String(dto.status);
+      if (!['active', 'inactive'].includes(status)) throw badReq('status must be active or inactive');
+      if (status === 'inactive' && g.status !== 'inactive') {
+        // A group is a shelf for heads; emptying the shelf first keeps every
+        // active head reachable from the screen.
+        const live = await m.getRepository(ExpenseHead).count({ where: { groupId: id, status: 'active' } });
+        if (live > 0) throw badReq(`Group "${g.groupName}" still has ${live} active head(s) — deactivate them or move them to another group first`);
+      }
       await repo.update(id, {
         groupName: dto.groupName === undefined ? g.groupName : String(dto.groupName).trim(),
-        status: dto.status === undefined ? g.status : String(dto.status),
+        status,
         remarks: dto.remarks === undefined ? g.remarks : ((dto.remarks as string) ?? null),
       });
       return repo.findOne({ where: { id } });
@@ -105,11 +113,14 @@ export class ExpenseHeadService {
         const group = await m.getRepository(ExpenseGroup).findOne({ where: { id: groupId } });
         if (!group) throw badReq('Expense group not found');
       }
+      const status = dto.status === undefined ? h.status : String(dto.status);
+      if (!['active', 'inactive'].includes(status)) throw badReq('status must be active or inactive');
+      if (dto.headName !== undefined && !String(dto.headName).trim()) throw badReq('Head name is required');
       await repo.update(id, {
         headName: dto.headName === undefined ? h.headName : String(dto.headName).trim(),
         groupId,
         defaultCostType: dto.defaultCostType === undefined ? h.defaultCostType : ((dto.defaultCostType as string) ?? null),
-        status: dto.status === undefined ? h.status : String(dto.status),
+        status,
       });
       return repo.findOne({ where: { id } });
     });

@@ -131,6 +131,7 @@ export class ExpenseVoucherService {
         if (expenseHeadId) {
           const head = await headRepo.findOne({ where: { id: expenseHeadId } });
           if (!head) throw badReq('Expense head not found');
+          if (head.status !== 'active') throw badReq(`Expense head "${head.headName}" is inactive — reactivate it under Expenses → Heads, or pick another head`);
           expenseHeadLabel = head.headName;
         }
         if (!expenseHeadLabel) throw badReq('Each line needs an expense head');

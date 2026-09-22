@@ -104,7 +104,8 @@ export function Logo({
   if (src) {
     // The height is a CSS variable with a per-size default, so a container can
     // resize the lockup (the app sidebar grows it and shrinks it under the cursor).
-    const h = size === 'lg' ? 56 : size === 'sm' ? 38 : 44;
+    // On the plate the lockup runs larger, so the badge reads as a badge and not a chip.
+    const h = plate ? (size === 'lg' ? 70 : size === 'sm' ? 46 : 56) : size === 'lg' ? 56 : size === 'sm' ? 38 : 44;
     const img = <img src={src} alt="Mix Nova RMC Software" className="mn-logo" style={{ height: `var(--mn-logo-h, ${h}px)`, width: 'auto', display: 'block' }} />;
     return plate ? <span className="mn-brand-plate">{img}</span> : img;
   }

@@ -1932,6 +1932,8 @@ main:focus-visible {
   justify-content: space-between;
   gap: 16px;
   min-height: 68px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 .mn-lp-nav nav { display: flex; align-items: center; gap: 6px; }
 .mn-lp-nav-link {
@@ -3126,20 +3128,21 @@ main:focus-visible {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 7px 13px 7px 10px;
-  border-radius: 14px;
+  padding: 11px 20px 11px 15px;
+  border-radius: 18px;
   background: linear-gradient(180deg, #ffffff 0%, #f7f3ff 100%);
   box-shadow:
-    0 14px 34px -12px rgba(108, 43, 217, 0.5),
-    0 0 22px rgba(183, 140, 255, 0.35);
+    0 20px 48px -14px rgba(108, 43, 217, 0.7),
+    0 0 40px rgba(160, 110, 255, 0.6),
+    0 0 90px rgba(138, 79, 255, 0.28);
   transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 .mn-brand-plate::before {
   content: '';
   position: absolute;
-  inset: -2px;
-  border-radius: 16px;
-  padding: 2px;
+  inset: -2.5px;
+  border-radius: 20.5px;
+  padding: 2.5px;
   background: linear-gradient(120deg, #6c2bd9, #8a4fff 50%, #b78cff);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
@@ -3149,12 +3152,14 @@ main:focus-visible {
 }
 a:hover > .mn-brand-plate, .mn-brand-plate:hover {
   box-shadow:
-    0 18px 40px -12px rgba(108, 43, 217, 0.6),
-    0 0 30px rgba(183, 140, 255, 0.5);
+    0 24px 56px -14px rgba(108, 43, 217, 0.8),
+    0 0 52px rgba(160, 110, 255, 0.75),
+    0 0 110px rgba(138, 79, 255, 0.35);
 }
 /* the sidebar rail: the plate replaces the earlier translucent pill */
 :root[data-ui='v2'] .mn-rail-brand { padding: 0; background: none; box-shadow: none; }
-.mn-sidebar .mn-rail-brand .mn-brand-plate { padding: 6px 11px 6px 8px; }
+.mn-sidebar .mn-rail-brand .mn-brand-plate { padding: 7px 12px 7px 9px; border-radius: 15px; }
+.mn-sidebar .mn-rail-brand .mn-brand-plate::before { inset: -2px; border-radius: 17px; padding: 2px; }
 
 /* soft emblem watermark on the dark surfaces */
 .mn-lp-watermark {

@@ -274,7 +274,7 @@ export default function QuotationDetail() {
         <StatCard label="Total incl. GST" value={money(tax?.total ?? quoted)} tone="info" />
         <StatCard label="Volume" value={`${qty(totalM3)} m³`} />
         <StatCard label="Grades" value={items.length} />
-        <StatCard label="Validity" value={days == null ? '—' : days < 0 ? 'Expired' : `${days} d`} tone={validity.tone === 'neutral' ? 'neutral' : validity.tone} />
+        <StatCard label="Validity" value={converted ? 'Converted' : days == null ? '—' : days < 0 ? 'Expired' : `${days} d`} tone={validity.tone === 'neutral' ? 'neutral' : validity.tone} />
       </div>
 
       <div className="mn-od-grid">

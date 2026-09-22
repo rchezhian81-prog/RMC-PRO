@@ -132,6 +132,9 @@ const ALL_TESTS = [
   // moving its balance through the one formula; refusals (headroom, over-
   // payment, live note blocks invoice cancel); statement, GST, HSN, Tally.
   'test/credit-notes.test.mjs',
+  // Roles: rename any role; archive a standard role (not delete — the seed would
+  // re-provision it), refuse the two core roles, block while assigned, restore.
+  'test/roles-lifecycle.test.mjs',
   // Order cancel with live downstream (I14): in-flight concrete blocks the
   // cancel, harmless leftovers go with it, downstream creates refuse a
   // cancelled order. Seeds its own orders.

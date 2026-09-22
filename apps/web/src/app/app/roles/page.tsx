@@ -17,7 +17,6 @@ export default function RolesPage() {
   const [selRole, setSelRole] = useState<Row | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [form, setForm] = useState({ roleKey: '', roleName: '' });
-  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -34,9 +33,12 @@ export default function RolesPage() {
       .finally(() => setLoaded(true));
   }, []);
 
+  /** Open a role for editing: its name and its permissions, saved together. */
   async function selectRole(role: Row) {
     setSelRole(role);
+    setEditName(String(role.roleName ?? ''));
     setMsg(null);
+    setError(null);
     setChecked(new Set(await rolesApi.getPerms(String(role.id))));
   }
   function toggle(id: string) {
@@ -47,14 +49,19 @@ export default function RolesPage() {
       return n;
     });
   }
-  async function savePerms() {
+  async function saveRole() {
     if (!selRole) return;
     setError(null);
+    const name = editName.trim();
+    if (!name) { setError('Role name is required.'); return; }
     try {
+      if (name !== String(selRole.roleName ?? '')) await rolesApi.update(String(selRole.id), { roleName: name });
       await rolesApi.setPerms(String(selRole.id), [...checked]);
-      setMsg('Permissions saved.');
+      await reload();
+      setSelRole({ ...selRole, roleName: name });
+      setMsg(`Role "${name}" saved.`);
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
   async function createRole(e: FormEvent) {
@@ -69,27 +76,6 @@ export default function RolesPage() {
     }
   }
 
-  function startRename(r: Row) {
-    setEditingRoleId(String(r.id));
-    setEditName(String(r.roleName ?? ''));
-    setError(null);
-  }
-  async function saveRename() {
-    if (!editingRoleId) return;
-    setError(null);
-    try {
-      await rolesApi.update(editingRoleId, { roleName: editName });
-      setEditingRoleId(null);
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-  /**
-   * A custom role is deleted; a standard one is archived (it leaves every list
-   * and nobody can be given it, and Restore brings it back). The two core roles
-   * cannot be removed at all — the server refuses, and the buttons are not shown.
-   */
   async function deleteRole(r: Row) {
     const system = Boolean(r.isSystemRole);
     if (
@@ -134,7 +120,7 @@ export default function RolesPage() {
     <div style={{ display: 'grid', gap: 18 }}>
       <h1 style={{ fontSize: 24, margin: 0 }}>Roles &amp; Permissions</h1>
       <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '-8px 0 0' }}>
-        Every role can be renamed and its permissions changed. A standard role you do not use can be archived and restored later; a role you created can be deleted. Company Owner and Company Admin always stay.
+        Edit any role: its name and the permissions it holds. A standard role you do not use can be archived and restored later; a role you created can be deleted. Company Owner and Company Admin always stay.
       </p>
       {error && <ErrorState message={error} />}
       {msg && <div style={{ color: 'var(--mn-success)', fontSize: 13 }}>{msg}</div>}
@@ -174,49 +160,29 @@ export default function RolesPage() {
             </thead>
             <tbody>
               {active.map((r) => {
-                const isEditing = editingRoleId === String(r.id);
                 const system = Boolean(r.isSystemRole);
                 const core = CORE.has(String(r.roleKey));
+                const open = selRole?.id === r.id;
                 return (
-                  <tr key={r.id}>
+                  <tr key={r.id} style={open ? { background: 'var(--mn-purple-50)' } : undefined}>
                     <Td style={{ fontWeight: 600 }}>
-                      {isEditing ? (
-                        <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-                      ) : (
-                        <>
-                          {String(r.roleName ?? '')}
-                          {system && (
-                            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--mn-muted)' }}>
-                              system
-                            </span>
-                          )}
-                        </>
+                      {String(r.roleName ?? '')}
+                      {system && (
+                        <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--mn-muted)' }}>
+                          standard
+                        </span>
                       )}
                     </Td>
                     <Td>{String(r.roleKey ?? '')}</Td>
                     <Td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6 }}>
-                        {isEditing ? (
-                          <>
-                            <Button size="sm" onClick={saveRename}>Save</Button>
-                            <Button variant="secondary" size="sm" onClick={() => setEditingRoleId(null)}>
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="secondary" size="sm" onClick={() => selectRole(r)}>
-                              Permissions
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => startRename(r)}>
-                              Rename
-                            </Button>
-                            {!core && (
-                              <Button variant="danger" size="sm" onClick={() => deleteRole(r)}>
-                                {system ? 'Archive' : 'Delete'}
-                              </Button>
-                            )}
-                          </>
+                        <Button variant={open ? 'primary' : 'secondary'} size="sm" onClick={() => selectRole(r)}>
+                          Edit
+                        </Button>
+                        {!core && (
+                          <Button variant="danger" size="sm" onClick={() => deleteRole(r)}>
+                            {system ? 'Archive' : 'Delete'}
+                          </Button>
                         )}
                       </div>
                     </Td>
@@ -254,10 +220,15 @@ export default function RolesPage() {
       </div>
 
       {selRole && (
-        <Card
-          title={`Permissions — ${String(selRole.roleName)}`}
-          actions={msg ? <span style={{ color: 'var(--mn-success)', fontSize: 12 }}>{msg}</span> : undefined}
-        >
+        <Card title={`Edit role — ${String(selRole.roleName)}`}>
+          <div style={{ maxWidth: 360, marginBottom: 14 }}>
+            <Field label="Role name" required>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </Field>
+            <p style={{ color: 'var(--mn-muted)', fontSize: 12, margin: '4px 0 0' }}>
+              Key: {String(selRole.roleKey)} (fixed). Tick the permissions this role should hold, then Save.
+            </p>
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             {catalog.map((p) => {
               const id = String(p.id);
@@ -284,7 +255,10 @@ export default function RolesPage() {
               );
             })}
           </div>
-          <Button onClick={savePerms}>Save permissions</Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button onClick={saveRole}>Save</Button>
+            <Button variant="secondary" onClick={() => setSelRole(null)}>Cancel</Button>
+          </div>
         </Card>
       )}
     </div>

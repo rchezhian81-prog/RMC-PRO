@@ -45,11 +45,13 @@ services:
       retries: 5
 
   minio:
-    # Docker Hub no longer serves minio/minio (pulls are refused), so this tag
-    # only exists as the copy already on the box. Never re-pull it: `up` uses
-    # the local image, and the deploy runbook pulls the app images by name
-    # (`pull api web`) so a refused MinIO pull cannot abort the deploy.
-    image: minio/minio:latest
+    # Pinned to the exact release the pilot box has run since day one, served
+    # from quay.io: Docker Hub no longer serves minio/minio (pulls are refused),
+    # and a floating `latest` would have changed the storage engine under a
+    # running plant on the first re-pull. Change the tag only on purpose, with
+    # a backup taken first. The deploy runbook pulls the app images by name
+    # (`pull api web`); this one is pulled once, when missing.
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     pull_policy: missing
     restart: unless-stopped
     command: server /data --console-address ":9001"

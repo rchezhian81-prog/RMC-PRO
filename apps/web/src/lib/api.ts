@@ -468,12 +468,14 @@ export const auditApi = {
 };
 
 export const rolesApi = {
-  list: () => apiFetch<Row[]>('/roles'),
+  /** Active roles — the ones people can be given. Setup → Roles asks for the archived ones too. */
+  list: (includeArchived = false) => apiFetch<Row[]>(`/roles${includeArchived ? '?includeArchived=1' : ''}`),
+  restore: (id: string) => apiFetch<Row>(`/roles/${id}/restore`, { method: 'POST' }),
   create: (b: Record<string, unknown>) =>
     apiFetch<Row>('/roles', { method: 'POST', body: JSON.stringify(b) }),
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/roles/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
-  remove: (id: string) => apiFetch<{ deleted: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
+  remove: (id: string) => apiFetch<{ deleted: boolean; archived: boolean }>(`/roles/${id}`, { method: 'DELETE' }),
   catalog: () => apiFetch<Row[]>('/roles/permissions-catalog'),
   getPerms: (id: string) => apiFetch<string[]>(`/roles/${id}/permissions`),
   setPerms: (id: string, permissionIds: string[]) =>

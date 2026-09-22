@@ -67,6 +67,9 @@ export class Role extends TenantScopedEntity {
 
   @Column({ name: 'is_system_role', type: 'boolean', default: false })
   isSystemRole!: boolean;
+  /** Set when a standard role is taken out of use; null while active. */
+  @Column({ name: 'archived_at', type: 'timestamptz', nullable: true })
+  archivedAt!: Date | null;
 }
 
 /** Role → permission mapping (Design Doc 6 §6.4). */

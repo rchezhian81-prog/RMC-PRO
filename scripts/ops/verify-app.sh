@@ -268,7 +268,7 @@ else:
     # out of everything, so assert the contents, not just the names — including
     # the separations of duty the business relies on.
     tmp=$(mktemp -d)
-    curl -sS --max-time 25 "${auth[@]}" "${API}/api/v1/roles" -o "$tmp/roles.json" 2>/dev/null
+    curl -sS --max-time 25 "${auth[@]}" "${API}/api/v1/roles?includeArchived=1" -o "$tmp/roles.json" 2>/dev/null
     curl -sS --max-time 25 "${auth[@]}" "${API}/api/v1/roles/permissions-catalog" -o "$tmp/catalog.json" 2>/dev/null
     # Fetch each role's granted permission ids into its own file.
     while IFS=$'\t' read -r rkey rid; do
@@ -304,10 +304,13 @@ if roles is None or catalog is None:
 
 key_of = {p["id"]: p["permissionKey"] for p in catalog if isinstance(p, dict) and p.get("id")}
 have = {r["roleKey"]: r for r in roles if isinstance(r, dict) and r.get("roleKey")}
+# A standard role the owner archived (Setup → Roles) is a choice, not a gap:
+# nobody can hold it, so its grants do not matter and it is not "missing".
+archived = {k for k, r in have.items() if r.get("archivedAt")}
 
-OPERATIONAL = ["plant_manager","sales_manager","sales_executive","dispatch_manager",
+OPERATIONAL = [k for k in ["plant_manager","sales_manager","sales_executive","dispatch_manager",
                "batching_operator","store_staff","qc_engineer","accounts_manager",
-               "fleet_manager","auditor"]
+               "fleet_manager","auditor"] if k not in archived]
 EXPECTED = ["company_owner","company_admin"] + OPERATIONAL
 
 missing = [k for k in EXPECTED if k not in have]
@@ -328,10 +331,10 @@ if empty:
 
 problems = []
 def deny(role, key, why):
-    if key in perms[role]:
+    if role in perms and key in perms[role]:
         problems.append(why)
 def need(role, key, why):
-    if key not in perms[role]:
+    if role in perms and key not in perms[role]:
         problems.append(why)
 
 need("sales_manager", "quotations.approve", "sales manager cannot approve quotations")
@@ -362,8 +365,9 @@ if problems:
     print("BAD|" + "; ".join(problems))
 else:
     total = sum(len(perms[k]) for k in OPERATIONAL)
-    print("OK|%d roles, all populated (%d operational grants), duties separated"
-          % (len(EXPECTED), total))
+    note = (", %d archived by the owner" % len(archived)) if archived else ""
+    print("OK|%d roles, all populated (%d operational grants), duties separated%s"
+          % (len(EXPECTED), total, note))
 PY
 )
     rm -rf "$tmp"

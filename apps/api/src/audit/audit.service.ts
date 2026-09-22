@@ -191,6 +191,8 @@ export const AUDIT_ACTIONS = {
   ROLE_CREATE: 'role.create',
   ROLE_UPDATE: 'role.update',
   ROLE_DELETE: 'role.delete',
+  ROLE_ARCHIVE: 'role.archive',
+  ROLE_RESTORE: 'role.restore',
   ROLE_PERMISSION_CHANGE: 'role.permission_change',
   COMPANY_UPDATE: 'company.update',
   SETTING_CHANGE: 'setting.change',

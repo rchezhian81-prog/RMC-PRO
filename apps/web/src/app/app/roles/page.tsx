@@ -24,7 +24,7 @@ export default function RolesPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
-    const [r, c] = await Promise.all([rolesApi.list(), rolesApi.catalog()]);
+    const [r, c] = await Promise.all([rolesApi.list(true), rolesApi.catalog()]);
     setRoles(r);
     setCatalog(c);
   }
@@ -85,31 +85,59 @@ export default function RolesPage() {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+  /**
+   * A custom role is deleted; a standard one is archived (it leaves every list
+   * and nobody can be given it, and Restore brings it back). The two core roles
+   * cannot be removed at all — the server refuses, and the buttons are not shown.
+   */
   async function deleteRole(r: Row) {
+    const system = Boolean(r.isSystemRole);
     if (
       !(await confirm({
-        title: 'Delete role',
-        message: `Delete role "${String(r.roleName)}"? This cannot be undone.`,
-        confirmLabel: 'Delete',
+        title: system ? 'Archive role' : 'Delete role',
+        message: system
+          ? `Archive "${String(r.roleName)}"? It disappears from the role lists and nobody can be given it. You can restore it here later.`
+          : `Delete role "${String(r.roleName)}"? This cannot be undone.`,
+        confirmLabel: system ? 'Archive' : 'Delete',
         danger: true,
       }))
     ) {
       return;
     }
     setError(null);
+    setMsg(null);
     try {
-      await rolesApi.remove(String(r.id));
+      const out = await rolesApi.remove(String(r.id));
       if (selRole && selRole.id === r.id) setSelRole(null);
       await reload();
+      setMsg(out.archived ? `Role "${String(r.roleName)}" archived.` : `Role "${String(r.roleName)}" deleted.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+  async function restoreRole(r: Row) {
+    setError(null);
+    setMsg(null);
+    try {
+      await rolesApi.restore(String(r.id));
+      await reload();
+      setMsg(`Role "${String(r.roleName)}" restored.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+  const CORE = new Set(['company_owner', 'company_admin']);
+  const active = roles.filter((r) => !r.archivedAt);
+  const archived = roles.filter((r) => Boolean(r.archivedAt));
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
       <h1 style={{ fontSize: 24, margin: 0 }}>Roles &amp; Permissions</h1>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '-8px 0 0' }}>
+        Every role can be renamed and its permissions changed. A standard role you do not use can be archived and restored later; a role you created can be deleted. Company Owner and Company Admin always stay.
+      </p>
       {error && <ErrorState message={error} />}
+      {msg && <div style={{ color: 'var(--mn-success)', fontSize: 13 }}>{msg}</div>}
 
       <div className="mn-crud">
         <div className="mn-crud-aside">
@@ -135,7 +163,7 @@ export default function RolesPage() {
       <Card title="Roles" padded={false}>
         {!loaded ? (
           <TableSkeleton cols={4} />
-        ) : roles.length ? (
+        ) : active.length ? (
           <Table>
             <thead>
               <tr>
@@ -145,9 +173,10 @@ export default function RolesPage() {
               </tr>
             </thead>
             <tbody>
-              {roles.map((r) => {
+              {active.map((r) => {
                 const isEditing = editingRoleId === String(r.id);
                 const system = Boolean(r.isSystemRole);
+                const core = CORE.has(String(r.roleKey));
                 return (
                   <tr key={r.id}>
                     <Td style={{ fontWeight: 600 }}>
@@ -179,14 +208,12 @@ export default function RolesPage() {
                             <Button variant="secondary" size="sm" onClick={() => selectRole(r)}>
                               Permissions
                             </Button>
-                            {!system && (
-                              <Button variant="ghost" size="sm" onClick={() => startRename(r)}>
-                                Rename
-                              </Button>
-                            )}
-                            {!system && (
+                            <Button variant="ghost" size="sm" onClick={() => startRename(r)}>
+                              Rename
+                            </Button>
+                            {!core && (
                               <Button variant="danger" size="sm" onClick={() => deleteRole(r)}>
-                                Delete
+                                {system ? 'Archive' : 'Delete'}
                               </Button>
                             )}
                           </>
@@ -202,6 +229,27 @@ export default function RolesPage() {
           <EmptyState title="No roles yet" />
         )}
       </Card>
+      {archived.length > 0 && (
+        <Card title={`Archived roles (${archived.length})`} padded={false}>
+          <Table>
+            <thead>
+              <tr><Th>Role</Th><Th>Key</Th><Th>Archived</Th><Th /></tr>
+            </thead>
+            <tbody>
+              {archived.map((r) => (
+                <tr key={String(r.id)}>
+                  <Td style={{ fontWeight: 600, color: 'var(--mn-muted)' }}>{String(r.roleName ?? '')}</Td>
+                  <Td>{String(r.roleKey ?? '')}</Td>
+                  <Td>{String(r.archivedAt ?? '').slice(0, 10)}</Td>
+                  <Td style={{ textAlign: 'right' }}>
+                    <Button variant="secondary" size="sm" onClick={() => restoreRole(r)}>Restore</Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+      )}
         </div>
       </div>
 

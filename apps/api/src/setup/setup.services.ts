@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { In, type DeepPartial } from 'typeorm';
+import { In, type DeepPartial, IsNull } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import {
   ROLE_KEYS, passwordProblemMessage, validateCompanyProfile,
-  SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue, isPlatformPermission,
+  SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue, isPlatformPermission, SYSTEM_ROLE_KEYS,
 } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -333,6 +333,7 @@ export class UsersService {
         // is simply unknown here (RLS) instead of surfacing as an FK failure.
         role = await m.getRepository(Role).findOne({ where: { id: roleId } });
         if (!role) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
+        if (role.archivedAt) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `The role "${role.roleName}" is archived — restore it in Setup → Roles before assigning it` });
       }
       const saved = await m.getRepository(User).save(
         m.getRepository(User).create({
@@ -475,6 +476,9 @@ export class UsersService {
         if (!role) {
           throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
         }
+        if (role.archivedAt) {
+          throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `The role "${role.roleName}" is archived — restore it in Setup → Roles before assigning it` });
+        }
         newRoleName = role.roleName;
       }
       if (reactivating) {
@@ -555,9 +559,10 @@ export class RolesService {
     private readonly userAccess: UserAccessService,
   ) {}
 
-  list(tenantId: string) {
+  /** Active roles by default — the lists people choose from; archived ones on request (Setup → Roles). */
+  list(tenantId: string, includeArchived = false) {
     return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Role).find({ order: { roleName: 'ASC' } }),
+      m.getRepository(Role).find({ where: includeArchived ? {} : { archivedAt: IsNull() }, order: { roleName: 'ASC' } }),
     );
   }
 
@@ -582,15 +587,15 @@ export class RolesService {
     return role;
   }
 
-  /** Rename a role. System roles (owner/admin/etc.) are protected. */
+  /**
+   * Rename a role — any role. The display name is the owner's to choose; the
+   * key underneath (what the app reasons about) never changes.
+   */
   async update(tenantId: string, id: string, dto: Record<string, unknown>, userId: string) {
     const result = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Role);
       const role = await repo.findOne({ where: { id } });
       if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
-      if (role.isSystemRole) {
-        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'System roles cannot be modified' });
-      }
       const roleName = String(dto.roleName ?? '').trim();
       if (!roleName) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'roleName required' });
       await repo.update(id, { roleName });
@@ -604,34 +609,47 @@ export class RolesService {
     return result;
   }
 
-  /** Delete a role. Blocked for system roles and roles still assigned to users. */
-  async remove(tenantId: string, id: string, userId: string) {
-    const label = await this.db.runInTenant(tenantId, async (m) => {
+  /**
+   * Take a role out of use. A custom role is deleted outright. A standard
+   * (system) role is ARCHIVED instead — deleting it would not stick, because
+   * the production seed re-provisions any standard role a tenant lacks on the
+   * next deploy; archived, the row stays, the seed leaves it alone, it leaves
+   * every list people choose from, and Restore brings it back. The two core
+   * roles (Company Owner / Admin) can never be removed. Blocked while any user
+   * still holds the role.
+   */
+  async remove(tenantId: string, id: string, userId: string): Promise<{ deleted: boolean; archived: boolean }> {
+    const { label, archived } = await this.db.runInTenant(tenantId, async (m) => {
       const role = await m.getRepository(Role).findOne({ where: { id } });
       if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
-      if (role.isSystemRole) {
-        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'System roles cannot be deleted' });
+      if (SYSTEM_ROLE_KEYS.includes(role.roleKey)) {
+        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Company Owner and Company Admin are the two core roles and cannot be removed.' });
       }
       const assigned = await m.getRepository(UserRole).count({ where: { roleId: id } });
       if (assigned > 0) {
         throw new BadRequestException({
           code: 'VALIDATION_ERROR',
-          message: `Role is assigned to ${assigned} user(s); remove those assignments first`,
+          message: `Role is assigned to ${assigned} user(s); give those users another role first (Setup → Users)`,
         });
+      }
+      if (role.isSystemRole) {
+        if (role.archivedAt) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Role is already archived' });
+        await m.getRepository(Role).update(id, { archivedAt: new Date() });
+        return { label: role.roleName, archived: true };
       }
       await m.getRepository(RolePermission).delete({ roleId: id });
       await m.getRepository(Role).delete(id);
-      return role.roleName;
+      return { label: role.roleName, archived: false };
     });
-    // No user still holds this role (deletion is blocked while assigned), but
+    // No user still holds this role (removal is blocked while assigned), but
     // clear the tenant so any cached access can never reference a gone role.
     this.userAccess.invalidateTenant(tenantId);
     await this.audit.record({
-      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_DELETE,
+      tenantId, actorUserId: userId, action: archived ? AUDIT_ACTIONS.ROLE_ARCHIVE : AUDIT_ACTIONS.ROLE_DELETE,
       entityType: 'role', entityId: id, entityLabel: label,
-      summary: `Deleted role ${label}`,
+      summary: archived ? `Archived role ${label}` : `Deleted role ${label}`,
     });
-    return { deleted: true };
+    return { deleted: !archived, archived };
   }
 
   getPermissions(tenantId: string, roleId: string) {
@@ -642,6 +660,24 @@ export class RolesService {
       );
       return rows.map((r) => r.id);
     });
+  }
+
+  /** Bring an archived standard role back into use. */
+  async restore(tenantId: string, id: string, userId: string) {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(Role);
+      const role = await repo.findOne({ where: { id } });
+      if (!role) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Role not found' });
+      if (!role.archivedAt) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Role is not archived' });
+      await repo.update(id, { archivedAt: null });
+      return repo.findOne({ where: { id } });
+    });
+    await this.audit.record({
+      tenantId, actorUserId: userId, action: AUDIT_ACTIONS.ROLE_RESTORE,
+      entityType: 'role', entityId: id, entityLabel: result?.roleName ?? null,
+      summary: `Restored role ${result?.roleName ?? ''}`.trim(),
+    });
+    return result;
   }
 
   async setPermissions(tenantId: string, roleId: string, permissionIds: string[], userId: string) {

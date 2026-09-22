@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards, Query } from '@nestjs/common';
 import { BaseCrudController } from '../common/base-crud.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -116,9 +116,13 @@ export class RolesController {
   // verification account ops runs verify-app.sh with) can see who holds what
   // without gaining the power to change it. Anyone who already had
   // roles.manage is unaffected — every mutation below still requires it.
-  @Get() @RequireAnyPermission('roles.view', 'roles.manage') list(@CurrentUser() u: AuthUser) {
-    return this.svc.list(u.tenantId as string);
+  @Get() @RequireAnyPermission('roles.view', 'roles.manage') list(@CurrentUser() u: AuthUser, @Query('includeArchived') includeArchived?: string) {
+    return this.svc.list(u.tenantId as string, includeArchived === '1' || includeArchived === 'true');
   }
+  @Post(':id/restore') restore(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.svc.restore(u.tenantId as string, id, u.userId);
+  }
+
   @Post() create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
     return this.svc.create(u.tenantId as string, dto, u.userId);
   }

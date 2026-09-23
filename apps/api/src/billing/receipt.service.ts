@@ -1,4 +1,5 @@
 import { listLimit } from '../common/list-limit.util';
+import { attachCustomerName } from '../common/attach-customer-name';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { In } from 'typeorm';
 import type { EntityManager } from 'typeorm';
@@ -31,8 +32,12 @@ export class ReceiptService {
     private readonly audit: AuditService,
   ) {}
 
+  /** The receipt list with the customer's name on each row (one batched lookup). */
   list(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) => m.getRepository(Payment).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }));
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(Payment).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      return attachCustomerName(m, rows);
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

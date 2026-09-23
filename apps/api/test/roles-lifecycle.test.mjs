@@ -7,7 +7,6 @@
  * removed while a user holds it; a custom role is still deleted outright.
  * Env: API_BASE, LOGIN, RMC_PASSWORD.
  */
-import { randomUUID } from 'node:crypto';
 
 const BASE = process.env.API_BASE ?? 'http://localhost:4000/api/v1';
 let pass = 0;

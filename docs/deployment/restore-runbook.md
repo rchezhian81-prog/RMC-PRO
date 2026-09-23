@@ -85,3 +85,26 @@ the VM and a failed copy is alerted (setup in `scripts/backup/README.md`). The
 Acronis whole-VM image remains a second, independent off-box layer. In a real
 recovery you can pull the newest dump back with
 `rclone copy b2:<bucket>/<dump> backups/postgres/` before restoring.
+
+## 6. Restore uploaded files (MinIO)
+
+The nightly `backups/files/rmc-files-daily-*.tgz` (and the copy under `files/`
+in the off-box bucket) is a tar of MinIO's `/data` directory taken with
+`docker cp`. To put it back, with the SAME MinIO release as the compose file
+pins (a different release may not read the layout):
+
+```bash
+cd /opt/rmc
+# 0. pick the archive and check it
+sha256sum -c backups/files/rmc-files-daily-YYYYMMDD-HHMMSS.tgz.sha256
+# 1. stop the app (MinIO stays up) so nothing writes files meanwhile
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml stop api web
+# 2. stream the archive back into the container's /data (existing objects are overwritten)
+gunzip -c backups/files/rmc-files-daily-YYYYMMDD-HHMMSS.tgz | docker cp - rmc-pilot-minio-1:/
+# 3. restart MinIO so it re-reads the directory, then the app
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml restart minio
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d api web
+```
+
+Then open a record with a photo in the app to confirm files are served.
+

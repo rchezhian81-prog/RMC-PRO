@@ -642,6 +642,30 @@ if [ -f "$ENV_FILE" ]; then
   # health-check.sh returns silently when no webhook is set, so the monitor cron
   # runs and alerts nowhere. Say so here rather than letting it stay invisible.
   alertw="$(grep -E '^(RMC_ALERT_WEBHOOK|ALERT_WEBHOOK_URL)=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' | head -1)"
+  # Uploaded files (photos, scans, logos) live in MinIO, which no database
+  # dump touches; files-backup.sh archives them nightly beside the dumps.
+  FB_DIR="${FILES_BACKUP_DIR:-backups/files}"
+  newest_f=""
+  for f in "$FB_DIR"/rmc-files-daily-*.tgz "$FB_DIR"/rmc-files-weekly-*.tgz "$FB_DIR"/rmc-files-monthly-*.tgz; do
+    [ -f "$f" ] || continue
+    [ -z "$newest_f" ] || [ "$f" -nt "$newest_f" ] && newest_f="$f"
+  done
+  if [ -z "$newest_f" ]; then
+    warn "files backup" "no rmc-files archive yet — re-run: sudo ./scripts/backup/install-backup-cron.sh (adds the nightly files job)"
+  else
+    fage_h=$(( ( $(date +%s) - $(stat -c %Y "$newest_f" 2>/dev/null || echo 0) ) / 3600 ))
+    if   [ "$fage_h" -le 48 ];  then ok   "files backup" "$(basename "$newest_f") — ${fage_h}h old"
+    elif [ "$fage_h" -le 192 ]; then warn "files backup" "$(basename "$newest_f") — ${fage_h}h old (a daily should be <48h)"
+    else bad "files backup" "$(basename "$newest_f") — ${fage_h}h old; the nightly files job has stopped"; fi
+    if [ -n "${rc_target:-}" ] && command -v rclone >/dev/null 2>&1; then
+      off_f="$(rclone lsf --files-only --include 'rmc-files-*.tgz' "$rc_target/files" 2>/dev/null | sort | tail -1)"
+      if [ -n "$off_f" ]; then ok "files off-box" "$off_f in $rc_target/files"
+      else warn "files off-box" "no rmc-files archive in $rc_target/files yet — check the backup log after 02:50"; fi
+    fi
+  fi
+  # A backup nobody restores is a hypothesis: the monthly drill must be scheduled.
+  if [ -f /etc/cron.d/rmc-restore-verify ]; then ok "restore drill" "scheduled monthly (/etc/cron.d/rmc-restore-verify)"
+  else warn "restore drill" "not scheduled — sudo ./scripts/backup/verify-restore.sh --install-cron"; fi
   if [ -n "$alertw" ]; then ok "failure alerting" "webhook configured"
   else warn "failure alerting" "no RMC_ALERT_WEBHOOK/ALERT_WEBHOOK_URL — backup failures and 5xx alert nowhere"; fi
 else

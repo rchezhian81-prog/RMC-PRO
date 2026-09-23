@@ -13,6 +13,16 @@
 
 name: rmc-pilot
 
+# Container logs are json files on the host and grow without bound by default:
+# the api logs every request, nginx every hit. Capped here for the services that
+# talk, so a busy year cannot fill the disk. (Datastores log little; changing
+# their logging would recreate them for nothing.)
+x-logging: &rotated-logs
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '5'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -97,6 +107,7 @@ services:
 
   api:
     image: ${IMAGE_REPO_API:-rmc-api}:${IMAGE_TAG:-latest}
+    logging: *rotated-logs
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
@@ -172,6 +183,7 @@ services:
     # without rebuilding or touching the api image. Unset -> falls back to IMAGE_TAG,
     # so normal deploys are unchanged. Roll back the skin by clearing IMAGE_TAG_WEB.
     image: ${IMAGE_REPO_WEB:-rmc-web}:${IMAGE_TAG_WEB:-${IMAGE_TAG:-latest}}
+    logging: *rotated-logs
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
@@ -189,6 +201,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    logging: *rotated-logs
     restart: unless-stopped
     ports:
       - '80:80'

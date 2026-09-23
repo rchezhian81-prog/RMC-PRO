@@ -16,8 +16,11 @@
 #  server's timezone, so a UTC server still backs up at 02:15 local:
 #     sudo BACKUP_CRON_TZ=Asia/Kolkata ./scripts/backup/install-backup-cron.sh
 #
+#     files   02:50   (files-backup.sh — MinIO uploads: photos, scans, logos; keeps 7)
+#
 #  Off-box copies stay opt-in: set RMC_OFFBOX_RCLONE or RMC_OFFBOX_SCP in
-#  .env.production (see pg-backup.sh) and every dump is copied off VM3 too.
+#  .env.production (see pg-backup.sh) and every dump and files archive is
+#  copied off VM3 too.
 # =============================================================================
 set -u
 
@@ -64,9 +67,10 @@ CRON_TZ=$BACKUP_CRON_TZ
 15 2 * * *  $RUN_USER  cd $REPO_ROOT && ./scripts/backup/pg-backup.sh                 >> $LOG_FILE 2>&1
 30 2 * * 0  $RUN_USER  cd $REPO_ROOT && ./scripts/backup/pg-backup.sh --label weekly  >> $LOG_FILE 2>&1
 45 2 1 * *  $RUN_USER  cd $REPO_ROOT && ./scripts/backup/pg-backup.sh --label monthly >> $LOG_FILE 2>&1
+50 2 * * *  $RUN_USER  cd $REPO_ROOT && ./scripts/backup/files-backup.sh                >> $LOG_FILE 2>&1
 EOF
 chmod 644 "$CRON_FILE" || die "cannot chmod $CRON_FILE"
-log "wrote $CRON_FILE (daily 02:15, weekly Sun 02:30, monthly 1st 02:45 — $BACKUP_CRON_TZ)"
+log "wrote $CRON_FILE (daily 02:15, weekly Sun 02:30, monthly 1st 02:45, files daily 02:50 — $BACKUP_CRON_TZ)"
 
 # Say what the server thinks the time is, so a timezone surprise is visible now
 # rather than inferred weeks later from log timestamps.
@@ -90,4 +94,11 @@ if sudo -u "$RUN_USER" bash -c "cd $REPO_ROOT && ./scripts/backup/pg-backup.sh -
   log "list backups:  ls -lh $REPO_ROOT/backups/postgres/"
 else
   die "verification backup FAILED — fix the error above; the schedule is written but unproven."
+fi
+if sudo -u "$RUN_USER" bash -c "cd $REPO_ROOT && ./scripts/backup/files-backup.sh --label install-check"; then
+  ls -1t "$REPO_ROOT"/backups/files/rmc-files-install-check-*.tgz 2>/dev/null | tail -n +2 | \
+    while read -r f; do rm -f "$f" "$f.sha256"; done
+  log "files archive OK — list: ls -lh $REPO_ROOT/backups/files/"
+else
+  log "WARN: the files archive did not run (is the MinIO container up?) — the nightly job is scheduled; check the log after 02:50"
 fi

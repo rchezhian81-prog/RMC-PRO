@@ -3765,3 +3765,14 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-bq-form-submit { padding-bottom: 0; }
   .mn-bq-mix .mn-input { max-width: none; }
 }
+
+/* ============================================================================
+   CHALLAN DETAIL — shares the order detail layout (.mn-od-*)
+   ============================================================================ */
+.mn-cd-form { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(120px, 0.7fr) minmax(200px, 1.4fr); gap: 12px; align-items: end; }
+.mn-cd-form-submit { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.mn-cd-clock { display: grid; gap: 4px; }
+.mn-cd-clock[data-tone='danger'] .mn-od-money dd:last-child { color: var(--mn-danger); }
+@media (max-width: 640px) {
+  .mn-cd-form { grid-template-columns: 1fr; }
+}

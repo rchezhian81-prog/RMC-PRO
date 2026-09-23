@@ -86,13 +86,59 @@ export class DeliveryChallanService {
     });
   }
 
+  /**
+   * One challan with everything its screen shows: the status history, the
+   * parties (customer, site with address and contact, vehicle, driver), the
+   * dispatch and batch ticket behind it with the batching time and the
+   * use-by time the concrete's working life implies, the order it serves,
+   * and the invoice that bills it (with its e-way bill once one exists).
+   */
   private async loadFull(m: EntityManager, id: string) {
     const challan = await m.getRepository(DeliveryChallan).findOne({ where: { id } });
     if (!challan) throw notFound();
     const history = await m
       .getRepository(DeliveryStatusHistory)
       .find({ where: { challanId: id }, order: { createdAt: 'ASC' } });
-    return { ...challan, history };
+    const [customer, site, vehicle, driver, dispatch, ticket, link] = await Promise.all([
+      challan.customerId ? m.getRepository(Customer).findOne({ where: { id: challan.customerId } }) : null,
+      challan.siteId ? m.getRepository(Site).findOne({ where: { id: challan.siteId } }) : null,
+      challan.vehicleId ? m.getRepository(Vehicle).findOne({ where: { id: challan.vehicleId } }) : null,
+      challan.driverId ? m.getRepository(Driver).findOne({ where: { id: challan.driverId } }) : null,
+      challan.dispatchId ? m.getRepository(Dispatch).findOne({ where: { id: challan.dispatchId } }) : null,
+      challan.batchTicketId ? m.getRepository(BatchTicket).findOne({ where: { id: challan.batchTicketId } }) : null,
+      m.getRepository(InvoiceChallan).findOne({ where: { challanId: id } }),
+    ]);
+    const invoice = link ? await m.getRepository(Invoice).findOne({ where: { id: link.invoiceId } }) : null;
+    const [order] = challan.orderId
+      ? await m.query(`SELECT order_no AS "orderNo" FROM orders WHERE id = $1`, [challan.orderId])
+      : [null];
+    const batchedAt = ticket?.batchStartTime ?? null;
+    const useBy = batchedAt ? new Date(new Date(batchedAt).getTime() + CONCRETE_SLA_MINUTES * 60_000) : null;
+    return {
+      ...challan,
+      history,
+      customerName: customer?.customerName ?? null,
+      siteName: site?.siteName ?? null,
+      siteAddress: site ? [site.address, site.city, site.state, site.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null : null,
+      siteContact: site ? [site.contactPerson, site.mobile].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ') || null : null,
+      vehicleNo: vehicle?.vehicleNo ?? null,
+      driverName: driver?.driverName ?? null,
+      driverMobile: driver?.mobile ?? null,
+      orderNo: order?.orderNo ?? null,
+      dispatchNo: dispatch?.dispatchNo ?? null,
+      dispatchStatus: dispatch?.dispatchStatus ?? null,
+      siteArrivalTime: dispatch?.siteArrivalTime ?? null,
+      pourStartTime: dispatch?.pourStartTime ?? null,
+      pourEndTime: dispatch?.pourEndTime ?? null,
+      batchTicketNo: ticket?.batchTicketNo ?? null,
+      batchedAt,
+      useBy,
+      concreteSlaMinutes: CONCRETE_SLA_MINUTES,
+      invoiceId: invoice?.id ?? null,
+      invoiceNo: invoice?.invoiceNo ?? null,
+      invoiceDocStatus: invoice?.invoiceStatus ?? null,
+      ewayBillNo: invoice && hasEwayBill(invoice.ewayStatus) ? invoice.ewayBillNo : null,
+    };
   }
 
   get(tenantId: string, id: string) {

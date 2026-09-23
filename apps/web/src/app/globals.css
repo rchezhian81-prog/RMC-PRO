@@ -3735,3 +3735,33 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 .mn-rc .mn-ord-when-m { white-space: normal; }
 .mn-rc .mn-ord-cols--acts,
 .mn-rc .mn-ord-row--acts { grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1.3fr) minmax(140px, 0.7fr) minmax(190px, 1fr) minmax(90px, auto) auto; }
+
+/* ============================================================================
+   BATCH QUEUE — loads waiting for the plant, with the mix pick and the actions
+   ============================================================================ */
+.mn-bq-form { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 12px; align-items: end; }
+.mn-bq-form-submit { padding-bottom: 14px; }
+.mn-bq-mix { display: grid; gap: 4px; min-width: 0; }
+.mn-bq-mix .mn-input { width: 100%; max-width: 220px; padding-top: 6px; padding-bottom: 6px; font-size: 13px; }
+.mn-bq-acts { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.mn-bq-bar { display: block; width: 100%; max-width: 140px; height: 6px; margin-top: 6px; margin-left: auto; border-radius: 999px; background: var(--mn-surface-2); overflow: hidden; }
+.mn-bq-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--mn-success); }
+.mn-bq .mn-ord-cols--acts,
+.mn-bq .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) minmax(150px, 0.8fr) minmax(200px, 1fr) minmax(100px, auto) auto; }
+@media (max-width: 860px) {
+  .mn-bq .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'val val'
+      'when when'
+      'acts acts';
+  }
+  .mn-bq .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-bq-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-bq-bar { margin-left: 0; }
+  .mn-bq-form { grid-template-columns: 1fr; }
+  .mn-bq-form-submit { padding-bottom: 0; }
+  .mn-bq-mix .mn-input { max-width: none; }
+}

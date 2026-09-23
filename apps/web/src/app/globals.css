@@ -3694,3 +3694,44 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 }
 .mn-id-scroll { overflow-x: auto; }
 .mn-od-money--tight dd { font-size: 13.5px; }
+
+/* ============================================================================
+   RECEIPTS — the document-list rows above, plus the "new receipt" form
+   ============================================================================ */
+.mn-rc-form { display: grid; grid-template-columns: minmax(200px, 1.5fr) minmax(130px, 0.8fr) minmax(110px, 0.6fr) minmax(150px, 0.8fr) minmax(160px, 1fr); gap: 12px; align-items: end; }
+.mn-rc-exposure { margin-top: 14px; }
+.mn-rc-alloc { margin-top: 14px; border-top: 1px solid var(--mn-border); padding-top: 12px; }
+.mn-rc-alloc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.mn-rc-alloc-head .mn-ord-meta { white-space: normal; }
+.mn-rc-alloc-sum[data-tone='danger'] { color: var(--mn-danger); font-weight: 600; }
+.mn-rc-submit { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.mn-rc-acts { display: flex; flex-wrap: wrap; gap: 2px; justify-content: flex-end; }
+.mn-rc .mn-ord-cols--acts,
+.mn-rc .mn-ord-row--acts { grid-template-columns: minmax(130px, 0.7fr) minmax(0, 1.2fr) minmax(150px, 0.8fr) minmax(170px, 0.9fr) minmax(100px, auto) minmax(240px, auto); }
+@media (max-width: 1100px) {
+  .mn-rc .mn-ord-cols--acts,
+  .mn-rc .mn-ord-row--acts { grid-template-columns: minmax(130px, 0.7fr) minmax(0, 1.2fr) minmax(150px, 0.8fr) minmax(170px, 0.9fr) minmax(100px, auto) auto; }
+  .mn-rc-form { grid-template-columns: 1fr 1fr 1fr; }
+  .mn-rc-form > :first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 860px) {
+  .mn-rc .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'val val'
+      'when when'
+      'acts acts';
+  }
+  .mn-rc .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-rc-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-rc-form { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .mn-rc-form { grid-template-columns: 1fr; }
+}
+/* The standing note is a sentence; let it wrap instead of truncating. Share is icon-only. */
+.mn-rc .mn-ord-when-m { white-space: normal; }
+.mn-rc .mn-ord-cols--acts,
+.mn-rc .mn-ord-row--acts { grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1.3fr) minmax(140px, 0.7fr) minmax(190px, 1fr) minmax(90px, auto) auto; }

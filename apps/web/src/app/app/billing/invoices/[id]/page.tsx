@@ -256,7 +256,7 @@ export default function InvoiceDetail() {
             </Button>
           )}
           {status === 'issued' && outstanding > 0.001 && (
-            <Link href="/app/billing/receipts" className="mn-ord-link">
+            <Link href={`/app/billing/receipts?customerId=${encodeURIComponent(String(inv.customerId ?? ''))}`} className="mn-ord-link">
               <Button icon={<Wallet size={14} />}>Record receipt</Button>
             </Link>
           )}

@@ -230,7 +230,7 @@ export default function RolesPage() {
             </p>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {catalog.map((p) => {
+            {catalog.filter((p) => !String(p.permissionKey).startsWith('platform.')).map((p) => {
               const id = String(p.id);
               const on = checked.has(id);
               return (

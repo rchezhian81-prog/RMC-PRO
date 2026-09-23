@@ -138,6 +138,16 @@ alternative — set `RMC_OFFBOX_SCP` and leave `RMC_OFFBOX_RCLONE` unset.
 > restore takes; that time is your restore-side RTO. Confirm the newest B2 dump
 > restores cleanly, not just the on-box copy.
 
+## Uploaded files (MinIO) — backed up nightly too
+
+The dumps carry every record; the photos, scans and logos live in MinIO's data
+volume, which no dump touches. `files-backup.sh` archives that volume every
+night at 02:50 (`docker cp` out of the running container — no extra image, no
+credentials, read-only), keeps seven, and copies each archive to the same
+off-box target under `files/`. A failed copy is alerted like a dump's.
+`install-backup-cron.sh` schedules it; `verify-app.sh` checks its age and the
+off-box copy. Restore: `docs/deployment/restore-runbook.md` §6.
+
 ## What time do the backups actually run?
 
 The schedules say 02:15 / 02:30 / 02:45, and the restore drill 03:15 — and those

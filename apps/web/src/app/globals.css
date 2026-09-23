@@ -3672,3 +3672,25 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-dc .mn-ord-row--acts,
   .mn-bt .mn-ord-row { grid-template-columns: minmax(0, 1fr) auto; }
 }
+
+/* ============================================================================
+   INVOICE DETAIL — shares the order detail layout (.mn-od-*)
+   ============================================================================ */
+.mn-id-link { color: var(--mn-primary); font-weight: 600; text-decoration: none; }
+.mn-id-link:hover { text-decoration: underline; }
+.mn-id-note-head { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr); gap: 12px; margin-bottom: 12px; }
+.mn-id-note-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.mn-id-row-acts { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-id-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mn-id-gst-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.mn-id-bad { color: var(--mn-danger); }
+.mn-id-wrap { white-space: normal !important; overflow-wrap: anywhere; text-align: right; }
+.mn-od-money-total[data-tone='danger'] .mn-id-outstanding { color: var(--mn-danger); }
+.mn-od-money-total[data-tone='warning'] .mn-id-outstanding { color: var(--mn-warning); }
+.mn-od-money-total[data-tone='success'] .mn-id-outstanding { color: var(--mn-success); }
+.mn-id .mn-od-tl-title { font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .mn-id-note-head { grid-template-columns: 1fr; }
+}
+.mn-id-scroll { overflow-x: auto; }
+.mn-od-money--tight dd { font-size: 13.5px; }

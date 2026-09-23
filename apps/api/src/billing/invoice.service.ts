@@ -80,12 +80,46 @@ export class InvoiceService {
     });
   }
 
+  /**
+   * One invoice with everything its screen shows: the lines, the challans it
+   * bills (with their numbers and dispatch times), the receipts applied to it,
+   * and the customer, site and transporter names.
+   */
   private async loadFull(m: EntityManager, id: string) {
     const invoice = await m.getRepository(Invoice).findOne({ where: { id } });
     if (!invoice) throw notFound();
     const items = await m.getRepository(InvoiceItem).find({ where: { invoiceId: id }, order: { createdAt: 'ASC' } });
-    const challans = await m.getRepository(InvoiceChallan).find({ where: { invoiceId: id } });
-    return { ...invoice, items, challans };
+    const links = await m.getRepository(InvoiceChallan).find({ where: { invoiceId: id } });
+    const challanIds = links.map((c) => c.challanId);
+    const dcs = challanIds.length ? await m.getRepository(DeliveryChallan).find({ where: { id: In(challanIds) } }) : [];
+    const dc = new Map(dcs.map((c) => [c.id, c]));
+    const challans = links.map((l) => {
+      const c = dc.get(l.challanId);
+      return { ...l, challanNo: c?.challanNo ?? null, dispatchTime: c?.dispatchTime ?? null, gradeLabel: c?.gradeLabel ?? null, vehicleId: c?.vehicleId ?? null };
+    });
+    const receipts: Array<Record<string, unknown>> = await m.query(
+      `SELECT p.id, p.receipt_no AS "receiptNo", p.receipt_date AS "receiptDate", p.payment_mode AS "paymentMode",
+              p.bank_reference AS "bankReference", p.status, p.clearing_status AS "clearingStatus",
+              a.allocated_amount AS "allocatedAmount", a.created_at AS "allocatedAt"
+         FROM payment_allocations a JOIN payments p ON p.id = a.payment_id
+        WHERE a.invoice_id = $1
+        ORDER BY p.receipt_date ASC NULLS LAST, a.created_at ASC`,
+      [id],
+    );
+    const [customer, site, transporter] = await Promise.all([
+      invoice.customerId ? m.getRepository(Customer).findOne({ where: { id: invoice.customerId } }) : null,
+      invoice.siteId ? m.getRepository(Site).findOne({ where: { id: invoice.siteId } }) : null,
+      invoice.transporterId ? m.getRepository(Transporter).findOne({ where: { id: invoice.transporterId } }) : null,
+    ]);
+    return {
+      ...invoice,
+      items,
+      challans,
+      receipts,
+      customerName: customer?.customerName ?? null,
+      siteName: site?.siteName ?? null,
+      transporterName: transporter?.transporterName ?? null,
+    };
   }
 
   get(tenantId: string, id: string) {

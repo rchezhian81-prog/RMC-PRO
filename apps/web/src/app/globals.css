@@ -4188,3 +4188,46 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-ma-row .mn-ord-status { grid-area: status; justify-self: end; }
   .mn-ma-acts { grid-area: acts; justify-content: flex-start; padding-top: 2px; }
 }
+
+/* ============================================================================
+   SALES LEADS — the document-list rows above, plus the worksheet card
+   ============================================================================ */
+.mn-ld-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; }
+.mn-ld-form > * { min-width: 0; }
+.mn-ld-form > :nth-last-child(2) { grid-column: 1 / -1; }
+.mn-ld-form-submit { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.mn-ld .mn-ord-cols--acts,
+.mn-ld .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.75fr) minmax(160px, 1fr) minmax(0, 1.4fr) minmax(150px, 0.9fr) minmax(100px, auto) auto; cursor: pointer; }
+.mn-ld .mn-ord-cols--acts { cursor: default; }
+.mn-ld-row.is-on { background: color-mix(in srgb, var(--mn-primary) 7%, var(--mn-surface)); }
+.mn-ld-row.is-on .mn-ord-no { color: var(--mn-primary); }
+.mn-ld-need { display: grid; gap: 2px; min-width: 0; }
+.mn-ld-need-text { font-size: 13.5px; color: var(--mn-text); overflow-wrap: anywhere; }
+.mn-ld .mn-ord-when-m { white-space: normal; }
+.mn-ld .mn-ord-status { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; }
+.mn-ld-acts { display: flex; gap: 2px; justify-content: flex-end; }
+.mn-ld-acts button { white-space: nowrap; }
+.mn-ld-fu { display: grid; grid-template-columns: minmax(0, 2fr) minmax(140px, 0.8fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr); gap: 0 14px; padding: 14px 16px 0; border-bottom: 1px solid var(--mn-border); }
+.mn-ld-fu > * { min-width: 0; }
+.mn-ld-fu-submit { grid-column: 1 / -1; padding-bottom: 14px; }
+.mn-ld-history { padding: 14px 16px 16px; border-bottom: 1px solid var(--mn-border); }
+.mn-ld-h { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--mn-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.mn-ld-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; padding: 14px 16px 0; }
+.mn-ld-details > * { min-width: 0; }
+.mn-ld-h--full, .mn-ld-details > :nth-child(8) { grid-column: 1 / -1; }
+@media (max-width: 860px) {
+  .mn-ld .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'need need'
+      'when when'
+      'acts acts';
+  }
+  .mn-ld .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; justify-content: flex-end; }
+  .mn-ld-need { grid-area: need; }
+  .mn-ld .mn-ord-row--acts .mn-ord-when { grid-area: when; }
+  .mn-ld-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-ld-form, .mn-ld-details, .mn-ld-fu { grid-template-columns: minmax(0, 1fr); }
+}

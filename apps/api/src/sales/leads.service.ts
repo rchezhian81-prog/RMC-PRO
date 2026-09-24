@@ -15,10 +15,56 @@ export class LeadsService {
     private readonly numbering: NumberingService,
   ) {}
 
+  /**
+   * The list carries what the pipeline screen needs beside each lead: how many
+   * follow-ups it has had and what the last one said, and the latest quotation
+   * raised from it (number and approval status). Two grouped queries over the
+   * listed ids, not one per lead.
+   */
   list(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Lead).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const leads = await m.getRepository(Lead).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!leads.length) return leads;
+      const ids = leads.map((l) => l.id);
+      const followups: Array<{ leadId: string; followupCount: string; lastFollowupAt: Date; lastOutcome: string | null; lastNotes: string | null }> =
+        await m.query(
+          `SELECT DISTINCT ON (f.lead_id) f.lead_id AS "leadId",
+                  COUNT(*) OVER (PARTITION BY f.lead_id) AS "followupCount",
+                  f.created_at AS "lastFollowupAt", f.outcome AS "lastOutcome", f.notes AS "lastNotes"
+             FROM lead_followups f
+            WHERE f.lead_id = ANY($1::uuid[])
+            ORDER BY f.lead_id, f.created_at DESC`,
+          [ids],
+        );
+      const quotes: Array<{ leadId: string; quotationCount: string; quotationId: string; quotationNo: string; quotationStatus: string }> =
+        await m.query(
+          `SELECT DISTINCT ON (q.lead_id) q.lead_id AS "leadId",
+                  COUNT(*) OVER (PARTITION BY q.lead_id) AS "quotationCount",
+                  q.id AS "quotationId", q.quotation_no AS "quotationNo",
+                  CASE WHEN q.status = 'converted' THEN 'converted' ELSE q.approval_status END AS "quotationStatus"
+             FROM quotations q
+            WHERE q.lead_id = ANY($1::uuid[])
+            ORDER BY q.lead_id, q.created_at DESC`,
+          [ids],
+        );
+      const fu = new Map(followups.map((f) => [f.leadId, f]));
+      const qu = new Map(quotes.map((q) => [q.leadId, q]));
+      return leads.map((l) => {
+        const f = fu.get(l.id);
+        const q = qu.get(l.id);
+        return {
+          ...l,
+          followupCount: Number(f?.followupCount ?? 0),
+          lastFollowupAt: f?.lastFollowupAt ?? null,
+          lastOutcome: f?.lastOutcome ?? null,
+          lastNotes: f?.lastNotes ?? null,
+          quotationCount: Number(q?.quotationCount ?? 0),
+          quotationId: q?.quotationId ?? null,
+          quotationNo: q?.quotationNo ?? null,
+          quotationStatus: q?.quotationStatus ?? null,
+        };
+      });
+    });
   }
 
   get(tenantId: string, id: string) {

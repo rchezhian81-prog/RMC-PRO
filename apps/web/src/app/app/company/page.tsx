@@ -1,34 +1,45 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { Building2, CheckCircle2, ImageIcon, Landmark, MapPin, Phone, Receipt, Save, Settings, Trash2, Upload } from 'lucide-react';
 import { GST_STATE_NAMES } from '@rmc/shared';
 import { company } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
+import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
-import { Field, Input } from '../../../components/ui/Field';
+import { Field, Input, Select } from '../../../components/ui/Field';
 import { ErrorState } from '../../../components/ui/States';
 
 /**
- * The plant's own legal identity, grouped the way it reads on a tax invoice.
- * Every field is what customers, auditors and the GST portal expect to see, so
- * the sections mirror an invoice: who you are, where you are, how to reach you,
- * and where to pay.
+ * Company — the plant's own identity, the way it reads on a tax invoice.
+ *
+ * The header names the company with its GSTIN and state. The main column
+ * holds the profile in the sections an invoice shows (who you are, where
+ * you are, how to reach you, where to pay) with one Save for all of it and
+ * a note when something is unsaved; the side column holds the logo with a
+ * live preview, and the e-invoicing switch with the rule explained. Same
+ * layout in both skins; every colour reads the semantic tokens.
  */
-const SECTIONS: Array<{ title: string; help?: string; fields: Array<[string, string, string?]> }> = [
+const SECTIONS: Array<{ key: string; title: string; icon: React.ReactNode; help: string; fields: Array<[string, string, string?]> }> = [
   {
-    title: 'Identity',
-    help: 'Shown at the top of every invoice and quotation.',
+    key: 'identity',
+    title: 'Who you are',
+    icon: <Building2 size={16} aria-hidden />,
+    help: 'Printed at the top of every invoice and quotation.',
     fields: [
-      ['companyName', 'Company name (trading name)'],
-      ['legalName', 'Registered legal name', 'If different from the trading name'],
-      ['gstin', 'GSTIN', '15-character GST number'],
+      ['companyName', 'Trading name', 'The name customers know you by'],
+      ['legalName', 'Registered legal name', 'Only if different from the trading name'],
+      ['gstin', 'GSTIN', '15 characters, from the GST certificate'],
       ['pan', 'PAN'],
     ],
   },
   {
-    title: 'Address',
-    help: 'Your plant / registered address. The state decides CGST+SGST vs IGST on invoices.',
+    key: 'address',
+    title: 'Where you are',
+    icon: <MapPin size={16} aria-hidden />,
+    help: 'The plant or registered address. The state decides whether a sale carries CGST and SGST or IGST.',
     fields: [
       ['addressLine1', 'Address line 1'],
       ['addressLine2', 'Address line 2'],
@@ -38,7 +49,10 @@ const SECTIONS: Array<{ title: string; help?: string; fields: Array<[string, str
     ],
   },
   {
-    title: 'Contact',
+    key: 'contact',
+    title: 'How to reach you',
+    icon: <Phone size={16} aria-hidden />,
+    help: 'Printed under the address.',
     fields: [
       ['phone', 'Phone'],
       ['email', 'Email'],
@@ -46,10 +60,12 @@ const SECTIONS: Array<{ title: string; help?: string; fields: Array<[string, str
     ],
   },
   {
-    title: 'Bank details',
-    help: 'Printed on the invoice so customers know where to pay.',
+    key: 'bank',
+    title: 'Where to pay',
+    icon: <Landmark size={16} aria-hidden />,
+    help: 'Printed on the invoice so the customer\'s accountant can pay without asking.',
     fields: [
-      ['bankName', 'Bank name'],
+      ['bankName', 'Bank'],
       ['bankAccountNo', 'Account number'],
       ['bankIfsc', 'IFSC'],
       ['bankBranch', 'Branch'],
@@ -80,10 +96,13 @@ function fileToBase64(file: File): Promise<{ mime: string; base64: string; dataU
 
 export default function CompanyPage() {
   const [form, setForm] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState<Record<string, string>>({});
   // Kept out of `form`, which holds text fields only.
   const [einvoiceApplicable, setEinvoiceApplicable] = useState(false);
+  const [savedEinvoice, setSavedEinvoice] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   // Logo state. `preview` is the data URL shown; `hasServerLogo` gates Remove;
   // `pending` holds a chosen-but-unsaved file so Save/Remove are explicit.
@@ -103,7 +122,9 @@ export default function CompanyPage() {
           const next: Record<string, string> = {};
           for (const k of ALL_KEYS) next[k] = String(rec[k] ?? '');
           setForm(next);
+          setSaved(next);
           setEinvoiceApplicable(rec.einvoiceApplicable === true);
+          setSavedEinvoice(rec.einvoiceApplicable === true);
           if (rec.logoData && rec.logoMime) {
             setPreview(`data:${String(rec.logoMime)};base64,${String(rec.logoData)}`);
             setHasServerLogo(true);
@@ -121,11 +142,11 @@ export default function CompanyPage() {
     if (!file) return;
     const isSvgByName = /\.svg$/i.test(file.name);
     if (!LOGO_TYPES.includes(file.type) && !isSvgByName) {
-      setLogoErr('Logo must be a PNG, JPG or SVG image.');
+      setLogoErr('The logo must be a PNG, JPG or SVG image.');
       return;
     }
     if (file.size > LOGO_MAX_BYTES) {
-      setLogoErr(`Logo must be ${Math.round(LOGO_MAX_BYTES / 1024)} KB or smaller.`);
+      setLogoErr(`The logo must be ${Math.round(LOGO_MAX_BYTES / 1024)} KB or smaller.`);
       return;
     }
     try {
@@ -146,7 +167,7 @@ export default function CompanyPage() {
       await company.uploadLogo(pending.mime, pending.base64);
       setPending(null);
       setHasServerLogo(true);
-      setLogoMsg('Logo saved. It will appear on new invoices.');
+      setLogoMsg('Logo saved. It appears on the next invoice printed.');
     } catch (err) {
       setLogoErr(err instanceof Error ? err.message : 'Upload failed.');
     } finally {
@@ -163,7 +184,7 @@ export default function CompanyPage() {
       setPreview(null);
       setPending(null);
       setHasServerLogo(false);
-      setLogoMsg('Logo removed. Invoices will show the company name as text.');
+      setLogoMsg('Logo removed. Invoices show the company name as text.');
     } catch (err) {
       setLogoErr(err instanceof Error ? err.message : 'Could not remove the logo.');
     } finally {
@@ -175,125 +196,122 @@ export default function CompanyPage() {
     e.preventDefault();
     setMsg(null);
     setError(null);
+    setBusy(true);
     try {
       // Send only the profile keys, trimmed.
       const payload: Record<string, string> = {};
       for (const k of ALL_KEYS) payload[k] = (form[k] ?? '').trim();
       await company.update({ ...payload, einvoiceApplicable });
-      setMsg('Saved.');
+      setSaved(payload);
+      setForm(payload);
+      setSavedEinvoice(einvoiceApplicable);
+      setMsg('Profile saved. The next invoice or quotation printed carries it.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   }
 
+  const dirtyKeys = ALL_KEYS.filter((k) => (form[k] ?? '') !== (saved[k] ?? ''));
+  const dirty = dirtyKeys.length > 0 || einvoiceApplicable !== savedEinvoice;
+  const missing = ['companyName', 'gstin', 'addressLine1', 'state'].filter((k) => !(saved[k] ?? '').trim());
+  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
   return (
-    <div style={{ maxWidth: 720 }}>
-      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>Company Profile</h1>
-      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 18px' }}>
-        These details appear on every invoice and quotation you send. Fill them in once.
-      </p>
-
-      {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
-
-      <div style={{ marginBottom: 18 }}>
-        <Card title="Logo">
-          <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '0 0 12px' }}>
-            Printed at the top of the invoice. PNG, JPG or SVG, up to {Math.round(LOGO_MAX_BYTES / 1024)} KB. If you
-            don’t add one, the invoice shows your company name as text.
+    <div className="mn-od mn-co">
+      <header className="mn-board-head">
+        <div className="mn-board-title mn-od-title">
+          <h1>
+            {saved.companyName?.trim() || 'Company'}
+            <span className="mn-od-badges">
+              {savedEinvoice ? <Badge tone="info">e-invoicing</Badge> : null}
+              {dirty ? <Badge tone="warning">unsaved changes</Badge> : null}
+            </span>
+          </h1>
+          <p className="mn-od-facts">
+            <span className="mn-od-fact mn-od-fact--who">{saved.legalName?.trim() && saved.legalName.trim() !== saved.companyName?.trim() ? saved.legalName.trim() : 'What every invoice and quotation says about you'}</span>
+            <span className="mn-od-fact"><Receipt size={13} aria-hidden /> {saved.gstin?.trim() ? `GSTIN ${saved.gstin.trim()}` : 'GSTIN not set'}</span>
+            <span className="mn-od-fact"><MapPin size={13} aria-hidden /> {[saved.city, saved.state].filter((x) => x?.trim()).join(', ') || 'Address not set'}</span>
           </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <div
-              style={{
-                width: 150, height: 60, border: '1px dashed var(--mn-border)', borderRadius: 8,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-                background: 'var(--mn-surface)', flex: '0 0 auto',
-              }}
-            >
-              {preview ? (
-                <img src={preview} alt="Company logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-              ) : (
-                <span style={{ color: 'var(--mn-subtle)', fontSize: 12 }}>No logo</span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label
-                style={{
-                  display: 'inline-block', cursor: 'pointer', fontSize: 13, padding: '7px 12px',
-                  border: '1px solid var(--mn-border)', borderRadius: 6, background: 'var(--mn-surface)',
-                }}
-              >
-                {hasServerLogo || pending ? 'Choose a different file…' : 'Choose logo file…'}
-                <input type="file" accept={LOGO_ACCEPT} onChange={onPickLogo} style={{ display: 'none' }} />
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Button type="button" onClick={saveLogo} disabled={!pending || logoBusy}>
-                  {logoBusy ? 'Saving…' : 'Save logo'}
-                </Button>
-                {(hasServerLogo || preview) && (
-                  <Button type="button" variant="ghost" onClick={removeLogo} disabled={logoBusy}>
-                    Remove
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-          {logoErr && <p style={{ color: 'var(--mn-danger)', fontSize: 13, margin: '12px 0 0' }}>{logoErr}</p>}
-          {logoMsg && <p style={{ color: 'var(--mn-success)', fontSize: 13, margin: '12px 0 0' }}>{logoMsg}</p>}
-        </Card>
-      </div>
-
-      <Form onSubmit={save}>
-        <div style={{ display: 'grid', gap: 18 }}>
-          {SECTIONS.map((section) => (
-            <Card key={section.title} title={section.title}>
-              {section.help && (
-                <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '0 0 12px' }}>{section.help}</p>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                {section.fields.map(([k, label, help]) => (
-                  <Field key={k} label={label} help={help}>
-                    {k === 'state' ? (
-                      // Chosen, not typed — like the customer and site forms. The
-                      // company's state is the seller side of every CGST+SGST-vs-IGST
-                      // decision, and a typo here taxed every local sale as inter-state.
-                      <select className="mn-input" value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}>
-                        <option value="">— choose —</option>
-                        {GST_STATE_NAMES.map((name) => (
-                          <option key={name} value={name}>{name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input value={form[k] ?? ''} onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))} />
-                    )}
-                  </Field>
-                ))}
-              </div>
-            </Card>
-          ))}
         </div>
-        <div style={{ marginTop: 18 }}>
-          <Card title="GST filing">
-            <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: '0 0 12px' }}>
-              E-invoicing (getting an IRN from the government portal before a sale) applies only to
-              businesses above the turnover limit — ₹5 crore at present. Your accountant will tell you
-              if it applies to you. Leave this off if it does not: the compliance report then stops
-              asking for an IRN on every invoice.
-            </p>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={einvoiceApplicable}
-                onChange={(e) => setEinvoiceApplicable(e.target.checked)}
-              />
-              E-invoicing applies to this company
+        <div className="mn-board-tools">
+          <Button icon={<Save size={14} />} onClick={() => (document.getElementById('mn-co-form') as HTMLFormElement | null)?.requestSubmit()} loading={busy} disabled={!dirty}>Save profile</Button>
+          <Link href="/app/settings" prefetch={false} className="mn-ord-link">
+            <Button variant="ghost" size="sm" icon={<Settings size={14} />}>Settings</Button>
+          </Link>
+        </div>
+      </header>
+
+      {error && <ErrorState message={error} />}
+      {msg && <div className="mn-ord-note mn-ord-note--ok" role="status"><CheckCircle2 size={16} aria-hidden /><span>{msg}</span></div>}
+      {missing.length > 0 && !msg && (
+        <div className="mn-ord-note mn-ord-note--warn" role="status">
+          <Receipt size={16} aria-hidden />
+          <span><strong>An invoice needs {missing.length === 1 ? 'one more thing' : `${missing.length} more things`}:</strong> {missing.map((k) => ({ companyName: 'the trading name', gstin: 'the GSTIN', addressLine1: 'the address', state: 'the state' })[k]).join(', ')}. Fill them in and press Save profile.</span>
+        </div>
+      )}
+
+      <div className="mn-od-grid">
+        <div className="mn-od-main">
+          <Form id="mn-co-form" onSubmit={save} className="mn-co-form">
+            {SECTIONS.map((section) => (
+              <Card key={section.key} title={<span className="mn-board-card-title">{section.icon} {section.title}</span>} actions={<span className="mn-ord-how">{section.help}</span>}>
+                <div className="mn-co-fields">
+                  {section.fields.map(([k, label, help]) => (
+                    <Field key={k} label={label} help={help}>
+                      {k === 'state' ? (
+                        // Chosen, not typed. The company's state is the seller side of every
+                        // CGST+SGST-vs-IGST decision, and a typo here taxed every local sale as inter-state.
+                        <Select value={form[k] ?? ''} onChange={(e) => set(k, e.target.value)}>
+                          <option value="">Choose…</option>
+                          {GST_STATE_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </Select>
+                      ) : (
+                        <Input value={form[k] ?? ''} onChange={(e) => set(k, e.target.value)} inputMode={k === 'pincode' || k === 'phone' ? 'numeric' : undefined} type={k === 'email' ? 'email' : 'text'} />
+                      )}
+                    </Field>
+                  ))}
+                </div>
+              </Card>
+            ))}
+            <div className="mn-co-foot">
+              <Button type="submit" icon={<Save size={14} />} loading={busy} disabled={!dirty}>Save profile</Button>
+              <span className="mn-ord-how">{dirty ? `${dirtyKeys.length || 1} ${dirtyKeys.length === 1 ? 'field' : 'fields'} changed and not saved.` : 'Nothing to save.'}</span>
+            </div>
+          </Form>
+        </div>
+        <div className="mn-od-side">
+          <Card title={<span className="mn-board-card-title"><ImageIcon size={16} aria-hidden /> Logo</span>} actions={hasServerLogo ? <Badge tone="success">on invoices</Badge> : <Badge tone="neutral">none</Badge>}>
+            <div className="mn-co-logo">
+              <div className="mn-co-logo-box">
+                {preview ? <img src={preview} alt="Company logo" /> : <span className="mn-ord-meta">No logo; the name prints as text</span>}
+              </div>
+              <label className="mn-im-file">
+                <input type="file" accept={LOGO_ACCEPT} onChange={onPickLogo} />
+                <Upload size={16} aria-hidden />
+                <span>{hasServerLogo || pending ? 'Choose a different file' : 'Choose a logo file'}</span>
+              </label>
+              <div className="mn-se-actions">
+                <Button size="sm" onClick={saveLogo} disabled={!pending} loading={logoBusy} icon={<Save size={14} />}>Save logo</Button>
+                {(hasServerLogo || preview) && <Button variant="ghost" size="sm" onClick={removeLogo} disabled={logoBusy} icon={<Trash2 size={14} />}>Remove</Button>}
+              </div>
+              <p className="mn-ord-how mn-co-logo-hint">PNG, JPG or SVG up to {Math.round(LOGO_MAX_BYTES / 1024)} KB; a wide logo prints best.</p>
+              {logoErr && <ErrorState message={logoErr} />}
+              {logoMsg && <div className="mn-ord-note mn-ord-note--ok" role="status"><CheckCircle2 size={16} aria-hidden /><span>{logoMsg}</span></div>}
+            </div>
+          </Card>
+          <Card title={<span className="mn-board-card-title"><Receipt size={16} aria-hidden /> GST filing</span>} actions={savedEinvoice ? <Badge tone="info">e-invoicing on</Badge> : <Badge tone="neutral">off</Badge>}>
+            <p className="mn-se-blurb">E-invoicing means getting an IRN from the government portal before a sale. It applies only above the turnover limit (₹5 crore at present); your accountant will say. Leave it off if it does not apply: the compliance report then stops asking for an IRN on every invoice.</p>
+            <label className="mn-se-switch">
+              <input type="checkbox" role="switch" checked={einvoiceApplicable} onChange={(e) => setEinvoiceApplicable(e.target.checked)} aria-label="E-invoicing applies to this company" />
+              <span className="mn-se-switch-track" aria-hidden><span className="mn-se-switch-knob" /></span>
+              <span className="mn-se-switch-text">{einvoiceApplicable ? 'E-invoicing applies to this company' : 'E-invoicing does not apply'}</span>
             </label>
+            <p className="mn-ord-how mn-co-logo-hint">Saved with the profile.</p>
           </Card>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
-          <Button type="submit">Save profile</Button>
-          {msg && <span style={{ color: 'var(--mn-success)', fontSize: 13 }}>{msg}</span>}
-        </div>
-      </Form>
+      </div>
     </div>
   );
 }

@@ -1,112 +1,155 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { BellRing, Building2, CheckCircle2, Landmark, RefreshCw, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { formatDateTime } from '../../../lib/format-date';
 import { settings, gstCredentialsApi, gstApi, opsApi, type SettingRow, type GstCredentialStatus, type GstStatus, type AlertingStatus } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
+import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { Field, Input } from '../../../components/ui/Field';
+import { Field, Input, Select } from '../../../components/ui/Field';
 import { Form } from '../../../components/ui/Form';
-import { Table, Th, Td } from '../../../components/ui/Table';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
-import { ErrorState, Loading } from '../../../components/ui/States';
+import { ErrorState, TableSkeleton } from '../../../components/ui/States';
+
+/**
+ * Settings — the handful of switches that change how the app behaves.
+ *
+ * Each setting is one row: the name, what it does in plain words, and the
+ * control (a switch, a choice, a number or text) with Save beside it that
+ * lights up only when the value changed. Below, the GST portal logins and
+ * the error-alert wiring, each in its own card with plain status words.
+ * Same layout in both skins; every colour reads the semantic tokens.
+ */
+
+/** The catalogue's descriptions, said the way an owner would say them. */
+const PLAIN: Record<string, string> = {
+  credit_block_stage: 'When a customer over their credit limit gets stopped: when the order is booked, only when the truck is about to leave, or never.',
+  default_gst_rate: 'The GST rate a new quotation or order line starts with. Concrete is usually 18%.',
+  default_credit_days: 'The credit period a new customer starts with; change it per customer afterwards.',
+  low_stock_alerts: 'Show an alert on the dashboard when a material drops below its reorder level.',
+  whatsapp_notifications: 'Offer WhatsApp sends for receipts and dispatches.',
+  invoice_footer_note: 'A line printed at the foot of every tax invoice: bank terms, a thank-you, a notice.',
+};
 
 export default function SettingsPage() {
   const [rows, setRows] = useState<SettingRow[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const list = await settings.list();
     setRows(list);
     setDraft(Object.fromEntries(list.map((r) => [r.key, r.value])));
-  }
+  }, []);
   useEffect(() => {
     reload()
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [reload]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await reload();
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function save(key: string) {
     setError(null);
     setSavedKey(null);
+    setSavingKey(key);
     try {
       await settings.set(key, draft[key] ?? '');
       setSavedKey(key);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingKey(null);
     }
   }
 
-  if (!loaded) return <Loading label="Loading settings…" />;
+  const changed = rows.filter((r) => (draft[r.key] ?? '') !== r.value).length;
 
   return (
-    <div style={{ display: 'grid', gap: 18, maxWidth: 760 }}>
-      <div>
-        <h1 style={{ fontSize: 24, margin: '0 0 4px' }}>Tenant Settings</h1>
-        <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>
-          Configuration for this company. Each setting is typed and validated.
-        </p>
-      </div>
+    <div className="mn-ord mn-se">
+      <header className="mn-board-head">
+        <div className="mn-board-title">
+          <h1>Settings</h1>
+          <p>The switches that change how the app behaves for this company: when credit stops an order, the defaults a new customer or line starts with, and what is printed or sent. The company name, address and bank details live under <Link href="/app/company" prefetch={false} className="mn-id-link">Company</Link>.</p>
+        </div>
+        <div className="mn-board-tools">
+          <span className="mn-board-live mn-ord-sum" aria-live="polite">
+            <SettingsIcon size={14} aria-hidden />
+            {loaded ? `${rows.length} settings${changed ? ` · ${changed} unsaved` : ''}` : 'Loading…'}
+          </span>
+          <Link href="/app/company" prefetch={false} className="mn-ord-link">
+            <Button variant="ghost" size="sm" icon={<Building2 size={14} />}>Company</Button>
+          </Link>
+          <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={refresh} loading={refreshing}>
+            Refresh
+          </Button>
+        </div>
+      </header>
+
       {error && <ErrorState message={error} />}
 
-      <Card title="Settings">
-        <div style={{ display: 'grid', gap: 18 }}>
-          {rows.map((r) => {
-            const v = draft[r.key] ?? '';
-            const dirty = v !== r.value;
-            return (
-              <div key={r.key} style={{ display: 'grid', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                  <label style={{ fontSize: 14, fontWeight: 600 }}>{r.label}</label>
-                  <span style={{ fontSize: 11, color: 'var(--mn-subtle)', fontFamily: 'var(--mn-font-mono, monospace)' }}>{r.key}</span>
+      <Card title={<span className="mn-board-card-title"><SettingsIcon size={16} aria-hidden /> How the app behaves <span className="mn-board-card-count">{rows.length}</span></span>} actions={<span className="mn-ord-how">Each setting saves on its own; Save lights up when the value changed.</span>} padded={false}>
+        {!loaded ? (
+          <div className="mn-ord-skel"><TableSkeleton cols={3} /></div>
+        ) : (
+          <div className="mn-se-list">
+            {rows.map((r) => {
+              const v = draft[r.key] ?? '';
+              const dirty = v !== r.value;
+              const set = (val: string) => setDraft((p) => ({ ...p, [r.key]: val }));
+              return (
+                <div key={r.key} className={`mn-se-row${dirty ? ' is-dirty' : ''}`}>
+                  <div className="mn-se-text">
+                    <span className="mn-se-label">{r.label}</span>
+                    <span className="mn-ord-meta">{PLAIN[r.key] ?? r.description}</span>
+                  </div>
+                  <div className="mn-se-control">
+                    {r.type === 'boolean' ? (
+                      <label className="mn-se-switch">
+                        <input type="checkbox" role="switch" checked={v === 'true'} onChange={(e) => set(String(e.target.checked))} aria-label={r.label} />
+                        <span className="mn-se-switch-track" aria-hidden><span className="mn-se-switch-knob" /></span>
+                        <span className="mn-se-switch-text">{v === 'true' ? 'On' : 'Off'}</span>
+                      </label>
+                    ) : r.type === 'enum' ? (
+                      <Select value={v} onChange={(e) => set(e.target.value)} aria-label={r.label}>
+                        {(r.options ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </Select>
+                    ) : (
+                      <Input type={r.type === 'number' ? 'number' : 'text'} inputMode={r.type === 'number' ? 'decimal' : undefined} value={v} onChange={(e) => set(e.target.value)} aria-label={r.label} placeholder={r.type === 'string' ? 'Nothing printed' : undefined} />
+                    )}
+                  </div>
+                  <div className="mn-se-save">
+                    <Button variant={dirty ? undefined : 'ghost'} size="sm" icon={<Save size={14} />} onClick={() => save(r.key)} disabled={!dirty} loading={savingKey === r.key}>Save</Button>
+                    {savedKey === r.key && !dirty && <span className="mn-ord-meta mn-se-saved"><CheckCircle2 size={13} aria-hidden /> Saved</span>}
+                  </div>
                 </div>
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--mn-muted)' }}>{r.description}</p>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {r.type === 'boolean' ? (
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={v === 'true'}
-                        onChange={(e) => setDraft((p) => ({ ...p, [r.key]: String(e.target.checked) }))}
-                        style={{ width: 16, height: 16, accentColor: 'var(--mn-primary)' }}
-                      />
-                      <span style={{ fontSize: 13, color: 'var(--mn-muted)' }}>{v === 'true' ? 'On' : 'Off'}</span>
-                    </label>
-                  ) : r.type === 'enum' ? (
-                    <select
-                      className="mn-input"
-                      style={{ maxWidth: 280 }}
-                      value={v}
-                      onChange={(e) => setDraft((p) => ({ ...p, [r.key]: e.target.value }))}
-                    >
-                      {(r.options ?? []).map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Input
-                      type={r.type === 'number' ? 'number' : 'text'}
-                      style={{ maxWidth: 280 }}
-                      value={v}
-                      onChange={(e) => setDraft((p) => ({ ...p, [r.key]: e.target.value }))}
-                    />
-                  )}
-                  <Button variant="secondary" size="sm" onClick={() => save(r.key)} disabled={!dirty}>Save</Button>
-                  {savedKey === r.key && !dirty && (
-                    <span style={{ fontSize: 12, color: 'var(--mn-success)' }}>Saved</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
-      <GstCredentialsCard />
-      <AlertingCard />
+      <div className="mn-ir-two">
+        <GstCredentialsCard />
+        <AlertingCard />
+      </div>
     </div>
   );
 }
@@ -130,7 +173,7 @@ function AlertingCard() {
     try {
       const r = await opsApi.alertTest();
       setMsg(r.delivered
-        ? `Test alert delivered (HTTP ${r.status ?? 200}). Check the channel — the message reads "${r.message}".`
+        ? `Test alert delivered (HTTP ${r.status ?? 200}). Check the channel; the message reads "${r.message}".`
         : `Not delivered: ${r.error ?? 'unknown reason'}`);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -139,27 +182,20 @@ function AlertingCard() {
     }
   }
   return (
-    <Card title="Error alerts">
-      <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 10px' }}>
-        When the server fails a request, the health monitor sees the site down, or a backup does not leave the box, a message goes to your alert channel.
-      </p>
+    <Card title={<span className="mn-board-card-title"><BellRing size={16} aria-hidden /> Error alerts</span>} actions={status === undefined ? null : status.configured ? <Badge tone="success">wired</Badge> : <Badge tone="warning">not wired</Badge>}>
+      <p className="mn-se-blurb">When the server fails a request, the health monitor sees the site down, or a backup does not leave the box, a message goes to your alert channel.</p>
       {status === undefined ? (
-        <p style={{ fontSize: 13, margin: 0 }}>Checking…</p>
+        <p className="mn-ord-meta">Checking…</p>
       ) : status.configured ? (
         <>
-          <p style={{ fontSize: 13, margin: '0 0 10px' }}>
-            <strong style={{ color: 'var(--mn-success)' }}>Wired</strong> on this server (via {status.source ?? 'the env file'}).
-            {status.digestEnabled ? ' A daily digest of dashboard alerts is on too.' : ''}
-          </p>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Button variant="secondary" onClick={sendTest} disabled={busy}>{busy ? 'Sending…' : 'Send test alert'}</Button>
-            {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('Test alert delivered') ? 'var(--mn-success)' : 'var(--mn-danger)' }}>{msg}</span>}
+          <p className="mn-se-blurb"><strong>Wired</strong> on this server via {status.source ?? 'the env file'}.{status.digestEnabled ? ' A daily digest of dashboard alerts is on too.' : ''}</p>
+          <div className="mn-se-actions">
+            <Button variant="secondary" size="sm" onClick={sendTest} loading={busy}>Send a test alert</Button>
+            {msg && <span className={`mn-ord-meta${msg.startsWith('Test alert delivered') ? ' mn-st-in' : ' mn-id-bad'}`}>{msg}</span>}
           </div>
         </>
       ) : (
-        <p style={{ fontSize: 13, margin: 0 }}>
-          <strong style={{ color: 'var(--mn-warning)' }}>Not wired.</strong> Alerts only reach the server log. To turn them on, set RMC_ALERT_WEBHOOK in the server's .env.production, restart the api, and run scripts/ops/alert-test.sh on the server.
-        </p>
+        <p className="mn-se-blurb"><strong>Not wired.</strong> Alerts only reach the server log. To turn them on, set <code>RMC_ALERT_WEBHOOK</code> in the server's .env.production, restart the API, and run scripts/ops/alert-test.sh on the server.</p>
       )}
     </Card>
   );
@@ -180,6 +216,7 @@ function GstCredentialsCard() {
     gstApi.status().then(setGstLive).catch(() => setGstLive(undefined));
   }, []);
   const [form, setForm] = useState({ gstin: '', username: '', password: '' });
+  const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -212,94 +249,61 @@ function GstCredentialsCard() {
     await run(async () => {
       await gstCredentialsApi.set(form.gstin.trim().toUpperCase(), form.username.trim(), form.password);
       setForm({ gstin: '', username: '', password: '' });
-    }, 'Credentials saved');
+      setShowForm(false);
+    }, 'Portal login saved. Press Test to check it connects.');
   }
-
-  const testLabel = (c: GstCredentialStatus) =>
-    c.lastTestSuccess === true ? 'Connected' : c.lastTestSuccess === false ? 'Failed' : 'Not tested';
 
   if (unavailable) return null;
 
   return (
-    <Card title="GST portal credentials">
-      <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 12px', maxWidth: 700 }}>
-        Your GSTIN portal login, used to file e-invoices (IRN) and e-way bills live. The password is encrypted and never shown again — re-enter it to change.
-      </p>
-      {gstLive !== undefined && (
-        <p style={{ fontSize: 12.5, margin: '0 0 12px' }}>
-          Live filing on this server: {gstLive?.configured
-            ? <strong style={{ color: 'var(--mn-success)' }}>enabled ({String(gstLive.provider)})</strong>
-            : <><strong style={{ color: 'var(--mn-warning)' }}>not enabled</strong> — invoices are prepared but not filed with the portal. It is switched on from the server (scripts/ops/gst-enable.sh) once your GSP sandbox credentials are in hand.</>}
-        </p>
+    <Card title={<span className="mn-board-card-title"><Landmark size={16} aria-hidden /> GST portal logins <span className="mn-board-card-count">{creds.length}</span></span>} actions={gstLive === undefined ? null : gstLive?.configured ? <Badge tone="success">live filing on</Badge> : <Badge tone="neutral">live filing off</Badge>}>
+      <p className="mn-se-blurb">Your GSTIN portal login, used to file e-invoices (IRN) and e-way bills straight from the app. The password is encrypted and never shown again; enter it again to change it.</p>
+      {gstLive !== undefined && !gstLive?.configured && (
+        <p className="mn-se-blurb"><strong>Live filing is not switched on</strong> on this server: invoices are prepared but not filed with the portal. It is switched on from the server (scripts/ops/gst-enable.sh) once your GSP credentials are in hand.</p>
       )}
-      {err && <div style={{ marginBottom: 12 }}><ErrorState message={err} /></div>}
-      {msg && (
-        <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '8px 12px', fontSize: 13, margin: '0 0 12px' }}>{msg}</p>
-      )}
-
-      <Table>
-        <thead>
-          <tr>
-            <Th>GSTIN</Th>
-            <Th>Connection</Th>
-            <Th>Last test</Th>
-            <Th />
-          </tr>
-        </thead>
-        <tbody>
+      {err && <ErrorState message={err} />}
+      {msg && <div className="mn-ord-note mn-ord-note--ok" role="status"><CheckCircle2 size={16} aria-hidden /><span>{msg}</span></div>}
+      {creds.length > 0 && (
+        <div className="mn-se-creds">
           {creds.map((c) => (
-            <tr key={c.gstin}>
-              <Td style={{ fontWeight: 600 }}>{c.gstin}</Td>
-              <Td style={{ color: c.lastTestSuccess === false ? 'var(--mn-danger)' : c.lastTestSuccess === true ? 'var(--mn-success)' : 'var(--mn-muted)' }}>
-                {testLabel(c)}
-                {c.lastTestMessage ? <span style={{ color: 'var(--mn-muted)', fontSize: 11, display: 'block' }}>{c.lastTestMessage}</span> : null}
-              </Td>
-              <Td style={{ color: 'var(--mn-muted)', fontSize: 12 }}>{c.lastTestedAt ? String(c.lastTestedAt).slice(0, 16).replace('T', ' ') : '—'}</Td>
-              <Td style={{ textAlign: 'right' }}>
-                <span style={{ display: 'inline-flex', gap: 6 }}>
-                  <Button variant="secondary" size="sm" onClick={() => run(() => gstCredentialsApi.test(c.gstin), 'Connection tested')}>Test</Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      run(async () => {
-                        if (!(await confirm({ title: 'Remove credentials', message: `Delete the stored portal login for ${c.gstin}?`, confirmLabel: 'Remove', danger: true }))) return;
-                        await gstCredentialsApi.remove(c.gstin);
-                      }, 'Credentials removed')
-                    }
-                  >
-                    Remove
-                  </Button>
-                </span>
-              </Td>
-            </tr>
+            <div key={c.gstin} className="mn-se-cred">
+              <div className="mn-se-cred-text">
+                <span className="mn-ord-no">{c.gstin}</span>
+                <span className="mn-ord-meta">{c.lastTestedAt ? `tested ${formatDateTime(c.lastTestedAt)}` : 'not tested yet'}{c.lastTestMessage ? ` · ${c.lastTestMessage}` : ''}</span>
+              </div>
+              {c.lastTestSuccess === true ? <Badge tone="success">connected</Badge> : c.lastTestSuccess === false ? <Badge tone="danger">failed</Badge> : <Badge tone="neutral">not tested</Badge>}
+              <div className="mn-se-cred-acts">
+                <Button variant="secondary" size="sm" onClick={() => run(() => gstCredentialsApi.test(c.gstin), 'Connection tested; see the result on the row.')}>Test</Button>
+                <Button variant="ghost" size="sm" onClick={() => run(async () => {
+                  if (!(await confirm({ title: `Remove the login for ${c.gstin}`, message: 'Live filing for this GSTIN stops until a login is saved again.', confirmLabel: 'Remove', danger: true }))) return;
+                  await gstCredentialsApi.remove(c.gstin);
+                }, 'Login removed.')}>Remove</Button>
+              </div>
+            </div>
           ))}
-          {!creds.length && (
-            <tr><Td colSpan={4} style={{ color: 'var(--mn-muted)' }}>No GST credentials configured yet.</Td></tr>
-          )}
-        </tbody>
-      </Table>
-
-      <Form onSubmit={add} style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginTop: 14 }}>
-        <div style={{ minWidth: 190 }}>
+        </div>
+      )}
+      {showForm ? (
+        <Form onSubmit={add} className="mn-se-cred-form">
           <Field label="GSTIN" required>
             <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="33ABCDE1234F1Z7" required />
           </Field>
-        </div>
-        <div style={{ minWidth: 160 }}>
           <Field label="Portal username" required>
             <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
           </Field>
-        </div>
-        <div style={{ minWidth: 160 }}>
           <Field label="Portal password" required>
-            <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+            <Input type="password" autoComplete="off" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
           </Field>
+          <div className="mn-se-actions">
+            <Button type="submit" size="sm" icon={<ShieldCheck size={14} />}>Save the login</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+          </div>
+        </Form>
+      ) : (
+        <div className="mn-se-actions">
+          <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>{creds.length ? 'Add another GSTIN' : 'Add a portal login'}</Button>
         </div>
-        <div style={{ marginBottom: 14 }}>
-          <Button type="submit" variant="secondary">Save credentials</Button>
-        </div>
-      </Form>
+      )}
     </Card>
   );
 }

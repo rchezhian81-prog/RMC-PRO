@@ -282,6 +282,9 @@ export class UsersService {
         roleId: r?.role_id ?? null,
         roleKey: r?.role_key ?? null,
         roleName: r?.role_name ?? null,
+        // When they last signed in and when they were added: the screen says who is really using the app.
+        lastLoginAt: u.lastLoginAt ?? null,
+        createdAt: u.createdAt,
       };
     });
   }
@@ -560,10 +563,21 @@ export class RolesService {
   ) {}
 
   /** Active roles by default — the lists people choose from; archived ones on request (Setup → Roles). */
+  /** Each role with how many people hold it and how many permissions it carries. */
   list(tenantId: string, includeArchived = false) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(Role).find({ where: includeArchived ? {} : { archivedAt: IsNull() }, order: { roleName: 'ASC' } }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const roles = await m.getRepository(Role).find({ where: includeArchived ? {} : { archivedAt: IsNull() }, order: { roleName: 'ASC' } });
+      if (!roles.length) return roles;
+      const counts: Array<{ id: string; userCount: number; permissionCount: number }> = await m.query(
+        `SELECT r.id,
+                (SELECT COUNT(*) FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_id = r.id AND u.status = 'active')::int AS "userCount",
+                (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id = r.id)::int AS "permissionCount"
+           FROM roles r WHERE r.id = ANY($1::uuid[])`,
+        [roles.map((r) => r.id)],
+      );
+      const by = new Map(counts.map((c) => [c.id, c]));
+      return roles.map((r) => ({ ...r, userCount: by.get(r.id)?.userCount ?? 0, permissionCount: by.get(r.id)?.permissionCount ?? 0 }));
+    });
   }
 
   permissionCatalog() {

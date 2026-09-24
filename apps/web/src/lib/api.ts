@@ -570,6 +570,7 @@ export const mixDesignsApi = {
   list: () => apiFetch<Row[]>('/mix-designs'),
   get: (id: string) => apiFetch<Row>(`/mix-designs/${id}`),
   create: (b: Record<string, unknown>) => post('/mix-designs', b),
+  update: (id: string, b: Record<string, unknown>) => post(`/mix-designs/${id}`, b),
   addMaterial: (id: string, b: Record<string, unknown>) => post(`/mix-designs/${id}/materials`, b),
   deleteMaterial: (id: string, rowId: string) =>
     apiFetch<Row>(`/mix-designs/${id}/materials/${rowId}`, { method: 'DELETE' }),

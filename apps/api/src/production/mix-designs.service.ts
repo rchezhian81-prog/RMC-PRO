@@ -19,19 +19,69 @@ export class MixDesignsService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * The design list with what the plant reads it by: the grade code, how
+   * many materials the recipe has, how many batches have used it and when
+   * the last one was. Two batched lookups for the whole page.
+   */
   list(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(MixDesign).find({ order: { mixCode: 'ASC', versionNo: 'DESC' } }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(MixDesign).find({ order: { mixCode: 'ASC', versionNo: 'DESC' } });
+      const ids = rows.map((r) => r.id);
+      const gradeIds = [...new Set(rows.map((r) => r.gradeId).filter((v): v is string => !!v))];
+      const grades: Array<{ id: string; gradeCode: string }> = gradeIds.length
+        ? await m.query(`SELECT id, grade_code AS "gradeCode" FROM concrete_grades WHERE id = ANY($1)`, [gradeIds])
+        : [];
+      const stats: Array<{ mixDesignId: string; materialCount: number; batchCount: number; lastBatchedAt: Date | null }> = ids.length
+        ? await m.query(
+            `SELECT d.id AS "mixDesignId",
+                    (SELECT COUNT(*)::int FROM mix_design_materials mm WHERE mm.mix_design_id = d.id) AS "materialCount",
+                    (SELECT COUNT(*)::int FROM batch_tickets t WHERE t.mix_design_id = d.id AND t.status <> 'cancelled') AS "batchCount",
+                    (SELECT MAX(t.batch_start_time) FROM batch_tickets t WHERE t.mix_design_id = d.id AND t.status <> 'cancelled') AS "lastBatchedAt"
+               FROM mix_designs d WHERE d.id = ANY($1)`,
+            [ids],
+          )
+        : [];
+      const gradeCode = new Map(grades.map((g) => [g.id, g.gradeCode]));
+      const stat = new Map(stats.map((s) => [s.mixDesignId, s]));
+      return rows.map((r) => {
+        const s = stat.get(r.id);
+        return {
+          ...r,
+          gradeCode: r.gradeId ? gradeCode.get(r.gradeId) ?? null : null,
+          materialCount: s?.materialCount ?? 0,
+          batchCount: s?.batchCount ?? 0,
+          lastBatchedAt: s?.lastBatchedAt ?? null,
+        };
+      });
+    });
   }
 
+  /** One design with its recipe, the grade code, and how often it has been batched. */
   private async loadFull(m: EntityManager, id: string) {
     const design = await m.getRepository(MixDesign).findOne({ where: { id } });
     if (!design) throw notFound();
     const materials = await m
       .getRepository(MixDesignMaterial)
       .find({ where: { mixDesignId: id }, order: { sequenceNo: 'ASC', createdAt: 'ASC' } });
-    return { ...design, materials };
+    const [grade, usage] = await Promise.all([
+      design.gradeId
+        ? (m.query(`SELECT grade_code AS "gradeCode", grade_name AS "gradeName" FROM concrete_grades WHERE id = $1`, [design.gradeId]) as Promise<Array<{ gradeCode: string; gradeName: string }>>)
+        : Promise.resolve([] as Array<{ gradeCode: string; gradeName: string }>),
+      m.query(
+        `SELECT COUNT(*)::int AS "batchCount", MAX(batch_start_time) AS "lastBatchedAt"
+           FROM batch_tickets WHERE mix_design_id = $1 AND status <> 'cancelled'`,
+        [id],
+      ) as Promise<Array<{ batchCount: number; lastBatchedAt: Date | null }>>,
+    ]);
+    return {
+      ...design,
+      materials,
+      gradeCode: grade[0]?.gradeCode ?? null,
+      gradeName: grade[0]?.gradeName ?? null,
+      batchCount: usage[0]?.batchCount ?? 0,
+      lastBatchedAt: usage[0]?.lastBatchedAt ?? null,
+    };
   }
 
   get(tenantId: string, id: string) {

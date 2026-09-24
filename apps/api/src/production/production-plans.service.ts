@@ -27,19 +27,104 @@ export class ProductionPlansService {
     private readonly numbering: NumberingService,
   ) {}
 
+  /**
+   * The plan list with what a planner reads it by: the plant, how many lines
+   * and how much concrete each plan schedules, how many lines have reached
+   * the batch queue, and the customers on it. Two batched lookups.
+   */
   list(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(ProductionPlan).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(ProductionPlan).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      const planIds = rows.map((r) => r.id);
+      const plantIds = [...new Set(rows.map((r) => r.plantId).filter((v): v is string => !!v))];
+      const plants: Array<{ id: string; plantName: string }> = plantIds.length
+        ? await m.query(`SELECT id, plant_name AS "plantName" FROM plants WHERE id = ANY($1)`, [plantIds])
+        : [];
+      const stats: Array<{ planId: string; lines: number; plannedM3: string; queuedLines: number; customerNames: string[] }> = planIds.length
+        ? await m.query(
+            `SELECT i.production_plan_id AS "planId",
+                    COUNT(*)::int AS lines,
+                    COALESCE(SUM(i.planned_quantity_m3), 0)::float AS "plannedM3",
+                    COUNT(*) FILTER (WHERE i.status = 'queued')::int AS "queuedLines",
+                    ARRAY_REMOVE(ARRAY_AGG(DISTINCT c.customer_name), NULL) AS "customerNames"
+               FROM production_plan_items i
+               LEFT JOIN orders o ON o.id = i.order_id
+               LEFT JOIN customers c ON c.id = o.customer_id
+              WHERE i.production_plan_id = ANY($1)
+              GROUP BY i.production_plan_id`,
+            [planIds],
+          )
+        : [];
+      const plantName = new Map(plants.map((p) => [p.id, p.plantName]));
+      const stat = new Map(stats.map((s) => [s.planId, s]));
+      return rows.map((r) => {
+        const s = stat.get(r.id);
+        return {
+          ...r,
+          plantName: r.plantId ? plantName.get(r.plantId) ?? null : null,
+          lines: s?.lines ?? 0,
+          plannedM3: Number(s?.plannedM3 ?? 0),
+          queuedLines: s?.queuedLines ?? 0,
+          customerNames: s?.customerNames ?? [],
+        };
+      });
+    });
   }
 
+  /**
+   * One plan with its lines read the way the worksheet shows them: the order
+   * and its customer and site, the ordered quantity the line is capped by,
+   * and, once queued, where the batch queue has taken it (status, produced).
+   */
   private async loadFull(m: EntityManager, id: string) {
     const plan = await m.getRepository(ProductionPlan).findOne({ where: { id } });
     if (!plan) throw notFound();
-    const items = await m
+    const rawItems = await m
       .getRepository(ProductionPlanItem)
       .find({ where: { productionPlanId: id }, order: { sequenceNo: 'ASC', createdAt: 'ASC' } });
-    return { ...plan, items };
+    const plant = plan.plantId
+      ? ((await m.query(`SELECT plant_name AS "plantName" FROM plants WHERE id = $1`, [plan.plantId])) as Array<{ plantName: string }>)[0] ?? null
+      : null;
+    const itemIds = rawItems.map((i) => i.id);
+    const orderIds = [...new Set(rawItems.map((i) => i.orderId).filter((v): v is string => !!v))];
+    const orders: Array<{ id: string; orderNo: string; customerName: string | null; siteName: string | null; requiredDatetime: Date | null }> = orderIds.length
+      ? await m.query(
+          `SELECT o.id, o.order_no AS "orderNo", c.customer_name AS "customerName", s.site_name AS "siteName", o.required_datetime AS "requiredDatetime"
+             FROM orders o LEFT JOIN customers c ON c.id = o.customer_id LEFT JOIN sites s ON s.id = o.site_id
+            WHERE o.id = ANY($1)`,
+          [orderIds],
+        )
+      : [];
+    const lineIds = [...new Set(rawItems.map((i) => i.orderItemId).filter((v): v is string => !!v))];
+    const orderLines: Array<{ id: string; quantityM3: string }> = lineIds.length
+      ? await m.query(`SELECT id, quantity_m3 AS "quantityM3" FROM order_items WHERE id = ANY($1)`, [lineIds])
+      : [];
+    const queue: Array<{ itemId: string; queueStatus: string; producedM3: string }> = itemIds.length
+      ? await m.query(
+          `SELECT DISTINCT ON (production_plan_item_id) production_plan_item_id AS "itemId", queue_status AS "queueStatus", produced_quantity_m3 AS "producedM3"
+             FROM batch_queue WHERE production_plan_item_id = ANY($1)
+            ORDER BY production_plan_item_id, (queue_status = 'cancelled'), created_at DESC`,
+          [itemIds],
+        )
+      : [];
+    const order = new Map(orders.map((o) => [o.id, o]));
+    const ordered = new Map(orderLines.map((l) => [l.id, l.quantityM3]));
+    const queued = new Map(queue.map((q) => [q.itemId, q]));
+    const items = rawItems.map((i) => {
+      const o = i.orderId ? order.get(i.orderId) : undefined;
+      const q = queued.get(i.id);
+      return {
+        ...i,
+        orderNo: o?.orderNo ?? null,
+        customerName: o?.customerName ?? null,
+        siteName: o?.siteName ?? null,
+        requiredDatetime: o?.requiredDatetime ?? null,
+        orderedQtyM3: i.orderItemId ? ordered.get(i.orderItemId) ?? null : null,
+        queueStatus: q?.queueStatus ?? null,
+        producedM3: q ? Number(q.producedM3) : 0,
+      };
+    });
+    return { ...plan, plantName: plant?.plantName ?? null, items };
   }
 
   get(tenantId: string, id: string) {

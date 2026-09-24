@@ -3822,3 +3822,47 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-dr-period { padding: 10px 12px; }
   .mn-dr-range .mn-input { width: calc(50% - 40px); min-width: 120px; }
 }
+
+/* ============================================================================
+   PRODUCTION PLANS — the document-list rows above, plus the worksheet card
+   ============================================================================ */
+.mn-pp-form { display: grid; grid-template-columns: minmax(200px, 1.2fr) minmax(150px, 0.8fr) minmax(120px, 0.6fr) auto; gap: 12px; align-items: end; }
+.mn-pp-form-submit { padding-bottom: 14px; }
+.mn-pp-form-submit button { white-space: nowrap; }
+.mn-pp .mn-ord-cols--acts,
+.mn-pp .mn-ord-row--acts { grid-template-columns: minmax(170px, 0.9fr) minmax(0, 1.5fr) minmax(150px, 0.8fr) minmax(112px, auto) auto; cursor: pointer; }
+.mn-pp .mn-ord-cols--acts { cursor: default; }
+.mn-pp-row.is-on { background: color-mix(in srgb, var(--mn-primary) 7%, var(--mn-surface)); }
+.mn-pp-row.is-on .mn-ord-no { color: var(--mn-primary); }
+.mn-pp-acts { display: flex; justify-content: flex-end; }
+.mn-pp-sub { font-size: 13px; font-weight: 500; color: var(--mn-muted); white-space: normal; }
+/* The worksheet header carries a long title and four buttons: let both wrap. */
+.mn-pp-ws { min-width: 0; }
+.mn-pp-ws .mn-card-head { flex-wrap: wrap; }
+.mn-pp-ws .mn-board-card-title { white-space: normal; flex-wrap: wrap; }
+.mn-pp-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.mn-pp-tools button { white-space: nowrap; }
+.mn-pp-hint { margin: 0; padding: 12px 16px; font-size: 13px; color: var(--mn-muted); border-bottom: 1px solid var(--mn-border); }
+.mn-pp-total td { font-weight: 600; border-top: 2px solid var(--mn-border); }
+.mn-pp-line { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(200px, 1.2fr) minmax(120px, 0.7fr) auto; gap: 12px; align-items: end; padding: 12px 16px 2px; border-top: 1px solid var(--mn-border); }
+.mn-pp-line-submit { padding-bottom: 14px; }
+.mn-pp-line-submit button { white-space: nowrap; }
+@media (max-width: 860px) {
+  .mn-pp .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'val val'
+      'acts acts';
+  }
+  .mn-pp .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-pp-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-pp-form, .mn-pp-line { grid-template-columns: 1fr 1fr; }
+  .mn-pp-form-submit, .mn-pp-line-submit { grid-column: 1 / -1; padding-bottom: 12px; }
+  .mn-pp-tools { justify-content: flex-start; }
+  .mn-pp-ws .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+}
+@media (max-width: 480px) {
+  .mn-pp-form, .mn-pp-line { grid-template-columns: 1fr; }
+}

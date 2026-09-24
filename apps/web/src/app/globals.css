@@ -3797,3 +3797,28 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-btd-acts { justify-content: stretch; }
   .mn-btd-acts button { flex: 1 1 auto; }
 }
+
+/* ============================================================================
+   DELIVERY REGISTER — the supply record by day, with the period bar
+   ============================================================================ */
+.mn-dr-period { display: flex; justify-content: space-between; align-items: center; gap: 12px 20px; flex-wrap: wrap; padding: 10px 14px; background: var(--mn-surface); border: 1px solid var(--mn-border); border-radius: var(--mn-radius-lg); }
+.mn-dr-chip { padding: 6px 12px; }
+.mn-dr-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+.mn-dr-range svg { color: var(--mn-subtle); flex: none; }
+.mn-dr-range .mn-input { width: 150px; }
+.mn-dr-day td { background: var(--mn-surface-2); border-top: 1px solid var(--mn-border); font-size: 12.5px; }
+.mn-dr-day-label { font-weight: 700; color: var(--mn-text); }
+.mn-dr-day-m3 { font-weight: 700; color: var(--mn-text); font-variant-numeric: tabular-nums; }
+.mn-dr-ret { color: var(--mn-warning); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mn-dr-total td { font-weight: 700; border-top: 2px solid var(--mn-border); }
+.mn-dr-total-m3 { font-family: var(--mn-font-display); font-size: 16px; color: var(--mn-primary); font-variant-numeric: tabular-nums; }
+.mn-dr-avg { align-items: baseline; }
+.mn-dr-avg .mn-ord-meta { flex: 1 1 100%; font-size: 12px; white-space: normal; }
+/* The register is read on a phone at the gate: let the small print wrap so the
+   challan column stays narrow and the day's total stays in view. */
+.mn-dr .mn-od-rate-meta { white-space: normal; max-width: 300px; }
+.mn-dr tbody td:nth-child(-n + 2) { min-width: 170px; }
+@media (max-width: 640px) {
+  .mn-dr-period { padding: 10px 12px; }
+  .mn-dr-range .mn-input { width: calc(50% - 40px); min-width: 120px; }
+}

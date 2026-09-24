@@ -711,7 +711,7 @@ export const challansApi = {
     if (params.to) qs.set('to', params.to);
     if (params.plantId) qs.set('plantId', params.plantId);
     const s = qs.toString();
-    return apiFetch<{ rows: Row[]; totalM3: number; count: number }>(`/delivery-challans/report/delivery-register${s ? `?${s}` : ''}`);
+    return apiFetch<{ rows: Row[]; totalM3: number; returnedM3: number; count: number }>(`/delivery-challans/report/delivery-register${s ? `?${s}` : ''}`);
   },
 };
 

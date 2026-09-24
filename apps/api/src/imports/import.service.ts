@@ -56,10 +56,17 @@ export class ImportService {
     return buildTemplateCsv(importer.def);
   }
 
+  /** Every import job with the person who ran it by name. */
   list(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(ImportJob).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(ImportJob).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      const ids = [...new Set(rows.map((r) => r.createdBy).filter((x): x is string => Boolean(x)))];
+      const users: Array<{ id: string; name: string | null; email: string | null }> = ids.length
+        ? await m.query(`SELECT id, name, email FROM users WHERE id = ANY($1::uuid[])`, [ids])
+        : [];
+      const by = new Map(users.map((u) => [u.id, u.name || u.email || null]));
+      return rows.map((r) => ({ ...r, createdByName: r.createdBy ? by.get(r.createdBy) ?? null : null }));
+    });
   }
 
   get(tenantId: string, id: string) {

@@ -36,10 +36,56 @@ export class OrdersDraftService {
     private readonly numbering: NumberingService,
   ) {}
 
+  /**
+   * Every draft order with what the handoff screen needs beside it: the
+   * customer, site and plant by name, the document it was priced from, the
+   * lines summed (count, grades, m³) and whether a credit hold on it is still
+   * waiting. One grouped query over the drafts, not one per draft.
+   */
   list(tenantId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const drafts = await m.getRepository(Order).find({ where: { orderStatus: 'draft' }, order: { createdAt: 'DESC' } });
-      return attachCustomerName(m, drafts);
+      const named = await attachCustomerName(m, drafts);
+      if (!named.length) return named;
+      const extra: Array<{
+        id: string; siteName: string | null; plantName: string | null; quotationNo: string | null; rateContractNo: string | null;
+        itemCount: number; gradeLabels: string | null; quantityM3: number; lastCreditNote: string | null;
+      }> = await m.query(
+        `SELECT o.id, s.site_name AS "siteName", p.plant_name AS "plantName",
+                q.quotation_no AS "quotationNo", rc.rate_contract_no AS "rateContractNo",
+                COALESCE(oi.n, 0)::int AS "itemCount", oi.grades AS "gradeLabels", COALESCE(oi.m3, 0)::float AS "quantityM3",
+                h.decision_note AS "lastCreditNote"
+           FROM orders o
+           LEFT JOIN sites s ON s.id = o.site_id
+           LEFT JOIN plants p ON p.id = o.plant_id
+           LEFT JOIN quotations q ON q.id = o.quotation_id
+           LEFT JOIN rate_contracts rc ON rc.id = o.rate_contract_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) AS n, STRING_AGG(DISTINCT grade_label, ', ') AS grades, SUM(quantity_m3) AS m3
+               FROM order_items WHERE order_id = o.id
+           ) oi ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT decision_note FROM credit_hold_requests WHERE order_id = o.id AND status = 'rejected'
+              ORDER BY decided_at DESC NULLS LAST LIMIT 1
+           ) h ON TRUE
+          WHERE o.id = ANY($1::uuid[])`,
+        [named.map((d) => d.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return named.map((d) => {
+        const e = by.get(d.id);
+        return {
+          ...d,
+          siteName: e?.siteName ?? null,
+          plantName: e?.plantName ?? null,
+          quotationNo: e?.quotationNo ?? null,
+          rateContractNo: e?.rateContractNo ?? null,
+          itemCount: e?.itemCount ?? 0,
+          gradeLabels: e?.gradeLabels ?? null,
+          quantityM3: e?.quantityM3 ?? 0,
+          lastCreditNote: e?.lastCreditNote ?? null,
+        };
+      });
     });
   }
 

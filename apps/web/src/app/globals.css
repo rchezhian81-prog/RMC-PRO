@@ -3966,3 +3966,40 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-st-form-submit { padding-bottom: 0; }
   .mn-st-ledger-tools { justify-content: flex-start; }
 }
+
+/* ============================================================================
+   MATERIAL INWARD — the document-list rows above, plus the "new inward" form
+   ============================================================================ */
+.mn-mi-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.mn-mi-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 6px; }
+.mn-mi-form-submit button { white-space: nowrap; }
+.mn-mi .mn-ord-cols--acts,
+.mn-mi .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.5fr) minmax(130px, 0.7fr) minmax(150px, 0.85fr) minmax(100px, auto) auto; }
+.mn-mi .mn-ord-who .mn-ord-meta { white-space: normal; }
+.mn-mi-rej { color: var(--mn-warning); }
+.mn-mi-rate-off { color: var(--mn-warning); }
+.mn-mi-acts { display: flex; gap: 4px; justify-content: flex-end; }
+.mn-mi-acts button { white-space: nowrap; }
+.mn-mi-instock { text-decoration: none; color: var(--mn-success); font-weight: 600; white-space: nowrap; }
+@media (max-width: 1180px) {
+  .mn-mi-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .mn-mi .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'val val'
+      'value value'
+      'acts acts';
+  }
+  .mn-mi .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-mi .mn-ord-row--acts .mn-ord-val:nth-of-type(3) { grid-area: val; }
+  .mn-mi .mn-ord-row--acts .mn-ord-val:nth-of-type(4) { grid-area: value; }
+  .mn-mi-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-mi-form { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .mn-mi-form { grid-template-columns: 1fr; }
+}

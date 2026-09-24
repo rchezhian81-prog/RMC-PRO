@@ -4091,3 +4091,34 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 480px) {
   .mn-sa-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ============================================================================
+   NEGATIVE STOCK — the document-list rows above, with the reason and decision
+   ============================================================================ */
+.mn-ns .mn-ord-cols--acts,
+.mn-ns .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(120px, 0.6fr) minmax(120px, 0.6fr) minmax(0, 1.6fr) minmax(150px, 0.9fr) auto; }
+.mn-ns-neg { color: var(--mn-danger); }
+.mn-ns-reason { display: grid; gap: 2px; min-width: 0; }
+.mn-ns-reason-text { font-size: 13.5px; color: var(--mn-text); overflow-wrap: anywhere; }
+.mn-ns-reason .mn-ord-meta { white-space: normal; }
+.mn-ns-decision { display: grid; gap: 4px; justify-items: start; }
+.mn-ns-decided { white-space: normal; }
+.mn-ns-acts { display: flex; gap: 4px; justify-content: flex-end; }
+.mn-ns-acts button { white-space: nowrap; }
+@media (max-width: 860px) {
+  .mn-ns .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'id'
+      'asked'
+      'books'
+      'reason'
+      'decision'
+      'acts';
+  }
+  .mn-ns .mn-ord-row--acts .mn-ord-status { grid-area: decision; justify-self: start; justify-items: start; }
+  .mn-ns .mn-ord-row--acts .mn-ord-val:nth-of-type(2) { grid-area: asked; }
+  .mn-ns .mn-ord-row--acts .mn-ord-val:nth-of-type(3) { grid-area: books; }
+  .mn-ns-reason { grid-area: reason; }
+  .mn-ns-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+}

@@ -1,6 +1,7 @@
 import { REPORT_FETCH_LIMIT, assertReportSize } from '../common/list-limit.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { In } from 'typeorm';
+import { businessToday } from '../common/business-date.util';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { companyBlock, type StatementPdfData } from '../sales/pdf.service';
@@ -144,7 +145,9 @@ export class BillingReportsService {
           ORDER BY p.customer_id, p.receipt_date DESC NULLS LAST, p.created_at DESC`,
       );
       const lastReceiptOf = new Map(lastReceipts.map((r) => [r.customerId, r]));
-      const todayIso = new Date().toISOString().slice(0, 10);
+      // The plant's calendar day, not the UTC one: past 18:30 UTC the plant is
+      // already on tomorrow, and an invoice due today would read as overdue.
+      const todayIso = businessToday();
       const byCustomer = new Map<
         string,
         {
@@ -458,14 +461,20 @@ export class BillingReportsService {
 
   /** Receipts register, optionally bounded to [from, to] on the receipt date. */
   receiptsRegister(tenantId: string, from?: string, to?: string) {
-    return this.db.runInTenant(tenantId, (m) => {
+    return this.db.runInTenant(tenantId, async (m) => {
       // Date-bound in the DB (was: load all payments, filter in JS). Same order
       // (created_at DESC) and same NULL-receipt_date exclusion as the old
       // `(receiptDate ?? '') >= from` test.
       const qb = m.getRepository(Payment).createQueryBuilder('p');
       if (from) qb.andWhere('p.receiptDate >= :from', { from });
       if (to) qb.andWhere('p.receiptDate <= :to', { to });
-      return qb.orderBy('p.createdAt', 'DESC').getMany();
+      const rows = await qb.orderBy('p.createdAt', 'DESC').getMany();
+      // The payer's name rides on each row: the register is read by a person,
+      // and a customer id means nothing to them.
+      const ids = [...new Set(rows.map((r) => r.customerId).filter((v): v is string => !!v))];
+      const customers = ids.length ? await m.getRepository(Customer).find({ where: { id: In(ids) } }) : [];
+      const nameOf = new Map(customers.map((c) => [c.id, c.customerName]));
+      return rows.map((r) => ({ ...r, customerName: r.customerId ? nameOf.get(r.customerId) ?? null : null }));
     });
   }
 

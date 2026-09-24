@@ -4399,3 +4399,48 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-cs .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
   .mn-cs .mn-ir-tools { justify-content: flex-start; }
 }
+
+/* ============================================================================
+   BILLING REPORTS and SALES MIS — the period's sales, tax and money in, on the
+   reports' bones
+   ============================================================================ */
+.mn-br-sub td { font-weight: 600; border-top: 2px solid var(--mn-border); }
+.mn-br-void td { color: var(--mn-muted); text-decoration: line-through; }
+.mn-br-void td .mn-od-rate-meta, .mn-br-void td .mn-badge { text-decoration: none; }
+.mn-br .mn-od-rate-meta, .mn-mis .mn-od-rate-meta { white-space: normal; max-width: 320px; }
+.mn-mis > .mn-ord-how { max-width: none; }
+@media (max-width: 860px) {
+  .mn-br .mn-card-head, .mn-mis .mn-card-head { flex-wrap: wrap; }
+  .mn-br .mn-card-actions, .mn-mis .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+  .mn-br .mn-ir-tools, .mn-mis .mn-ir-tools { justify-content: flex-start; }
+  .mn-br .mn-board-card-title, .mn-mis .mn-board-card-title { white-space: normal; flex-wrap: wrap; }
+}
+
+/* ============================================================================
+   CREDIT / DEBIT NOTES — the document-list rows above
+   ============================================================================ */
+.mn-cn .mn-ord-cols--acts,
+.mn-cn .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(150px, 0.9fr) minmax(0, 1.4fr) minmax(150px, 0.8fr) minmax(120px, auto) auto; }
+.mn-cn-draft { color: var(--mn-muted); font-weight: 500; }
+.mn-cn-why { display: grid; gap: 2px; min-width: 0; }
+.mn-cn-why-text { font-size: 13.5px; color: var(--mn-text); overflow-wrap: anywhere; }
+.mn-cn-why .mn-ord-meta { white-space: normal; }
+.mn-cn-status { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; }
+.mn-cn-cancel { flex-basis: 100%; white-space: normal; }
+.mn-cn-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-cn-acts button { white-space: nowrap; }
+@media (max-width: 860px) {
+  .mn-cn .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'why why'
+      'val val'
+      'acts acts';
+  }
+  .mn-cn .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; justify-content: flex-end; }
+  .mn-cn-why { grid-area: why; }
+  .mn-cn .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-cn-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+}

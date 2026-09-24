@@ -1,5 +1,6 @@
 import { listLimit } from '../common/list-limit.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { In } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { Company, CreditNote, CreditNoteItem, Customer, Invoice, InvoiceItem } from '../core/database/entities';
@@ -39,10 +40,31 @@ export class CreditNoteService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Every note with the invoice it amends, the party and the reason in words. */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(CreditNote).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const notes = await m.getRepository(CreditNote).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!notes.length) return notes;
+      const invoiceIds = [...new Set(notes.map((n) => n.invoiceId))];
+      const customerIds = [...new Set(notes.map((n) => n.customerId).filter((v): v is string => !!v))];
+      const [invoices, customers] = await Promise.all([
+        m.getRepository(Invoice).find({ where: { id: In(invoiceIds) } }),
+        customerIds.length ? m.getRepository(Customer).find({ where: { id: In(customerIds) } }) : [],
+      ]);
+      const invOf = new Map(invoices.map((i) => [i.id, i]));
+      const custOf = new Map(customers.map((c) => [c.id, c.customerName]));
+      return notes.map((n) => {
+        const inv = invOf.get(n.invoiceId);
+        return {
+          ...n,
+          invoiceNo: inv?.invoiceNo ?? null,
+          invoiceTotal: inv ? num(inv.totalAmount) : null,
+          invoiceOutstanding: inv ? num(inv.outstandingAmount) : null,
+          customerName: (n.customerId ? custOf.get(n.customerId) : null) ?? null,
+          reasonLabel: n.reason ? (NOTE_REASONS[n.reason] ?? n.reason) : null,
+        };
+      });
+    });
   }
 
   forInvoice(tenantId: string, invoiceId: string) {

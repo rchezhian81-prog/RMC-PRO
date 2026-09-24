@@ -4530,3 +4530,19 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-pu-progress, .mn-gr-bill, .mn-vb-match { grid-area: extra; }
   .mn-pu-acts, .mn-gr-acts, .mn-vb-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; margin-left: 0; max-width: none; }
 }
+
+/* ============================================================================
+   PURCHASE REPORTS and ITC REGISTER — payables and buying on the reports' bones
+   ============================================================================ */
+.mn-pr2-cols, .mn-pr2-row { grid-template-columns: minmax(200px, 1fr) minmax(0, 1.8fr) minmax(150px, 0.8fr); }
+.mn-pr2-who { flex: 0 1 260px; }
+.mn-pr2 .mn-od-rate-meta, .mn-itc .mn-od-rate-meta { white-space: normal; max-width: 320px; }
+@media (max-width: 860px) {
+  .mn-pr2-row { grid-template-columns: minmax(0, 1fr); }
+  .mn-pr2-row .mn-ord-val { text-align: left; align-items: flex-start; }
+  .mn-pr2-who { flex-basis: 100%; }
+  .mn-pr2 .mn-card-head, .mn-itc .mn-card-head { flex-wrap: wrap; }
+  .mn-pr2 .mn-card-actions, .mn-itc .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+  .mn-pr2 .mn-ir-tools, .mn-itc .mn-ir-tools { justify-content: flex-start; }
+  .mn-pr2 .mn-board-card-title, .mn-itc .mn-board-card-title { white-space: normal; flex-wrap: wrap; }
+}

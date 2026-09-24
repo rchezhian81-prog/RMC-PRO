@@ -4137,3 +4137,19 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-ir-two { grid-template-columns: minmax(0, 1fr); }
   .mn-ir-tools { justify-content: flex-start; }
 }
+
+/* ============================================================================
+   PRODUCTION REPORTS — what the plant made and what it took, on the reports' bones
+   ============================================================================ */
+.mn-pr-bar { margin-left: auto; background: var(--mn-surface-2); }
+.mn-pr-bar > span { background: var(--mn-primary); }
+.mn-pr-breaches { display: grid; }
+.mn-pr-breach { border-top: 1px solid var(--mn-border); }
+.mn-pr-breach:first-child { border-top: 0; }
+.mn-pr-breach-head { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 12px 16px 8px; }
+.mn-pr-breach-head > div { display: grid; }
+.mn-pr-breach .mn-table thead th { background: var(--mn-surface-2); }
+.mn-pr .mn-od-rate-meta { white-space: normal; max-width: 320px; }
+@media (max-width: 860px) {
+  .mn-pr-breach-head { padding: 12px 12px 8px; }
+}

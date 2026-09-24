@@ -4616,3 +4616,100 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-eh-group { grid-template-columns: minmax(0, 1fr) auto; }
   .mn-eh-group .mn-eh-acts { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* ============================================================================
+   QUALITY — slump tests, cube sets, one cube set, the QC register
+   ============================================================================ */
+.mn-sl-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 16px; }
+.mn-sl-form > * { min-width: 0; }
+.mn-sl-form-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mn-sl-form-foot .mn-ord-how { flex: 1 1 240px; white-space: normal; }
+.mn-sl-preview { flex: 1 1 240px; margin: 0; }
+.mn-sl-form-submit { display: flex; gap: 8px; margin-left: auto; }
+.mn-sl-cols, .mn-sl-row { grid-template-columns: minmax(170px, 0.9fr) minmax(170px, 1fr) minmax(190px, 1.1fr) minmax(120px, 0.7fr) minmax(0, 1.2fr); }
+.mn-sl-val { display: grid; gap: 3px; min-width: 0; }
+.mn-sl-bar { position: relative; display: block; width: 100%; max-width: 180px; height: 8px; border-radius: 999px; background: var(--mn-surface-2); }
+.mn-sl-bar-band { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: color-mix(in srgb, var(--mn-success) 30%, var(--mn-surface-2)); }
+.mn-sl-bar-dot { position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--mn-success); box-shadow: 0 0 0 2px var(--mn-surface); }
+.mn-sl-bar-dot.is-bad { background: var(--mn-danger); }
+.mn-sl-status { display: grid; gap: 3px; justify-items: start; }
+.mn-sl-remarks { min-width: 0; }
+.mn-sl-remarks .mn-ord-meta { white-space: normal; overflow-wrap: anywhere; }
+.mn-cb-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 16px; }
+.mn-cb-form > * { min-width: 0; }
+.mn-cb-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-cb-form-submit .mn-ord-how { white-space: normal; }
+.mn-cb .mn-ord-cols--acts,
+.mn-cb .mn-ord-row--acts { grid-template-columns: minmax(160px, 0.9fr) minmax(170px, 1fr) minmax(170px, 1fr) minmax(150px, 0.9fr) minmax(90px, auto) auto; }
+.mn-cb-res { display: grid; gap: 2px; min-width: 0; font-size: 12.5px; color: var(--mn-text); }
+.mn-cb-res-line strong { font-weight: 600; }
+.mn-cb-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-cb-acts button { white-space: nowrap; }
+.mn-cbd-groups { display: grid; }
+.mn-cbd-group { padding: 10px 16px 12px; border-top: 1px solid var(--mn-border); display: grid; gap: 6px; }
+.mn-cbd-group:first-child { border-top: 0; }
+.mn-cbd-group-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.mn-cbd-group-title { font-weight: 700; font-size: 13.5px; }
+.mn-cbd-cube { display: grid; grid-template-columns: 72px minmax(0, 1fr) 110px minmax(120px, 0.8fr); gap: 10px; align-items: center; }
+.mn-cbd-cube-no { font-size: 13px; font-weight: 600; }
+.mn-cbd-cube-bar { position: relative; display: block; height: 10px; border-radius: 999px; background: var(--mn-surface-2); overflow: visible; }
+.mn-cbd-cube-fill { display: block; height: 100%; border-radius: 999px; background: var(--mn-success); }
+.mn-cbd-cube.is-bad .mn-cbd-cube-fill { background: var(--mn-danger); }
+.mn-cbd-cube-floor { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--mn-text); opacity: 0.6; }
+.mn-cbd-cube-val { text-align: right; }
+.mn-cbd-cube-meta { white-space: normal; }
+.mn-cbd-form { display: grid; gap: 4px; }
+.mn-cbd-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.mn-cbd-form-row > * { min-width: 0; }
+.mn-cbd-hint { white-space: normal; margin: 0 0 8px; }
+.mn-cbd-cubes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0 12px; }
+.mn-cbd-cubes > * { min-width: 0; }
+.mn-qr-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.mn-qr .mn-card-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mn-qr-sum { display: flex; gap: 6px 18px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--mn-border); font-size: 13px; color: var(--mn-muted); }
+.mn-qr-sum strong { color: var(--mn-text); font-variant-numeric: tabular-nums; }
+.mn-qr-short { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mn-qr-foot { padding: 10px 16px; border-top: 1px solid var(--mn-border); margin: 0; white-space: normal; }
+@media (max-width: 1100px) {
+  .mn-qr-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .mn-sl-form, .mn-cb-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-sl-form-submit { margin-left: 0; }
+  .mn-sl-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'val val'
+      'rem rem';
+  }
+  .mn-sl-row .mn-ord-id { grid-area: id; }
+  .mn-sl-row .mn-sl-status { grid-area: status; justify-items: end; }
+  .mn-sl-row .mn-ord-who { grid-area: who; }
+  .mn-sl-row .mn-sl-val { grid-area: val; }
+  .mn-sl-row .mn-sl-remarks { grid-area: rem; }
+  .mn-cb .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'res res'
+      'val val'
+      'acts acts';
+  }
+  .mn-cb .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-cb .mn-ord-row--acts .mn-cb-res { grid-area: res; }
+  .mn-cb .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-cb-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-cbd-cube { grid-template-columns: 64px minmax(0, 1fr) 90px; }
+  .mn-cbd-cube-meta { grid-column: 1 / -1; }
+  .mn-qr-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mn-qr .mn-card-head { flex-wrap: wrap; }
+  .mn-qr .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+  .mn-qr .mn-board-card-title { white-space: normal; flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  .mn-sl-form, .mn-cb-form, .mn-cbd-form-row { grid-template-columns: minmax(0, 1fr); }
+}
+.mn-cb .mn-ord-id .mn-ord-meta, .mn-cb .mn-ord-who .mn-ord-meta { white-space: normal; }

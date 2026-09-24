@@ -4053,3 +4053,41 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 480px) {
   .mn-wb-form, .mn-wb-dev-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ============================================================================
+   STOCK ADJUSTMENTS — the form first, then the balances and the history rows
+   ============================================================================ */
+.mn-sa-form { display: grid; grid-template-columns: minmax(220px, 1.3fr) auto minmax(140px, 0.8fr) minmax(240px, 1.6fr); gap: 12px; align-items: end; }
+.mn-sa-form > * { min-width: 0; }
+.mn-sa-dir { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 38px; }
+.mn-sa-dir .mn-board-chip { padding: 7px 12px; }
+.mn-sa-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; min-width: 0; }
+.mn-sa-form-submit button { white-space: nowrap; }
+.mn-sa-preview { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.mn-sa-preview strong { font-family: var(--mn-font-display); font-size: 16px; font-variant-numeric: tabular-nums; }
+.mn-sa-preview .mn-ord-meta { white-space: normal; }
+.mn-sa-preview--neg strong { color: var(--mn-danger); }
+.mn-sa-picked td { background: color-mix(in srgb, var(--mn-primary) 7%, var(--mn-surface)); }
+.mn-sa-cols, .mn-sa-row { grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(0, 1.6fr); }
+.mn-sa-row { cursor: default; }
+.mn-sa-reason { font-size: 13px; color: var(--mn-text); overflow-wrap: anywhere; }
+@media (max-width: 1180px) {
+  .mn-sa-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .mn-sa-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id id'
+      'who who'
+      'val val'
+      'after after'
+      'reason reason';
+  }
+  .mn-sa-row .mn-ord-val:nth-of-type(3) { grid-area: val; }
+  .mn-sa-row .mn-ord-val:nth-of-type(4) { grid-area: after; text-align: left; }
+  .mn-sa-reason { grid-area: reason; }
+}
+@media (max-width: 480px) {
+  .mn-sa-form { grid-template-columns: minmax(0, 1fr); }
+}

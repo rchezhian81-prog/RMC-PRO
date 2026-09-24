@@ -4122,3 +4122,18 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-ns-reason { grid-area: reason; }
   .mn-ns-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
 }
+
+/* ============================================================================
+   INVENTORY REPORTS — the position and the movement, on the register's bones
+   ============================================================================ */
+.mn-ir-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.mn-ir-total td { font-weight: 700; border-top: 2px solid var(--mn-border); }
+.mn-ir-total-value { font-family: var(--mn-font-display); font-size: 16px; color: var(--mn-primary); font-variant-numeric: tabular-nums; }
+.mn-ir-low { color: var(--mn-warning); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mn-ir-foot { margin: 0; padding: 10px 16px 12px; font-size: 12.5px; color: var(--mn-muted); border-top: 1px solid var(--mn-border); }
+.mn-ir-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.mn-ir .mn-od-rate-meta { white-space: normal; max-width: 320px; }
+@media (max-width: 860px) {
+  .mn-ir-two { grid-template-columns: minmax(0, 1fr); }
+  .mn-ir-tools { justify-content: flex-start; }
+}

@@ -4330,3 +4330,14 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-ch-decision { grid-area: decision; }
   .mn-ch-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
 }
+
+/* ============================================================================
+   IMPORT PO — the AI-read purchase order, on the document-list bones
+   ============================================================================ */
+.mn-po-drop { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mn-po-drop .mn-ord-meta { white-space: normal; }
+.mn-po-grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+.mn-po-next { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .mn-po-grid { grid-template-columns: minmax(0, 1fr); }
+}

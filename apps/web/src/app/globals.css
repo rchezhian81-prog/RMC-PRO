@@ -4231,3 +4231,35 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-ld-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
   .mn-ld-form, .mn-ld-details, .mn-ld-fu { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ============================================================================
+   RATE CONTRACTS — the document-list rows above, plus the on-demand form;
+   the detail shares the order / quotation detail layout (.mn-od-*)
+   ============================================================================ */
+.mn-rc-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 16px; }
+.mn-rc-form > * { min-width: 0; }
+.mn-rc-form-submit { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.mn-rc .mn-ord-cols--acts,
+.mn-rc .mn-ord-row--acts { grid-template-columns: minmax(140px, 0.8fr) minmax(160px, 1fr) minmax(150px, 0.9fr) minmax(190px, 1fr) minmax(130px, 0.8fr) minmax(112px, auto) 28px; }
+.mn-rc-rates { display: grid; gap: 2px; min-width: 0; }
+.mn-rc-grades { font-size: 13.5px; font-weight: 600; color: var(--mn-text); overflow-wrap: anywhere; }
+.mn-rc .mn-ord-when-m { white-space: normal; }
+.mn-rcd-qty { width: 96px; text-align: right; }
+.mn-rcd-book { display: grid; gap: 4px; padding-bottom: 14px; justify-items: start; }
+@media (max-width: 860px) {
+  .mn-rc-form { grid-template-columns: minmax(0, 1fr); }
+  .mn-rc .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'rates rates'
+      'when when'
+      'val val';
+  }
+  .mn-rc .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-rc-rates { grid-area: rates; }
+  .mn-rc .mn-ord-row--acts .mn-ord-when { grid-area: when; }
+  .mn-rc .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-rc .mn-ord-row--acts .mn-ord-go { display: none; }
+}

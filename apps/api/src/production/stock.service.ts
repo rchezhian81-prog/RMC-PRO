@@ -31,10 +31,64 @@ interface TxnInput {
 export class StockService {
   constructor(private readonly db: TenantDbService) {}
 
+  /**
+   * The balances with what the yard reads them by: the material's code, type,
+   * reorder level and standard rate (for a stock value), how fast the last
+   * 30 days of batching drew each one down (for days of cover), and the last
+   * movement on it. Two batched lookups for the whole page.
+   */
   listBalances(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(StockBalance).find({ order: { materialLabel: 'ASC' } }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(StockBalance).find({ order: { materialLabel: 'ASC' } });
+      const materialIds = [...new Set(rows.map((r) => r.materialId))];
+      const plantIds = [...new Set(rows.map((r) => r.plantId))];
+      const materials: Array<{ id: string; materialCode: string; materialType: string | null; reorderLevel: string; minimumStock: string; standardRate: string }> = materialIds.length
+        ? await m.query(
+            `SELECT id, material_code AS "materialCode", material_type AS "materialType", reorder_level AS "reorderLevel",
+                    minimum_stock AS "minimumStock", standard_rate AS "standardRate"
+               FROM materials WHERE id = ANY($1)`,
+            [materialIds],
+          )
+        : [];
+      const plants: Array<{ id: string; plantName: string }> = plantIds.length
+        ? await m.query(`SELECT id, plant_name AS "plantName" FROM plants WHERE id = ANY($1)`, [plantIds])
+        : [];
+      const stats: Array<{ plantId: string; materialId: string; consumed30: string; lastMovementAt: Date | null; lastMovementType: string | null; lastInwardAt: Date | null }> = materialIds.length
+        ? await m.query(
+            `SELECT t.plant_id AS "plantId", t.material_id AS "materialId",
+                    COALESCE(SUM(t.out_quantity) FILTER (WHERE t.transaction_type = 'batch_consumption' AND t.created_at > now() - interval '30 days'), 0)::float AS "consumed30",
+                    MAX(t.created_at) AS "lastMovementAt",
+                    (ARRAY_AGG(t.transaction_type ORDER BY t.created_at DESC))[1] AS "lastMovementType",
+                    MAX(t.created_at) FILTER (WHERE t.transaction_type = 'inward') AS "lastInwardAt"
+               FROM stock_transactions t
+              WHERE t.material_id = ANY($1)
+              GROUP BY t.plant_id, t.material_id`,
+            [materialIds],
+          )
+        : [];
+      const material = new Map(materials.map((x) => [x.id, x]));
+      const plantName = new Map(plants.map((p) => [p.id, p.plantName]));
+      const stat = new Map(stats.map((s) => [`${s.plantId}:${s.materialId}`, s]));
+      return rows.map((r) => {
+        const mt = material.get(r.materialId);
+        const s = stat.get(`${r.plantId}:${r.materialId}`);
+        const consumed30 = Number(s?.consumed30 ?? 0);
+        return {
+          ...r,
+          plantName: plantName.get(r.plantId) ?? null,
+          materialCode: mt?.materialCode ?? null,
+          materialType: mt?.materialType ?? null,
+          reorderLevel: Number(mt?.reorderLevel ?? 0),
+          minimumStock: Number(mt?.minimumStock ?? 0),
+          standardRate: Number(mt?.standardRate ?? 0),
+          consumed30,
+          avgDailyOut: Math.round((consumed30 / 30) * 1000) / 1000,
+          lastMovementAt: s?.lastMovementAt ?? null,
+          lastMovementType: s?.lastMovementType ?? null,
+          lastInwardAt: s?.lastInwardAt ?? null,
+        };
+      });
+    });
   }
 
   ledger(tenantId: string, materialId?: string, limit?: string) {

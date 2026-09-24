@@ -3924,3 +3924,45 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 480px) {
   .mn-md-form, .mn-md-line, .mn-md-details { grid-template-columns: 1fr; }
 }
+
+/* ============================================================================
+   STOCK — the document-list rows above, with cover and value columns
+   ============================================================================ */
+.mn-st-form { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(220px, 1.3fr) minmax(160px, 0.9fr) auto; gap: 12px; align-items: end; }
+.mn-st-form-submit { padding-bottom: 14px; }
+.mn-st-form-submit button { white-space: nowrap; }
+.mn-st .mn-ord-cols--acts,
+.mn-st .mn-ord-row--acts { grid-template-columns: minmax(170px, 1.1fr) minmax(120px, 0.8fr) minmax(130px, 0.8fr) minmax(120px, 0.8fr) minmax(150px, 0.9fr) minmax(100px, auto) auto; }
+.mn-st .mn-ord-row--acts::before { background: var(--rail); }
+.mn-st-cover { display: grid; gap: 2px; min-width: 0; }
+.mn-st-cover .mn-ord-cust { font-weight: 600; white-space: normal; }
+.mn-st-cover--short { color: var(--mn-warning); }
+.mn-st-acts { display: flex; justify-content: flex-end; }
+.mn-st-anchor { scroll-margin-top: 80px; height: 0; }
+.mn-st-ledger-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.mn-st-chip { padding: 5px 12px; }
+.mn-st-in { color: var(--mn-success); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mn-st-out { color: var(--mn-danger); font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 1180px) {
+  .mn-st-form { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 860px) {
+  .mn-st .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'val val'
+      'cover cover'
+      'value value'
+      'when when'
+      'acts acts';
+  }
+  .mn-st .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-st .mn-ord-row--acts .mn-ord-val:nth-of-type(2) { grid-area: val; }
+  .mn-st-cover { grid-area: cover; }
+  .mn-st .mn-ord-row--acts .mn-ord-val:nth-of-type(4) { grid-area: value; text-align: left; }
+  .mn-st-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-st-form { grid-template-columns: 1fr; }
+  .mn-st-form-submit { padding-bottom: 0; }
+  .mn-st-ledger-tools { justify-content: flex-start; }
+}

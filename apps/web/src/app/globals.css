@@ -5128,3 +5128,50 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-se-cred { grid-template-columns: minmax(0, 1fr) auto; }
   .mn-se-cred-acts { grid-column: 1 / -1; }
 }
+
+/* ============================================================================
+   AGENT GOVERNOR
+   ============================================================================ */
+.mn-ag-budgets { display: grid; grid-template-columns: minmax(140px, 220px) minmax(140px, 220px) minmax(0, 1fr); gap: 0 16px; align-items: start; }
+.mn-ag-budgets > * { min-width: 0; }
+.mn-ag-budgets-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 24px; }
+.mn-ag-budgets-save .mn-ord-meta { white-space: normal; }
+.mn-ag .mn-ag-cols, .mn-ag .mn-ag-row { grid-template-columns: minmax(260px, 1.4fr) minmax(0, 1.4fr) minmax(90px, auto) auto; }
+.mn-ag .mn-ord-id .mn-ord-meta { white-space: normal; }
+.mn-ag-tools { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.mn-ag-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-ag-acts button { white-space: nowrap; }
+.mn-ag .mn-ag-acols, .mn-ag .mn-ag-arow { grid-template-columns: minmax(260px, 1.6fr) minmax(160px, 0.8fr) minmax(120px, auto) auto; }
+.mn-ag-strip { gap: 6px; }
+.mn-ag-rcols, .mn-ag-rrow { grid-template-columns: minmax(200px, 0.9fr) minmax(90px, 0.4fr) minmax(0, 2fr) minmax(90px, auto); }
+.mn-ag-gcols, .mn-ag-grow { grid-template-columns: minmax(200px, 0.9fr) minmax(90px, 0.4fr) minmax(0, 2fr) minmax(90px, auto); }
+.mn-ag-used { display: grid; gap: 2px; font-size: 13px; }
+.mn-ag-outcome { display: grid; gap: 2px; min-width: 0; font-size: 13px; }
+.mn-ag-outcome > span { overflow-wrap: anywhere; }
+.mn-ag-outcome .mn-ord-meta { white-space: normal; }
+.mn-ag .mn-card-head { flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .mn-ag-budgets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-ag-budgets-save { grid-column: 1 / -1; padding-top: 0; }
+  .mn-ag .mn-ag-row, .mn-ag .mn-ag-arow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'mid mid'
+      'acts acts';
+  }
+  .mn-ag .mn-ag-row .mn-ord-status, .mn-ag .mn-ag-arow .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-ag .mn-ag-row .mn-ag-tools, .mn-ag .mn-ag-arow .mn-ord-who { grid-area: mid; }
+  .mn-ag .mn-ag-row .mn-ag-acts, .mn-ag .mn-ag-arow .mn-ag-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-ag-rrow, .mn-ag-grow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'used used'
+      'out out';
+  }
+  .mn-ag-rrow .mn-ord-status, .mn-ag-grow .mn-ord-status { grid-area: status; justify-self: end; }
+  .mn-ag-rrow .mn-ag-used, .mn-ag-grow .mn-ag-used { grid-area: used; }
+  .mn-ag-rrow .mn-ag-outcome, .mn-ag-grow .mn-ag-outcome { grid-area: out; }
+  .mn-ag .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+}

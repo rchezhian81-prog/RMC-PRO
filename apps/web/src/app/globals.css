@@ -4341,3 +4341,61 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 860px) {
   .mn-po-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ============================================================================
+   CUSTOMER OUTSTANDING — the age of the money per customer, on the document-
+   list bones; CUSTOMER STATEMENT — one account for a period
+   ============================================================================ */
+.mn-ao-chip .mn-board-chip-n { min-width: 0; padding: 0 8px; font-size: 12px; }
+.mn-ao .mn-ord-cols--acts,
+.mn-ao .mn-ord-row--acts { grid-template-columns: minmax(190px, 1.1fr) minmax(0, 1.6fr) minmax(130px, 0.8fr) minmax(140px, 0.9fr) minmax(120px, 0.7fr) auto; }
+.mn-ao-row .mn-ord-who { gap: 2px; }
+.mn-ao-age { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.mn-ao-bar { display: flex; height: 8px; border-radius: 999px; background: var(--mn-surface-2); overflow: hidden; }
+.mn-ao-bar > span { display: block; height: 100%; }
+.mn-ao-bar > span[data-tone='success'] { background: var(--mn-success); }
+.mn-ao-bar > span[data-tone='info'] { background: var(--mn-info, var(--mn-primary)); }
+.mn-ao-bar > span[data-tone='warning'] { background: var(--mn-warning); }
+.mn-ao-bar > span[data-tone='danger'] { background: var(--mn-danger); }
+.mn-ao-age-text { white-space: normal; font-variant-numeric: tabular-nums; }
+.mn-ao-age-text em { font-style: normal; color: var(--mn-subtle); }
+.mn-ao-age-text > span[data-tone='danger'] { color: var(--mn-danger); font-weight: 600; }
+.mn-ao-age-text > span[data-tone='warning'] { color: var(--mn-warning); font-weight: 600; }
+.mn-ao-overdue { color: var(--mn-warning); font-weight: 600; }
+.mn-ao-exposure { display: grid; gap: 3px; min-width: 0; }
+.mn-ao-exposure-text { white-space: normal; }
+.mn-ao-exposure[data-tone='danger'] .mn-ao-exposure-text { color: var(--mn-danger); font-weight: 600; }
+.mn-ao-exposure[data-tone='warning'] .mn-ao-exposure-text { color: var(--mn-warning); font-weight: 600; }
+.mn-ao .mn-ord-when-m { white-space: normal; }
+.mn-ao-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-ao-acts button { white-space: nowrap; }
+.mn-cs-period { gap: 12px 16px; }
+.mn-cs-who { display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; }
+.mn-cs-who svg { color: var(--mn-subtle); flex: none; }
+.mn-cs-who .mn-input { width: 100%; min-width: 0; }
+.mn-cs-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mn-cs-open td { background: var(--mn-surface-2); }
+.mn-cs-entry { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .mn-ao .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'who'
+      'age'
+      'val'
+      'exposure'
+      'when'
+      'acts';
+  }
+  .mn-ao-age { grid-area: age; }
+  .mn-ao .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-ao-exposure { grid-area: exposure; }
+  .mn-ao .mn-ord-row--acts .mn-ord-when { grid-area: when; }
+  .mn-ao-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-cs-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mn-cs-who { flex-basis: 100%; }
+  .mn-cs .mn-card-head { flex-wrap: wrap; }
+  .mn-cs .mn-board-card-title { white-space: normal; flex-wrap: wrap; }
+  .mn-cs .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+  .mn-cs .mn-ir-tools { justify-content: flex-start; }
+}

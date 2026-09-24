@@ -29,12 +29,24 @@ export class MaintenanceJobService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Every job with the vehicle and the schedule it fulfils by name. */
   list(tenantId: string, vehicleId?: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) => {
+    return this.db.runInTenant(tenantId, async (m) => {
       const where: Record<string, unknown> = {};
       if (vehicleId) where.vehicleId = vehicleId;
       if (status) where.status = status;
-      return m.getRepository(VehicleMaintenanceJob).find({ where, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      const rows = await m.getRepository(VehicleMaintenanceJob).find({ where, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!rows.length) return rows;
+      const extra: Array<{ id: string; vehicleNo: string | null; vehicleType: string | null; scheduleServiceType: string | null }> = await m.query(
+        `SELECT j.id, v.vehicle_no AS "vehicleNo", v.vehicle_type AS "vehicleType", s.service_type AS "scheduleServiceType"
+           FROM vehicle_maintenance_jobs j
+           LEFT JOIN vehicles v ON v.id = j.vehicle_id
+           LEFT JOIN vehicle_service_schedules s ON s.id = j.schedule_id
+          WHERE j.id = ANY($1::uuid[])`,
+        [rows.map((r) => r.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return rows.map((r) => ({ ...r, ...(by.get(r.id) ?? { vehicleNo: null, vehicleType: null, scheduleServiceType: null }) }));
     });
   }
 

@@ -66,6 +66,11 @@ export class ServiceScheduleService {
         [vehicleIds],
       );
       const odoOf = new Map(odoRows.map((r) => [r.vehicle_id, numOrNull(r.odo) ?? 0]));
+      const vehicleRows: Array<{ id: string; vehicleNo: string; vehicleType: string | null }> = await m.query(
+        `SELECT id, vehicle_no AS "vehicleNo", vehicle_type AS "vehicleType" FROM vehicles WHERE id = ANY($1)`,
+        [vehicleIds],
+      );
+      const vehicleOf = new Map(vehicleRows.map((v) => [v.id, v]));
       const today = businessToday();
       return rows.map((s) => {
         // Mirror currentOdometer(): GREATEST(vehicle log odometer, this schedule's
@@ -79,7 +84,8 @@ export class ServiceScheduleService {
           nextDueDate: s.nextDueDate,
           today,
         });
-        return { ...s, currentOdometer, dueState };
+        const v = vehicleOf.get(s.vehicleId);
+        return { ...s, vehicleNo: v?.vehicleNo ?? null, vehicleType: v?.vehicleType ?? null, currentOdometer, dueState };
       });
     });
   }

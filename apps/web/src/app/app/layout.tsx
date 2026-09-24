@@ -154,6 +154,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/fleet/maintenance', label: 'Maintenance', icon: <Wrench size={IS} />, perm: 'fleet.view', module: 'fleet' },
       { href: '/app/fleet/fuel', label: 'Fuel Log', icon: <Fuel size={IS} />, perm: 'fleet.view', module: 'fleet' },
+      { href: '/app/fleet/reports', label: 'Running Cost', icon: <BarChart3 size={IS} />, perm: 'fleet.view', module: 'fleet' },
     ],
   },
   {

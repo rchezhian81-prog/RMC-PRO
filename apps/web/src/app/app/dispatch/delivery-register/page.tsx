@@ -305,9 +305,7 @@ export default function DeliveryRegisterPage() {
               )}
             </Table>
           </div>
-        ) : failed[0] ? (
-          <ErrorState message={failed[0] ?? 'This report did not load.'} />
-        ) : (
+        ) : failed[0] ? <ErrorState message={String(failed[0])} /> : (
           <EmptyState title="No deliveries in this period" description="Challans signed for on site appear here under the day the load left the plant. Widen the period or check the Dispatch board for loads still on the road." />
         )}
       </Card>
@@ -355,9 +353,7 @@ export default function DeliveryRegisterPage() {
               </tbody>
             </Table>
           </div>
-        ) : failed[1] ? (
-          <ErrorState message={failed[1] ?? 'This report did not load.'} />
-        ) : (
+        ) : failed[1] ? <ErrorState message={String(failed[1])} /> : (
           <EmptyState title="No completed trips in this period" description="A trip counts once its dispatch reaches Completed on the board; travel, wait, pour and turnaround come from the times stamped on the way." />
         )}
       </Card>

@@ -32,6 +32,12 @@ export class MixDesignsController {
   @RequirePermissions('mix_design.approve')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
 
+  // Details of a draft (cement, w/c ratio, slump range, pumpable, notes);
+  // the service refuses it on an approved design, which is locked.
+  @Post(':id')
+  @RequirePermissions('mix_design.approve')
+  update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.update(tid(u), id, dto); }
+
   @Post(':id/materials')
   @RequirePermissions('mix_design.approve')
   addMaterial(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.addMaterial(tid(u), id, dto); }

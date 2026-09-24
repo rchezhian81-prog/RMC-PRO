@@ -38,7 +38,11 @@ die() { log "ERROR: $*" >&2; exit 1; }
 getenv() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' | sed -e "s/^[\"']//" -e "s/[\"']\$//" || true; }
 
 command -v docker >/dev/null 2>&1 || die "docker not found on PATH"
-docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$MINIO_CONTAINER" || die "MinIO container $MINIO_CONTAINER is not running — nothing to archive"
+# Read the list first, then search it: piping into `grep -q` lets grep exit on
+# the first match and, under pipefail, the writer's broken pipe can turn a
+# running container into "not running" once in a while.
+RUNNING="$(docker ps --format '{{.Names}}' 2>/dev/null)"
+grep -qx "$MINIO_CONTAINER" <<<"$RUNNING" || die "MinIO container $MINIO_CONTAINER is not running — nothing to archive"
 mkdir -p "$BACKUP_DIR" || die "cannot create $BACKUP_DIR"
 
 OUT="$BACKUP_DIR/rmc-files-$LABEL-$(date +%Y%m%d-%H%M%S).tgz"

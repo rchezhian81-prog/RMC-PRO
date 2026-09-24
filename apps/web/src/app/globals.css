@@ -4713,3 +4713,100 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-sl-form, .mn-cb-form, .mn-cbd-form-row { grid-template-columns: minmax(0, 1fr); }
 }
 .mn-cb .mn-ord-id .mn-ord-meta, .mn-cb .mn-ord-who .mn-ord-meta { white-space: normal; }
+
+/* ============================================================================
+   FLEET — maintenance, fuel log, running cost
+   ============================================================================ */
+.mn-fm-form, .mn-ff-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 16px; }
+.mn-fm-form > *, .mn-ff-form > * { min-width: 0; }
+.mn-fm-form-wide { grid-column: span 2; }
+.mn-fm-form-submit, .mn-ff-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-fm-form-submit .mn-ord-how, .mn-ff-form-submit .mn-ord-how { white-space: normal; }
+.mn-ff-check { grid-column: span 2; align-self: center; margin-bottom: 14px; }
+.mn-ff-check .mn-ord-meta { white-space: normal; }
+.mn-fm-scols, .mn-fm-srow { grid-template-columns: minmax(170px, 0.9fr) minmax(200px, 1.2fr) minmax(170px, 1fr) minmax(90px, auto) auto; }
+.mn-fm-next { display: grid; gap: 2px; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.mn-fm-next .mn-ord-meta { font-weight: 400; white-space: normal; }
+.mn-fm .mn-ord-who .mn-ord-meta, .mn-fm .mn-ord-id .mn-ord-meta, .mn-fm .mn-ord-val .mn-ord-meta { white-space: normal; }
+.mn-fm .mn-ord-cols--acts,
+.mn-fm .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(160px, 0.9fr) minmax(0, 1.4fr) minmax(170px, 0.9fr) minmax(90px, auto) auto; }
+.mn-fm-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-fm-acts button { white-space: nowrap; }
+.mn-ff-cols, .mn-ff-row { grid-template-columns: minmax(150px, 0.8fr) minmax(170px, 1fr) minmax(120px, 0.7fr) minmax(110px, 0.6fr) minmax(190px, 1.1fr) minmax(90px, auto); }
+.mn-ff-diesel { display: grid; gap: 2px; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.mn-ff-diesel .mn-ord-meta { font-weight: 400; }
+.mn-ff-mileage { display: grid; gap: 3px; min-width: 0; }
+.mn-ff-bar { width: 100%; max-width: 160px; margin-top: 2px; }
+.mn-ff .mn-qr-sum { border-bottom: 1px solid var(--mn-border); }
+.mn-fr-cols, .mn-fr-row { grid-template-columns: minmax(170px, 0.9fr) minmax(0, 1.6fr) minmax(120px, 0.7fr) minmax(140px, 0.8fr) minmax(80px, 0.4fr); }
+.mn-fr-split { display: grid; gap: 4px; min-width: 0; }
+.mn-fr-split-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--mn-surface-2); }
+.mn-fr-split-m { display: block; height: 100%; background: var(--mn-warning); }
+.mn-fr-split-f { display: block; height: 100%; background: var(--mn-primary); }
+.mn-fr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.mn-fr-dot--m { background: var(--mn-warning); }
+.mn-fr-dot--f { background: var(--mn-primary); }
+.mn-fr-perkm { display: grid; gap: 2px; min-width: 0; }
+.mn-fr-foot { background: var(--mn-surface-2); font-weight: 600; }
+.mn-fr .mn-card-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .mn-fm-form, .mn-ff-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-fm-form-wide, .mn-ff-check { grid-column: 1 / -1; }
+  .mn-fm-srow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'next next'
+      'acts acts';
+  }
+  .mn-fm-srow .mn-ord-id { grid-area: id; }
+  .mn-fm-srow .mn-ord-status { grid-area: status; justify-self: end; }
+  .mn-fm-srow .mn-ord-who { grid-area: who; }
+  .mn-fm-srow .mn-fm-next { grid-area: next; }
+  .mn-fm-srow .mn-fm-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-fm .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'mats mats'
+      'val val'
+      'acts acts';
+  }
+  .mn-fm .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-fm .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-fm .mn-ord-row--acts .mn-fm-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-ff-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'diesel val'
+      'mil mil';
+  }
+  .mn-ff-row .mn-ord-id { grid-area: id; }
+  .mn-ff-row .mn-ord-status { grid-area: status; justify-self: end; }
+  .mn-ff-row .mn-ord-who { grid-area: who; }
+  .mn-ff-row .mn-ff-diesel { grid-area: diesel; }
+  .mn-ff-row .mn-ord-val { grid-area: val; }
+  .mn-ff-row .mn-ff-mileage { grid-area: mil; }
+  .mn-fr-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id total'
+      'split split'
+      'perkm kmpl';
+  }
+  .mn-fr-row .mn-ord-id { grid-area: id; }
+  .mn-fr-row .mn-fr-split { grid-area: split; }
+  .mn-fr-row > .mn-ord-val:nth-of-type(3) { grid-area: total; }
+  .mn-fr-row .mn-fr-perkm { grid-area: perkm; }
+  .mn-fr-row > .mn-ord-val:last-child { grid-area: kmpl; }
+  .mn-fr .mn-card-head { flex-wrap: wrap; }
+  .mn-fr .mn-card-actions { margin-left: 0; flex: 1 1 100%; }
+  .mn-fr .mn-board-card-title { white-space: normal; flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  .mn-fm-form, .mn-ff-form { grid-template-columns: minmax(0, 1fr); }
+}

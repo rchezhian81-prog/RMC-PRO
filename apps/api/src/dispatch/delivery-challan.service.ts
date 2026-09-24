@@ -285,7 +285,9 @@ export class DeliveryChallanService {
   /**
    * Delivery register — delivered challans over a period (net of returns), with
    * the customer and grade. The daily record of concrete supplied, optionally
-   * bounded by date and plant.
+   * bounded by date and plant. Each row also carries what the register is read
+   * with: the site, the truck and driver, when the load left, who signed for
+   * it, what came back and why, and the invoice that bills it.
    */
   deliveryRegister(tenantId: string, filters: { from?: string; to?: string; plantId?: string } = {}) {
     return this.db.runInTenant(tenantId, async (m) => {
@@ -296,14 +298,34 @@ export class DeliveryChallanService {
       if (filters.to) { params.push(filters.to); where.push(`${dateExpr} <= $${params.length}`); }
       if (filters.plantId) { params.push(filters.plantId); where.push(`dc.plant_id = $${params.length}`); }
 
-      const rows: Array<{ delivered: number | string }> = await m.query(
-        `SELECT dc.challan_no AS "challanNo",
-                ${dateExpr} AS date,
+      const rows: Array<{ delivered: number | string; returnedM3: number | string }> = await m.query(
+        `SELECT dc.id AS "challanId",
+                dc.challan_no AS "challanNo",
+                ${dateExpr}::text AS date,
+                dc.dispatch_time AS "dispatchTime",
                 c.customer_name AS "customerName",
+                s.site_name AS "siteName",
                 dc.grade_label AS "gradeLabel",
-                (dc.quantity_m3 - dc.return_quantity_m3)::float AS delivered
+                v.vehicle_no AS "vehicleNo",
+                dr.driver_name AS "driverName",
+                dc.receiver_name AS "receiverName",
+                dc.quantity_m3::float AS "loadedM3",
+                dc.return_quantity_m3::float AS "returnedM3",
+                dc.return_reason AS "returnReason",
+                (dc.quantity_m3 - dc.return_quantity_m3)::float AS delivered,
+                dc.invoice_status AS "invoiceStatus",
+                inv."invoiceId", inv."invoiceNo"
            FROM delivery_challans dc
            LEFT JOIN customers c ON c.id = dc.customer_id
+           LEFT JOIN sites s ON s.id = dc.site_id
+           LEFT JOIN vehicles v ON v.id = dc.vehicle_id
+           LEFT JOIN drivers dr ON dr.id = dc.driver_id
+           LEFT JOIN LATERAL (
+             SELECT i.id AS "invoiceId", i.invoice_no AS "invoiceNo"
+               FROM invoice_challans ic JOIN invoices i ON i.id = ic.invoice_id
+              WHERE ic.challan_id = dc.id AND i.invoice_status <> 'cancelled'
+              ORDER BY ic.created_at DESC LIMIT 1
+           ) inv ON TRUE
           WHERE ${where.join(' AND ')}
           ORDER BY date DESC, dc.challan_no
           LIMIT ${REPORT_FETCH_LIMIT}`,
@@ -313,7 +335,8 @@ export class DeliveryChallanService {
       // is a wrong number, and it is the figure people reconcile against.
       assertReportSize(rows, 'delivery register');
       const totalM3 = Math.round(rows.reduce((s, r) => s + (Number(r.delivered) || 0), 0) * 1000) / 1000;
-      return { rows, totalM3, count: rows.length };
+      const returnedM3 = Math.round(rows.reduce((s, r) => s + (Number(r.returnedM3) || 0), 0) * 1000) / 1000;
+      return { rows, totalM3, returnedM3, count: rows.length };
     });
   }
 

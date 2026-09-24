@@ -214,8 +214,24 @@ export class SyncService {
     });
   }
 
+  /** Every device with its plant and registrar by name, and what it holds: number blocks and conflicts waiting. */
   listDevices(tenantId: string) {
-    return this.db.runInTenant(tenantId, (m) => m.getRepository(Device).find({ order: { createdAt: 'DESC' } }));
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(Device).find({ order: { createdAt: 'DESC' } });
+      if (!rows.length) return rows;
+      const extra: Array<{ id: string; plantName: string | null; registeredByName: string | null; reservationCount: number; pendingConflicts: number }> = await m.query(
+        `SELECT d.id, p.plant_name AS "plantName", COALESCE(u.name, u.email) AS "registeredByName",
+                (SELECT COUNT(*) FROM local_number_reservations r WHERE r.device_id = d.id AND r.status = 'active')::int AS "reservationCount",
+                (SELECT COUNT(*) FROM sync_conflicts c WHERE c.device_id = d.id AND c.resolution_status = 'pending')::int AS "pendingConflicts"
+           FROM devices d
+           LEFT JOIN plants p ON p.id = d.plant_id
+           LEFT JOIN users u ON u.id = d.registered_by
+          WHERE d.id = ANY($1::uuid[])`,
+        [rows.map((r) => r.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return rows.map((r) => ({ ...r, ...(by.get(r.id) ?? { plantName: null, registeredByName: null, reservationCount: 0, pendingConflicts: 0 }) }));
+    });
   }
 
   /** Revoke (or restore) a device. Its documents and number blocks are kept. */
@@ -401,10 +417,21 @@ export class SyncService {
     return count ?? 0;
   }
 
+  /** Every number block with the device that holds it by name. */
   listReservations(tenantId: string, deviceId?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(LocalNumberReservation).find({ where: deviceId ? { deviceId } : {}, order: { createdAt: 'DESC' } }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(LocalNumberReservation).find({ where: deviceId ? { deviceId } : {}, order: { createdAt: 'DESC' } });
+      return this.withDeviceNames(m, rows);
+    });
+  }
+
+  private async withDeviceNames<T extends { deviceId: string | null }>(m: EntityManager, rows: T[]): Promise<Array<T & { deviceName: string | null }>> {
+    const ids = [...new Set(rows.map((r) => r.deviceId).filter((x): x is string => Boolean(x)))];
+    const devices: Array<{ id: string; deviceName: string }> = ids.length
+      ? await m.query(`SELECT id, device_name AS "deviceName" FROM devices WHERE id = ANY($1::uuid[])`, [ids])
+      : [];
+    const by = new Map(devices.map((d) => [d.id, d.deviceName]));
+    return rows.map((r) => ({ ...r, deviceName: r.deviceId ? by.get(r.deviceId) ?? null : null }));
   }
 
   // ---- Push (offline → cloud) ------------------------------------------
@@ -976,7 +1003,7 @@ export class SyncService {
         where: status ? { resolutionStatus: status } : {},
         order: { createdAt: 'DESC' },
         take: listLimit(limit),
-      }),
+      }).then((rows) => this.withDeviceNames(m, rows)),
     );
   }
 

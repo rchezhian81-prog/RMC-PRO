@@ -27,10 +27,49 @@ export class WeighbridgeService {
     private readonly numbering: NumberingService,
   ) {}
 
+  /**
+   * The slip list with what the gate reads it by: the supplier's name, the
+   * indicator the weights came off, the material's stock unit, and the inward
+   * a converted slip became. Batched lookups.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(WeighbridgeEntry).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(WeighbridgeEntry).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      const ids = (pick: (r: WeighbridgeEntry) => string | null) => [...new Set(rows.map(pick).filter((v): v is string => !!v))];
+      const supplierIds = ids((r) => r.supplierId);
+      const indicatorIds = ids((r) => r.indicatorId);
+      const materialIds = ids((r) => r.materialId);
+      const entryIds = rows.map((r) => r.id);
+      const [suppliers, indicators, materials, inwards] = await Promise.all([
+        supplierIds.length ? (m.query(`SELECT id, supplier_name AS "supplierName" FROM suppliers WHERE id = ANY($1)`, [supplierIds]) as Promise<Array<{ id: string; supplierName: string }>>) : Promise.resolve([]),
+        indicatorIds.length ? (m.query(`SELECT id, name FROM weighbridge_indicators WHERE id = ANY($1)`, [indicatorIds]) as Promise<Array<{ id: string; name: string }>>) : Promise.resolve([]),
+        materialIds.length ? (m.query(`SELECT id, uom FROM materials WHERE id = ANY($1)`, [materialIds]) as Promise<Array<{ id: string; uom: string | null }>>) : Promise.resolve([]),
+        entryIds.length
+          ? (m.query(
+              `SELECT DISTINCT ON (weighbridge_entry_id) weighbridge_entry_id AS "entryId", id AS "inwardId", inward_no AS "inwardNo", status AS "inwardStatus"
+                 FROM material_inwards WHERE weighbridge_entry_id = ANY($1)
+                ORDER BY weighbridge_entry_id, (status = 'cancelled'), created_at DESC`,
+              [entryIds],
+            ) as Promise<Array<{ entryId: string; inwardId: string; inwardNo: string; inwardStatus: string }>>)
+          : Promise.resolve([]),
+      ]);
+      const supplier = new Map(suppliers.map((s) => [s.id, s.supplierName]));
+      const indicator = new Map(indicators.map((i) => [i.id, i.name]));
+      const uom = new Map(materials.map((x) => [x.id, x.uom]));
+      const inward = new Map(inwards.map((i) => [i.entryId, i]));
+      return rows.map((r) => {
+        const inw = inward.get(r.id);
+        return {
+          ...r,
+          supplierName: r.supplierId ? supplier.get(r.supplierId) ?? null : null,
+          indicatorName: r.indicatorId ? indicator.get(r.indicatorId) ?? null : null,
+          materialUom: r.materialId ? uom.get(r.materialId) ?? null : null,
+          inwardId: inw?.inwardId ?? null,
+          inwardNo: inw?.inwardNo ?? null,
+          inwardStatus: inw?.inwardStatus ?? null,
+        };
+      });
+    });
   }
 
   get(tenantId: string, id: string) {

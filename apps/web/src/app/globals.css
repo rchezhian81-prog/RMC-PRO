@@ -4003,3 +4003,53 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 480px) {
   .mn-mi-form { grid-template-columns: 1fr; }
 }
+
+/* ============================================================================
+   WEIGHBRIDGE — the document-list rows above, plus the slip and indicator forms
+   ============================================================================ */
+.mn-wb-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.mn-wb-weigh { display: flex; gap: 6px; align-items: center; }
+.mn-wb-weigh .mn-input { min-width: 0; flex: 1 1 auto; }
+.mn-wb-weigh button { flex: none; white-space: nowrap; }
+.mn-wb-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; }
+.mn-wb-form-submit button { white-space: nowrap; }
+.mn-wb-net { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.mn-wb-net strong { font-family: var(--mn-font-display); font-size: 16px; font-variant-numeric: tabular-nums; }
+.mn-wb-net .mn-ord-meta { white-space: normal; }
+.mn-wb-form-submit { min-width: 0; }
+.mn-wb .mn-ord-cols--acts,
+.mn-wb .mn-ord-row--acts { grid-template-columns: minmax(130px, 0.7fr) minmax(0, 1.3fr) minmax(150px, 0.9fr) minmax(130px, 0.7fr) minmax(110px, auto) auto; }
+.mn-wb-mat { display: grid; gap: 2px; min-width: 0; }
+.mn-wb-status { display: grid; gap: 4px; justify-items: start; }
+.mn-wb-inward { text-decoration: none; color: var(--mn-primary); font-weight: 600; white-space: nowrap; }
+.mn-wb-acts { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.mn-wb-acts button { white-space: nowrap; }
+.mn-wb-devs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.mn-wb-dev { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 12.5px; border: 1px solid var(--mn-border); border-radius: 999px; background: var(--mn-surface-2); }
+.mn-wb-dev-form { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 0.9fr) minmax(140px, 0.9fr) minmax(120px, 0.8fr) auto; gap: 12px; align-items: end; }
+.mn-wb-dev-submit { padding-bottom: 14px; }
+.mn-wb-dev-submit button { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .mn-wb-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mn-wb-dev-form { grid-template-columns: 1fr 1fr 1fr; }
+}
+@media (max-width: 860px) {
+  .mn-wb .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'mat mat'
+      'val val'
+      'acts acts';
+  }
+  .mn-wb .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; justify-items: end; }
+  .mn-wb-mat { grid-area: mat; }
+  .mn-wb-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+  .mn-wb-form, .mn-wb-dev-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mn-wb-form > *, .mn-wb-dev-form > * { min-width: 0; }
+  .mn-wb-dev-submit { grid-column: 1 / -1; padding-bottom: 12px; }
+}
+@media (max-width: 480px) {
+  .mn-wb-form, .mn-wb-dev-form { grid-template-columns: minmax(0, 1fr); }
+}

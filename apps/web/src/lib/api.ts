@@ -599,7 +599,8 @@ export const batchTicketsApi = {
   get: (id: string) => apiFetch<Row>(`/batch-tickets/${id}`),
   createFromQueue: (queueId: string, b: Record<string, unknown>) => post(`/batch-tickets/from-queue/${queueId}`, b),
   updateActuals: (id: string, materials: Record<string, unknown>[]) => post(`/batch-tickets/${id}/actuals`, { materials }),
-  confirm: (id: string, overrideVariance?: boolean) => post(`/batch-tickets/${id}/confirm`, { overrideVariance }),
+  confirm: (id: string, overrideVariance?: boolean, allowNegativeStock?: boolean) =>
+    post(`/batch-tickets/${id}/confirm`, { overrideVariance, ...(allowNegativeStock ? { allowNegativeStock } : {}) }),
   cancel: (id: string) => post(`/batch-tickets/${id}/cancel`),
 };
 

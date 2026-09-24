@@ -95,10 +95,19 @@ export class BatchTicketsService {
     });
   }
 
+  /**
+   * One ticket with everything the batching screen reads around it: the
+   * order, customer and site it was mixed for and the queue line it came off
+   * (planned against produced), the recipe (mix code and version, w/c ratio,
+   * slump range, cement), who ran it and on which plant, the controller the
+   * actuals came from, the stock balance each material was left at once the
+   * batch was confirmed, and what happened to the concrete afterwards: the
+   * dispatches and challans that carried it and the QC tests taken from it.
+   */
   private async loadFull(m: EntityManager, id: string) {
     const ticket = await m.getRepository(BatchTicket).findOne({ where: { id } });
     if (!ticket) throw notFound();
-    const materials = await m
+    const rawMaterials = await m
       .getRepository(BatchTicketMaterial)
       .find({ where: { batchTicketId: id }, order: { createdAt: 'ASC' } });
     // Resolve the batching operator to a name — the ticket stores only the UUID,
@@ -106,7 +115,92 @@ export class BatchTicketsService {
     const operator = ticket.operatorUserId
       ? await m.getRepository(User).findOne({ where: { id: ticket.operatorUserId } })
       : null;
-    return { ...ticket, materials, operatorName: operator?.name ?? null };
+    const one = async <T,>(sql: string, params: unknown[]): Promise<T | null> => {
+      const rows: T[] = await m.query(sql, params);
+      return rows[0] ?? null;
+    };
+    const [order, plant, mix, queue, controller, dispatches, challans, qc, stock] = await Promise.all([
+      ticket.orderId
+        ? one<{ orderNo: string; customerId: string | null; customerName: string | null; siteName: string | null }>(
+            `SELECT o.order_no AS "orderNo", o.customer_id AS "customerId", c.customer_name AS "customerName", s.site_name AS "siteName"
+               FROM orders o LEFT JOIN customers c ON c.id = o.customer_id LEFT JOIN sites s ON s.id = o.site_id
+              WHERE o.id = $1`,
+            [ticket.orderId],
+          )
+        : null,
+      ticket.plantId ? one<{ plantName: string }>(`SELECT plant_name AS "plantName" FROM plants WHERE id = $1`, [ticket.plantId]) : null,
+      ticket.mixDesignId
+        ? one<{ mixCode: string; mixVersion: number; waterCementRatio: string | null; slumpMin: number | null; slumpMax: number | null; cementType: string | null; pumpable: boolean }>(
+            `SELECT mix_code AS "mixCode", version_no AS "mixVersion", water_cement_ratio AS "waterCementRatio", slump_min AS "slumpMin",
+                    slump_max AS "slumpMax", cement_type AS "cementType", pumpable FROM mix_designs WHERE id = $1`,
+            [ticket.mixDesignId],
+          )
+        : null,
+      ticket.batchQueueId
+        ? one<{ queuePlannedM3: string; queueProducedM3: string; queueStatus: string }>(
+            `SELECT planned_quantity_m3 AS "queuePlannedM3", produced_quantity_m3 AS "queueProducedM3", queue_status AS "queueStatus"
+               FROM batch_queue WHERE id = $1`,
+            [ticket.batchQueueId],
+          )
+        : null,
+      ticket.controllerId ? one<{ controllerName: string }>(`SELECT name AS "controllerName" FROM batching_controllers WHERE id = $1`, [ticket.controllerId]) : null,
+      m.query(
+        `SELECT d.id, d.dispatch_no AS "dispatchNo", d.dispatch_status AS "dispatchStatus", d.quantity_m3 AS "quantityM3",
+                d.dispatch_time AS "dispatchTime", v.vehicle_no AS "vehicleNo"
+           FROM dispatches d LEFT JOIN vehicles v ON v.id = d.vehicle_id
+          WHERE d.batch_ticket_id = $1 ORDER BY d.created_at ASC`,
+        [id],
+      ) as Promise<Array<{ id: string; dispatchNo: string; dispatchStatus: string; quantityM3: string; dispatchTime: Date | null; vehicleNo: string | null }>>,
+      m.query(
+        `SELECT id, challan_no AS "challanNo", challan_status AS "challanStatus", quantity_m3 AS "quantityM3"
+           FROM delivery_challans WHERE batch_ticket_id = $1 ORDER BY created_at ASC`,
+        [id],
+      ) as Promise<Array<{ id: string; challanNo: string; challanStatus: string; quantityM3: string }>>,
+      one<{ slumpTests: number; slumpFailed: number; cubeSets: number; cubesRejected: number }>(
+        `SELECT (SELECT COUNT(*)::int FROM qc_slump_tests WHERE batch_ticket_id = $1) AS "slumpTests",
+                (SELECT COUNT(*)::int FROM qc_slump_tests WHERE batch_ticket_id = $1 AND NOT passed) AS "slumpFailed",
+                (SELECT COUNT(*)::int FROM qc_cube_sets WHERE batch_ticket_id = $1) AS "cubeSets",
+                (SELECT COUNT(*)::int FROM qc_cube_sets WHERE batch_ticket_id = $1 AND acceptance_status = 'rejected') AS "cubesRejected"`,
+        [id],
+      ),
+      m.query(
+        `SELECT material_id AS "materialId", balance_after AS "balanceAfter"
+           FROM stock_transactions WHERE reference_type = 'batch_ticket' AND reference_id = $1`,
+        [id],
+      ) as Promise<Array<{ materialId: string; balanceAfter: string }>>,
+    ]);
+    const balanceAfter = new Map(stock.map((s) => [s.materialId, s.balanceAfter]));
+    const materials = rawMaterials.map((mat) => ({
+      ...mat,
+      balanceAfter: mat.materialId ? balanceAfter.get(mat.materialId) ?? null : null,
+    }));
+    return {
+      ...ticket,
+      materials,
+      operatorName: operator?.name ?? null,
+      orderNo: order?.orderNo ?? null,
+      customerId: order?.customerId ?? null,
+      customerName: order?.customerName ?? null,
+      siteName: order?.siteName ?? null,
+      plantName: plant?.plantName ?? null,
+      mixCode: mix?.mixCode ?? null,
+      mixVersion: mix?.mixVersion ?? null,
+      waterCementRatio: mix?.waterCementRatio ?? null,
+      slumpMin: mix?.slumpMin ?? null,
+      slumpMax: mix?.slumpMax ?? null,
+      cementType: mix?.cementType ?? null,
+      pumpable: mix?.pumpable ?? null,
+      queuePlannedM3: queue?.queuePlannedM3 ?? null,
+      queueProducedM3: queue?.queueProducedM3 ?? null,
+      queueStatus: queue?.queueStatus ?? null,
+      controllerName: controller?.controllerName ?? null,
+      dispatches,
+      challans,
+      slumpTests: qc?.slumpTests ?? 0,
+      slumpFailed: qc?.slumpFailed ?? 0,
+      cubeSets: qc?.cubeSets ?? 0,
+      cubesRejected: qc?.cubesRejected ?? 0,
+    };
   }
 
   get(tenantId: string, id: string) {

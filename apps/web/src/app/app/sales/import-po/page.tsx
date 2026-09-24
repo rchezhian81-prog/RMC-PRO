@@ -1,12 +1,27 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { Sparkles, Upload } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, ClipboardList, FileSignature, FileText, RefreshCw, Sparkles, Upload } from 'lucide-react';
 import { aiApi, type PoExtract } from '../../../../lib/api';
+import { formatDate } from '../../../../lib/format-date';
+import { money } from '../../../../lib/money';
 import { Card } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/Button';
 import { Table, Th, Td } from '../../../../components/ui/Table';
-import { ErrorState } from '../../../../components/ui/States';
+import { ErrorState, EmptyState } from '../../../../components/ui/States';
+
+/**
+ * Import PO — read a customer's purchase order with AI.
+ *
+ * One card to drop the PDF or photo on, then what was read: the header
+ * facts (customer, site, PO number, dates, contact) as a fact list, the
+ * grade lines as a table with a total, any notes, and where to take it next
+ * (a quotation or a rate contract). The page says up front when the feature
+ * is switched off, and reminds that what was read must be checked against
+ * the document. Same layout in both skins; every colour reads the semantic
+ * tokens.
+ */
 
 function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -17,8 +32,10 @@ function readAsBase64(file: File): Promise<string> {
   });
 }
 
-const money = (v: unknown) => (v == null ? '—' : '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 }));
+const num = (v: unknown) => (v == null || v === '' ? 0 : Number(v)) || 0;
+const qty = (v: unknown) => num(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const val = (v: unknown) => (v == null || v === '' ? '—' : String(v));
+const dateOrText = (v: unknown) => (/^\d{4}-\d{2}-\d{2}/.test(String(v ?? '')) ? formatDate(v) : val(v));
 
 export default function ImportPoPage() {
   const [busy, setBusy] = useState(false);
@@ -56,107 +73,114 @@ export default function ImportPoPage() {
     }
   }
 
-  const fields: [string, unknown][] = data
-    ? [
-        ['Customer', data.customerName],
-        ['Site / Project', data.siteName],
-        ['PO number', data.poNumber],
-        ['Order date', data.orderDate],
-        ['Delivery date', data.deliveryDate],
-        ['Contact', data.contactMobile],
-      ]
-    : [];
+  const items = data?.items ?? [];
+  const totalM3 = items.reduce((t, it) => t + num(it.quantityM3), 0);
+  const totalValue = items.reduce((t, it) => t + num(it.quantityM3) * num(it.rate), 0);
+  const priced = items.filter((it) => it.rate != null).length;
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span className="mn-gradient" style={{ width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}>
-          <Sparkles size={18} color="#fff" />
-        </span>
-        <div>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Import PO (AI)</h1>
-          <p style={{ margin: 0, color: 'var(--mn-muted)', fontSize: 13 }}>
-            Upload a customer purchase order (PDF or photo) — the AI reads the details for you.
-          </p>
+    <div className="mn-ord mn-po">
+      <header className="mn-board-head">
+        <div className="mn-board-title">
+          <h1>Import a purchase order</h1>
+          <p>Upload the customer&rsquo;s purchase order as a PDF or a photo and the details are read for you: who, where, the PO number and dates, and the grades with quantities and rates. Check them against the document, then raise the quotation or book the order.</p>
         </div>
-      </div>
+        <div className="mn-board-tools">
+          <span className="mn-board-live mn-ord-sum" aria-live="polite">
+            <Sparkles size={14} aria-hidden />
+            {enabled === null ? 'Checking…' : enabled ? 'AI reading is on' : 'AI reading is off'}
+          </span>
+          {data && <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => { setData(null); setFileName(''); setError(null); }}>Start over</Button>}
+        </div>
+      </header>
 
-      <Card>
+      {error && <ErrorState message={error} />}
+
+      <Card title={<span className="mn-board-card-title"><Upload size={16} aria-hidden /> The document</span>}>
         {enabled === false ? (
-          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--mn-muted)' }}>
-            PO reading isn&apos;t switched on yet. An administrator can enable it by setting an Anthropic API key on
-            the server. Until then, enter orders from the Order Drafts screen.
-          </p>
+          <EmptyState
+            icon={<Sparkles size={22} aria-hidden />}
+            title="PO reading is not switched on"
+            description="An administrator can enable it by setting an Anthropic API key on the server. Until then, key the order in from the quotation or the rate contract."
+            action={<Link href="/app/sales/quotations" className="mn-ord-link"><Button variant="secondary" size="sm" icon={<FileText size={14} />}>Quotations</Button></Link>}
+          />
         ) : (
-          <>
+          <div className="mn-po-drop">
             <input ref={fileRef} type="file" accept="application/pdf,image/*" onChange={onFile} style={{ display: 'none' }} />
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Button
-                icon={<Upload size={16} />}
-                onClick={() => fileRef.current?.click()}
-                loading={busy}
-                disabled={enabled === null}
-              >
-                {busy ? 'Reading…' : 'Choose PO file'}
-              </Button>
-              {fileName && <span style={{ color: 'var(--mn-muted)', fontSize: 13 }}>{fileName}</span>}
-            </div>
-            {error && (
-              <div style={{ marginTop: 12 }}>
-                <ErrorState message={error} />
-              </div>
-            )}
-          </>
+            <Button icon={<Upload size={16} />} onClick={() => fileRef.current?.click()} loading={busy} disabled={enabled === null}>
+              {busy ? 'Reading the document…' : data ? 'Choose another file' : 'Choose the PO file'}
+            </Button>
+            <span className="mn-ord-meta">{fileName || 'A PDF, or a clear photo of the printed order. One page at a time reads best.'}</span>
+          </div>
         )}
       </Card>
 
       {data && (
         <>
-          <Card title="Extracted details">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
-              {fields.map(([label, v]) => (
-                <div key={label}>
-                  <div style={{ fontSize: 11, color: 'var(--mn-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{val(v)}</div>
+          <div className="mn-ord-note mn-ord-note--warn" role="status">
+            <AlertTriangle size={16} aria-hidden />
+            <span><strong>Check every figure against the document before using it.</strong> Reading a scan can miss or misread a number; nothing below has been saved yet.</span>
+          </div>
+
+          <div className="mn-po-grid">
+            <Card title={<span className="mn-board-card-title"><ClipboardList size={16} aria-hidden /> What was read</span>}>
+              <dl className="mn-od-money mn-od-money--tight">
+                <div><dt>Customer</dt><dd>{val(data.customerName)}</dd></div>
+                <div><dt>Site / project</dt><dd>{val(data.siteName)}</dd></div>
+                <div><dt>PO number</dt><dd>{val(data.poNumber)}</dd></div>
+                <div><dt>Order date</dt><dd>{dateOrText(data.orderDate)}</dd></div>
+                <div><dt>Delivery date</dt><dd>{dateOrText(data.deliveryDate)}</dd></div>
+                <div><dt>Contact</dt><dd>{val(data.contactMobile)}</dd></div>
+              </dl>
+              {data.notes ? <p className="mn-board-form-hint"><strong>Notes on the order:</strong> {data.notes}</p> : null}
+            </Card>
+
+            <Card title={<span className="mn-board-card-title"><FileText size={16} aria-hidden /> Grade lines <span className="mn-board-card-count">{items.length}</span></span>} padded={false}>
+              {items.length ? (
+                <div className="mn-id-scroll">
+                  <Table>
+                    <thead>
+                      <tr>
+                        <Th>Grade</Th>
+                        <Th numeric>Quantity</Th>
+                        <Th numeric>Rate/m³</Th>
+                        <Th numeric>Line value</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((it, i) => (
+                        <tr key={i}>
+                          <Td><span className="mn-od-grade">{val(it.grade)}</span></Td>
+                          <Td numeric className="mn-od-num">{it.quantityM3 == null ? '—' : `${qty(it.quantityM3)} m³`}</Td>
+                          <Td numeric>{it.rate == null ? <span className="mn-ord-meta">not on the PO</span> : money(it.rate)}</Td>
+                          <Td numeric className="mn-od-num">{it.rate == null || it.quantityM3 == null ? '—' : money(num(it.quantityM3) * num(it.rate))}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="mn-ir-total">
+                        <Td>{items.length} {items.length === 1 ? 'line' : 'lines'}{priced < items.length ? ` · ${items.length - priced} without a rate` : ''}</Td>
+                        <Td numeric>{qty(totalM3)} m³</Td>
+                        <Td />
+                        <Td numeric><span className="mn-ir-total-value">{priced ? money(totalValue) : '—'}</span></Td>
+                      </tr>
+                    </tfoot>
+                  </Table>
                 </div>
-              ))}
+              ) : (
+                <EmptyState title="No grade lines found" description="The document may list the concrete in a table the reader could not follow. Key the lines in by hand on the quotation." />
+              )}
+            </Card>
+          </div>
+
+          <Card title={<span className="mn-board-card-title"><Sparkles size={16} aria-hidden /> Next</span>}>
+            <p className="mn-board-form-hint" style={{ marginTop: 0 }}>Nothing is created from here automatically. Take the figures to the screen that fits:</p>
+            <div className="mn-po-next">
+              <Link href="/app/sales/quotations" className="mn-ord-link"><Button variant="secondary" size="sm" icon={<FileText size={14} />}>Raise a quotation</Button></Link>
+              <Link href="/app/sales/rate-contracts" className="mn-ord-link"><Button variant="ghost" size="sm" icon={<FileSignature size={14} />}>Book under a rate contract</Button></Link>
+              <Link href="/app/entity/customers" className="mn-ord-link"><Button variant="ghost" size="sm">Add the customer first</Button></Link>
             </div>
-            {data.notes && (
-              <p style={{ marginTop: 14, marginBottom: 0, fontSize: 13, color: 'var(--mn-muted)' }}>
-                <strong>Notes:</strong> {data.notes}
-              </p>
-            )}
           </Card>
-
-          <Card title="Line items" padded={false}>
-            {data.items?.length ? (
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Grade</Th>
-                    <Th numeric>Quantity (m³)</Th>
-                    <Th numeric>Rate</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((it, i) => (
-                    <tr key={i}>
-                      <Td>{val(it.grade)}</Td>
-                      <Td numeric>{it.quantityM3 == null ? '—' : it.quantityM3}</Td>
-                      <Td numeric>{money(it.rate)}</Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            ) : (
-              <p style={{ padding: 16, margin: 0, color: 'var(--mn-muted)', fontSize: 13 }}>No line items detected.</p>
-            )}
-          </Card>
-
-          <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: 0 }}>
-            Check these against the document, then create the quotation or order on the relevant screen. AI extraction can
-            contain mistakes.
-          </p>
         </>
       )}
     </div>

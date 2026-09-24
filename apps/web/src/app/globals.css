@@ -4263,3 +4263,81 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-rc .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
   .mn-rc .mn-ord-row--acts .mn-ord-go { display: none; }
 }
+
+/* ============================================================================
+   ORDER DRAFTS — the document-list rows above, plus the lines worksheet
+   ============================================================================ */
+.mn-odr .mn-ord-cols--acts,
+.mn-odr .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.85fr) minmax(160px, 1fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(170px, 1fr) auto; }
+.mn-odr-row.is-on { background: color-mix(in srgb, var(--mn-primary) 7%, var(--mn-surface)); }
+.mn-odr-lines { display: grid; gap: 2px; min-width: 0; }
+.mn-odr-grades { font-size: 13.5px; font-weight: 600; color: var(--mn-text); overflow-wrap: anywhere; }
+.mn-odr .mn-ord-when-m { white-space: normal; }
+.mn-odr-acts { display: flex; gap: 2px; justify-content: flex-end; }
+.mn-odr-acts button { white-space: nowrap; }
+.mn-odr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.mn-odr-table th, .mn-odr-table td { padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--mn-border); vertical-align: top; }
+.mn-odr-table th { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-muted); background: var(--mn-surface-2); }
+.mn-odr-table .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.mn-odr-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 16px; }
+@media (max-width: 860px) {
+  .mn-odr .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'id'
+      'who'
+      'lines'
+      'val'
+      'credit'
+      'acts';
+  }
+  .mn-odr .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-odr-lines { grid-area: lines; }
+  .mn-odr-credit { grid-area: credit; }
+  .mn-odr-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+}
+
+/* ============================================================================
+   CREDIT HOLDS — the document-list rows above, with the credit meter
+   ============================================================================ */
+.mn-ch .mn-ord-cols--acts,
+.mn-ch .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(160px, 0.9fr) minmax(130px, 0.7fr) minmax(0, 1.5fr) minmax(150px, 0.9fr) auto; }
+.mn-ch-credit { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.mn-ch-bar { position: relative; }
+.mn-ch-bar > span { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999px; }
+.mn-ch-bar > span.mn-ch-bar-after { background: var(--mn-danger); opacity: 0.4; }
+.mn-ch-bar > span.mn-ch-bar-before { background: var(--mn-warning); z-index: 1; }
+.mn-ch-credit-text { white-space: normal; }
+.mn-ch-credit-text strong { color: var(--mn-text); font-variant-numeric: tabular-nums; }
+.mn-ch-over { color: var(--mn-danger); font-weight: 600; }
+.mn-ch-decision { display: grid; gap: 4px; justify-items: start; }
+.mn-ch-decided { white-space: normal; }
+.mn-ch-acts { display: flex; gap: 4px; justify-content: flex-end; }
+.mn-ch-acts button { white-space: nowrap; }
+@media (max-width: 860px) {
+  .mn-ch .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'id'
+      'who'
+      'val'
+      'credit'
+      'decision'
+      'acts';
+  }
+  .mn-ch .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-ch-credit { grid-area: credit; }
+  .mn-ch-decision { grid-area: decision; }
+  .mn-ch-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
+}
+
+/* ============================================================================
+   IMPORT PO — the AI-read purchase order, on the document-list bones
+   ============================================================================ */
+.mn-po-drop { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mn-po-drop .mn-ord-meta { white-space: normal; }
+.mn-po-grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
+.mn-po-next { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .mn-po-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -29,6 +29,8 @@ export class CreditHoldService {
         .createQueryBuilder('h')
         .leftJoin('orders', 'o', 'o.id = h.order_id')
         .leftJoin('customers', 'c', 'c.id = h.customer_id')
+        .leftJoin('users', 'ru', 'ru.id = h.requested_by')
+        .leftJoin('users', 'du', 'du.id = h.decided_by')
         .select([
           'h.id AS id',
           'h.order_id AS "orderId"',
@@ -43,7 +45,13 @@ export class CreditHoldService {
           'h.decided_at AS "decidedAt"',
           'h.created_at AS "createdAt"',
           'o.order_no AS "orderNo"',
+          'o.order_status AS "orderStatus"',
+          'o.order_date::text AS "orderDate"',
+          'o.estimated_order_value AS "orderValue"',
           'c.customer_name AS "customerName"',
+          'c.credit_days AS "creditDays"',
+          'ru.name AS "requestedByName"',
+          'du.name AS "decidedByName"',
         ])
         .orderBy('h.created_at', 'DESC')
         .limit(listLimit(limit));

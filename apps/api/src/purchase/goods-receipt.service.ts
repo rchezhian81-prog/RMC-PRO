@@ -42,10 +42,41 @@ export class GrnService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Every receipt with what the list needs beside it: the supplier, plant
+   * and purchase order by name, the lines summed (count, materials, received
+   * and accepted), and the bill raised on it. Grouped queries, not one per
+   * receipt.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(GoodsReceipt).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const grns = await m.getRepository(GoodsReceipt).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!grns.length) return grns;
+      const ids = grns.map((g) => g.id);
+      const extra: Array<{ id: string; supplierName: string | null; plantName: string | null; poNo: string | null; itemCount: number; materialLabels: string | null; receivedQty: number; acceptedQty: number; billId: string | null; billNo: string | null; billStatus: string | null }> = await m.query(
+        `SELECT g.id, s.supplier_name AS "supplierName", p.plant_name AS "plantName", o.po_no AS "poNo",
+                COALESCE(i.n, 0)::int AS "itemCount", i.labels AS "materialLabels",
+                COALESCE(i.received, 0)::float AS "receivedQty", COALESCE(i.accepted, 0)::float AS "acceptedQty",
+                b.id AS "billId", b.bill_no AS "billNo", b.status AS "billStatus"
+           FROM goods_receipts g
+           LEFT JOIN suppliers s ON s.id = g.supplier_id
+           LEFT JOIN plants p ON p.id = g.plant_id
+           LEFT JOIN purchase_orders o ON o.id = g.purchase_order_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) AS n, STRING_AGG(material_label, ', ' ORDER BY created_at) AS labels,
+                    SUM(received_quantity) AS received, SUM(accepted_quantity) AS accepted
+               FROM goods_receipt_items WHERE goods_receipt_id = g.id
+           ) i ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT id, bill_no, status FROM vendor_bills WHERE goods_receipt_id = g.id AND status <> 'cancelled'
+              ORDER BY created_at DESC LIMIT 1
+           ) b ON TRUE
+          WHERE g.id = ANY($1::uuid[])`,
+        [ids],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return grns.map((g) => ({ ...g, ...(by.get(g.id) ?? { supplierName: null, plantName: null, poNo: null, itemCount: 0, materialLabels: null, receivedQty: 0, acceptedQty: 0, billId: null, billNo: null, billStatus: null }) }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

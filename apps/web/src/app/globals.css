@@ -4444,3 +4444,89 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-cn .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
   .mn-cn-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
 }
+
+/* ============================================================================
+   PURCHASE — orders, goods receipts and vendor bills on the document-list bones
+   ============================================================================ */
+.mn-pu-form { display: grid; gap: 4px; }
+.mn-pu-form-head { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(150px, 0.8fr); gap: 0 16px; }
+.mn-pu-form-head > * { min-width: 0; }
+.mn-pu-lines { display: grid; gap: 8px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-md); padding: 8px 12px 12px; }
+.mn-pu-line { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(90px, 0.7fr) minmax(110px, 0.8fr) minmax(70px, 0.5fr) minmax(110px, 0.8fr) auto; gap: 8px; align-items: center; }
+.mn-pu-line > * { min-width: 0; }
+.mn-pu-line--head { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-muted); padding: 2px 0; }
+.mn-pu-line .is-num { text-align: right; }
+.mn-pu-line .mn-input.is-num { text-align: right; }
+.mn-pu-line-total { font-weight: 600; font-variant-numeric: tabular-nums; }
+.mn-pu-form-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; }
+.mn-pu-form-foot .mn-ord-how { flex: 1 1 200px; white-space: normal; }
+.mn-pu-form-submit { display: flex; gap: 8px; margin-left: auto; }
+.mn-pu .mn-ord-cols--acts,
+.mn-pu .mn-ord-row--acts { grid-template-columns: minmax(130px, 0.7fr) minmax(140px, 0.8fr) minmax(170px, 1.3fr) minmax(120px, 0.7fr) minmax(150px, 0.9fr) minmax(90px, auto) minmax(120px, auto); }
+.mn-pu-mats { display: grid; gap: 2px; min-width: 0; }
+.mn-pu-mats-text { font-size: 13.5px; font-weight: 600; color: var(--mn-text); overflow-wrap: anywhere; }
+.mn-pu-late { color: var(--mn-danger); font-weight: 600; }
+.mn-pu-progress { display: grid; gap: 5px; min-width: 0; align-content: start; }
+.mn-pu-progress .mn-ord-meta { white-space: normal; }
+.mn-pu-progress .mn-ord-meta strong { color: var(--mn-text); }
+.mn-pu-bar > span { background: var(--mn-warning); }
+.mn-pu-progress[data-tone='success'] .mn-pu-bar > span { background: var(--mn-success); }
+.mn-pu-acts, .mn-gr-acts, .mn-vb-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; max-width: 200px; margin-left: auto; }
+.mn-pu-acts button, .mn-gr-acts button, .mn-vb-acts button { white-space: nowrap; }
+/* Goods receipts */
+.mn-gr-form { display: grid; gap: 4px; }
+.mn-gr-form-head { display: grid; grid-template-columns: minmax(240px, 1.6fr) minmax(150px, 0.9fr) minmax(130px, 0.7fr) minmax(150px, 0.8fr); gap: 0 16px; }
+.mn-gr-form-head > * { min-width: 0; }
+.mn-gr-lines { display: grid; gap: 8px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-md); padding: 8px 12px 12px; }
+.mn-gr-line { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(80px, 0.6fr) minmax(80px, 0.6fr) minmax(110px, 0.8fr) minmax(110px, 0.8fr); gap: 8px; align-items: center; }
+.mn-gr-line > * { min-width: 0; }
+.mn-gr-line--head { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-muted); padding: 2px 0; }
+.mn-gr-line .is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.mn-gr-line-mat { display: grid; gap: 2px; }
+.mn-gr-rej { border-color: var(--mn-danger) !important; }
+.mn-gr-form-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 12px; }
+.mn-gr-form-foot .mn-ord-how { flex: 1 1 200px; white-space: normal; }
+.mn-gr-form-submit { display: flex; gap: 8px; margin-left: auto; }
+.mn-gr .mn-ord-cols--acts,
+.mn-gr .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.85fr) minmax(150px, 0.9fr) minmax(0, 1.2fr) minmax(130px, 0.8fr) minmax(110px, 0.7fr) minmax(100px, auto) auto; }
+.mn-gr-qty .mn-ord-meta { white-space: normal; }
+.mn-gr-rej-text { color: var(--mn-danger); font-weight: 600; }
+.mn-gr-bill { display: grid; gap: 2px; min-width: 0; justify-items: start; }
+.mn-gr .mn-ord-status { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; }
+/* Vendor bills */
+.mn-vb-form { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(160px, 1fr) minmax(140px, 0.7fr) minmax(160px, 0.9fr); gap: 0 16px; }
+.mn-vb-form > * { min-width: 0; }
+.mn-vb-form-submit { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.mn-vb .mn-ord-cols--acts,
+.mn-vb .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.85fr) minmax(150px, 0.9fr) minmax(0, 1.1fr) minmax(140px, 0.8fr) minmax(130px, 0.7fr) minmax(100px, auto) auto; }
+.mn-vb-pay-cols, .mn-vb-pay-row { grid-template-columns: minmax(170px, 0.9fr) minmax(150px, 0.9fr) minmax(0, 1.2fr) minmax(120px, 0.7fr) minmax(90px, auto) auto !important; }
+.mn-vb-owed { color: var(--mn-warning); font-weight: 600; }
+.mn-vb-match { display: grid; gap: 3px; min-width: 0; }
+.mn-vb-match[data-tone='success'] .mn-ord-when-d { color: var(--mn-success); }
+.mn-vb-match[data-tone='danger'] .mn-ord-when-d { color: var(--mn-danger); }
+.mn-vb .mn-ord-status { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; }
+@media (max-width: 860px) {
+  .mn-pu-form-head, .mn-gr-form-head, .mn-vb-form { grid-template-columns: minmax(0, 1fr); }
+  .mn-pu-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-pu-line > :first-child { grid-column: 1 / -1; }
+  .mn-pu-line--head { display: none; }
+  .mn-gr-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-gr-line > :first-child { grid-column: 1 / -1; }
+  .mn-gr-line--head { display: none; }
+  .mn-pu-form-submit, .mn-gr-form-submit { margin-left: 0; }
+  .mn-pu .mn-ord-row--acts, .mn-gr .mn-ord-row--acts, .mn-vb .mn-ord-row--acts, .mn-vb-pay-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-areas:
+      'id status'
+      'who who'
+      'mats mats'
+      'val val'
+      'extra extra'
+      'acts acts';
+  }
+  .mn-pu .mn-ord-row--acts .mn-ord-status, .mn-gr .mn-ord-row--acts .mn-ord-status, .mn-vb .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; justify-content: flex-end; }
+  .mn-pu-mats { grid-area: mats; }
+  .mn-pu .mn-ord-row--acts .mn-ord-val, .mn-gr .mn-ord-row--acts .mn-ord-val, .mn-vb .mn-ord-row--acts .mn-ord-val { grid-area: val; text-align: left; align-items: flex-start; }
+  .mn-pu-progress, .mn-gr-bill, .mn-vb-match { grid-area: extra; }
+  .mn-pu-acts, .mn-gr-acts, .mn-vb-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; margin-left: 0; max-width: none; }
+}

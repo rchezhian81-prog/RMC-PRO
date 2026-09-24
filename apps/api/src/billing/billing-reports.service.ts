@@ -136,24 +136,51 @@ export class BillingReportsService {
       const { byCustomer: unclearedOf, total: unclearedTotal } = await this.unclearedChequeAllocations(m);
       // Contact details ride along so the UI can send a reminder without a second lookup.
       const infoOf = new Map(customers.map((c) => [c.id, c]));
+      // The last money in per customer, so the collections screen can say how
+      // long it has been since they paid anything.
+      const lastReceipts: Array<{ customerId: string; receiptDate: string | null; amount: number }> = await m.query(
+        `SELECT DISTINCT ON (p.customer_id) p.customer_id AS "customerId", p.receipt_date::text AS "receiptDate", p.amount::float AS amount
+           FROM payments p WHERE p.status <> 'reversed' AND p.customer_id IS NOT NULL
+          ORDER BY p.customer_id, p.receipt_date DESC NULLS LAST, p.created_at DESC`,
+      );
+      const lastReceiptOf = new Map(lastReceipts.map((r) => [r.customerId, r]));
+      const todayIso = new Date().toISOString().slice(0, 10);
       const byCustomer = new Map<
         string,
-        { customerName: string; contactPerson: string; mobile: string; total: number; b0_30: number; b31_60: number; b61_90: number; b90: number }
+        {
+          customerId: string | null; customerName: string; contactPerson: string; mobile: string;
+          creditLimit: number; creditDays: number; invoiceCount: number; oldestDays: number; overdue: number;
+          lastReceiptDate: string | null; lastReceiptAmount: number;
+          total: number; b0_30: number; b31_60: number; b61_90: number; b90: number;
+        }
       >();
-      const totals = { total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0 };
+      const totals = { total: 0, overdue: 0, invoiceCount: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0 };
 
       for (const inv of invoices) {
         const out = num(inv.outstandingAmount);
         if (out <= 0) continue;
         const key = inv.customerId ?? 'unknown';
         const c = infoOf.get(key);
+        const last = lastReceiptOf.get(key);
         const row = byCustomer.get(key) ?? {
+          customerId: inv.customerId ?? null,
           customerName: c?.customerName ?? 'Unknown',
           contactPerson: c?.contactPerson ?? '',
           mobile: c?.mobile ?? '',
+          creditLimit: num(c?.creditLimit), creditDays: num(c?.creditDays),
+          invoiceCount: 0, oldestDays: 0, overdue: 0,
+          lastReceiptDate: last?.receiptDate ?? null, lastReceiptAmount: num(last?.amount),
           total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90: 0,
         };
-        const bucket = bucketOf(daysBetween(inv.invoiceDate));
+        const age = daysBetween(inv.invoiceDate);
+        const bucket = bucketOf(age);
+        row.invoiceCount += 1;
+        totals.invoiceCount += 1;
+        row.oldestDays = Math.max(row.oldestDays, age);
+        // Past its due date (or, with no due date, past the customer's credit days).
+        const dueIso = inv.dueDate ?? null;
+        const pastDue = dueIso ? dueIso < todayIso : age > num(c?.creditDays);
+        if (pastDue) { row.overdue = round2(row.overdue + out); totals.overdue = round2(totals.overdue + out); }
         row.total = round2(row.total + out);
         if (bucket === '0-30') { row.b0_30 = round2(row.b0_30 + out); totals.b0_30 = round2(totals.b0_30 + out); }
         else if (bucket === '31-60') { row.b31_60 = round2(row.b31_60 + out); totals.b31_60 = round2(totals.b31_60 + out); }

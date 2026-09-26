@@ -2193,94 +2193,55 @@ main:focus-visible {
 .mn-lp-on-dark .mn-lp-h2 { color: #ffffff; }
 .mn-lp-on-dark .mn-lp-sub { color: #cfc4ee; }
 
-/* ---- the plant photograph ---- */
-.mn-lp-plant {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border-radius: 24px;
-  background: #0f0a22;
-  border: 1px solid rgba(138, 79, 255, 0.22);
-  box-shadow: 0 40px 90px -40px rgba(30, 17, 64, 0.8);
-}
-.mn-lp-plant .mn-lp-mesh { filter: blur(50px); }
-.mn-lp-plant .mn-lp-blob { opacity: 0.55; }
-.mn-lp-plant--photo .mn-lp-mesh, .mn-lp-plant--photo .mn-lp-grain { display: none; }
-.mn-lp-photo { position: relative; z-index: 2; display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
-/* a soft brand vignette so the white callouts and the card edge sit on the picture */
-.mn-lp-plant--photo::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(15, 10, 34, 0.28) 0%, rgba(15, 10, 34, 0) 28%, rgba(15, 10, 34, 0) 70%, rgba(15, 10, 34, 0.42) 100%),
-    radial-gradient(120% 90% at 50% 50%, rgba(15, 10, 34, 0) 55%, rgba(30, 17, 64, 0.35) 100%);
-}
-/* option c: the photograph in the brand's purple */
-.mn-lp[data-photo='c'] .mn-lp-photo { filter: grayscale(1) contrast(1.08) brightness(0.92); }
-.mn-lp[data-photo='c'] .mn-lp-plant--photo::after {
-  background:
-    linear-gradient(180deg, rgba(20, 10, 48, 0.55) 0%, rgba(108, 43, 217, 0.42) 50%, rgba(20, 10, 48, 0.7) 100%);
-  mix-blend-mode: multiply;
-}
-.mn-lp[data-photo='c'] .mn-lp-plant--photo::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(160deg, rgba(183, 140, 255, 0.45) 0%, rgba(138, 79, 255, 0.15) 45%, rgba(108, 43, 217, 0) 80%);
-  mix-blend-mode: screen;
-}
-/* option b: the same photograph, darkened, behind the hero */
-.mn-lp-hero-photo { display: none; }
-.mn-lp[data-photo='b'] .mn-lp-hero-photo {
+/* ---- the plant photograph behind the hero ---- */
+.mn-lp-hero-photo { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.mn-lp-hero-photo img {
   display: block;
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-image: url('/landing/plant-1600.webp');
-  background-size: cover;
-  background-position: 62% 40%;
-  filter: saturate(0.7) brightness(0.85);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 68% 42%;
+  filter: saturate(1.02) contrast(1.04);
 }
-.mn-lp[data-photo='b'] .mn-lp-hero-photo::after {
+/* the scrim: solid enough on the left for the headline, open on the right for the plant, deep at the foot for the strip */
+.mn-lp-hero-photo::after {
   content: '';
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(15, 10, 34, 0.96) 0%, rgba(15, 10, 34, 0.86) 42%, rgba(24, 14, 56, 0.66) 70%, rgba(15, 10, 34, 0.8) 100%),
-    linear-gradient(180deg, rgba(15, 10, 34, 0.35) 0%, rgba(15, 10, 34, 0) 40%, rgba(15, 10, 34, 0.9) 100%);
+    linear-gradient(90deg, rgba(15, 10, 34, 0.93) 0%, rgba(15, 10, 34, 0.8) 30%, rgba(15, 10, 34, 0.32) 52%, rgba(15, 10, 34, 0.1) 72%, rgba(15, 10, 34, 0.26) 100%),
+    linear-gradient(180deg, rgba(15, 10, 34, 0.42) 0%, rgba(15, 10, 34, 0) 22%, rgba(15, 10, 34, 0) 56%, rgba(15, 10, 34, 0.86) 100%);
 }
-.mn-lp[data-photo='b'] .mn-lp-hero .mn-lp-mesh { opacity: 0.55; }
-.mn-lp[data-photo='b'] .mn-lp-hero .mn-lp-dots { opacity: 0.35; }
-.mn-lp-callout {
-  position: absolute;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 12px 8px 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #1e1e2e;
-  box-shadow: 0 14px 34px -14px rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px);
-  line-height: 1.2;
+.mn-lp-hero .mn-lp-mesh { opacity: 0.22; z-index: 1; }
+.mn-lp-hero .mn-lp-dots { opacity: 0.18; }
+.mn-lp-hero .mn-lp-watermark { opacity: 0.06; }
+.mn-lp-hero-inner { padding-bottom: 40px; }
+
+/* ---- the plant-floor strip: the callouts, over the foot of the photograph ---- */
+.mn-lp-floor { position: relative; z-index: 2; padding: 0 24px 40px; }
+.mn-lp-floor-lead { margin: 0 0 14px; font-size: 14px; color: #cfc4ee; }
+.mn-lp-floor-lead b { color: #ffffff; font-weight: 700; }
+.mn-lp-floor-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.mn-lp-floor-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 10, 34, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -24px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #efe9ff;
+  line-height: 1.3;
 }
-.mn-lp-callout span { display: grid; gap: 2px; }
-.mn-lp-callout b { font-size: 12.5px; font-weight: 700; }
-.mn-lp-callout small { font-size: 11px; color: #5b5b6b; }
-.mn-lp-callout-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mn-purple-500); box-shadow: 0 0 0 4px rgba(138, 79, 255, 0.18); flex: 0 0 auto; }
-/* positions match the photograph: silos and tower on the right, bins on the left, mixers in the yard, the office in the middle */
-.mn-lp-callout-silos { left: 60%; top: 7%; }
-.mn-lp-callout-bins { left: 4%; top: 47%; }
-.mn-lp-callout-tower { left: 47%; top: 30%; }
-.mn-lp-callout-truck { left: 71%; top: 63%; }
-.mn-lp-callout-office { left: 38%; top: 66%; }
-.mn-lp-callout-list { display: none; }
+.mn-lp-floor-item span { display: grid; gap: 3px; min-width: 0; }
+.mn-lp-floor-item b { font-size: 13px; font-weight: 700; color: #ffffff; }
+.mn-lp-floor-item small { font-size: 11.5px; color: #cfc4ee; }
+.mn-lp-floor-item .mn-lp-callout-dot { margin-top: 4px; }
+.mn-lp-callout-dot { width: 9px; height: 9px; border-radius: 50%; background: #b78cff; box-shadow: 0 0 0 4px rgba(183, 140, 255, 0.22); flex: 0 0 auto; }
 
 /* ---- bento capability grid ---- */
 .mn-lp-bento { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -2437,7 +2398,13 @@ main:focus-visible {
 
 /* ---- responsive ---- */
 @media (max-width: 980px) {
-  .mn-lp-hero-inner { grid-template-columns: 1fr; gap: 44px; padding: 64px 24px 80px; }
+  .mn-lp-hero-inner { grid-template-columns: 1fr; gap: 44px; padding: 64px 24px 36px; }
+  .mn-lp-floor-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mn-lp-hero-photo img { object-position: 62% 40%; }
+  .mn-lp-hero-photo::after {
+    background:
+      linear-gradient(180deg, rgba(15, 10, 34, 0.88) 0%, rgba(15, 10, 34, 0.78) 36%, rgba(15, 10, 34, 0.42) 60%, rgba(15, 10, 34, 0.9) 100%);
+  }
   .mn-lp-window { transform: none; }
   .mn-lp-float-a { right: 6px; }
   .mn-lp-float-b { left: 6px; }
@@ -2453,11 +2420,10 @@ main:focus-visible {
   .mn-lp-kpis { grid-template-columns: repeat(2, 1fr); }
   .mn-lp-row { grid-template-columns: 62px 1fr auto; }
   .mn-lp-row-m { display: none; }
-  .mn-lp-callout { display: none; }
-  .mn-lp-callout-list { display: grid; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--mn-muted); }
-  .mn-lp-callout-list b { color: var(--mn-text); }
+  .mn-lp-floor-list { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
+  .mn-lp-floor-list { grid-template-columns: 1fr; }
   .mn-lp-bento { grid-template-columns: 1fr; }
   .mn-lp-card-wide { grid-column: auto; }
   .mn-lp-card-wide .mn-lp-points { grid-template-columns: 1fr; }

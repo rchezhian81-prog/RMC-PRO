@@ -109,11 +109,11 @@ const DIFFERENTIATORS: { title: string; body: string; icon: LucideIcon }[] = [
 ];
 
 const CALLOUTS: { cls: string; title: string; sub: string }[] = [
-  { cls: 'silos', title: 'Cement silos', sub: 'stock ledger, GRN from the weighbridge' },
+  { cls: 'silos', title: 'Cement silos', sub: 'stock ledger, GRN posted from the weighbridge' },
   { cls: 'bins', title: 'Aggregate bins', sub: 'moisture-corrected batching' },
-  { cls: 'tower', title: 'Batching plant', sub: 'controller import, batch tickets' },
-  { cls: 'truck', title: 'Transit mixers', sub: 'GPS, challan, e-way bill' },
-  { cls: 'office', title: 'Plant office', sub: 'invoice, IRN, receipts, statements' },
+  { cls: 'tower', title: 'Batching tower', sub: 'the operator batches from the queue, controller import' },
+  { cls: 'truck', title: 'Transit mixers', sub: 'GPS, a challan the portal already knows, e-way bill' },
+  { cls: 'office', title: 'Plant office', sub: 'invoice, IRN, receipts, customer statements' },
 ];
 
 function Check() {
@@ -180,44 +180,40 @@ function ProductPreview() {
 }
 
 /**
- * The plant photograph. An AI-rendered model plant, not a customer site: it
- * stands in for the parts of a plant the product covers. Served from /public
- * (the CSP allows images from 'self' only), at three widths so a phone does
- * not download the desktop file.
+ * The plant photograph behind the hero. An AI-rendered model plant, not a
+ * customer site: it stands in for the parts of a plant the product covers.
+ * Served from /public (the CSP allows images from 'self' only) at three
+ * widths so a phone does not download the desktop file. The scrim over it
+ * keeps the headline readable on the left and lets the plant show through
+ * on the right and along the bottom, where the plant-floor strip sits.
  */
-const PLANT_SRC = '/landing/plant-1600.webp';
-const PLANT_SRCSET = '/landing/plant-640.webp 640w, /landing/plant-1000.webp 1000w, /landing/plant-1600.webp 1600w';
-
-function PlantPhoto() {
+function HeroPhoto() {
   return (
-    <img
-      className="mn-lp-photo"
-      src={PLANT_SRC}
-      srcSet={PLANT_SRCSET}
-      sizes="(max-width: 1200px) 100vw, 1152px"
-      width={1600}
-      height={900}
-      alt="A ready-mix concrete plant: cement silos and the batching tower on the right, aggregate bins and stockpiles on the left, a conveyor between them, and transit mixers on the yard"
-      loading="lazy"
-      decoding="async"
-    />
+    <div className="mn-lp-hero-photo" aria-hidden="true">
+      <img
+        src="/landing/plant-1600.webp"
+        srcSet="/landing/plant-640.webp 640w, /landing/plant-1000.webp 1000w, /landing/plant-1600.webp 1600w"
+        sizes="100vw"
+        width={1600}
+        height={900}
+        alt=""
+        decoding="async"
+        fetchPriority="high"
+      />
+    </div>
   );
 }
 
-/** How the photograph is used; picked at build time while the options are compared. */
-const PHOTO_MODE = process.env.NEXT_PUBLIC_LP_PHOTO || 'a';
-
 /** Where an enterprise enquiry about a self-hosted installation goes. */
-const CONTACT_EMAIL = 'hello@mixnovas.com';
+const CONTACT_EMAIL = 'mixnova360@gmail.com';
 
 export default function LandingPage() {
   return (
-    <div className="mn-app mn-lp" data-photo={PHOTO_MODE}>
+    <div className="mn-app mn-lp">
       <header className="mn-lp-nav">
         <div className="mn-lp-wrap mn-lp-nav-inner">
           <Logo size="md" plate />
           <nav aria-label="Primary">
-            <a className="mn-lp-nav-link" href="#plant">The plant</a>
             <a className="mn-lp-nav-link" href="#capabilities">Capabilities</a>
             <a className="mn-lp-nav-link" href="#why">Why Mix Nova</a>
             <Link className="mn-btn mn-btn-primary mn-lp-nav-cta" href="/login">Sign in</Link>
@@ -227,7 +223,7 @@ export default function LandingPage() {
 
       <main>
         <section className="mn-lp-hero">
-          <div className="mn-lp-hero-photo" aria-hidden="true" />
+          <HeroPhoto />
           <Aurora watermark />
           <div className="mn-lp-wrap mn-lp-hero-inner">
             <div className="mn-lp-hero-copy">
@@ -250,6 +246,19 @@ export default function LandingPage() {
             </div>
             <ProductPreview />
           </div>
+          <div className="mn-lp-wrap mn-lp-floor" id="plant" aria-label="Built for the plant floor">
+            <p className="mn-lp-floor-lead">
+              <b>Built for the plant floor.</b> Every part of the plant has a screen that speaks its language.
+            </p>
+            <ul className="mn-lp-floor-list">
+              {CALLOUTS.map((c) => (
+                <li className="mn-lp-floor-item" key={c.cls}>
+                  <i className="mn-lp-callout-dot" aria-hidden="true" />
+                  <span><b>{c.title}</b><small>{c.sub}</small></span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
 
         <section className="mn-lp-flow" aria-label="Order to cash in one line">
@@ -262,36 +271,6 @@ export default function LandingPage() {
                 </li>
               ))}
             </ol>
-          </div>
-        </section>
-
-        <section id="plant" className="mn-lp-section">
-          <div className="mn-lp-wrap">
-            <Reveal>
-              <p className="mn-lp-kicker">The plant</p>
-              <h2 className="mn-lp-h2">Built for the plant floor</h2>
-              <p className="mn-lp-sub">
-                Every part of the plant has a screen that speaks its language: the store posts a GRN from the
-                weighbridge, the operator batches from the queue, the driver carries a challan the portal already knows.
-              </p>
-            </Reveal>
-            <Reveal delay={120}>
-              <div className="mn-lp-plant mn-lp-plant--photo">
-                <Aurora dots={false} />
-                <PlantPhoto />
-                {CALLOUTS.map((c) => (
-                  <div className={`mn-lp-callout mn-lp-callout-${c.cls}`} key={c.cls}>
-                    <i className="mn-lp-callout-dot" aria-hidden="true" />
-                    <span><b>{c.title}</b><small>{c.sub}</small></span>
-                  </div>
-                ))}
-              </div>
-              <ul className="mn-lp-callout-list">
-                {CALLOUTS.map((c) => (
-                  <li key={c.cls}><b>{c.title}</b> — {c.sub}</li>
-                ))}
-              </ul>
-            </Reveal>
           </div>
         </section>
 

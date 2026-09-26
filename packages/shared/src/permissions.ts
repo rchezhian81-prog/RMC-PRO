@@ -115,6 +115,18 @@ export const PERMISSIONS = {
   GPS_VIEW: 'gps.view',
   GPS_RECORD: 'gps.record',
 
+  // Driver phone screen (My Trips). A driver sees ONLY the deliveries assigned
+  // to the driver record their login is linked to, moves those along the trip
+  // chain and streams the phone's position. Deliberately not dispatch.update_status:
+  // that key opens the whole board, every truck, every load.
+  DRIVER_TRIPS: 'driver.trips',
+
+  // Pump management: the pump register, pump jobs (scheduling, on-site, pumping
+  // hours) and the pump-charge reconciliation. Planning a job commits a pump and
+  // an operator to a site, so it is a separate key from viewing.
+  PUMP_VIEW: 'pump.view',
+  PUMP_MANAGE: 'pump.manage',
+
   // Control
   APPROVALS_ACT: 'approvals.act',
   AUDIT_LOGS_VIEW: 'audit_logs.view',
@@ -163,6 +175,7 @@ export const ROLE_KEYS = {
   FLEET_MANAGER: 'fleet_manager',
   AUDITOR: 'auditor',
   PLANT_DEVICE: 'plant_device',
+  DRIVER: 'driver',
 } as const;
 
 export type RoleKey = (typeof ROLE_KEYS)[keyof typeof ROLE_KEYS];
@@ -214,7 +227,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.RATE_CONTRACTS_VIEW, P.ORDERS_VIEW, P.ORDERS_CREATE, P.ORDERS_CONFIRM,
     P.CREDIT_HOLD_APPROVE, P.APPROVALS_ACT,
     P.BATCH_TICKETS_CREATE, P.BATCHING_INGEST, P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
-    P.GPS_VIEW, P.GPS_RECORD,
+    P.GPS_VIEW, P.GPS_RECORD, P.PUMP_VIEW, P.PUMP_MANAGE,
     P.STOCK_ADJUST, P.STOCK_ADJUSTMENT_APPROVE, P.NEGATIVE_STOCK_APPROVE, P.WEIGHBRIDGE_DEVICE,
     P.QC_VIEW, P.QC_RECORD,
     P.INVOICES_CREATE, P.RECEIPTS_CREATE,
@@ -249,7 +262,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.MASTERS_VIEW, P.ORDERS_VIEW,
     P.DISPATCH_UPDATE_STATUS, P.DELIVERY_CHALLANS_CREATE,
     P.FLEET_VIEW, P.FLEET_FUEL_RECORD,
-    P.GPS_VIEW, P.GPS_RECORD,
+    P.GPS_VIEW, P.GPS_RECORD, P.PUMP_VIEW, P.PUMP_MANAGE,
     P.REPORTS_VIEW, P.WHATSAPP_SEND,
   ],
 
@@ -274,7 +287,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
     P.MASTERS_VIEW, P.CUSTOMERS_VIEW, P.ORDERS_VIEW,
     P.INVOICES_CREATE, P.INVOICE_CANCELLATION_APPROVE, P.RECEIPTS_CREATE,
     P.PURCHASE_VIEW, P.VENDOR_BILLS_CREATE, P.VENDOR_BILLS_APPROVE, P.VENDOR_PAYMENTS_CREATE,
-    P.FLEET_VIEW,
+    P.FLEET_VIEW, P.PUMP_VIEW,
     P.EXPENSES_VIEW, P.EXPENSES_MANAGE, P.EXPENSES_POST,
     P.DOCUMENT_CORRECTIONS_MANAGE,
     P.TALLY_EXPORT_GENERATE, P.REPORTS_VIEW, P.REPORTS_EXPORT, P.WHATSAPP_SEND, P.AI_USE,
@@ -283,9 +296,18 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, Permission[]> = {
   [ROLE_KEYS.FLEET_MANAGER]: [
     P.MASTERS_VIEW, P.MASTERS_EDIT, P.DISPATCH_UPDATE_STATUS,
     P.FLEET_VIEW, P.FLEET_MAINTENANCE_RECORD, P.FLEET_FUEL_RECORD,
-    P.GPS_VIEW,
+    P.GPS_VIEW, P.PUMP_VIEW, P.PUMP_MANAGE,
     P.REPORTS_VIEW,
   ],
+
+  /**
+   * A mixer or pump driver on a phone. Holds ONLY the My Trips key: the
+   * deliveries assigned to the driver record the login is linked to (Masters →
+   * Drivers → Login account), the trip-status buttons for those, and the
+   * phone's position feed. No board, no masters, no reports — a phone left in
+   * a cab opens nothing else.
+   */
+  [ROLE_KEYS.DRIVER]: [P.DRIVER_TRIPS],
 
   /**
    * The tablet at the plant, not a person.
@@ -327,4 +349,5 @@ export const ROLE_LABELS: Record<string, string> = {
   [ROLE_KEYS.FLEET_MANAGER]: 'Fleet Manager',
   [ROLE_KEYS.AUDITOR]: 'Auditor',
   [ROLE_KEYS.PLANT_DEVICE]: 'Plant Device (offline sync)',
+  [ROLE_KEYS.DRIVER]: 'Driver',
 };

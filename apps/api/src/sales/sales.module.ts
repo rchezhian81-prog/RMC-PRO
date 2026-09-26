@@ -14,7 +14,6 @@ import { RateContractsService } from './rate-contracts.service';
 import { OrdersDraftService } from './orders-draft.service';
 import { NumberingService } from './numbering.service';
 import { PdfService } from './pdf.service';
-import { WhatsAppService } from './whatsapp.service';
 
 /**
  * Sprint 4 — Sales module: leads, quotations (items, approval, revisions, PDF,
@@ -36,7 +35,6 @@ import { WhatsAppService } from './whatsapp.service';
     OrdersDraftService,
     NumberingService,
     PdfService,
-    WhatsAppService,
     TenantGuard,
     PermissionsGuard,
   ],

@@ -5,12 +5,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
-import { RequirePermissions } from '../rbac/permissions.decorator';
+import { RequireAnyPermission, RequirePermissions } from '../rbac/permissions.decorator';
 import { DispatchService } from './dispatch.service';
 import { DeliveryChallanService } from './delivery-challan.service';
 import { PdfService } from '../sales/pdf.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
+
+/** Any of these lets a role read the dispatch board; every seeded operational role holds at least one. */
+const DISPATCH_READ = ['masters.view', 'orders.view', 'dispatch.update_status', 'delivery_challans.create', 'gps.view', 'reports.view', 'sync.manage'];
 
 @Controller('dispatches')
 @RequireModule('dispatch')
@@ -18,12 +21,17 @@ const tid = (u: AuthUser) => u.tenantId as string;
 export class DispatchController {
   constructor(private readonly service: DispatchService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
+  // Reading the board is open to every operational role (any of these keys),
+  // but not to a driver's phone login, which holds driver.trips alone and reads
+  // its own trips through /driver — a phone left in a cab must not list every load.
+  @Get() @RequireAnyPermission(...DISPATCH_READ)
+  list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
   // Literal route declared before `:id` so it wins over the param route.
   @Get('report/cycle-times') @RequirePermissions('reports.view') cycleTimes(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.cycleTimeReport(tid(u), from, to); }
   @Get('report/fleet-utilization') @RequirePermissions('reports.view') fleetUtilization(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.fleetUtilizationReport(tid(u), from, to); }
   @Get('report/driver-productivity') @RequirePermissions('reports.view') driverProductivity(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.driverProductivityReport(tid(u), from, to); }
-  @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
+  @Get(':id') @RequireAnyPermission(...DISPATCH_READ)
+  get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-batch-ticket/:batchTicketId')
   @RequirePermissions('dispatch.update_status')

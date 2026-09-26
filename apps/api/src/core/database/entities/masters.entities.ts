@@ -120,6 +120,13 @@ export class Vehicle extends TenantScopedEntity {
   @Column({ name: 'permit_expiry', type: 'date', nullable: true }) permitExpiry!: string | null;
   @Column({ name: 'pollution_expiry', type: 'date', nullable: true }) pollutionExpiry!: string | null;
   @Column({ name: 'road_tax_expiry', type: 'date', nullable: true }) roadTaxExpiry!: string | null;
+  /** The tracker's device id / IMEI, so a GPS vendor can post positions by device instead of by number. */
+  @Column({ name: 'gps_device_id', type: 'varchar', nullable: true }) gpsDeviceId!: string | null;
+  /** Last known position from any source (vendor feed, driver phone, board ping) — kept even when the truck is idle. */
+  @Column({ name: 'last_latitude', type: 'numeric', precision: 10, scale: 6, nullable: true }) lastLatitude!: string | null;
+  @Column({ name: 'last_longitude', type: 'numeric', precision: 10, scale: 6, nullable: true }) lastLongitude!: string | null;
+  @Column({ name: 'last_location_at', type: 'timestamptz', nullable: true }) lastLocationAt!: Date | null;
+  @Column({ name: 'last_speed_kmph', type: 'numeric', precision: 6, scale: 2, nullable: true }) lastSpeedKmph!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'available' }) status!: string;
 }
 
@@ -132,6 +139,8 @@ export class Driver extends TenantScopedEntity {
   @Column({ name: 'mobile', type: 'varchar', nullable: true }) mobile!: string | null;
   @Column({ name: 'license_no', type: 'varchar', nullable: true }) licenseNo!: string | null;
   @Column({ name: 'license_expiry', type: 'date', nullable: true }) licenseExpiry!: string | null;
+  /** The login this driver signs in with on the phone (My Trips). One login per driver. */
+  @Column({ name: 'user_id', type: 'uuid', nullable: true }) userId!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
 }
 

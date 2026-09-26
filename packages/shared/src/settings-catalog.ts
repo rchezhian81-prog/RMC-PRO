@@ -57,8 +57,9 @@ export const SETTINGS_CATALOG: readonly SettingDef[] = [
   },
   {
     key: 'whatsapp_notifications',
-    label: 'WhatsApp notifications',
-    description: 'Send WhatsApp messages for receipts and dispatches.',
+    label: 'WhatsApp automatic sending',
+    description:
+      'When a WhatsApp Business account is connected (Settings → WhatsApp Business), shared quotations, challans, invoices, receipts and notes are sent to the customer automatically. Off = only the click-to-chat link opens.',
     type: 'boolean',
     default: 'true',
   },

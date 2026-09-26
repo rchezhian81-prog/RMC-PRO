@@ -797,6 +797,7 @@ export const stockAdjustApi = {
 // ---- Notification / WhatsApp send log ----
 export const notificationsApi = {
   history: () => apiFetch<Row[]>('/notifications'),
+  resend: (id: string) => post(`/notifications/${id}/resend`),
 };
 
 // ---- Agent governor (the multi-agent substrate control surface) ----
@@ -924,6 +925,22 @@ export type AlertTestResult = { configured: boolean; delivered: boolean; status?
 export const opsApi = {
   alerting: () => apiFetch<AlertingStatus>('/ops/alerting'),
   alertTest: () => apiFetch<AlertTestResult>('/ops/alert-test', { method: 'POST' }),
+};
+
+// WhatsApp Business (Meta Cloud API). The access token never comes back — only
+// whether an account is connected, from where, and what the last test did.
+export type WhatsAppStatus = {
+  configured: boolean; source: 'tenant' | 'server' | null; phoneNumberId: string | null; businessNumber: string | null;
+  templateName: string | null; templateLanguage: string | null; encryptionAvailable: boolean;
+  lastTestedAt: string | null; lastTestSuccess: boolean | null; lastTestMessage: string | null;
+};
+export type WhatsAppTestResult = { delivered: boolean; status: string; error: string | null; source: string | null; logId: string; providerMessageId: string | null };
+export const whatsappIntegrationApi = {
+  status: () => apiFetch<WhatsAppStatus>('/integrations/whatsapp'),
+  set: (b: { phoneNumberId: string; accessToken: string; businessNumber?: string; templateName?: string; templateLanguage?: string }) =>
+    apiFetch<WhatsAppStatus>('/integrations/whatsapp', { method: 'POST', body: JSON.stringify(b) }),
+  remove: () => apiFetch<{ deleted: boolean }>('/integrations/whatsapp', { method: 'DELETE' }),
+  test: (mobile: string) => apiFetch<WhatsAppTestResult>('/integrations/whatsapp/test', { method: 'POST', body: JSON.stringify({ mobile }) }),
 };
 
 export const gstCredentialsApi = {
@@ -1213,10 +1230,49 @@ export const numberingApi = {
 };
 
 // ---- GPS tracking (the `gps` module) ----
+export type GpsIngestKeyStatus = { configured: boolean; keyHint: string | null; label: string | null; createdAt: string | null; lastUsedAt: string | null };
 export const gpsApi = {
   live: () => apiFetch<Row[]>('/gps/live'),
+  /** Every vehicle's last known position, on a trip or idle. */
+  fleet: () => apiFetch<Row[]>('/gps/fleet'),
   track: (dispatchId: string) => apiFetch<Row>(`/gps/dispatches/${dispatchId}/track`),
   ping: (dispatchId: string, b: Record<string, unknown>) => post(`/gps/dispatches/${dispatchId}/ping`, b),
+  // The vendor feed key (Settings → GPS vendor feed). The key itself comes back ONCE, from createKey.
+  ingestKey: () => apiFetch<GpsIngestKeyStatus>('/gps/ingest-key'),
+  createIngestKey: (label?: string) => apiFetch<GpsIngestKeyStatus & { key: string }>('/gps/ingest-key', { method: 'POST', body: JSON.stringify({ label }) }),
+  revokeIngestKey: () => apiFetch<{ revoked: boolean }>('/gps/ingest-key', { method: 'DELETE' }),
+};
+
+// ---- Driver phone screen (My Trips) ----
+export type DriverIdentity = {
+  linked: boolean;
+  driver: { id: string; driverCode: string; driverName: string; mobile: string | null } | null;
+  vehicle: { id: string; vehicleNo: string } | null;
+  gpsEnabled: boolean;
+  message: string | null;
+};
+export const driverApi = {
+  me: () => apiFetch<DriverIdentity>('/driver/me'),
+  trips: () => apiFetch<Row[]>('/driver/trips'),
+  setStatus: (id: string, status: string, extra: Record<string, unknown> = {}) => post(`/driver/trips/${id}/status`, { status, ...extra }),
+  location: (id: string, b: Record<string, unknown>) => apiFetch<{ recorded: boolean; reason?: string }>(`/driver/trips/${id}/location`, { method: 'POST', body: JSON.stringify(b) }),
+};
+
+// ---- Pump management ----
+export const pumpApi = {
+  list: (q: { status?: string; vehicleId?: string; orderId?: string; from?: string; to?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== null) qs.set(k, String(v));
+    const str = qs.toString();
+    return apiFetch<Row[]>(`/pump-jobs${str ? `?${str}` : ''}`);
+  },
+  pumps: () => apiFetch<Row[]>('/pump-jobs/pumps'),
+  get: (id: string) => apiFetch<Row>(`/pump-jobs/${id}`),
+  create: (b: Record<string, unknown>) => post('/pump-jobs', b),
+  update: (id: string, b: Record<string, unknown>) => apiFetch<Row>(`/pump-jobs/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  setStatus: (id: string, status: string, extra: Record<string, unknown> = {}) => post(`/pump-jobs/${id}/status`, { status, ...extra }),
+  utilisation: (from?: string, to?: string) =>
+    apiFetch<{ range: { from: string; to: string }; perPump: Row[]; reconciliation: { rows: Row[]; totals: Record<string, number> } }>(`/pump-jobs/report/utilisation${dateQs(from, to)}`),
 };
 
 // ---- Document corrections / amendment trail (Plan F2) ----
@@ -1248,14 +1304,23 @@ export async function openWhatsAppShare(call: () => Promise<Row>): Promise<strin
   try {
     const log = await call();
     const url = String(log?.shareUrl ?? '');
+    const to = log?.recipientMobile ? ` to ${String(log.recipientMobile)}` : '';
+    // A connected WhatsApp Business account already delivered it: nothing to
+    // open, the customer has the message.
+    if (String(log?.messageStatus) === 'sent') {
+      tab?.close();
+      return `Sent${to} through WhatsApp Business. A copy is saved under Notifications.`;
+    }
     if (!url) {
       tab?.close();
       return 'The message is saved under Notifications, but there is no mobile number to send it to.';
     }
     if (tab) tab.location.href = url;
     else if (!window.open(url, '_blank')) throw new Error('Your browser blocked the WhatsApp window. Allow pop-ups for this site and try again.');
-    const to = log?.recipientMobile ? ` for ${String(log.recipientMobile)}` : '';
-    return `WhatsApp opened with the message${to} — press Send there. A copy is saved under Notifications.`;
+    if (String(log?.messageStatus) === 'failed') {
+      return `Automatic sending failed (${String(log?.errorMessage ?? 'unknown reason')}) — WhatsApp opened with the message instead${to}; press Send there.`;
+    }
+    return `WhatsApp opened with the message${to.replace(' to ', ' for ')} — press Send there. A copy is saved under Notifications.`;
   } catch (e) {
     tab?.close();
     throw e;

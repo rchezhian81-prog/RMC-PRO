@@ -38,6 +38,15 @@ export default function NotificationsPage() {
   const load = useCallback(async () => {
     setRows(await notificationsApi.history());
   }, []);
+  /** Send a failed message again through the connected WhatsApp Business account. */
+  const resend = useCallback(async (id: string) => {
+    setError(null);
+    try {
+      const r = await notificationsApi.resend(id);
+      if (String(r.messageStatus) !== 'sent') setError(`Not sent: ${String(r.errorMessage ?? 'unknown reason')}`);
+      await load();
+    } catch (e) { setError(String(e)); }
+  }, [load]);
   useEffect(() => {
     setLoaded(false);
     load()
@@ -102,7 +111,7 @@ export default function NotificationsPage() {
 
       <Card
         title={<span className="mn-board-card-title"><MessageSquare size={16} aria-hidden /> Sends <span className="mn-board-card-count">{shown.length}</span></span>}
-        actions={<span className="mn-ord-how">Newest first. Open reopens the chat with the same message.</span>}
+        actions={<span className="mn-ord-how">Newest first. <strong>sent</strong> went out through WhatsApp Business; <strong>logged</strong> opened a chat window for you to press Send; <strong>failed</strong> was refused — Resend, or Open to send by hand.</span>}
         padded={false}
       >
         {!loaded ? (
@@ -117,21 +126,24 @@ export default function NotificationsPage() {
               <span />
             </div>
             {shown.map((r) => (
-              <div key={String(r.id)} className="mn-ord-row mn-ord-row--acts mn-wa-row" data-tone={String(r.messageStatus) === 'failed' ? 'danger' : 'success'} role="listitem">
+              <div key={String(r.id)} className="mn-ord-row mn-ord-row--acts mn-wa-row" data-tone={String(r.messageStatus) === 'failed' ? 'danger' : String(r.messageStatus) === 'sent' ? 'success' : 'info'} role="listitem">
                 <div className="mn-ord-id">
                   <span className="mn-ord-no">{formatDateTime(r.createdAt)}</span>
                   <span className="mn-ord-meta">{moduleLabel(r.moduleKey)}<span className="mn-ord-dot" aria-hidden>·</span>{eventLabel(r.eventKey)}</span>
                 </div>
                 <div className="mn-ord-who">
                   <span className="mn-ord-cust">{mobile(r.recipientMobile)}</span>
-                  <span className="mn-ord-meta">{r.errorMessage ? String(r.errorMessage) : 'WhatsApp'}</span>
+                  <span className={r.errorMessage ? 'mn-ord-meta mn-id-bad' : 'mn-ord-meta'}>{r.errorMessage ? String(r.errorMessage) : r.providerMessageId ? `WhatsApp Business · ${String(r.providerMessageId).slice(0, 18)}…` : 'WhatsApp'}</span>
                 </div>
                 <div className="mn-wa-msg">
                   <span>{r.messageBody ? String(r.messageBody) : <span className="mn-ord-meta">No message text</span>}</span>
                 </div>
                 <div className="mn-ord-status"><StatusBadge status={String(r.messageStatus === 'queued' ? 'shared' : r.messageStatus ?? '')} /></div>
                 <div className="mn-ord-act mn-wa-acts">
-                  {r.shareUrl ? (
+                  {String(r.messageStatus) === 'failed' && r.recipientMobile ? (
+                    <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => resend(String(r.id))}>Resend</Button>
+                  ) : null}
+                  {r.shareUrl && String(r.messageStatus) !== 'sent' ? (
                     <a href={String(r.shareUrl)} target="_blank" rel="noopener noreferrer" className="mn-ord-link">
                       <Button variant="ghost" size="sm" icon={<ExternalLink size={14} />}>Open</Button>
                     </a>

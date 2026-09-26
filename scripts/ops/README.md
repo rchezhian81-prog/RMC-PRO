@@ -420,6 +420,22 @@ Exit `0` when access matches the user's permissions exactly, `1` otherwise.
 
 ---
 
+# Ops — credential master key (`cred-key-ensure.sh`)
+
+`GST_CRED_ENC_KEY` seals every secret a company stores through the app: the
+GST-portal password and the WhatsApp Business access token. Until it exists,
+Settings → WhatsApp Business (and GST portal credentials) refuse to store
+anything, with the exact command to run. One command creates it and restarts
+the api; running it again changes nothing:
+
+```bash
+cd /opt/rmc && sudo ./scripts/ops/cred-key-ensure.sh           # generate if missing, restart api, verify
+cd /opt/rmc && sudo ./scripts/ops/cred-key-ensure.sh --status  # is it set? (never printed)
+```
+
+Back the env file up afterwards — a lost key means every stored secret has to
+be entered again.
+
 # Ops — TLS certificate renewal (containerized nginx)
 
 The pilot cert (`mixnovas.com` + `www`/`app`/`api`/`admin`) is issued with

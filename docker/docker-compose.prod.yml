@@ -148,8 +148,17 @@ services:
       GST_GSP_CLIENT_SECRET: ${GST_GSP_CLIENT_SECRET:-}
       GST_RSA_PUBLIC_KEY_PEM: ${GST_RSA_PUBLIC_KEY_PEM:-}
       GST_IRP_MAX_RETRIES: ${GST_IRP_MAX_RETRIES:-2}
-      # AES-256-GCM master key for per-tenant GST-portal credentials (at rest).
+      # AES-256-GCM master key for per-tenant stored secrets (GST-portal
+      # credentials and the WhatsApp Business token) at rest.
       GST_CRED_ENC_KEY: ${GST_CRED_ENC_KEY:-}
+      # WhatsApp Business box-wide fallback (companies normally connect their own
+      # account in Settings; see .env.production.example).
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_TEMPLATE_NAME: ${WHATSAPP_TEMPLATE_NAME:-}
+      WHATSAPP_TEMPLATE_LANGUAGE: ${WHATSAPP_TEMPLATE_LANGUAGE:-}
+      WHATSAPP_BUSINESS_NUMBER: ${WHATSAPP_BUSINESS_NUMBER:-}
+      WHATSAPP_API_BASE: ${WHATSAPP_API_BASE:-}
       GST_IRP_TIMEOUT_MS: ${GST_IRP_TIMEOUT_MS:-30000}
       # The in-process worker that drains approved GST actions (off = manual drain).
       GST_WORKER_ENABLED: ${GST_WORKER_ENABLED:-false}

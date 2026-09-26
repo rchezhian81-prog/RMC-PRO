@@ -25,6 +25,12 @@ const GUARDED = [
   ['receipts.create', 'POST', '/receipts'],
   ['tally_export.generate', 'GET', '/billing-reports/tally-export'],
   ['sync.manage', 'POST', '/sync/devices/register'],
+  ['driver.trips', 'POST', '/driver/trips/00000000-0000-0000-0000-000000000000/status'],
+  ['pump.manage', 'POST', '/pump-jobs'],
+  ['pump.view', 'GET', '/pump-jobs/pumps'],
+  ['integrations.manage', 'POST', '/integrations/whatsapp/test'],
+  ['integrations.manage', 'POST', '/gps/ingest-key'],
+  ['whatsapp.send', 'POST', '/notifications/00000000-0000-0000-0000-000000000000/resend'],
 ];
 
 export async function run() {

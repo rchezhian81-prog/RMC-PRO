@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { BellRing, Building2, CheckCircle2, Landmark, RefreshCw, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
 import { formatDateTime } from '../../../lib/format-date';
-import { settings, gstCredentialsApi, gstApi, opsApi, type SettingRow, type GstCredentialStatus, type GstStatus, type AlertingStatus } from '../../../lib/api';
+import { settings, gstCredentialsApi, gstApi, opsApi, whatsappIntegrationApi, gpsApi, type SettingRow, type GstCredentialStatus, type GstStatus, type AlertingStatus, type WhatsAppStatus, type GpsIngestKeyStatus } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -150,6 +150,10 @@ export default function SettingsPage() {
       <div className="mn-ir-two">
         <GstCredentialsCard />
         <AlertingCard />
+      </div>
+      <div className="mn-ir-two">
+        <WhatsAppCard />
+        <GpsFeedCard />
       </div>
     </div>
   );
@@ -304,6 +308,199 @@ function GstCredentialsCard() {
         <div className="mn-se-actions">
           <Button variant="secondary" size="sm" onClick={() => setShowForm(true)}>{creds.length ? 'Add another GSTIN' : 'Add a portal login'}</Button>
         </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Connect the company's WhatsApp Business account (Meta Cloud API) so shared
+ * documents are SENT to the customer instead of only opening a chat window.
+ * The token is sealed on the server and never shown again; the card shows the
+ * phone-number id, where the connection comes from and the last test.
+ */
+function WhatsAppCard() {
+  const { confirm } = useConfirm();
+  const [status, setStatus] = useState<WhatsAppStatus | null | undefined>(undefined);
+  const [form, setForm] = useState({ phoneNumberId: '', accessToken: '', businessNumber: '', templateName: '', templateLanguage: 'en' });
+  const [testMobile, setTestMobile] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const load = () => whatsappIntegrationApi.status().then(setStatus).catch(() => setStatus(null));
+  useEffect(() => { load(); }, []);
+  if (status === null) return null; // not permitted → nothing to show
+
+  async function save(e: FormEvent) {
+    e.preventDefault(); setErr(null); setMsg(null);
+    try {
+      await whatsappIntegrationApi.set({
+        phoneNumberId: form.phoneNumberId.trim(), accessToken: form.accessToken.trim(), businessNumber: form.businessNumber.trim() || undefined,
+        templateName: form.templateName.trim() || undefined, templateLanguage: form.templateLanguage.trim() || undefined,
+      });
+      setForm({ phoneNumberId: '', accessToken: '', businessNumber: '', templateName: '', templateLanguage: 'en' });
+      setOpen(false);
+      setMsg('WhatsApp Business connected. Send a test message below to prove it.');
+      await load();
+    } catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
+  }
+  async function test() {
+    setErr(null); setMsg(null);
+    try {
+      const r = await whatsappIntegrationApi.test(testMobile.trim());
+      setMsg(r.delivered ? `Test message delivered to ${testMobile.trim()} (WhatsApp id ${r.providerMessageId ?? '—'}). Check the phone.` : `Not delivered: ${r.error ?? 'unknown reason'}`);
+      await load();
+    } catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
+  }
+  async function disconnect() {
+    if (!(await confirm({ title: 'Disconnect WhatsApp Business?', message: 'The stored token is deleted. Shares go back to opening a chat window.', confirmLabel: 'Disconnect', danger: true }))) return;
+    setErr(null); setMsg(null);
+    try { await whatsappIntegrationApi.remove(); setMsg('Disconnected.'); await load(); }
+    catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
+  }
+  return (
+    <Card title="WhatsApp Business (automatic sending)">
+      <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 10px' }}>
+        Without this, &quot;Share on WhatsApp&quot; opens a chat window for you to press Send. With a WhatsApp Business account connected, quotations, challans, invoices, receipts and credit notes are sent to the customer straight away and the send log shows delivered or failed.
+        You need a Meta Business account with the WhatsApp product: copy the <strong>Phone number ID</strong> and a permanent <strong>access token</strong> from Meta (WhatsApp → API setup). A pre-approved <strong>template</strong> with one variable lets messages go out at any time; without one, Meta only delivers inside 24 hours of the customer&apos;s last message.
+      </p>
+      {status === undefined ? <p style={{ fontSize: 13, margin: 0 }}>Checking…</p> : (
+        <>
+          <p style={{ fontSize: 13, margin: '0 0 10px' }}>
+            {status.configured ? (
+              <>
+                <strong style={{ color: 'var(--mn-success)' }}>Connected</strong> {status.source === 'server' ? 'through the server’s env file' : 'with this company’s own account'} — phone number id {status.phoneNumberId}
+                {status.businessNumber ? ` (${status.businessNumber})` : ''}{status.templateName ? `, template ${status.templateName} (${status.templateLanguage})` : ', free-text messages (24-hour window)'}.
+                {status.lastTestedAt ? ` Last test ${new Date(status.lastTestedAt).toLocaleString('en-IN')}: ${status.lastTestSuccess ? 'delivered' : `failed — ${status.lastTestMessage ?? ''}`}.` : ''}
+              </>
+            ) : (
+              <><strong style={{ color: 'var(--mn-warning)' }}>Not connected.</strong> Shares open a chat window only.</>
+            )}
+          </p>
+          {!status.encryptionAvailable && (
+            <p style={{ fontSize: 12.5, color: 'var(--mn-danger)', margin: '0 0 10px' }}>
+              This server has no credential key yet, so a token cannot be stored. On the server run: <code>cd /opt/rmc &amp;&amp; sudo ./scripts/ops/cred-key-ensure.sh</code>
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} disabled={!status.encryptionAvailable}>{status.source === 'tenant' ? 'Replace account' : 'Connect account'}</Button>
+            {status.source === 'tenant' && <Button variant="ghost" size="sm" onClick={disconnect}>Disconnect</Button>}
+          </div>
+          {open && (
+            <Form onSubmit={save}>
+              <div style={{ display: 'grid', gap: 10, maxWidth: 520 }}>
+                <Field label="Phone number ID" required help="The numeric id shown under WhatsApp → API setup in Meta, not the phone number.">
+                  <Input value={form.phoneNumberId} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} required inputMode="numeric" />
+                </Field>
+                <Field label="Access token" required help="A permanent System User token with whatsapp_business_messaging. Stored encrypted; never shown again.">
+                  <Input type="password" value={form.accessToken} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} required autoComplete="off" />
+                </Field>
+                <Field label="Business number (display)" help="Optional, e.g. +91 98765 43210 — shown on this card only.">
+                  <Input value={form.businessNumber} onChange={(e) => setForm({ ...form, businessNumber: e.target.value })} />
+                </Field>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 2, minWidth: 200 }}>
+                    <Field label="Template name" help="Optional. An approved template whose body is just {{1}}; the message text goes in as the variable.">
+                      <Input value={form.templateName} onChange={(e) => setForm({ ...form, templateName: e.target.value })} placeholder="e.g. rmc_notice" />
+                    </Field>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <Field label="Template language"><Input value={form.templateLanguage} onChange={(e) => setForm({ ...form, templateLanguage: e.target.value })} placeholder="en" /></Field>
+                  </div>
+                </div>
+                <div><Button type="submit">Save connection</Button></div>
+              </div>
+            </Form>
+          )}
+          {status.configured && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap', marginTop: 10 }}>
+              <div style={{ width: 200 }}><Field label="Send a test to (mobile)"><Input value={testMobile} onChange={(e) => setTestMobile(e.target.value)} placeholder="98765 43210" /></Field></div>
+              <Button variant="secondary" onClick={test} disabled={!testMobile.trim()}>Send test message</Button>
+            </div>
+          )}
+          {msg && <p style={{ fontSize: 12.5, color: /delivered|onnected|Disconnected/.test(msg) && !/Not delivered/.test(msg) ? 'var(--mn-success)' : 'var(--mn-danger)', margin: '10px 0 0' }}>{msg}</p>}
+          {err && <p style={{ fontSize: 12.5, color: 'var(--mn-danger)', margin: '10px 0 0' }}>{err}</p>}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * The GPS vendor feed: a key any tracking vendor posts vehicle positions with.
+ * Shown once when generated; afterwards only its last four characters.
+ */
+function GpsFeedCard() {
+  const { confirm } = useConfirm();
+  const [status, setStatus] = useState<GpsIngestKeyStatus | null | undefined>(undefined);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [label, setLabel] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = () => gpsApi.ingestKey().then(setStatus).catch(() => setStatus(null));
+  useEffect(() => { load(); }, []);
+  if (status === null) return null;
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
+  const endpoint = `${apiBase}/api/v1/gps/ingest`;
+  const sample = JSON.stringify([{ vehicleNo: 'TN01AB1234', latitude: 13.0827, longitude: 80.2707, speedKmph: 42, heading: 90, timestamp: '2026-01-31T10:15:00+05:30' }], null, 2);
+
+  async function generate() {
+    if (status?.configured && !(await confirm({ title: 'Issue a new key?', message: `The current key (…${status.keyHint}) stops working the moment the new one is issued. Give the new key to your GPS vendor.`, confirmLabel: 'Issue new key' }))) return;
+    setErr(null); setMsg(null);
+    try {
+      const r = await gpsApi.createIngestKey(label.trim() || undefined);
+      setFresh(r.key); setLabel('');
+      setMsg('New key issued. Copy it now — it is not shown again.');
+      await load();
+    } catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
+  }
+  async function revoke() {
+    if (!(await confirm({ title: 'Revoke the GPS feed key?', message: 'The vendor’s posts are refused until a new key is issued.', confirmLabel: 'Revoke', danger: true }))) return;
+    setErr(null); setMsg(null);
+    try { await gpsApi.revokeIngestKey(); setFresh(null); setMsg('Key revoked.'); await load(); }
+    catch (e2) { setErr(e2 instanceof Error ? e2.message : String(e2)); }
+  }
+  async function copy(text: string, what: string) {
+    try { await navigator.clipboard.writeText(text); setMsg(`${what} copied.`); } catch { setMsg(`Select and copy the ${what.toLowerCase()} by hand.`); }
+  }
+  return (
+    <Card title="GPS vendor feed">
+      <p style={{ color: 'var(--mn-muted)', fontSize: 12.5, margin: '0 0 10px' }}>
+        Any GPS tracking vendor (or your own device gateway) can post vehicle positions here; they land on Live Tracking and on the vehicle&apos;s last known position. Give the vendor the endpoint and the key below. Vehicles are matched by registration number, or by the GPS device ID (IMEI) entered under Masters → Vehicles.
+      </p>
+      {status === undefined ? <p style={{ fontSize: 13, margin: 0 }}>Checking…</p> : (
+        <>
+          <p style={{ fontSize: 13, margin: '0 0 10px' }}>
+            {status.configured ? (
+              <><strong style={{ color: 'var(--mn-success)' }}>Key active</strong> (…{status.keyHint}{status.label ? `, ${status.label}` : ''}), issued {status.createdAt ? new Date(status.createdAt).toLocaleDateString('en-IN') : ''}.{' '}
+                {status.lastUsedAt ? `Last position received ${new Date(status.lastUsedAt).toLocaleString('en-IN')}.` : 'Nothing received yet.'}</>
+            ) : (
+              <><strong style={{ color: 'var(--mn-warning)' }}>No key issued.</strong> Issue one and hand it to your GPS vendor.</>
+            )}
+          </p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap', marginBottom: 10 }}>
+            <div style={{ width: 220 }}><Field label="Label (optional)"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Vendor name" /></Field></div>
+            <Button variant="secondary" onClick={generate}>{status.configured ? 'Issue new key' : 'Issue key'}</Button>
+            {status.configured && <Button variant="ghost" onClick={revoke}>Revoke</Button>}
+          </div>
+          {fresh && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+              <code style={{ fontSize: 13, padding: '6px 8px', background: 'var(--mn-surface-2, rgba(0,0,0,0.05))', borderRadius: 6, wordBreak: 'break-all' }}>{fresh}</code>
+              <Button size="sm" variant="secondary" onClick={() => copy(fresh, 'Key')}>Copy key</Button>
+            </div>
+          )}
+          <div style={{ fontSize: 12.5, display: 'grid', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>Endpoint: <code>POST {endpoint}</code></span>
+              <Button size="sm" variant="ghost" onClick={() => copy(endpoint, 'Endpoint')}>Copy</Button>
+            </div>
+            <div>Header: <code>X-RMC-GPS-KEY: &lt;the key&gt;</code> (or <code>?key=</code> on the URL). Body: one position or a list, JSON.</div>
+            <pre style={{ margin: 0, fontSize: 12, padding: 8, background: 'var(--mn-surface-2, rgba(0,0,0,0.05))', borderRadius: 6, overflowX: 'auto' }}>{sample}</pre>
+            <div style={{ color: 'var(--mn-muted)' }}>Also accepted: <code>deviceId</code>/<code>imei</code> instead of <code>vehicleNo</code>; <code>lat</code>/<code>lng</code>; <code>speed</code>; epoch seconds or milliseconds for the time. Up to 500 positions per request.</div>
+          </div>
+          {msg && <p style={{ fontSize: 12.5, color: 'var(--mn-success)', margin: '10px 0 0' }}>{msg}</p>}
+          {err && <p style={{ fontSize: 12.5, color: 'var(--mn-danger)', margin: '10px 0 0' }}>{err}</p>}
+        </>
       )}
     </Card>
   );

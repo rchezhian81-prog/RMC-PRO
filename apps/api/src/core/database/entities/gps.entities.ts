@@ -21,3 +21,19 @@ export class DispatchLocationPing extends TenantScopedEntity {
   @Column({ name: 'source', type: 'varchar', default: 'device' }) source!: string;
   @Column({ name: 'recorded_at', type: 'timestamptz', nullable: true }) recordedAt!: Date | null;
 }
+
+/**
+ * A per-tenant API key a GPS vendor posts vehicle positions with
+ * (`POST /gps/ingest`). Only the SHA-256 hash is stored — the key itself is shown
+ * once, when it is generated. `key_hint` is its last four characters so the
+ * screen can say which key is active; `revoked_at` retires it.
+ */
+@Entity('gps_ingest_keys')
+export class GpsIngestKey extends TenantScopedEntity {
+  @Column({ name: 'key_hash', type: 'varchar' }) keyHash!: string;
+  @Column({ name: 'key_hint', type: 'varchar' }) keyHint!: string;
+  @Column({ name: 'label', type: 'varchar', nullable: true }) label!: string | null;
+  @Column({ name: 'created_by', type: 'uuid', nullable: true }) createdBy!: string | null;
+  @Column({ name: 'last_used_at', type: 'timestamptz', nullable: true }) lastUsedAt!: Date | null;
+  @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true }) revokedAt!: Date | null;
+}

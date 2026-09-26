@@ -46,6 +46,12 @@ const E = {
   // Turn on the AR/credit-exposure scenarios (T1–T10) now that the core is
   // built (design plan §7). Without this the ar-exposure test self-skips.
   AR_EXPOSURE_CORE: '1',
+  // A credential master key so the WhatsApp Business token (and GST portal
+  // passwords) can be sealed in the suite. A fixed test value, never a real key.
+  GST_CRED_ENC_KEY: 'a'.repeat(64),
+  // Point the WhatsApp Cloud adapter at the stub the whatsapp-cloud test runs
+  // on this port, so a "send" never leaves the box.
+  WHATSAPP_API_BASE: 'http://127.0.0.1:4599',
 };
 const OWNER_LOGIN = 'owner@ci.test';
 const OWNER_PW = 'OwnerCI#12345';
@@ -69,6 +75,10 @@ const ALL_TESTS = [
   'test/bulk-import.test.mjs',
   'test/numbering-corrections.test.mjs',
   'test/gps-tracking.test.mjs',
+  'test/driver-app.test.mjs',
+  'test/pump-management.test.mjs',
+  'test/whatsapp-cloud.test.mjs',
+  'test/gps-vendor-feed.test.mjs',
   'test/qc-cube-integrity.test.mjs',
   'test/qc-weighbridge-guards.test.mjs',
   'test/cookie-auth.test.mjs',
@@ -224,6 +234,11 @@ async function main() {
   const plan = plans[plans.length - 1];
   const tenant = await api('POST', '/platform/tenants', { tenantCode: 'CIPILOT', tenantName: 'CI Pilot', planId: plan.id }, su);
   await api('POST', `/platform/tenants/${tenant.id}/assign-plan`, { planId: plan.id }, su).catch(() => {});
+  // The suites between them sign up a dozen-odd logins on this one tenant
+  // (scoped users, driver phones, sync devices). The shipped Starter seat count
+  // is a business limit, not a test subject here — provisioning-atomicity proves
+  // the cap on a plan of its own — so give the CI plan room.
+  await api('PATCH', `/platform/plans/${plan.id}`, { maxUsers: 40 }, su).catch(() => {});
   await api('POST', `/platform/tenants/${tenant.id}/users`, { name: 'CI Owner', email: OWNER_LOGIN, password: OWNER_PW }, su);
   // `purchase` is a phase-2 module (off in the default plan) — turn it on for the
   // pilot tenant so the purchase-cycle test can exercise it, exactly as a Super
@@ -245,6 +260,8 @@ async function main() {
   await api('PUT', `/platform/tenants/${tenant.id}/modules/gps`, { isEnabled: true }, su);
   // `qc` (phase-2) — enable it for the QC cube-integrity test.
   await api('PUT', `/platform/tenants/${tenant.id}/modules/qc`, { isEnabled: true }, su);
+  // `driver_app` (phase-2) — the driver phone screen, for the driver-app test.
+  await api('PUT', `/platform/tenants/${tenant.id}/modules/driver_app`, { isEnabled: true }, su);
   console.log(`pilot tenant ${tenant.id} + owner ready`);
 
   step('seed plant master', 'node', ['../../scripts/setup/seed-plant-master.mjs'], {

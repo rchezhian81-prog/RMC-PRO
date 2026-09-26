@@ -27,6 +27,8 @@ export function statusTone(status: string): Tone {
       'realised', 'cleared',
       // Purchase: goods fully received, and a bill whose 3-way match is clean.
       'received', 'matched',
+      // A WhatsApp message delivered through the Business API.
+      'sent',
       // QC: a cube set that met IS 456, a slump inside its target, a day sampled as the code asks.
       'accepted', 'in_range', 'compliant', 'passed',
       // An invoice settled by credit note alone: nothing owed, nothing received.
@@ -40,6 +42,8 @@ export function statusTone(status: string): Tone {
       'partially_received', 'over_tolerance', 'unmatched',
       // Blocking or money-at-risk states — must not read as routine.
       'credit_hold', 'unpaid', 'not_invoiced', 'not_checked', 'expired',
+      // A trip held up or turning back.
+      'delayed', 'returning',
       // QC: cubes past their 28-day date, a day short of the samples IS 456 asks for.
       'due', 'under_sampled',
       // Subscription is overdue but the plant is still allowed to work.
@@ -61,6 +65,10 @@ export function statusTone(status: string): Tone {
     [
       'submitted', 'pending', 'batching', 'in_progress', 'in_transit', 'dispatched', 'invoiced',
       'issued', 'waiting', 'queued', 'planned', 'open', 'scheduled', 'partially_delivered', 'trial',
+      // Trip legs and pump-job legs in progress.
+      'loaded', 'left_plant', 'reached_site', 'pouring', 'on_site', 'pumping',
+      // A WhatsApp share opened as a chat window (sent by hand).
+      'logged',
     ].includes(s)
   )
     return 'info';

@@ -174,7 +174,7 @@ async function main() {
   // and a plant provisioned for real (which gets them on toggle) did not look
   // like the one developers worked against. Unbuilt catalogue entries
   // (driver_app, customer_portal) stay off.
-  const BUILT_PHASE2 = new Set(['qc', 'purchase', 'fleet', 'expenses', 'gps', 'batching_integration']);
+  const BUILT_PHASE2 = new Set(['qc', 'purchase', 'fleet', 'expenses', 'gps', 'batching_integration', 'driver_app']);
   const proModules = MODULE_CATALOG.filter((mod) => mod.phase === 1 || BUILT_PHASE2.has(mod.key)).map((mod) => mod.key);
 
   const starter = await m.save(
@@ -265,6 +265,26 @@ async function main() {
       driverId: driver.id,
     }),
   );
+  // A concrete pump for the pump register, and the driver's phone login
+  // (driver@alpha.test, role Driver) linked to Ravi Kumar so My Trips works
+  // out of the box in the demo.
+  await m.save(
+    m.create(Vehicle, {
+      tenantId: at,
+      vehicleNo: 'TN01PU5678',
+      vehicleType: 'concrete_pump',
+      capacityM3: '0',
+      ownershipType: 'own',
+    }),
+  );
+  const driverRole = await m.findOne(Role, { where: { tenantId: at, roleKey: ROLE_KEYS.DRIVER } });
+  if (driverRole) {
+    const driverUser = await m.save(
+      m.create(User, { tenantId: at, name: 'Ravi Kumar', email: 'driver@alpha.test', mobile: '9840000010', passwordHash, userType: 'tenant_user' }),
+    );
+    await m.save(m.create(UserRole, { tenantId: at, userId: driverUser.id, roleId: driverRole.id }));
+    await m.update(Driver, driver.id, { userId: driverUser.id });
+  }
   const [m25] = (await m.save([
     m.create(ConcreteGrade, { tenantId: at, gradeCode: 'M25', gradeName: 'M25', strengthClass: '25 MPa' }),
     m.create(ConcreteGrade, { tenantId: at, gradeCode: 'M30', gradeName: 'M30', strengthClass: '30 MPa' }),
@@ -316,7 +336,7 @@ async function main() {
   );
 
   console.log(
-    `Seed complete.\n  admin@alpha.test / admin@beta.test / super@platform.test\n  password: ${DEMO_PASSWORD}`,
+    `Seed complete.\n  admin@alpha.test / admin@beta.test / super@platform.test / driver@alpha.test (My Trips)\n  password: ${DEMO_PASSWORD}`,
   );
   await AppDataSource.destroy();
 }

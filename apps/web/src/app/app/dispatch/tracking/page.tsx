@@ -48,6 +48,7 @@ interface TrackSummary { pings: number; pathKm: number; straightLineKm: number }
 
 export default function LiveTrackingPage() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [fleet, setFleet] = useState<Row[]>([]);
   const [dispatches, setDispatches] = useState<Row[]>([]);
   const [track, setTrack] = useState<Row | null>(null);
   const [filter, setFilter] = useState('');
@@ -69,13 +70,16 @@ export default function LiveTrackingPage() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadLive = useCallback(async () => {
-    setRows(await gpsApi.live());
+    const [live, fl] = await Promise.all([gpsApi.live(), gpsApi.fleet().catch(() => [] as Row[])]);
+    setRows(live);
+    setFleet(fl);
     setLastRefresh(new Date());
   }, []);
 
   const reloadAll = useCallback(async () => {
-    const [live, disp] = await Promise.all([gpsApi.live(), dispatchApi.list()]);
+    const [live, disp, fl] = await Promise.all([gpsApi.live(), dispatchApi.list(), gpsApi.fleet().catch(() => [] as Row[])]);
     setRows(live);
+    setFleet(fl);
     setLastRefresh(new Date());
     setDispatches((Array.isArray(disp) ? disp : []).filter((d) => TRACKABLE.includes(String(d.dispatchStatus))));
   }, []);
@@ -144,7 +148,7 @@ export default function LiveTrackingPage() {
       <header className="mn-board-head">
         <div className="mn-board-title">
           <h1>Live tracking</h1>
-          <p>Where every load on the road is right now, from the fixes the truck's device sends. A customer asking "where is my concrete" gets an answer from here; a load that has not been seen for a while is the one to phone.</p>
+          <p>Where every load on the road is right now, from the driver's phone (My Trips), a GPS vendor feed (Settings → GPS vendor feed) or a fix entered by hand. A customer asking "where is my concrete" gets an answer from here; a load that has not been seen for a while is the one to phone.</p>
         </div>
         <div className="mn-board-tools">
           <span className="mn-board-live mn-ord-sum" aria-live="polite">
@@ -284,6 +288,53 @@ export default function LiveTrackingPage() {
           </div>
         ) : (
           <EmptyState title={filter ? `Nothing ${stageLabel(filter).toLowerCase()}` : 'No loads on the road'} description={filter ? 'Press the chip again to see every load.' : 'A dispatch appears here once it has left the plant and its device has sent a fix.'} action={filter ? <Button variant="secondary" size="sm" onClick={() => setFilter('')}>Show all</Button> : undefined} />
+        )}
+      </Card>
+
+      <Card
+        title={<span className="mn-board-card-title"><Truck size={16} aria-hidden /> Fleet — last known positions <span className="mn-board-card-count">{fleet.filter((v) => v.lastLocationAt).length}</span></span>}
+        actions={<span className="mn-ord-how">Every truck that has ever reported, on a trip or idle. Newest fix first.</span>}
+        padded={false}
+      >
+        {!loaded ? (
+          <div className="mn-ord-skel"><TableSkeleton cols={5} /></div>
+        ) : fleet.some((v) => v.lastLocationAt) ? (
+          <div className="mn-ord-list" role="list">
+            <div className="mn-ord-cols mn-lt-cols" aria-hidden>
+              <span>Truck</span>
+              <span>Driver</span>
+              <span>Last seen</span>
+              <span>Where</span>
+              <span>Trip</span>
+            </div>
+            {fleet.filter((v) => v.lastLocationAt).map((v) => {
+              const old = Number(v.ageSeconds) > 900;
+              return (
+                <div key={String(v.id)} className="mn-ord-row mn-lt-row" data-tone={v.dispatchNo ? (String(v.dispatchStatus) === 'delayed' ? 'danger' : 'info') : 'neutral'} role="listitem">
+                  <div className="mn-ord-id">
+                    <span className="mn-ord-no">{String(v.vehicleNo)}</span>
+                    <span className="mn-ord-meta">{v.vehicleType ? String(v.vehicleType) : 'type not set'}{v.lastSpeedKmph != null ? ` · ${Number(v.lastSpeedKmph).toFixed(0)} km/h` : ''}</span>
+                  </div>
+                  <div className="mn-ord-who">
+                    <span className="mn-ord-cust">{String(v.driverName ?? 'No driver')}</span>
+                    <span className="mn-ord-meta">{v.gpsDeviceId ? `device ${String(v.gpsDeviceId)}` : 'by registration'}</span>
+                  </div>
+                  <div className="mn-lt-seen">
+                    <span className={old ? 'mn-id-bad' : ''}>{ageLabel(v.ageSeconds)}</span>
+                    <span className="mn-ord-meta">{v.lastLocationAt ? formatDateTime(v.lastLocationAt) : ''}</span>
+                  </div>
+                  <div className="mn-lt-where">
+                    <a href={`https://maps.google.com/?q=${coord(v.lastLatitude)},${coord(v.lastLongitude)}`} target="_blank" rel="noreferrer" className="mn-id-link">
+                      <MapPin size={13} aria-hidden /> {coord(v.lastLatitude)}, {coord(v.lastLongitude)} <ExternalLink size={12} aria-hidden />
+                    </a>
+                  </div>
+                  <div className="mn-ord-status">{v.dispatchNo ? <><span className="mn-ord-meta">{String(v.dispatchNo)}</span> <StatusBadge status={String(v.dispatchStatus)} /></> : <span className="mn-ord-meta">Idle</span>}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState title="No truck has reported a position yet" description="Positions arrive from the driver's phone, a GPS vendor feed, or a fix entered by hand." />
         )}
       </Card>
     </div>

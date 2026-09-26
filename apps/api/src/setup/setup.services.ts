@@ -346,6 +346,9 @@ export class UsersService {
           mobile: dto.mobile ? String(dto.mobile) : null,
           passwordHash,
           userType: 'tenant_user',
+          // An administrator typed this password: the app asks for a new one
+          // the first time they sign in.
+          mustChangePassword: true,
         }),
       );
       if (role) {
@@ -494,7 +497,9 @@ export class UsersService {
         ...(dto.name !== undefined ? { name: String(dto.name) } : {}),
         ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
         ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
-        ...(passwordHash ? { passwordHash } : {}),
+        // A password someone else typed is asked to be replaced at the next
+        // sign-in; one you set for yourself is your own already.
+        ...(passwordHash ? { passwordHash, mustChangePassword: !isSelf, passwordResetTokenHash: null, passwordResetExpiresAt: null } : {}),
       });
       if (roleIdIn !== undefined) {
         await m.getRepository(UserRole).delete({ userId: id });

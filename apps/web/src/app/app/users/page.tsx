@@ -12,6 +12,7 @@ import { Badge, StatusBadge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
 import { Field, Input, Select } from '../../../components/ui/Field';
+import { PasswordInput } from '../../../components/ui/PasswordInput';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../components/ui/States';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
 
@@ -93,7 +94,7 @@ export default function UsersPage() {
     setBusy(true);
     try {
       await usersApi.create(form);
-      setNotice(`${form.name.trim()} can sign in with ${form.email.trim().toLowerCase()}. Give them the password yourself; it is not sent anywhere.`);
+      setNotice(`${form.name.trim()} can sign in with ${form.email.trim().toLowerCase()}. Give them the password yourself; it is not sent anywhere, and they choose their own at the first sign-in.`);
       setForm(EMPTY);
       setShowForm(false);
       await reload();
@@ -168,7 +169,7 @@ export default function UsersPage() {
     setSavingId(String(u.id));
     try {
       await usersApi.update(String(u.id), { password: pw });
-      setNotice(`Password updated for ${label}. Give it to them directly; it is not stored anywhere you can read.`);
+      setNotice(`Password updated for ${label}. Give it to them directly; it is not stored anywhere you can read, and they choose their own at the next sign-in.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not set the password.');
     } finally {
@@ -267,8 +268,8 @@ export default function UsersPage() {
                 {roles.map((r) => <option key={String(r.id)} value={String(r.id)}>{String(r.roleName ?? r.roleKey ?? '')}</option>)}
               </Select>
             </Field>
-            <Field label="First password" required help={`At least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number. They can change it under My account.`} error={form.password && problems.length ? `Must ${problems.join(', ')}.` : undefined}>
-              <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+            <Field label="First password" required help={`At least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number. They are asked to choose their own the first time they sign in.`} error={form.password && problems.length ? `Must ${problems.join(', ')}.` : undefined}>
+              <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
             </Field>
             <div className="mn-us-form-submit">
               <Button type="submit" loading={busy} disabled={seatsFull} icon={<UserPlus size={14} />}>Create the user</Button>

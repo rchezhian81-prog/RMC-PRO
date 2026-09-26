@@ -17,6 +17,11 @@ export interface Session {
    * entries the API would refuse — see `getAccess().hasModule`.
    */
   modules?: string[];
+  /**
+   * An administrator typed the current password (a new login, or a reset), so
+   * the app sends this person to choose their own before anything else.
+   */
+  mustChangePassword?: boolean;
 }
 
 const KEY = 'rmc_session';
@@ -88,6 +93,13 @@ export function updateAccessToken(token: string): void {
   const cur = getSession();
   if (!cur) return;
   saveSession({ ...cur, token });
+}
+
+/** The person chose their own password: the first-sign-in ask is satisfied. */
+export function clearMustChangePassword(): void {
+  const cur = getSession();
+  if (!cur || !cur.mustChangePassword) return;
+  saveSession({ ...cur, mustChangePassword: false });
 }
 
 export function clearSession(): void {

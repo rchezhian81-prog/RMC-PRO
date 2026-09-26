@@ -72,6 +72,9 @@ const ALL_TESTS = [
   'test/qc-cube-integrity.test.mjs',
   'test/qc-weighbridge-guards.test.mjs',
   'test/cookie-auth.test.mjs',
+  // Forgot / reset password, the first-sign-in change, and support's levers on a
+  // company login (new password, off / on). Creates its own tenant.
+  'test/password-reset.test.mjs',
   'test/observability.test.mjs',
   'test/dashboard-trends.test.mjs',
   'test/metrics.test.mjs',

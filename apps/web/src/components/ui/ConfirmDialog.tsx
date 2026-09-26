@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from './Button';
+import { PasswordInput } from './PasswordInput';
 import { useFocusTrap } from '../../lib/use-focus-trap';
 
 /**
@@ -182,12 +183,20 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                       </option>
                     ))}
                   </select>
+                ) : state.opts.type === 'password' ? (
+                  <PasswordInput
+                    id={promptId}
+                    autoFocus
+                    autoComplete="new-password"
+                    value={state.value}
+                    placeholder={state.opts.placeholder}
+                    onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}
+                  />
                 ) : (
                   <input
                     id={promptId}
                     autoFocus
-                    type={state.opts.type === 'number' ? 'number' : state.opts.type === 'password' ? 'password' : 'text'}
-                    autoComplete={state.opts.type === 'password' ? 'new-password' : undefined}
+                    type={state.opts.type === 'number' ? 'number' : 'text'}
                     value={state.value}
                     placeholder={state.opts.placeholder}
                     onChange={(e) => setState((s) => (s && s.kind === 'prompt' ? { ...s, value: e.target.value } : s))}

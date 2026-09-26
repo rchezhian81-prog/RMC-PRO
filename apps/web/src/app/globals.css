@@ -5270,3 +5270,137 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 @media (max-width: 560px) {
   .mn-lt-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* =====================================================================
+   SIGN-IN FAMILY, PASSWORD FIELD, PLATFORM PORTAL
+   The password box with its eye and Caps Lock line; the forgot / reset
+   screens on the sign-in frame; the super admin's companies, company and
+   plans screens on the document-list and document-detail bones.
+   ===================================================================== */
+.mn-pw { display: grid; gap: 4px; min-width: 0; }
+.mn-pw-box { position: relative; min-width: 0; }
+.mn-pw-input { padding-right: 42px; }
+.mn-pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--mn-radius-sm, 8px);
+  background: transparent;
+  color: var(--mn-muted);
+  cursor: pointer;
+}
+.mn-pw-toggle:hover { color: var(--mn-text); background: var(--mn-surface-2); }
+.mn-pw-toggle:focus-visible { outline: 2px solid var(--mn-focus); outline-offset: 1px; }
+.mn-pw-toggle[aria-pressed='true'] { color: var(--mn-primary); }
+.mn-pw-caps { font-size: 12px; color: var(--mn-warning); font-weight: 500; }
+
+.mn-login-row { display: flex; justify-content: flex-end; margin: -6px 0 14px; }
+.mn-login-link { font-size: 13px; font-weight: 500; color: var(--mn-primary); text-decoration: none; }
+.mn-login-link:hover { text-decoration: underline; }
+.mn-login .mn-login-help .mn-login-link { color: #e9ddff; }
+.mn-login-done { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 18px; padding: 14px; border-radius: var(--mn-radius-md); background: var(--mn-surface-2); border: 1px solid var(--mn-border); color: var(--mn-text); font-size: 14px; line-height: 1.55; }
+.mn-login-done svg { color: var(--mn-primary); flex: 0 0 auto; margin-top: 2px; }
+.mn-login-done p { margin: 0; }
+.mn-login-cta { display: inline-flex; width: 100%; justify-content: center; }
+.mn-login-rules { margin: -4px 0 16px; }
+.mn-login-form .mn-ac-rules { gap: 6px; padding: 10px 12px; }
+
+/* the platform rail: one group, no chevron */
+.mn-admin-navgroup { cursor: default; pointer-events: none; }
+
+/* companies */
+.mn-tn .mn-ord-cols--acts,
+.mn-tn .mn-ord-row--acts { grid-template-columns: minmax(220px, 1.3fr) minmax(140px, 0.8fr) minmax(170px, 1fr) minmax(90px, auto) auto; }
+.mn-tn .mn-ord-id .mn-ord-meta, .mn-tn .mn-ord-who .mn-ord-meta { white-space: normal; overflow-wrap: anywhere; }
+.mn-tn-search { margin-left: auto; }
+.mn-tn-search .mn-input { width: 220px; padding: 7px 10px; font-size: 13px; }
+.mn-tn-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; }
+.mn-tn-form > * { min-width: 0; }
+.mn-tn-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-tn-form-submit .mn-ord-how { white-space: normal; }
+
+/* plans */
+.mn-pl .mn-ord-cols--acts,
+.mn-pl .mn-ord-row--acts { grid-template-columns: minmax(160px, 1.1fr) minmax(150px, 0.9fr) minmax(110px, 0.7fr) minmax(80px, 0.5fr) minmax(90px, 0.5fr) minmax(90px, auto) auto; }
+.mn-pl .mn-ord-who .mn-ord-meta { white-space: normal; }
+.mn-pl .mn-ord-row.is-editing { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mn-primary) 45%, transparent); }
+.mn-pl-form { display: grid; gap: 12px; }
+.mn-pl-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; }
+.mn-pl-fields > * { min-width: 0; }
+.mn-pl-mods-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mn-pl-mods-acts { display: flex; gap: 10px; }
+.mn-pl-mods-acts .mn-id-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; cursor: pointer; }
+.mn-pl-mods { display: flex; flex-wrap: wrap; gap: 8px; }
+.mn-pl-mod { cursor: pointer; gap: 6px; }
+.mn-pl-mod input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.mn-pl-mod:has(input:focus-visible) { outline: 2px solid var(--mn-focus); outline-offset: 1px; }
+.mn-pl-mod .mn-ord-meta { font-size: 11px; }
+.mn-pl-form-submit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mn-pl-form-submit .mn-se-switch { margin-right: auto; }
+
+/* company detail */
+.mn-td .mn-od-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 13px; color: var(--mn-muted); text-decoration: none; }
+.mn-td .mn-od-back:hover { color: var(--mn-primary); }
+.mn-td-sub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+.mn-td-sub > * { min-width: 0; }
+.mn-td-plan-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.mn-td-mod { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.mn-td-mod.is-off .mn-ord-no { color: var(--mn-muted); }
+.mn-td .mn-ord-cols--acts,
+.mn-td .mn-ord-row--acts { grid-template-columns: minmax(200px, 1.2fr) minmax(170px, 1fr) minmax(140px, 0.8fr) minmax(80px, auto) auto; }
+.mn-td .mn-ord-id .mn-ord-meta, .mn-td .mn-ord-who .mn-ord-meta { white-space: normal; overflow-wrap: anywhere; }
+.mn-td-user-acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.mn-td-user-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; padding: 16px 18px 6px; border-bottom: 1px solid var(--mn-border); background: var(--mn-surface-2); }
+.mn-td-user-form > * { min-width: 0; }
+.mn-td-user-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.mn-td-user-submit .mn-ord-how { white-space: normal; }
+.mn-td-details { display: grid; gap: 4px; }
+.mn-td-details .mn-od-money { margin: 4px 0 12px; }
+.mn-td .mn-od-notes code { font-size: 12px; padding: 1px 5px; border-radius: 4px; background: var(--mn-surface-2); }
+
+@media (max-width: 1100px) {
+  .mn-tn-form, .mn-pl-fields, .mn-td-user-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .mn-tn-search { margin-left: 0; flex: 1 1 100%; }
+  .mn-tn-search .mn-input { width: 100%; }
+  .mn-tn-form, .mn-pl-fields, .mn-td-user-form, .mn-td-sub { grid-template-columns: minmax(0, 1fr); }
+  .mn-tn .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'id status' 'plan plan' 'people people' 'act act';
+  }
+  .mn-tn .mn-ord-row--acts .mn-ord-id { grid-area: id; }
+  .mn-tn .mn-ord-row--acts .mn-tn-plan { grid-area: plan; }
+  .mn-tn .mn-ord-row--acts .mn-tn-people { grid-area: people; }
+  .mn-tn .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-tn .mn-ord-row--acts .mn-ord-act { grid-area: act; justify-self: start; }
+  .mn-pl .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'id status' 'price price' 'caps caps' 'mods tenants' 'act act';
+  }
+  .mn-pl .mn-ord-row--acts .mn-ord-id { grid-area: id; }
+  .mn-pl .mn-ord-row--acts .mn-pl-price { grid-area: price; }
+  .mn-pl .mn-ord-row--acts .mn-pl-caps { grid-area: caps; }
+  .mn-pl .mn-ord-row--acts .mn-pl-mods-n { grid-area: mods; text-align: left; }
+  .mn-pl .mn-ord-row--acts .mn-pl-tenants { grid-area: tenants; text-align: left; }
+  .mn-pl .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-pl .mn-ord-row--acts .mn-ord-act { grid-area: act; justify-self: start; }
+  .mn-td .mn-ord-row--acts {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'id status' 'role role' 'seen seen' 'act act';
+  }
+  .mn-td .mn-ord-row--acts .mn-ord-id { grid-area: id; }
+  .mn-td .mn-ord-row--acts .mn-td-role { grid-area: role; }
+  .mn-td .mn-ord-row--acts .mn-td-seen { grid-area: seen; }
+  .mn-td .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
+  .mn-td .mn-ord-row--acts .mn-td-user-acts { grid-area: act; justify-content: flex-start; }
+}
+.mn-td-user-acts .mn-btn { white-space: nowrap; }
+.mn-td .mn-ord-cols--acts,
+.mn-td .mn-ord-row--acts { grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(70px, auto) minmax(230px, auto); }

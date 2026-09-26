@@ -6,7 +6,17 @@ import { TenantDbService } from '../core/database/tenant-db.service';
 import { Tenant, User } from '../core/database/entities';
 import { TenantAccessService } from '../rbac/tenant-access.service';
 import { UserAccessService } from '../rbac/user-access.service';
+import { MailService } from '../common/mail.service';
 import { JWT_ACCESS_SECRET, JWT_REFRESH_SECRET } from './jwt-secrets';
+import {
+  RESET_TTL_MINUTES,
+  hashResetToken,
+  looksLikeResetToken,
+  newResetToken,
+  resetEmail,
+  resetLink,
+  webOrigin,
+} from './password-reset.util';
 
 // Resolved once at startup; production refuses to boot on a default/weak secret.
 const ACCESS_SECRET = JWT_ACCESS_SECRET;
@@ -23,6 +33,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly access: TenantAccessService,
     private readonly userAccess: UserAccessService,
+    private readonly mail: MailService,
   ) {}
 
   async login(login: string, password: string) {
@@ -34,8 +45,18 @@ export class AuthService {
       // however the email was stored before normalisation-on-write existed).
       m.getRepository(User).createQueryBuilder('u').where('LOWER(u.email) = LOWER(:login)', { login }).getOne(),
     );
-    if (!user || user.status !== 'active' || !(await bcrypt.compare(password, user.passwordHash))) {
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException(INVALID);
+    }
+    // The password is right, so a deactivated login is told so plainly: "invalid
+    // credentials" would send them to reset a password that is not the problem.
+    // Only after the password check, so the message cannot probe which logins
+    // exist.
+    if (user.status !== 'active') {
+      throw new UnauthorizedException({
+        code: 'USER_INACTIVE',
+        message: 'This login has been deactivated. Ask your company administrator to reactivate it.',
+      });
     }
     // Credentials are good, so say plainly that it is the company account that
     // is blocked. Answering "invalid login" here would send a plant clerk
@@ -59,7 +80,80 @@ export class AuthService {
       permissions: access.permissions,
       roles: access.roleKeys,
       modules,
+      // An administrator typed this password: the app asks for a new one first.
+      mustChangePassword: Boolean(user.mustChangePassword),
     };
+  }
+
+  /**
+   * "I forgot my password": email a single-use reset link. The answer is the
+   * same whether or not the login exists, so the form cannot be used to find
+   * out which emails have an account. `channel` tells the screen whether an
+   * email can go out at all on this server.
+   */
+  async forgotPassword(login: string): Promise<{ ok: true; channel: 'email' | 'none'; minutes: number }> {
+    const channel: 'email' | 'none' = this.mail.isConfigured() ? 'email' : 'none';
+    const reply = { ok: true as const, channel, minutes: RESET_TTL_MINUTES };
+    if (channel === 'none') return reply;
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).createQueryBuilder('u').where('LOWER(u.email) = LOWER(:login)', { login: login.trim() }).getOne(),
+    );
+    // A deactivated login, or a blocked company, gets no link: the reset would
+    // only lead to a sign-in that is refused anyway.
+    if (!user || user.status !== 'active') return reply;
+    if (user.tenantId) {
+      try {
+        await this.access.assertUsable(user.tenantId);
+      } catch {
+        return reply;
+      }
+    }
+    const { token, hash } = newResetToken();
+    await this.db.runAsPlatform((m) =>
+      m.getRepository(User).update(user.id, {
+        passwordResetTokenHash: hash,
+        passwordResetExpiresAt: new Date(Date.now() + RESET_TTL_MINUTES * 60_000),
+      }),
+    );
+    const link = resetLink(webOrigin(), token);
+    await this.mail.send({ to: user.email, ...resetEmail({ name: user.name, link }) });
+    return reply;
+  }
+
+  /** Set a new password from the link in the email. The token works once. */
+  async resetPassword(token: string, newPassword: string): Promise<{ reset: true; email: string }> {
+    const bad = () =>
+      new BadRequestException({
+        code: 'RESET_LINK_INVALID',
+        message: 'This reset link is not valid any more. Ask for a new one from the sign-in page.',
+      });
+    if (!looksLikeResetToken(token)) throw bad();
+    const user = await this.db.runAsPlatform((m) =>
+      m.getRepository(User).findOne({ where: { passwordResetTokenHash: hashResetToken(token) } }),
+    );
+    if (!user || !user.passwordResetExpiresAt || user.passwordResetExpiresAt.getTime() < Date.now()) throw bad();
+    if (user.status !== 'active') throw bad();
+    const problem = passwordProblemMessage(newPassword ?? '');
+    if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'The new password must be different from the old one.',
+      });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    // The token is spent, and every existing session is signed out: whoever
+    // reset the password is the one who should hold the account now.
+    await this.db.runAsPlatform((m) =>
+      m.getRepository(User).update(user.id, {
+        passwordHash,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        mustChangePassword: false,
+        tokenVersion: (user.tokenVersion ?? 0) + 1,
+      }),
+    );
+    return { reset: true, email: user.email };
   }
 
   async refresh(refreshToken: string) {
@@ -127,6 +221,11 @@ export class AuthService {
     await this.db.runAsPlatform((m) =>
       m.getRepository(User).update(user.id, {
         passwordHash,
+        // A password of their own choosing: the first-sign-in ask is satisfied,
+        // and any reset link still out there is spent.
+        mustChangePassword: false,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
         tokenVersion: (user.tokenVersion ?? 0) + 1,
       }),
     );
@@ -168,6 +267,7 @@ export class AuthService {
       permissions: access.permissions,
       roles: access.roleKeys,
       modules,
+      mustChangePassword: Boolean(user.mustChangePassword),
     };
   }
 

@@ -9,6 +9,7 @@ import { Card } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Field, Input, Select } from '../../../components/ui/Field';
+import { PasswordInput } from '../../../components/ui/PasswordInput';
 import { Form } from '../../../components/ui/Form';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
 import { ErrorState, TableSkeleton } from '../../../components/ui/States';
@@ -292,7 +293,7 @@ function GstCredentialsCard() {
             <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
           </Field>
           <Field label="Portal password" required>
-            <Input type="password" autoComplete="off" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+            <PasswordInput autoComplete="off" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
           </Field>
           <div className="mn-se-actions">
             <Button type="submit" size="sm" icon={<ShieldCheck size={14} />}>Save the login</Button>

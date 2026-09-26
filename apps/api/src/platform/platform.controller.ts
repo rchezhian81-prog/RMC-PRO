@@ -12,6 +12,7 @@ import {
   SetTenantModuleDto,
   UpdatePlanDto,
   UpdateTenantDto,
+  UpdateTenantUserDto,
 } from './dto/platform.dto';
 
 @Controller('platform')
@@ -64,6 +65,17 @@ export class PlatformController {
   @Post('tenants/:id/users')
   createTenantUser(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: CreateTenantUserDto) {
     return this.svc.createTenantUser(id, dto, u.userId);
+  }
+
+  /** A new password for a locked-out login, or switch it off / on. */
+  @Patch('tenants/:id/users/:userId')
+  updateTenantUser(
+    @CurrentUser() u: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateTenantUserDto,
+  ) {
+    return this.svc.updateTenantUser(id, userId, dto, u.userId);
   }
 
   @Put('tenants/:id/modules/:moduleKey')

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { MODULE_CATALOG, MODULE_KEYS, ROLE_KEYS } from '@rmc/shared';
+import { MODULE_CATALOG, MODULE_KEYS, ROLE_KEYS, passwordProblemMessage } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { provisionTenantRoles, provisionTenantCompany } from '../core/database/provision-tenant-roles';
 import { TenantAccessService } from '../rbac/tenant-access.service';
@@ -22,6 +22,7 @@ import type {
   CreateTenantUserDto,
   UpdatePlanDto,
   UpdateTenantDto,
+  UpdateTenantUserDto,
 } from './dto/platform.dto';
 
 /**
@@ -47,16 +48,26 @@ export class PlatformService {
 
   // ---- Tenants ----
   async listTenants() {
-    const [tenants, plans, tms] = await Promise.all([
+    const [tenants, plans, tms, people] = await Promise.all([
       this.ds.getRepository(Tenant).find({ order: { tenantCode: 'ASC' } }),
       this.ds.getRepository(SubscriptionPlan).find(),
       // Genuinely cross-tenant: every tenant's enabled-module count for the
       // admin overview. RLS on tenant_modules requires the platform context.
       this.db.runAsPlatform((m) => m.getRepository(TenantModule).find({ where: { isEnabled: true } })),
+      // Who is using each company: active logins and the latest sign-in, so
+      // support can tell a live plant from one that never started.
+      this.db.runAsPlatform(
+        (m) =>
+          m.query(
+            `SELECT tenant_id, count(*) FILTER (WHERE status = 'active')::int AS active_users, max(last_login_at) AS last_login_at
+               FROM users WHERE tenant_id IS NOT NULL GROUP BY tenant_id`,
+          ) as Promise<Array<{ tenant_id: string; active_users: number; last_login_at: Date | null }>>,
+      ),
     ]);
     const planCode = new Map(plans.map((p) => [p.id, p.planCode]));
     const counts = new Map<string, number>();
     for (const tm of tms) counts.set(tm.tenantId, (counts.get(tm.tenantId) ?? 0) + 1);
+    const use = new Map(people.map((r) => [r.tenant_id, r]));
     return tenants.map((t) => ({
       id: t.id,
       code: t.tenantCode,
@@ -64,6 +75,9 @@ export class PlatformService {
       status: t.status,
       planCode: t.currentPlanId ? (planCode.get(t.currentPlanId) ?? null) : null,
       enabledModules: counts.get(t.id) ?? 0,
+      activeUsers: use.get(t.id)?.active_users ?? 0,
+      lastLoginAt: use.get(t.id)?.last_login_at ?? null,
+      createdAt: t.createdAt,
     }));
   }
 
@@ -133,17 +147,75 @@ export class PlatformService {
   async listTenantUsers(tenantId: string) {
     await this.getTenant(tenantId); // 404 if the tenant does not exist
     // Target-tenant-scoped: read this tenant's users inside its own context.
-    const users = await this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(User).find({ where: { tenantId }, order: { email: 'ASC' } }),
-    );
+    const { users, roles } = await this.db.runInTenant(tenantId, async (m) => ({
+      users: await m.getRepository(User).find({ where: { tenantId }, order: { email: 'ASC' } }),
+      // Which role each login holds, so support can see who the owner is.
+      roles: (await m.query(
+        `SELECT ur.user_id, r.role_key, r.role_name
+           FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+          WHERE ur.tenant_id = $1`,
+        [tenantId],
+      )) as Array<{ user_id: string; role_key: string; role_name: string }>,
+    }));
+    const roleOf = new Map(roles.map((r) => [r.user_id, { key: r.role_key, name: r.role_name }]));
     return users.map((u) => ({
       id: u.id,
       name: u.name,
       email: u.email,
       userType: u.userType,
       status: u.status,
+      roleKey: roleOf.get(u.id)?.key ?? null,
+      roleName: roleOf.get(u.id)?.name ?? null,
       lastLoginAt: u.lastLoginAt ?? null,
+      createdAt: u.createdAt,
+      mustChangePassword: Boolean(u.mustChangePassword),
     }));
+  }
+
+  /**
+   * Support's two levers on a company's login: a new password for someone who
+   * is locked out (the company owner, typically, since nobody inside the
+   * company can reset the owner's), and switching a login off or on. The
+   * person is asked to choose their own password at the next sign-in.
+   */
+  async updateTenantUser(tenantId: string, userId: string, dto: UpdateTenantUserDto, actorUserId?: string) {
+    await this.getTenant(tenantId);
+    const user = await this.db.runInTenant(tenantId, (m) =>
+      m.getRepository(User).findOne({ where: { id: userId, tenantId } }),
+    );
+    if (!user) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'User not found' });
+    const patch: Partial<User> = {};
+    if (dto.password !== undefined) {
+      const problem = passwordProblemMessage(dto.password);
+      if (problem) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: problem });
+      patch.passwordHash = await bcrypt.hash(dto.password, 10);
+      patch.mustChangePassword = true;
+      patch.passwordResetTokenHash = null;
+      patch.passwordResetExpiresAt = null;
+      // Whoever held the old password is signed out everywhere.
+      patch.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    }
+    if (dto.status !== undefined) {
+      if (dto.status === 'active' && user.status !== 'active') await this.planLimits.assertCanAddUser(tenantId);
+      patch.status = dto.status;
+      if (dto.status !== 'active') patch.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    }
+    if (Object.keys(patch).length) {
+      await this.db.runInTenant(tenantId, (m) => m.getRepository(User).update(userId, patch));
+    }
+    const base = { tenantId, actorUserId: actorUserId ?? null, entityType: 'user', entityId: user.id, entityLabel: user.email };
+    if (dto.password !== undefined) {
+      await this.audit.record({ ...base, action: AUDIT_ACTIONS.USER_PASSWORD_RESET, summary: `Platform support reset the password for ${user.email}` });
+    }
+    if (dto.status !== undefined && dto.status !== user.status) {
+      const activating = dto.status === 'active';
+      await this.audit.record({
+        ...base,
+        action: activating ? AUDIT_ACTIONS.USER_REACTIVATE : AUDIT_ACTIONS.USER_DEACTIVATE,
+        summary: `Platform support ${activating ? 'reactivated' : 'deactivated'} ${user.email}`,
+      });
+    }
+    return (await this.listTenantUsers(tenantId)).find((u) => u.id === userId);
   }
 
   /**
@@ -197,6 +269,9 @@ export class PlatformService {
           passwordHash,
           userType: 'tenant_user',
           status: 'active',
+          // Support typed this password: the owner chooses their own at the
+          // first sign-in.
+          mustChangePassword: true,
         }),
       );
       await m.save(m.create(UserRole, { tenantId, userId: user.id, roleId: ownerRole.id }));
@@ -425,12 +500,17 @@ export class PlatformService {
 
   // ---- Plans ----
   async listPlans() {
-    const [plans, pms] = await Promise.all([
+    const [plans, pms, tenants] = await Promise.all([
       this.ds.getRepository(SubscriptionPlan).find({ order: { planCode: 'ASC' } }),
       this.ds.getRepository(PlanModule).find({ where: { isEnabled: true } }),
+      // How many companies sit on each plan: a plan with companies on it is
+      // one to edit with care, and one with none can be retired.
+      this.ds.getRepository(Tenant).find({ select: { id: true, currentPlanId: true } }),
     ]);
     const counts = new Map<string, number>();
     for (const pm of pms) counts.set(pm.planId, (counts.get(pm.planId) ?? 0) + 1);
+    const onPlan = new Map<string, number>();
+    for (const t of tenants) if (t.currentPlanId) onPlan.set(t.currentPlanId, (onPlan.get(t.currentPlanId) ?? 0) + 1);
     return plans.map((p) => ({
       id: p.id,
       code: p.planCode,
@@ -441,6 +521,7 @@ export class PlatformService {
       maxUsers: p.maxUsers,
       isActive: p.isActive,
       moduleCount: counts.get(p.id) ?? 0,
+      tenantCount: onPlan.get(p.id) ?? 0,
     }));
   }
 

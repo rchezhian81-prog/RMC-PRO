@@ -154,6 +154,14 @@ services:
       # The in-process worker that drains approved GST actions (off = manual drain).
       GST_WORKER_ENABLED: ${GST_WORKER_ENABLED:-false}
       GST_WORKER_INTERVAL_MS: ${GST_WORKER_INTERVAL_MS:-5000}
+      # Password reset by email (optional). Unset => the sign-in page tells the
+      # person to ask their administrator instead of promising an email.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
       # Ops alerting: ONE webhook for the whole box. The API reads
       # ALERT_WEBHOOK_URL, else RMC_ALERT_WEBHOOK (the scripts' name) — so the
       # line the health monitor and backups use also pages on API 5xx. These

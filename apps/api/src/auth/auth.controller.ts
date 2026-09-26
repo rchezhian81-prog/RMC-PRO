@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser, type AuthUser } from './auth-user';
 
@@ -102,6 +103,27 @@ export class AuthController {
       path: o.path,
     });
     return { loggedOut: true };
+  }
+
+  /**
+   * "I forgot my password": emails a single-use reset link when the login
+   * exists and email is set up. Public, and answered the same either way, so it
+   * cannot be used to find out which emails have an account. Throttled like
+   * login, so one address cannot be flooded with links.
+   */
+  @Post('forgot-password')
+  @HttpCode(200)
+  @Throttle(AUTH_THROTTLE)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.forgotPassword(dto.login);
+  }
+
+  /** Set a new password with the token from the emailed link. */
+  @Post('reset-password')
+  @HttpCode(200)
+  @Throttle(AUTH_THROTTLE)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto.token, dto.newPassword);
   }
 
   @Post('change-password')

@@ -239,8 +239,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     const s = getSession();
     if (!s?.token) router.replace('/login');
     else if (s.userType === 'super_admin') router.replace('/admin/tenants');
+    // A password an administrator typed is replaced before anything else: My
+    // account is the only screen that opens until the person chose their own.
+    else if (s.mustChangePassword && !pathname.startsWith('/app/account')) router.replace('/app/account?required=1');
     else setEmail(s.email);
-  }, [router]);
+  }, [router, pathname]);
 
   // Re-read roles, permissions and subscription modules from the server. A plan
   // upgrade or a role change otherwise stays invisible until the next sign-in,

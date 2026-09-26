@@ -216,6 +216,8 @@ export interface LoginResult {
   roles: string[];
   /** Module keys the company's subscription includes. */
   modules: string[];
+  /** An administrator typed this password: the app asks for a new one first. */
+  mustChangePassword?: boolean;
 }
 /** Seats and plants a plan allows, against what the tenant is using. */
 export interface PlanUsage {
@@ -230,6 +232,7 @@ export interface MeResult {
   permissions: string[];
   roles: string[];
   modules: string[];
+  mustChangePassword?: boolean;
 }
 export interface TenantRow {
   id: string;
@@ -237,6 +240,10 @@ export interface TenantRow {
   name: string;
   status: string;
   planCode: string | null;
+  /** Active logins, and the latest sign-in across them. */
+  activeUsers?: number;
+  lastLoginAt?: string | null;
+  createdAt?: string;
   enabledModules: number;
 }
 export interface PlanRow {
@@ -244,9 +251,13 @@ export interface PlanRow {
   code: string;
   name: string;
   monthlyPrice: number;
+  yearlyPrice?: number | null;
   maxPlants: number;
   maxUsers: number;
+  isActive?: boolean;
   moduleCount: number;
+  /** Companies currently on this plan. */
+  tenantCount?: number;
 }
 /** A single plan with its enabled module keys — for the edit form. */
 export interface PlanDetail {
@@ -277,7 +288,11 @@ export interface TenantUserRow {
   email: string;
   userType: string;
   status: string;
+  roleKey: string | null;
+  roleName: string | null;
   lastLoginAt: string | null;
+  createdAt: string;
+  mustChangePassword: boolean;
 }
 
 export const api = {
@@ -304,6 +319,22 @@ export const api = {
     }),
   /** Who am I, and what does this company's subscription currently include. */
   me: () => apiFetch<MeResult>('/auth/me'),
+  /**
+   * "I forgot my password": the server emails a reset link when the login
+   * exists and email is set up. `channel` says whether an email can go out at
+   * all on this server; the reply is otherwise the same for any address.
+   */
+  forgotPassword: (login: string) =>
+    apiFetch<{ ok: true; channel: 'email' | 'none'; minutes: number }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ login }),
+    }),
+  /** Set a new password with the token from the emailed link. */
+  resetPassword: (token: string, newPassword: string) =>
+    apiFetch<{ reset: true; email: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
   tenants: () => apiFetch<TenantRow[]>('/platform/tenants'),
   createTenant: (b: { tenantCode: string; tenantName: string; planId?: string }) =>
     apiFetch<{ id: string }>('/platform/tenants', { method: 'POST', body: JSON.stringify(b) }),
@@ -332,6 +363,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(b),
     }),
+  /** Support's levers on one company login: a new password, or off / on. */
+  updateTenantUser: (id: string, userId: string, b: { password?: string; status?: 'active' | 'inactive' }) =>
+    apiFetch<TenantUserRow>(`/platform/tenants/${id}/users/${userId}`, { method: 'PATCH', body: JSON.stringify(b) }),
   setTenantModule: (id: string, key: string, isEnabled: boolean) =>
     apiFetch<TenantModuleRow[]>(`/platform/tenants/${id}/modules/${key}`, {
       method: 'PUT',

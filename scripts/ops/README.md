@@ -630,3 +630,41 @@ password signs in, and the old one is refused.
 Needing SSH access and the database password is the second factor here. Someone
 who can already run commands on the box could reach the data anyway, so this
 grants no new power — it only saves a rebuild.
+
+---
+
+# Ops — password reset by email ("Forgotten your password?")
+
+The sign-in page has **Forgotten your password?**. With a mailbox set up, the
+person gets a single-use link (30 minutes) by email and chooses a new password
+themselves; without one, the screen tells them to ask their company
+administrator (Setup → Users) instead of promising an email that never comes.
+Either way the answer is the same for any address, so the form cannot be used
+to find out who has an account.
+
+Five lines in `.env.production`, then recreate the api:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=mixnova360@gmail.com
+SMTP_PASS=<a Google App Password, 16 letters, not the account password>
+MAIL_FROM="Mix Nova <mixnova360@gmail.com>"
+```
+
+```bash
+cd /opt/rmc
+docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d api
+```
+
+A Google App Password is made at myaccount.google.com → Security →
+2-Step Verification (must be on) → App passwords. The link in the email points
+at the first `CORS_ORIGINS` entry (the app portal); set `WEB_ORIGIN` to override.
+
+Prove it: sign out, press **Forgotten your password?**, type an email that has a
+login, and open the link that arrives. A refused mailbox logs
+`Could not send "Reset your Mix Nova password"` in `docker compose logs api`.
+
+Passwords an administrator types (a new login, a reset from Setup → Users or
+from the platform portal) are flagged: that person is sent to **My account** to
+choose their own password the first time they sign in with it.

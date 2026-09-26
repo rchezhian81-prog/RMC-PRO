@@ -21,11 +21,19 @@ const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
 export class FuelLogService {
   constructor(private readonly db: TenantDbService) {}
 
+  /** Every fill with the vehicle by name. */
   list(tenantId: string, vehicleId?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) => {
+    return this.db.runInTenant(tenantId, async (m) => {
       const where: Record<string, unknown> = {};
       if (vehicleId) where.vehicleId = vehicleId;
-      return m.getRepository(VehicleFuelLog).find({ where, order: { odometer: 'DESC', createdAt: 'DESC' }, take: listLimit(limit) });
+      const rows = await m.getRepository(VehicleFuelLog).find({ where, order: { odometer: 'DESC', createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!rows.length) return rows;
+      const vehicles: Array<{ id: string; vehicleNo: string; vehicleType: string | null }> = await m.query(
+        `SELECT id, vehicle_no AS "vehicleNo", vehicle_type AS "vehicleType" FROM vehicles WHERE id = ANY($1::uuid[])`,
+        [[...new Set(rows.map((r) => r.vehicleId))]],
+      );
+      const by = new Map(vehicles.map((v) => [v.id, v]));
+      return rows.map((r) => ({ ...r, vehicleNo: by.get(r.vehicleId)?.vehicleNo ?? null, vehicleType: by.get(r.vehicleId)?.vehicleType ?? null }));
     });
   }
 

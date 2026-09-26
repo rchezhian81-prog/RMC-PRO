@@ -68,7 +68,9 @@ export class ProductionReportsService {
         byTicket.set(mm.batchTicketId, list);
       }
       return tickets.map((t) => ({
+        id: t.id,
         batchTicketNo: t.batchTicketNo,
+        batchedAt: t.batchStartTime ?? t.createdAt,
         gradeLabel: t.gradeLabel,
         batchQuantityM3: t.batchQuantityM3,
         breaches: (byTicket.get(t.id) ?? []).map((mm) => ({
@@ -89,14 +91,23 @@ export class ProductionReportsService {
       const qb = m
         .getRepository(BatchTicket)
         .createQueryBuilder('t')
-        .select('t.batch_ticket_no', 'batchTicketNo')
-        .addSelect('COALESCE(t.batch_start_time::date, t.created_at::date)', 'date')
+        .select('t.id', 'id')
+        .addSelect('t.batch_ticket_no', 'batchTicketNo')
+        .addSelect('COALESCE(t.batch_start_time::date, t.created_at::date)::text', 'date')
+        .addSelect('COALESCE(t.batch_start_time, t.created_at)', 'batchedAt')
         .addSelect('t.grade_label', 'gradeLabel')
         .addSelect('t.batch_quantity_m3::float', 'm3')
+        .addSelect('t.variance_exceeded', 'varianceExceeded')
+        .addSelect('o.order_no', 'orderNo')
+        .addSelect('c.customer_name', 'customerName')
+        .addSelect('u.name', 'operatorName')
+        .leftJoin('orders', 'o', 'o.id = t.order_id')
+        .leftJoin('customers', 'c', 'c.id = o.customer_id')
+        .leftJoin('users', 'u', 'u.id = t.operator_user_id')
         .where("t.status = 'confirmed'");
       if (from) qb.andWhere('COALESCE(t.batch_start_time, t.created_at)::date >= :from', { from });
       if (to) qb.andWhere('COALESCE(t.batch_start_time, t.created_at)::date <= :to', { to });
-      const rows: Array<{ m3: number | string }> = await qb.orderBy('date', 'DESC').getRawMany();
+      const rows: Array<{ m3: number | string }> = await qb.orderBy('date', 'DESC').addOrderBy('t.batch_ticket_no', 'DESC').getRawMany();
       const totalM3 = Math.round(rows.reduce((s, r) => s + (Number(r.m3) || 0), 0) * 1000) / 1000;
       return { rows, totalM3, count: rows.length };
     });
@@ -181,7 +192,11 @@ export class ProductionReportsService {
         .getRepository(StockTransaction)
         .createQueryBuilder('s')
         .select('COALESCE(s.material_label, :none)', 'material')
-        .addSelect('COALESCE(SUM(s.out_quantity), 0)', 'consumed')
+        .addSelect('MAX(mt.material_code)', 'materialCode')
+        .addSelect('MAX(mt.uom)', 'uom')
+        .addSelect('COALESCE(SUM(s.out_quantity), 0)::float', 'consumed')
+        .addSelect('COALESCE(SUM(s.out_quantity * mt.standard_rate), 0)::float', 'value')
+        .leftJoin('materials', 'mt', 'mt.id = s.material_id')
         .where('s.transaction_type IN (:...types)', { types: ['batch_consumption', 'negative_stock'] })
         .setParameter('none', 'Unspecified');
       if (from) qb.andWhere('s.created_at::date >= :from', { from });

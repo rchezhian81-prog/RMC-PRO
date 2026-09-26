@@ -216,6 +216,8 @@ export interface LoginResult {
   roles: string[];
   /** Module keys the company's subscription includes. */
   modules: string[];
+  /** An administrator typed this password: the app asks for a new one first. */
+  mustChangePassword?: boolean;
 }
 /** Seats and plants a plan allows, against what the tenant is using. */
 export interface PlanUsage {
@@ -230,6 +232,7 @@ export interface MeResult {
   permissions: string[];
   roles: string[];
   modules: string[];
+  mustChangePassword?: boolean;
 }
 export interface TenantRow {
   id: string;
@@ -237,6 +240,10 @@ export interface TenantRow {
   name: string;
   status: string;
   planCode: string | null;
+  /** Active logins, and the latest sign-in across them. */
+  activeUsers?: number;
+  lastLoginAt?: string | null;
+  createdAt?: string;
   enabledModules: number;
 }
 export interface PlanRow {
@@ -244,9 +251,13 @@ export interface PlanRow {
   code: string;
   name: string;
   monthlyPrice: number;
+  yearlyPrice?: number | null;
   maxPlants: number;
   maxUsers: number;
+  isActive?: boolean;
   moduleCount: number;
+  /** Companies currently on this plan. */
+  tenantCount?: number;
 }
 /** A single plan with its enabled module keys — for the edit form. */
 export interface PlanDetail {
@@ -277,7 +288,11 @@ export interface TenantUserRow {
   email: string;
   userType: string;
   status: string;
+  roleKey: string | null;
+  roleName: string | null;
   lastLoginAt: string | null;
+  createdAt: string;
+  mustChangePassword: boolean;
 }
 
 export const api = {
@@ -304,6 +319,22 @@ export const api = {
     }),
   /** Who am I, and what does this company's subscription currently include. */
   me: () => apiFetch<MeResult>('/auth/me'),
+  /**
+   * "I forgot my password": the server emails a reset link when the login
+   * exists and email is set up. `channel` says whether an email can go out at
+   * all on this server; the reply is otherwise the same for any address.
+   */
+  forgotPassword: (login: string) =>
+    apiFetch<{ ok: true; channel: 'email' | 'none'; minutes: number }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ login }),
+    }),
+  /** Set a new password with the token from the emailed link. */
+  resetPassword: (token: string, newPassword: string) =>
+    apiFetch<{ reset: true; email: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
   tenants: () => apiFetch<TenantRow[]>('/platform/tenants'),
   createTenant: (b: { tenantCode: string; tenantName: string; planId?: string }) =>
     apiFetch<{ id: string }>('/platform/tenants', { method: 'POST', body: JSON.stringify(b) }),
@@ -332,6 +363,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(b),
     }),
+  /** Support's levers on one company login: a new password, or off / on. */
+  updateTenantUser: (id: string, userId: string, b: { password?: string; status?: 'active' | 'inactive' }) =>
+    apiFetch<TenantUserRow>(`/platform/tenants/${id}/users/${userId}`, { method: 'PATCH', body: JSON.stringify(b) }),
   setTenantModule: (id: string, key: string, isEnabled: boolean) =>
     apiFetch<TenantModuleRow[]>(`/platform/tenants/${id}/modules/${key}`, {
       method: 'PUT',
@@ -570,6 +604,7 @@ export const mixDesignsApi = {
   list: () => apiFetch<Row[]>('/mix-designs'),
   get: (id: string) => apiFetch<Row>(`/mix-designs/${id}`),
   create: (b: Record<string, unknown>) => post('/mix-designs', b),
+  update: (id: string, b: Record<string, unknown>) => post(`/mix-designs/${id}`, b),
   addMaterial: (id: string, b: Record<string, unknown>) => post(`/mix-designs/${id}/materials`, b),
   deleteMaterial: (id: string, rowId: string) =>
     apiFetch<Row>(`/mix-designs/${id}/materials/${rowId}`, { method: 'DELETE' }),
@@ -599,7 +634,8 @@ export const batchTicketsApi = {
   get: (id: string) => apiFetch<Row>(`/batch-tickets/${id}`),
   createFromQueue: (queueId: string, b: Record<string, unknown>) => post(`/batch-tickets/from-queue/${queueId}`, b),
   updateActuals: (id: string, materials: Record<string, unknown>[]) => post(`/batch-tickets/${id}/actuals`, { materials }),
-  confirm: (id: string, overrideVariance?: boolean) => post(`/batch-tickets/${id}/confirm`, { overrideVariance }),
+  confirm: (id: string, overrideVariance?: boolean, allowNegativeStock?: boolean) =>
+    post(`/batch-tickets/${id}/confirm`, { overrideVariance, ...(allowNegativeStock ? { allowNegativeStock } : {}) }),
   cancel: (id: string) => post(`/batch-tickets/${id}/cancel`),
 };
 
@@ -710,7 +746,7 @@ export const challansApi = {
     if (params.to) qs.set('to', params.to);
     if (params.plantId) qs.set('plantId', params.plantId);
     const s = qs.toString();
-    return apiFetch<{ rows: Row[]; totalM3: number; count: number }>(`/delivery-challans/report/delivery-register${s ? `?${s}` : ''}`);
+    return apiFetch<{ rows: Row[]; totalM3: number; returnedM3: number; count: number }>(`/delivery-challans/report/delivery-register${s ? `?${s}` : ''}`);
   },
 };
 

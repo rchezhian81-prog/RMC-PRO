@@ -12,14 +12,59 @@ const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_
 export class BatchQueueService {
   constructor(private readonly db: TenantDbService) {}
 
+  /**
+   * The queue with what a batching operator reads it by: the order and the
+   * customer and site behind each load, when the pour is needed, and how many
+   * tickets have been raised against it (and how many are still draft). Two
+   * batched lookups for the whole page.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(BatchQueueEntry).find({
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(BatchQueueEntry).find({
         where: status ? { queueStatus: status } : {},
         order: { createdAt: 'DESC' },
         take: listLimit(limit),
-      }),
-    );
+      });
+      const orderIds = [...new Set(rows.map((r) => r.orderId).filter((v): v is string => !!v))];
+      const ids = rows.map((r) => r.id);
+      const orders: Array<{ id: string; orderNo: string; requiredDatetime: Date | null; customerName: string | null; siteName: string | null }> = orderIds.length
+        ? await m.query(
+            `SELECT o.id, o.order_no AS "orderNo", o.required_datetime AS "requiredDatetime",
+                    c.customer_name AS "customerName", s.site_name AS "siteName"
+               FROM orders o
+               LEFT JOIN customers c ON c.id = o.customer_id
+               LEFT JOIN sites s ON s.id = o.site_id
+              WHERE o.id = ANY($1)`,
+            [orderIds],
+          )
+        : [];
+      const tickets: Array<{ batchQueueId: string; tickets: number; drafts: number; lastTicketNo: string | null }> = ids.length
+        ? await m.query(
+            `SELECT batch_queue_id AS "batchQueueId",
+                    COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS "tickets",
+                    COUNT(*) FILTER (WHERE status = 'draft')::int AS "drafts",
+                    (ARRAY_AGG(batch_ticket_no ORDER BY created_at DESC) FILTER (WHERE status <> 'cancelled'))[1] AS "lastTicketNo"
+               FROM batch_tickets WHERE batch_queue_id = ANY($1) GROUP BY batch_queue_id`,
+            [ids],
+          )
+        : [];
+      const order = new Map(orders.map((o) => [o.id, o]));
+      const stat = new Map(tickets.map((t) => [t.batchQueueId, t]));
+      return rows.map((r) => {
+        const o = r.orderId ? order.get(r.orderId) : undefined;
+        const t = stat.get(r.id);
+        return {
+          ...r,
+          orderNo: o?.orderNo ?? null,
+          requiredDatetime: o?.requiredDatetime ?? null,
+          customerName: o?.customerName ?? null,
+          siteName: o?.siteName ?? null,
+          tickets: t?.tickets ?? 0,
+          drafts: t?.drafts ?? 0,
+          lastTicketNo: t?.lastTicketNo ?? null,
+        };
+      });
+    });
   }
 
   get(tenantId: string, id: string) {

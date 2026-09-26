@@ -1,18 +1,30 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, Trash2 } from 'lucide-react';
 import { aiApi, type ChatTurn } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Form } from '../../../components/ui/Form';
+import { Input } from '../../../components/ui/Field';
 import { ErrorState } from '../../../components/ui/States';
+
+/**
+ * Assistant — ask about the plant in plain words.
+ *
+ * One card: the conversation (with suggested questions when it is empty),
+ * then the composer. The assistant reads live data and changes nothing.
+ * When it is switched off, the card says who can switch it on. Same layout
+ * in both skins; every colour reads the semantic tokens.
+ */
 
 const SUGGESTIONS = [
   'Give me an overview of the plant',
   'Who owes us the most money?',
   'What are we low on in stock?',
   'Show recent orders on credit hold',
+  'Which trucks are due for service?',
+  'How much did we batch this month?',
 ];
 
 export default function AssistantPage() {
@@ -31,7 +43,7 @@ export default function AssistantPage() {
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [turns, busy]);
 
   async function ask(text: string) {
@@ -58,107 +70,66 @@ export default function AssistantPage() {
   }
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto', display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span
-          className="mn-gradient"
-          style={{ width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}
-        >
-          <Sparkles size={18} color="#fff" />
-        </span>
-        <div>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Assistant</h1>
-          <p style={{ margin: 0, color: 'var(--mn-muted)', fontSize: 13 }}>
-            Ask about your plant — reads your live data, changes nothing.
-          </p>
+    <div className="mn-ord mn-ai">
+      <header className="mn-board-head">
+        <div className="mn-board-title">
+          <h1>Assistant</h1>
+          <p>Ask about the plant the way you would ask the office: who owes what, what is low, what is due. It reads your live data and changes nothing. Check important figures against the reports.</p>
         </div>
-      </div>
+        <div className="mn-board-tools">
+          <span className="mn-board-live mn-ord-sum" aria-live="polite">
+            <Sparkles size={14} aria-hidden />
+            {enabled === null ? 'Checking…' : enabled ? `${turns.length ? `${Math.ceil(turns.length / 2)} ${turns.length <= 2 ? 'question' : 'questions'} this session` : 'Ready'}` : 'Switched off'}
+          </span>
+          {turns.length > 0 && <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={() => { setTurns([]); setError(null); }} disabled={busy}>Start again</Button>}
+        </div>
+      </header>
 
       {enabled === false && (
-        <Card>
-          <p style={{ margin: 0, color: 'var(--mn-muted)', fontSize: 14 }}>
-            The AI assistant isn&apos;t switched on yet. An administrator can enable it by setting an
-            Anthropic API key on the server.
-          </p>
-        </Card>
+        <div className="mn-ord-note mn-ord-note--warn" role="status">
+          <Sparkles size={16} aria-hidden />
+          <span><strong>The assistant is not switched on.</strong> An administrator switches it on by setting an Anthropic API key on the server; until then the reports answer the same questions.</span>
+        </div>
       )}
 
       {enabled !== false && (
         <Card padded={false}>
-          <div style={{ padding: 16, minHeight: 320, maxHeight: '58vh', overflowY: 'auto', display: 'grid', gap: 12 }}>
+          <div className="mn-ai-thread" role="log" aria-live="polite">
             {turns.length === 0 && (
-              <div style={{ display: 'grid', gap: 10 }}>
-                <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: 0 }}>Try asking:</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <div className="mn-ai-empty">
+                <span className="mn-ai-empty-icon" aria-hidden><Sparkles size={22} /></span>
+                <p className="mn-ai-empty-title">Try asking</p>
+                <div className="mn-ai-suggest">
                   {SUGGESTIONS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => void ask(s)}
-                      disabled={busy}
-                      className="mn-btn mn-btn-secondary mn-btn-sm"
-                      style={{ cursor: busy ? 'default' : 'pointer' }}
-                    >
-                      {s}
+                    <button key={s} type="button" className="mn-board-chip mn-ai-chip" onClick={() => void ask(s)} disabled={busy}>
+                      <span className="mn-board-chip-l">{s}</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
-
             {turns.map((t, i) => (
-              <div
-                key={i}
-                style={{
-                  justifySelf: t.role === 'user' ? 'end' : 'start',
-                  maxWidth: '85%',
-                  background: t.role === 'user' ? 'var(--mn-primary)' : 'var(--mn-surface-2, var(--mn-surface))',
-                  color: t.role === 'user' ? 'var(--mn-on-primary)' : 'var(--mn-text)',
-                  border: t.role === 'user' ? 'none' : '1px solid var(--mn-border)',
-                  borderRadius: 12,
-                  padding: '10px 13px',
-                  fontSize: 14,
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.5,
-                }}
-              >
-                {t.content}
+              <div key={i} className="mn-ai-turn" data-role={t.role}>
+                <span className="mn-ai-turn-who">{t.role === 'user' ? 'You' : 'Assistant'}</span>
+                <div className="mn-ai-bubble">{t.content}</div>
               </div>
             ))}
-
             {busy && (
-              <div style={{ justifySelf: 'start', color: 'var(--mn-muted)', fontSize: 13, padding: '4px 2px' }}>
-                Thinking…
+              <div className="mn-ai-turn" data-role="assistant">
+                <span className="mn-ai-turn-who">Assistant</span>
+                <div className="mn-ai-bubble mn-ai-bubble--thinking">Looking it up…</div>
               </div>
             )}
             <div ref={endRef} />
           </div>
-
-          {error && (
-            <div style={{ padding: '0 16px 12px' }}>
-              <ErrorState message={error} />
-            </div>
-          )}
-
-          <Form onSubmit={onSubmit} style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--mn-border)' }}>
-            <input
-              className="mn-input"
-              style={{ flex: 1 }}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about outstanding, stock, orders…"
-              aria-label="Ask the assistant"
-              disabled={busy}
-            />
-            <Button type="submit" icon={<Send size={16} />} loading={busy} disabled={!input.trim()}>
-              Send
-            </Button>
+          {error && <div className="mn-ai-error"><ErrorState message={error} /></div>}
+          <Form onSubmit={onSubmit} className="mn-ai-composer">
+            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask about outstanding, stock, orders, trucks…" aria-label="Ask the assistant" disabled={busy || enabled === null} />
+            <Button type="submit" icon={<Send size={16} />} loading={busy} disabled={!input.trim() || enabled === null}>Ask</Button>
           </Form>
         </Card>
       )}
-
-      <p style={{ color: 'var(--mn-subtle)', fontSize: 12, margin: 0, textAlign: 'center' }}>
-        The assistant can make mistakes — check important figures against the reports.
-      </p>
+      <p className="mn-ord-how mn-ai-foot">The assistant can make mistakes. It sees the same figures as the reports, but the reports are the record.</p>
     </div>
   );
 }

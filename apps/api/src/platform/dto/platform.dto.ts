@@ -18,6 +18,11 @@ export class CreateTenantUserDto {
   @IsString() @MinLength(8) password!: string;
 }
 
+export class UpdateTenantUserDto {
+  @IsOptional() @IsString() @MinLength(8) password?: string;
+  @IsOptional() @IsIn(['active', 'inactive']) status?: string;
+}
+
 export class CreateTenantDto {
   @IsString() @MinLength(2) tenantCode!: string;
   @IsString() @MinLength(2) tenantName!: string;

@@ -23,10 +23,38 @@ export class MaterialInwardService {
     private readonly stock: StockService,
   ) {}
 
+  /**
+   * The inward list with what the gate reads it by: the supplier's name, the
+   * material's code and standard rate (to judge the rate keyed), the plant,
+   * and the weighbridge slip the inward came from. Batched lookups.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(MaterialInward).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(MaterialInward).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      const ids = (pick: (r: MaterialInward) => string | null) => [...new Set(rows.map(pick).filter((v): v is string => !!v))];
+      const supplierIds = ids((r) => r.supplierId);
+      const materialIds = ids((r) => r.materialId);
+      const plantIds = ids((r) => r.plantId);
+      const slipIds = ids((r) => r.weighbridgeEntryId);
+      const [suppliers, materials, plants, slips] = await Promise.all([
+        supplierIds.length ? (m.query(`SELECT id, supplier_name AS "supplierName" FROM suppliers WHERE id = ANY($1)`, [supplierIds]) as Promise<Array<{ id: string; supplierName: string }>>) : Promise.resolve([]),
+        materialIds.length ? (m.query(`SELECT id, material_code AS "materialCode", standard_rate AS "standardRate" FROM materials WHERE id = ANY($1)`, [materialIds]) as Promise<Array<{ id: string; materialCode: string; standardRate: string }>>) : Promise.resolve([]),
+        plantIds.length ? (m.query(`SELECT id, plant_name AS "plantName" FROM plants WHERE id = ANY($1)`, [plantIds]) as Promise<Array<{ id: string; plantName: string }>>) : Promise.resolve([]),
+        slipIds.length ? (m.query(`SELECT id, slip_no AS "slipNo" FROM weighbridge_entries WHERE id = ANY($1)`, [slipIds]) as Promise<Array<{ id: string; slipNo: string }>>) : Promise.resolve([]),
+      ]);
+      const supplier = new Map(suppliers.map((s) => [s.id, s.supplierName]));
+      const material = new Map(materials.map((x) => [x.id, x]));
+      const plant = new Map(plants.map((p) => [p.id, p.plantName]));
+      const slip = new Map(slips.map((w) => [w.id, w.slipNo]));
+      return rows.map((r) => ({
+        ...r,
+        supplierName: r.supplierId ? supplier.get(r.supplierId) ?? null : null,
+        materialCode: r.materialId ? material.get(r.materialId)?.materialCode ?? null : null,
+        standardRate: r.materialId ? Number(material.get(r.materialId)?.standardRate ?? 0) : 0,
+        plantName: r.plantId ? plant.get(r.plantId) ?? null : null,
+        slipNo: r.weighbridgeEntryId ? slip.get(r.weighbridgeEntryId) ?? null : null,
+      }));
+    });
   }
 
   get(tenantId: string, id: string) {

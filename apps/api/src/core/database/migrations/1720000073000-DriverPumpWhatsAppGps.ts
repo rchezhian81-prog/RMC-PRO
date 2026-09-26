@@ -20,8 +20,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  * Every new tenant table is under the same FORCE-RLS, NULLIF-guarded policy as
  * the rest of the schema. Reversible: `down()` drops the tables and columns.
  */
-export class DriverPumpWhatsAppGps1720000072000 implements MigrationInterface {
-  name = 'DriverPumpWhatsAppGps1720000072000';
+export class DriverPumpWhatsAppGps1720000073000 implements MigrationInterface {
+  name = 'DriverPumpWhatsAppGps1720000073000';
 
   private readonly tables = ['pump_jobs', 'tenant_whatsapp_credentials', 'gps_ingest_keys'];
 

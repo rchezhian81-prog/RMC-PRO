@@ -5,6 +5,8 @@ export interface FieldDef {
   label: string;
   type?: 'text' | 'number' | 'date' | 'boolean';
   required?: boolean;
+  /** One plain sentence under the input: what the value is used for. */
+  help?: string;
   /** Seed for a boolean field on a NEW record, so the checkbox matches the
    * server-side column default (e.g. a series is Active by default). */
   default?: boolean;
@@ -69,6 +71,13 @@ const DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPES.map((d) => ({ value: d, label: titl
 export interface EntityConfig {
   path: string; // API path AND URL slug
   title: string;
+  /** One record, for buttons and empty states ("New material"). */
+  singular?: string;
+  /** One plain sentence under the title: what this master is for. */
+  description?: string;
+  /** The column that names a record on its row (default: the second column,
+   * the first being the code). Vehicles lead with the registration number. */
+  nameKey?: string;
   columns: string[];
   fields: FieldDef[];
 }
@@ -77,6 +86,8 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   customers: {
     path: 'customers',
     title: 'Customers',
+    singular: 'customer',
+    description: 'Who you sell to.',
     columns: ['customerCode', 'customerName', 'gstin', 'state', 'creditLimit', 'status'],
     fields: [
       { key: 'customerCode', label: 'Code', required: true },
@@ -94,16 +105,18 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
       { key: 'email', label: 'Email' },
-      { key: 'creditLimit', label: 'Credit limit', type: 'number' },
-      { key: 'creditDays', label: 'Credit days', type: 'number' },
+      { key: 'creditLimit', label: 'Credit limit', type: 'number', help: 'Orders stop on credit hold once the exposure passes this. Leave blank for no limit.' },
+      { key: 'creditDays', label: 'Credit days', type: 'number', help: 'Days after the invoice date before it is overdue.' },
       // Pre-existing receivable at go-live — the first term of the customer's
       // credit exposure, so it must be capturable.
-      { key: 'openingBalance', label: 'Opening balance (₹)', type: 'number' },
+      { key: 'openingBalance', label: 'Opening balance (₹)', type: 'number', help: 'What they already owed when you started using Mix Nova.' },
     ],
   },
   sites: {
     path: 'sites',
     title: 'Sites / Projects',
+    singular: 'site',
+    description: 'Where the concrete goes: each customer\'s project sites, with the contact on site and whether a pump is needed. An order is booked against a site.',
     columns: ['siteCode', 'siteName', 'city', 'state', 'status'],
     fields: [
       { key: 'siteCode', label: 'Code', required: true },
@@ -115,13 +128,15 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'pincode', label: 'PIN code' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
-      { key: 'pumpRequired', label: 'Pump required', type: 'boolean', default: false },
+      { key: 'pumpRequired', label: 'Pump required', type: 'boolean', default: false, help: 'Orders for this site default to pumped delivery.' },
     ],
   },
   materials: {
     path: 'materials',
     title: 'Materials',
-    columns: ['materialCode', 'materialName', 'materialType', 'uom', 'hsnCode', 'status'],
+    singular: 'material',
+    description: 'What goes into the mix: cement, aggregates, water, admixtures. The unit, the standard rate and the reorder level drive stock, valuation and the low-stock warnings.',
+    columns: ['materialCode', 'materialName', 'materialType', 'uom', 'standardRate', 'reorderLevel', 'hsnCode', 'status'],
     fields: [
       { key: 'materialCode', label: 'Code', required: true },
       { key: 'materialName', label: 'Name', required: true },
@@ -129,8 +144,8 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'category', label: 'Category' },
       { key: 'uom', label: 'UOM', ref: { path: 'uoms', value: 'uomCode', label: 'uomName' } },
       { key: 'hsnCode', label: 'HSN' },
-      { key: 'reorderLevel', label: 'Reorder level', type: 'number' },
-      { key: 'standardRate', label: 'Standard rate', type: 'number' },
+      { key: 'reorderLevel', label: 'Reorder level', type: 'number', help: 'Stock at or below this shows as low stock and on the inventory reports.' },
+      { key: 'standardRate', label: 'Standard rate', type: 'number', help: 'Per unit; values the stock and the material consumed in a batch.' },
       { key: 'specificGravity', label: 'Specific gravity', type: 'number' },
       { key: 'bulkDensity', label: 'Bulk density (kg/m³)', type: 'number' },
       { key: 'waterAbsorptionPct', label: 'Water absorption %', type: 'number' },
@@ -140,6 +155,8 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   uoms: {
     path: 'uoms',
     title: 'Units (UOM)',
+    singular: 'unit',
+    description: 'The units the yard counts in (ton, bag, litre, m³). Every material is booked in one of these.',
     columns: ['uomCode', 'uomName', 'uomCategory', 'status'],
     fields: [
       { key: 'uomCode', label: 'Code', required: true },
@@ -150,16 +167,20 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   'uom-conversions': {
     path: 'uom-conversions',
     title: 'Unit Conversions',
+    singular: 'conversion',
+    description: 'How one unit turns into another (1 ton = 1,000 kg), so a delivery weighed in tons can be booked against a material kept in bags or kg.',
     columns: ['fromUom', 'toUom', 'factor'],
     fields: [
       { key: 'fromUom', label: 'From UOM', required: true },
       { key: 'toUom', label: 'To UOM', required: true },
-      { key: 'factor', label: 'Factor (1 from = ? to)', type: 'number', required: true },
+      { key: 'factor', label: 'Factor (1 from = ? to)', type: 'number', required: true, help: 'For ton to kg the factor is 1000.' },
     ],
   },
   suppliers: {
     path: 'suppliers',
     title: 'Suppliers',
+    singular: 'supplier',
+    description: 'Who you buy from: GSTIN and state for the purchase bills, a contact, and the payment terms agreed.',
     columns: ['supplierCode', 'supplierName', 'gstin', 'state', 'status'],
     fields: [
       { key: 'supplierCode', label: 'Code', required: true },
@@ -170,18 +191,21 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
       { key: 'email', label: 'Email' },
-      { key: 'paymentTerms', label: 'Payment terms' },
+      { key: 'paymentTerms', label: 'Payment terms', help: 'As agreed, e.g. 30 days or advance.' },
     ],
   },
   vehicles: {
     path: 'vehicles',
     title: 'Vehicles',
+    singular: 'vehicle',
+    nameKey: 'vehicleNo',
+    description: 'The fleet: transit mixers, pumps and tippers, with the papers that expire. A vehicle with lapsed insurance or fitness is flagged here before it is sent out.',
     columns: ['vehicleNo', 'vehicleType', 'capacityM3', 'insuranceExpiry', 'fitnessExpiry', 'status'],
     fields: [
       { key: 'vehicleNo', label: 'Vehicle No', required: true },
       { key: 'vehicleType', label: 'Type', options: VEHICLE_TYPE_OPTIONS },
       { key: 'driverId', label: 'Assigned driver', ref: { path: 'drivers', value: 'id', label: 'driverName' } },
-      { key: 'capacityM3', label: 'Capacity (m³)', type: 'number' },
+      { key: 'capacityM3', label: 'Capacity (m³)', type: 'number', help: 'Drum capacity; a dispatch cannot load more than this.' },
       { key: 'ownershipType', label: 'Ownership', options: OWNERSHIP_OPTIONS },
       { key: 'insuranceExpiry', label: 'Insurance expiry', type: 'date' },
       { key: 'fitnessExpiry', label: 'Fitness (FC) expiry', type: 'date' },
@@ -194,6 +218,8 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   drivers: {
     path: 'drivers',
     title: 'Drivers',
+    singular: 'driver',
+    description: 'Who drives: name, mobile and licence, with the licence expiry flagged before it lapses.',
     columns: ['driverCode', 'driverName', 'mobile', 'licenseNo', 'licenseExpiry', 'status'],
     fields: [
       { key: 'driverCode', label: 'Code', required: true },
@@ -209,11 +235,13 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   transporters: {
     path: 'transporters',
     title: 'Transporters',
+    singular: 'transporter',
+    description: 'Hired transport companies and their GST transporter ID, needed on an e-way bill when their vehicle carries the load.',
     columns: ['transporterCode', 'transporterName', 'transin', 'gstin', 'state', 'status'],
     fields: [
       { key: 'transporterCode', label: 'Code', required: true },
       { key: 'transporterName', label: 'Name', required: true },
-      { key: 'transin', label: 'GST Transporter ID (TRANSIN)' },
+      { key: 'transin', label: 'GST Transporter ID (TRANSIN)', help: 'Goes on the e-way bill when this transporter carries the load.' },
       { key: 'gstin', label: 'GSTIN' },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
@@ -223,16 +251,20 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   'concrete-grades': {
     path: 'concrete-grades',
     title: 'Concrete Grades',
+    singular: 'grade',
+    description: 'The grades you sell (M10 to M60). A mix design gives each grade its recipe; orders and batches are booked by grade.',
     columns: ['gradeCode', 'gradeName', 'strengthClass', 'status'],
     fields: [
       { key: 'gradeCode', label: 'Code', required: true },
       { key: 'gradeName', label: 'Name', required: true },
-      { key: 'strengthClass', label: 'Strength class' },
+      { key: 'strengthClass', label: 'Strength class', help: 'The characteristic strength, e.g. 25 MPa for M25.' },
     ],
   },
   plants: {
     path: 'plants',
     title: 'Plants',
+    singular: 'plant',
+    description: 'Each batching plant you run. Stock, production and number series can be kept per plant.',
     columns: ['plantCode', 'plantName', 'city', 'status'],
     fields: [
       { key: 'plantCode', label: 'Code', required: true },
@@ -243,15 +275,17 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
   'number-series': {
     path: 'number-series',
     title: 'Number Series',
+    singular: 'series',
+    description: 'How each document is numbered: the prefix, the padding and the next number, restarting each financial year or running on. One series per document type, or one per plant.',
     columns: ['documentType', 'prefix', 'currentNumber', 'financialYear', 'isActive'],
     fields: [
       { key: 'documentType', label: 'Document type', required: true, options: DOCUMENT_TYPE_OPTIONS },
       { key: 'plantId', label: 'Plant', ref: { path: 'plants', value: 'id', label: 'plantName' } },
-      { key: 'prefix', label: 'Prefix' },
+      { key: 'prefix', label: 'Prefix', help: 'Text before the number, e.g. INV- gives INV-0001.' },
       { key: 'suffix', label: 'Suffix' },
-      { key: 'paddingLength', label: 'Padding', type: 'number' },
-      { key: 'currentNumber', label: 'Current number', type: 'number' },
-      { key: 'financialYear', label: 'Financial year' },
+      { key: 'paddingLength', label: 'Padding', type: 'number', help: 'How many digits, filled with zeros: 4 gives 0001.' },
+      { key: 'currentNumber', label: 'Current number', type: 'number', help: 'The last number used; the next document takes the one after it.' },
+      { key: 'financialYear', label: 'Financial year', help: 'In the form 2026-27.' },
       {
         key: 'resetFrequency',
         label: 'Reset',

@@ -1,135 +1,83 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { KeyRound, CheckCircle2 } from 'lucide-react';
-import { PASSWORD_MIN_LENGTH, passwordProblems } from '@rmc/shared';
-import { api } from '../../../lib/api';
-import { getSession } from '../../../lib/session';
+import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { KeyRound, ShieldCheck, UserCog } from 'lucide-react';
+import { getAccess, getSession } from '../../../lib/session';
 import { Card } from '../../../components/ui/Card';
-import { Button } from '../../../components/ui/Button';
-import { Form } from '../../../components/ui/Form';
-import { Field, Input } from '../../../components/ui/Field';
-import { ErrorState } from '../../../components/ui/States';
+import { Badge } from '../../../components/ui/Badge';
+import { ChangePasswordCard } from '../../../components/ChangePasswordCard';
 
-const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
+/**
+ * My account — who you are signed in as, and your password.
+ *
+ * The header names the account with its roles as badges. The main card
+ * changes the password with a live checklist; the side card lists the roles
+ * and what to do if the password is forgotten. Opened on its own, with
+ * `?required=1`, when the password was typed by an administrator: the app
+ * keeps sending the person here until they choose their own.
+ */
+const roleLabel = (r: string) => r.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
-export default function AccountPage() {
-  const [form, setForm] = useState(EMPTY);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-  const [who, setWho] = useState<{ email: string; roles: string[] } | null>(null);
+function AccountBody() {
+  const params = useSearchParams();
+  const [required, setRequired] = useState(false);
+  const [who, setWho] = useState<{ email: string; roles: string[]; permissions: number; userType: string } | null>(null);
 
   useEffect(() => {
     const s = getSession();
-    if (s) setWho({ email: s.email, roles: s.roles ?? [] });
-  }, []);
+    if (s) {
+      setWho({ email: s.email, roles: s.roles ?? [], permissions: s.permissions?.length ?? 0, userType: s.userType });
+      setRequired(Boolean(s.mustChangePassword) || params.get('required') === '1');
+    }
+  }, [params]);
 
-  // Judged by the same rule the server uses, so the guidance never disagrees
-  // with the eventual answer.
-  const problems = form.newPassword ? passwordProblems(form.newPassword) : [];
-  const mismatch = Boolean(form.confirmPassword) && form.newPassword !== form.confirmPassword;
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setDone(false);
-    if (mismatch) {
-      setError('The two new passwords do not match.');
-      return;
-    }
-    if (problems.length) {
-      setError(`The password must ${problems.join(', ')}.`);
-      return;
-    }
-    try {
-      await api.changePassword(form.currentPassword, form.newPassword);
-      setForm(EMPTY);
-      setDone(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not change the password.');
-    }
-  }
+  const canManageUsers = getAccess().has('users.manage');
 
   return (
-    <div style={{ maxWidth: 560 }}>
-      <h1 style={{ fontSize: 24, marginTop: 0, marginBottom: 4 }}>My account</h1>
-      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 18px' }}>
-        {who ? (
-          <>
-            Signed in as <strong>{who.email}</strong>
-            {who.roles.length ? ` · ${who.roles.map((r) => r.replace(/_/g, ' ')).join(', ')}` : ''}
-          </>
-        ) : (
-          'Signed in'
-        )}
-      </p>
+    <div className="mn-od mn-ac">
+      <header className="mn-board-head">
+        <div className="mn-board-title mn-od-title">
+          <h1>
+            My account
+            <span className="mn-od-badges">
+              {who?.roles.map((r) => <Badge key={r} tone={r === 'company_owner' ? 'info' : 'neutral'}>{roleLabel(r)}</Badge>)}
+            </span>
+          </h1>
+          <p className="mn-od-facts">
+            <span className="mn-od-fact mn-od-fact--who"><UserCog size={13} aria-hidden /> {who ? who.email : 'Signed in'}</span>
+            {who && <span className="mn-od-fact"><ShieldCheck size={13} aria-hidden /> {who.roles.includes('company_owner') || who.userType === 'super_admin' ? 'Full access to every screen' : `${who.permissions} ${who.permissions === 1 ? 'permission' : 'permissions'} through your roles`}</span>}
+          </p>
+        </div>
+      </header>
 
-      <Card
-        title={
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <KeyRound size={16} color="var(--mn-primary)" /> Change password
-          </span>
-        }
-      >
-        {done && (
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
-              padding: '10px 12px', borderRadius: 'var(--mn-radius-md)',
-              background: 'var(--mn-success-tint)', color: 'var(--mn-success)', fontSize: 13,
-            }}
-          >
-            <CheckCircle2 size={16} /> Password changed. Use the new one next time you sign in.
-          </div>
-        )}
-        {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
-
-        <Form onSubmit={submit}>
-          <Field label="Current password" required>
-            <Input
-              type="password"
-              autoComplete="current-password"
-              value={form.currentPassword}
-              onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
-              required
-            />
-          </Field>
-          <Field
-            label="New password"
-            required
-            help={`At least ${PASSWORD_MIN_LENGTH} characters, with a letter and a number.`}
-            error={form.newPassword && problems.length ? `Must ${problems.join(', ')}.` : undefined}
-          >
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={form.newPassword}
-              onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
-              required
-            />
-          </Field>
-          <Field
-            label="Confirm new password"
-            required
-            error={mismatch ? 'The two passwords do not match.' : undefined}
-          >
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={form.confirmPassword}
-              onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-              required
-            />
-          </Field>
-          <Button type="submit" disabled={problems.length > 0 || mismatch}>
-            Change password
-          </Button>
-        </Form>
-      </Card>
-
-      <p style={{ color: 'var(--mn-subtle)', fontSize: 12, marginTop: 12 }}>
-        Forgotten your password? Ask your administrator to set a new one from Setup&nbsp;→&nbsp;Users.
-      </p>
+      <div className="mn-od-grid">
+        <div className="mn-od-main">
+          <ChangePasswordCard required={required} onChanged={() => setRequired(false)} />
+        </div>
+        <div className="mn-od-side">
+          <Card title={<span className="mn-board-card-title"><ShieldCheck size={16} aria-hidden /> Your access</span>}>
+            <dl className="mn-od-money mn-od-money--tight">
+              <div><dt>Signed in as</dt><dd>{who?.email ?? '—'}</dd></div>
+              <div><dt>Roles</dt><dd>{who?.roles.length ? who.roles.map(roleLabel).join(', ') : 'None'}</dd></div>
+              <div><dt>Screens</dt><dd>{who ? (who.roles.includes('company_owner') || who.userType === 'super_admin' ? 'All' : `${who.permissions} permissions`) : '—'}</dd></div>
+            </dl>
+            <p className="mn-od-how mn-od-how--foot">Roles decide which screens you see and what you can do on them. {canManageUsers ? <>Change them under <Link href="/app/users" prefetch={false} className="mn-id-link">Users</Link>.</> : 'Ask an administrator to change them.'}</p>
+          </Card>
+          <Card title={<span className="mn-board-card-title"><KeyRound size={16} aria-hidden /> Forgotten password</span>}>
+            <p className="mn-od-notes">If you cannot sign in, press <strong>Forgotten your password?</strong> on the sign-in page and a reset link is emailed to you. {canManageUsers ? <>You can also set a new password for anyone under <Link href="/app/users" prefetch={false} className="mn-id-link">Users</Link>; they are asked to choose their own at the next sign-in.</> : 'An administrator can also set a new one for you under Setup → Users.'}</p>
+          </Card>
+        </div>
+      </div>
     </div>
+  );
+}
+
+export default function AccountPage() {
+  return (
+    <Suspense fallback={null}>
+      <AccountBody />
+    </Suspense>
   );
 }

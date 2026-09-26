@@ -29,8 +29,21 @@ export class VendorPaymentService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Every payment with the supplier's name and the bills it settled. */
   list(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) => m.getRepository(VendorPayment).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) }));
+    return this.db.runInTenant(tenantId, async (m) => {
+      const payments = await m.getRepository(VendorPayment).find({ order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!payments.length) return payments;
+      const extra: Array<{ id: string; supplierName: string | null; billNos: string | null }> = await m.query(
+        `SELECT p.id, s.supplier_name AS "supplierName",
+                (SELECT STRING_AGG(b.bill_no, ', ') FROM vendor_payment_allocations a JOIN vendor_bills b ON b.id = a.vendor_bill_id WHERE a.vendor_payment_id = p.id) AS "billNos"
+           FROM vendor_payments p LEFT JOIN suppliers s ON s.id = p.supplier_id
+          WHERE p.id = ANY($1::uuid[])`,
+        [payments.map((x) => x.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return payments.map((x) => ({ ...x, ...(by.get(x.id) ?? { supplierName: null, billNos: null }) }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

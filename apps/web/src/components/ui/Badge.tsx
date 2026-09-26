@@ -29,6 +29,8 @@ export function statusTone(status: string): Tone {
       'received', 'matched',
       // A WhatsApp message delivered through the Business API.
       'sent',
+      // QC: a cube set that met IS 456, a slump inside its target, a day sampled as the code asks.
+      'accepted', 'in_range', 'compliant', 'passed',
       // An invoice settled by credit note alone: nothing owed, nothing received.
       'credited'].includes(s)
   )
@@ -42,6 +44,8 @@ export function statusTone(status: string): Tone {
       'credit_hold', 'unpaid', 'not_invoiced', 'not_checked', 'expired',
       // A trip held up or turning back.
       'delayed', 'returning',
+      // QC: cubes past their 28-day date, a day short of the samples IS 456 asks for.
+      'due', 'under_sampled',
       // Subscription is overdue but the plant is still allowed to work.
       'grace',
     ].includes(s)
@@ -49,7 +53,7 @@ export function statusTone(status: string): Tone {
     return 'warning';
   if (
     [
-      'cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed', 'inactive',
+      'cancelled', 'rejected', 'negative_stock', 'blocked', 'overdue', 'failed', 'inactive', 'out_of_range',
       // Subscription blocked: nobody at this company can sign in.
       'suspended',
       // Bad debt written off, and a bounced / reversed receipt — money lost or clawed back.

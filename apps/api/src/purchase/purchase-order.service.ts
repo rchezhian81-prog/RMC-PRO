@@ -29,10 +29,37 @@ export class PurchaseOrderService {
     private readonly whatsapp: WhatsAppService,
   ) {}
 
+  /**
+   * Every order with what the list needs beside it: the supplier and plant
+   * by name, the lines summed (count, materials, ordered and received), and
+   * how many receipts and bills stand against it. Grouped queries over the
+   * listed ids, not one per order.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(PurchaseOrder).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const orders = await m.getRepository(PurchaseOrder).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!orders.length) return orders;
+      const ids = orders.map((o) => o.id);
+      const extra: Array<{ id: string; supplierName: string | null; plantName: string | null; itemCount: number; materialLabels: string | null; orderedQty: number; receivedQty: number; grnCount: number; billCount: number }> = await m.query(
+        `SELECT o.id, s.supplier_name AS "supplierName", p.plant_name AS "plantName",
+                COALESCE(i.n, 0)::int AS "itemCount", i.labels AS "materialLabels",
+                COALESCE(i.ordered, 0)::float AS "orderedQty", COALESCE(i.received, 0)::float AS "receivedQty",
+                (SELECT COUNT(*) FROM goods_receipts g WHERE g.purchase_order_id = o.id AND g.status <> 'cancelled')::int AS "grnCount",
+                (SELECT COUNT(*) FROM vendor_bills b WHERE b.purchase_order_id = o.id AND b.status <> 'cancelled')::int AS "billCount"
+           FROM purchase_orders o
+           LEFT JOIN suppliers s ON s.id = o.supplier_id
+           LEFT JOIN plants p ON p.id = o.plant_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) AS n, STRING_AGG(material_label, ', ' ORDER BY created_at) AS labels,
+                    SUM(quantity) AS ordered, SUM(received_quantity) AS received
+               FROM purchase_order_items WHERE purchase_order_id = o.id
+           ) i ON TRUE
+          WHERE o.id = ANY($1::uuid[])`,
+        [ids],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return orders.map((o) => ({ ...o, ...(by.get(o.id) ?? { supplierName: null, plantName: null, itemCount: 0, materialLabels: null, orderedQty: 0, receivedQty: 0, grnCount: 0, billCount: 0 }) }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

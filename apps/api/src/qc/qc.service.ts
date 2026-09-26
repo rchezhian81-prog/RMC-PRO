@@ -113,10 +113,23 @@ export class QcService {
 
   // ---- slump tests ----
 
+  /** Every slump test with the plant, the batch ticket and the tester by name. */
   listSlump(tenantId: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(QcSlumpTest).find({ order: { testedAt: 'DESC' }, take: listLimit(limit) });
+      if (!rows.length) return rows;
+      const extra: Array<{ id: string; plantName: string | null; batchTicketNo: string | null; testedByName: string | null }> = await m.query(
+        `SELECT s.id, p.plant_name AS "plantName", t.batch_ticket_no AS "batchTicketNo", u.name AS "testedByName"
+           FROM qc_slump_tests s
+           LEFT JOIN plants p ON p.id = s.plant_id
+           LEFT JOIN batch_tickets t ON t.id = s.batch_ticket_id
+           LEFT JOIN users u ON u.id = s.tested_by
+          WHERE s.id = ANY($1::uuid[])`,
+        [rows.map((r) => r.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return rows.map((r) => ({ ...r, ...(by.get(r.id) ?? { plantName: null, batchTicketNo: null, testedByName: null }) }));
+    });
   }
 
   /** Cube-set register — sets over a period (cast date) with target vs 28-day
@@ -205,10 +218,34 @@ export class QcService {
 
   // ---- cube sets ----
 
+  /**
+   * Every cube set with the plant and ticket by name and its results summed:
+   * how many cubes are crushed at 7 and at 28 days, and the lowest 28-day cube.
+   */
   listCubeSets(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(QcCubeSet).find({ where: status ? { status } : {}, order: { castDate: 'DESC', createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const sets = await m.getRepository(QcCubeSet).find({ where: status ? { status } : {}, order: { castDate: 'DESC', createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!sets.length) return sets;
+      const extra: Array<{ id: string; plantName: string | null; batchTicketNo: string | null; results7: number; results28: number; min28: number | null; mean7: number | null }> = await m.query(
+        `SELECT s.id, p.plant_name AS "plantName", t.batch_ticket_no AS "batchTicketNo",
+                COALESCE(r.n7, 0)::int AS results7, COALESCE(r.n28, 0)::int AS results28,
+                r.min28::float AS min28, r.mean7::float AS mean7
+           FROM qc_cube_sets s
+           LEFT JOIN plants p ON p.id = s.plant_id
+           LEFT JOIN batch_tickets t ON t.id = s.batch_ticket_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) FILTER (WHERE test_age_days < 28) AS n7,
+                    COUNT(*) FILTER (WHERE test_age_days >= 28) AS n28,
+                    MIN(compressive_strength_mpa) FILTER (WHERE test_age_days >= 28) AS min28,
+                    AVG(compressive_strength_mpa) FILTER (WHERE test_age_days < 28) AS mean7
+               FROM qc_cube_results WHERE cube_set_id = s.id
+           ) r ON TRUE
+          WHERE s.id = ANY($1::uuid[])`,
+        [sets.map((r) => r.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return sets.map((r) => ({ ...r, ...(by.get(r.id) ?? { plantName: null, batchTicketNo: null, results7: 0, results28: 0, min28: null, mean7: null }) }));
+    });
   }
 
   private async loadSet(m: EntityManager, id: string) {
@@ -217,7 +254,17 @@ export class QcService {
     const results = await m
       .getRepository(QcCubeResult)
       .find({ where: { cubeSetId: id }, order: { testAgeDays: 'ASC', specimenNo: 'ASC' } });
-    return { ...set, results };
+    const [names] = (await m.query(
+      `SELECT p.plant_name AS "plantName", t.batch_ticket_no AS "batchTicketNo", t.batch_quantity_m3::float AS "batchQuantityM3", o.order_no AS "orderNo", c.customer_name AS "customerName"
+         FROM qc_cube_sets s
+         LEFT JOIN plants p ON p.id = s.plant_id
+         LEFT JOIN batch_tickets t ON t.id = s.batch_ticket_id
+         LEFT JOIN orders o ON o.id = t.order_id
+         LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE s.id = $1`,
+      [id],
+    )) as Array<Record<string, unknown>>;
+    return { ...set, ...(names ?? {}), results };
   }
 
   getCubeSet(tenantId: string, id: string) {

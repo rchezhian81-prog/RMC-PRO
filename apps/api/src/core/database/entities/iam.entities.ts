@@ -40,6 +40,24 @@ export class User extends BaseUuidEntity {
 
   @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
   lastLoginAt!: Date | null;
+
+  /**
+   * Self-service reset: the SHA-256 of the single-use token in the emailed
+   * link, and when it stops working. The token itself is never stored.
+   */
+  @Column({ name: 'password_reset_token_hash', type: 'varchar', nullable: true })
+  passwordResetTokenHash!: string | null;
+
+  @Column({ name: 'password_reset_expires_at', type: 'timestamptz', nullable: true })
+  passwordResetExpiresAt!: Date | null;
+
+  /**
+   * True when the current password was typed by an administrator (a new login,
+   * or a reset from Setup → Users), so the app asks this person to choose their
+   * own the first time they sign in with it. Cleared by any password change.
+   */
+  @Column({ name: 'must_change_password', type: 'boolean', default: false })
+  mustChangePassword!: boolean;
 }
 
 /** Global permission catalog (Design Doc 6 §6.3). No tenant_id. */

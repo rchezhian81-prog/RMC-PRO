@@ -39,10 +39,28 @@ export class ExpenseVoucherService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Every voucher with the plant by name and its lines summed: count, heads, and what they were charged to. */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(ExpenseVoucher).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const vouchers = await m.getRepository(ExpenseVoucher).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!vouchers.length) return vouchers;
+      const extra: Array<{ id: string; plantName: string | null; lineCount: number; headLabels: string | null; allocations: string | null }> = await m.query(
+        `SELECT v.id, p.plant_name AS "plantName",
+                COALESCE(l.n, 0)::int AS "lineCount", l.heads AS "headLabels", l.allocs AS allocations
+           FROM expense_vouchers v
+           LEFT JOIN plants p ON p.id = v.plant_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) AS n,
+                    STRING_AGG(DISTINCT expense_head_label, ', ') AS heads,
+                    STRING_AGG(DISTINCT CASE WHEN allocation_type = 'general' OR allocation_type IS NULL THEN 'General' ELSE COALESCE(NULLIF(allocation_label, ''), allocation_type) END, ', ') AS allocs
+               FROM expense_voucher_lines WHERE expense_voucher_id = v.id
+           ) l ON TRUE
+          WHERE v.id = ANY($1::uuid[])`,
+        [vouchers.map((v) => v.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return vouchers.map((v) => ({ ...v, ...(by.get(v.id) ?? { plantName: null, lineCount: 0, headLabels: null, allocations: null }) }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

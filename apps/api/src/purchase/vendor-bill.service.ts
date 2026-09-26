@@ -39,10 +39,27 @@ export class VendorBillService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Every bill with the supplier, the order and the receipt it came from, by name. */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(VendorBill).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) }),
-    );
+    return this.db.runInTenant(tenantId, async (m) => {
+      const bills = await m.getRepository(VendorBill).find({ where: status ? { status } : {}, order: { createdAt: 'DESC' }, take: listLimit(limit) });
+      if (!bills.length) return bills;
+      const extra: Array<{ id: string; supplierName: string | null; supplierGstin: string | null; poNo: string | null; grnNo: string | null; itemCount: number; materialLabels: string | null }> = await m.query(
+        `SELECT b.id, s.supplier_name AS "supplierName", s.gstin AS "supplierGstin", o.po_no AS "poNo", g.grn_no AS "grnNo",
+                COALESCE(i.n, 0)::int AS "itemCount", i.labels AS "materialLabels"
+           FROM vendor_bills b
+           LEFT JOIN suppliers s ON s.id = b.supplier_id
+           LEFT JOIN purchase_orders o ON o.id = b.purchase_order_id
+           LEFT JOIN goods_receipts g ON g.id = b.goods_receipt_id
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*) AS n, STRING_AGG(material_label, ', ' ORDER BY created_at) AS labels FROM vendor_bill_items WHERE vendor_bill_id = b.id
+           ) i ON TRUE
+          WHERE b.id = ANY($1::uuid[])`,
+        [bills.map((b) => b.id)],
+      );
+      const by = new Map(extra.map((e) => [e.id, e]));
+      return bills.map((b) => ({ ...b, ...(by.get(b.id) ?? { supplierName: null, supplierGstin: null, poNo: null, grnNo: null, itemCount: 0, materialLabels: null }) }));
+    });
   }
 
   private async loadFull(m: EntityManager, id: string) {

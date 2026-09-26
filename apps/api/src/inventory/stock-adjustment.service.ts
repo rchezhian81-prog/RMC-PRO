@@ -93,14 +93,44 @@ export class NegativeStockService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * The request list with what an approver reads it by: who asked and who
+   * decided (names, not ids), the material's unit and code, the plant, and
+   * the balance the material holds right now. Batched lookups.
+   */
   list(tenantId: string, status?: string, limit?: string) {
-    return this.db.runInTenant(tenantId, (m) =>
-      m.getRepository(NegativeStockRequest).find({
+    return this.db.runInTenant(tenantId, async (m) => {
+      const rows = await m.getRepository(NegativeStockRequest).find({
         where: status ? { approvalStatus: status } : {},
         order: { createdAt: 'DESC' },
         take: listLimit(limit),
-      }),
-    );
+      });
+      const ids = (pick: (r: NegativeStockRequest) => string | null) => [...new Set(rows.map(pick).filter((v): v is string => !!v))];
+      const userIds = [...new Set([...ids((r) => r.requestedBy), ...ids((r) => r.approvedBy)])];
+      const materialIds = ids((r) => r.materialId);
+      const plantIds = ids((r) => r.plantId);
+      const [users, materials, plants, balances] = await Promise.all([
+        userIds.length ? (m.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [userIds]) as Promise<Array<{ id: string; name: string }>>) : Promise.resolve([]),
+        materialIds.length ? (m.query(`SELECT id, material_code AS "materialCode", uom FROM materials WHERE id = ANY($1)`, [materialIds]) as Promise<Array<{ id: string; materialCode: string; uom: string | null }>>) : Promise.resolve([]),
+        plantIds.length ? (m.query(`SELECT id, plant_name AS "plantName" FROM plants WHERE id = ANY($1)`, [plantIds]) as Promise<Array<{ id: string; plantName: string }>>) : Promise.resolve([]),
+        materialIds.length
+          ? (m.query(`SELECT plant_id AS "plantId", material_id AS "materialId", current_quantity AS "currentQuantity" FROM stock_balances WHERE material_id = ANY($1)`, [materialIds]) as Promise<Array<{ plantId: string; materialId: string; currentQuantity: string }>>)
+          : Promise.resolve([]),
+      ]);
+      const userName = new Map(users.map((u) => [u.id, u.name]));
+      const material = new Map(materials.map((x) => [x.id, x]));
+      const plantName = new Map(plants.map((p) => [p.id, p.plantName]));
+      const balance = new Map(balances.map((b) => [`${b.plantId}:${b.materialId}`, Number(b.currentQuantity)]));
+      return rows.map((r) => ({
+        ...r,
+        requestedByName: r.requestedBy ? userName.get(r.requestedBy) ?? null : null,
+        approvedByName: r.approvedBy ? userName.get(r.approvedBy) ?? null : null,
+        materialCode: r.materialId ? material.get(r.materialId)?.materialCode ?? null : null,
+        uom: r.materialId ? material.get(r.materialId)?.uom ?? null : null,
+        plantName: r.plantId ? plantName.get(r.plantId) ?? null : null,
+        currentQuantity: r.plantId && r.materialId ? balance.get(`${r.plantId}:${r.materialId}`) ?? null : null,
+      }));
+    });
   }
 
   async approve(tenantId: string, id: string, userId: string, remarks?: string) {

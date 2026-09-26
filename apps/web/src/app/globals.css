@@ -2193,7 +2193,7 @@ main:focus-visible {
 .mn-lp-on-dark .mn-lp-h2 { color: #ffffff; }
 .mn-lp-on-dark .mn-lp-sub { color: #cfc4ee; }
 
-/* ---- the plant scene ---- */
+/* ---- the plant photograph ---- */
 .mn-lp-plant {
   position: relative;
   isolation: isolate;
@@ -2205,8 +2205,57 @@ main:focus-visible {
 }
 .mn-lp-plant .mn-lp-mesh { filter: blur(50px); }
 .mn-lp-plant .mn-lp-blob { opacity: 0.55; }
-.mn-lp-scene { position: relative; z-index: 2; display: block; width: 100%; height: auto; }
-/* the plant illustration is a still: no belt, drum, vane or bar motion */
+.mn-lp-plant--photo .mn-lp-mesh, .mn-lp-plant--photo .mn-lp-grain { display: none; }
+.mn-lp-photo { position: relative; z-index: 2; display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+/* a soft brand vignette so the white callouts and the card edge sit on the picture */
+.mn-lp-plant--photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(15, 10, 34, 0.28) 0%, rgba(15, 10, 34, 0) 28%, rgba(15, 10, 34, 0) 70%, rgba(15, 10, 34, 0.42) 100%),
+    radial-gradient(120% 90% at 50% 50%, rgba(15, 10, 34, 0) 55%, rgba(30, 17, 64, 0.35) 100%);
+}
+/* option c: the photograph in the brand's purple */
+.mn-lp[data-photo='c'] .mn-lp-photo { filter: grayscale(1) contrast(1.08) brightness(0.92); }
+.mn-lp[data-photo='c'] .mn-lp-plant--photo::after {
+  background:
+    linear-gradient(180deg, rgba(20, 10, 48, 0.55) 0%, rgba(108, 43, 217, 0.42) 50%, rgba(20, 10, 48, 0.7) 100%);
+  mix-blend-mode: multiply;
+}
+.mn-lp[data-photo='c'] .mn-lp-plant--photo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(160deg, rgba(183, 140, 255, 0.45) 0%, rgba(138, 79, 255, 0.15) 45%, rgba(108, 43, 217, 0) 80%);
+  mix-blend-mode: screen;
+}
+/* option b: the same photograph, darkened, behind the hero */
+.mn-lp-hero-photo { display: none; }
+.mn-lp[data-photo='b'] .mn-lp-hero-photo {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('/landing/plant-1600.webp');
+  background-size: cover;
+  background-position: 62% 40%;
+  filter: saturate(0.7) brightness(0.85);
+}
+.mn-lp[data-photo='b'] .mn-lp-hero-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(15, 10, 34, 0.96) 0%, rgba(15, 10, 34, 0.86) 42%, rgba(24, 14, 56, 0.66) 70%, rgba(15, 10, 34, 0.8) 100%),
+    linear-gradient(180deg, rgba(15, 10, 34, 0.35) 0%, rgba(15, 10, 34, 0) 40%, rgba(15, 10, 34, 0.9) 100%);
+}
+.mn-lp[data-photo='b'] .mn-lp-hero .mn-lp-mesh { opacity: 0.55; }
+.mn-lp[data-photo='b'] .mn-lp-hero .mn-lp-dots { opacity: 0.35; }
 .mn-lp-callout {
   position: absolute;
   z-index: 3;
@@ -2215,7 +2264,7 @@ main:focus-visible {
   gap: 9px;
   padding: 8px 12px 8px 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   color: #1e1e2e;
   box-shadow: 0 14px 34px -14px rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(6px);
@@ -2225,11 +2274,12 @@ main:focus-visible {
 .mn-lp-callout b { font-size: 12.5px; font-weight: 700; }
 .mn-lp-callout small { font-size: 11px; color: #5b5b6b; }
 .mn-lp-callout-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mn-purple-500); box-shadow: 0 0 0 4px rgba(138, 79, 255, 0.18); flex: 0 0 auto; }
-.mn-lp-callout-silos { left: 3%; top: 6%; }
-.mn-lp-callout-bins { left: 30%; top: 13%; }
-.mn-lp-callout-tower { left: 55%; top: 4%; }
-.mn-lp-callout-truck { left: 71%; top: 40%; }
-.mn-lp-callout-bridge { left: 64%; bottom: 5%; }
+/* positions match the photograph: silos and tower on the right, bins on the left, mixers in the yard, the office in the middle */
+.mn-lp-callout-silos { left: 60%; top: 7%; }
+.mn-lp-callout-bins { left: 4%; top: 47%; }
+.mn-lp-callout-tower { left: 47%; top: 30%; }
+.mn-lp-callout-truck { left: 71%; top: 63%; }
+.mn-lp-callout-office { left: 38%; top: 66%; }
 .mn-lp-callout-list { display: none; }
 
 /* ---- bento capability grid ---- */

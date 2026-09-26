@@ -13,15 +13,17 @@ import { Aurora } from '../components/Aurora';
  * Public landing page.
  *
  * Everything here is deliberately self-contained: inline SVG, CSS-drawn
- * textures (the grain is an SVG data: URI, which img-src allows), no external
- * fonts, scripts or images. The app's CSP allows scripts, styles and images
- * from 'self' only, so an external asset would be silently blocked in
- * production while working fine in dev.
+ * textures (the grain is an SVG data: URI, which img-src allows), the plant
+ * photograph served from /public, no external fonts, scripts or images. The
+ * app's CSP allows scripts, styles and images from 'self' only, so an
+ * external asset would be silently blocked in production while working fine
+ * in dev.
  *
  * The capability claims below are drawn from the real module catalogue
  * (packages/shared/src/modules-catalog.ts) — not from marketing copy. If a
  * module is removed there, the claim here should go with it. The figures in
- * the product preview and the plant scene are illustrative sample data.
+ * the product preview are illustrative sample data; the plant is a rendered
+ * model plant, not a customer site.
  */
 export const metadata: Metadata = {
   title: 'Mix Nova — software for ready-mix concrete plants',
@@ -110,8 +112,8 @@ const CALLOUTS: { cls: string; title: string; sub: string }[] = [
   { cls: 'silos', title: 'Cement silos', sub: 'stock ledger, GRN from the weighbridge' },
   { cls: 'bins', title: 'Aggregate bins', sub: 'moisture-corrected batching' },
   { cls: 'tower', title: 'Batching plant', sub: 'controller import, batch tickets' },
-  { cls: 'truck', title: 'Transit mixer', sub: 'GPS, challan, e-way bill' },
-  { cls: 'bridge', title: 'Weighbridge', sub: 'gross · tare · net, no retyping' },
+  { cls: 'truck', title: 'Transit mixers', sub: 'GPS, challan, e-way bill' },
+  { cls: 'office', title: 'Plant office', sub: 'invoice, IRN, receipts, statements' },
 ];
 
 function Check() {
@@ -177,113 +179,40 @@ function ProductPreview() {
   );
 }
 
-/** A still, stylised ready-mix plant: silos, aggregate bins, conveyor, batching tower, transit mixer, weighbridge. (Replaced by a photograph of the plant when one is supplied.) */
-function PlantScene() {
-  const silos = [70, 140, 210];
-  const hoppers = [305, 368, 431];
+/**
+ * The plant photograph. An AI-rendered model plant, not a customer site: it
+ * stands in for the parts of a plant the product covers. Served from /public
+ * (the CSP allows images from 'self' only), at three widths so a phone does
+ * not download the desktop file.
+ */
+const PLANT_SRC = '/landing/plant-1600.webp';
+const PLANT_SRCSET = '/landing/plant-640.webp 640w, /landing/plant-1000.webp 1000w, /landing/plant-1600.webp 1600w';
+
+function PlantPhoto() {
   return (
-    <svg className="mn-lp-scene" viewBox="0 0 960 420" role="img" aria-label="Illustration of a ready-mix concrete plant: cement silos, aggregate bins, a conveyor into the batching tower, a transit mixer on the weighbridge">
-      <defs>
-        <linearGradient id="ps-silo" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#8b6cf0" /><stop offset="0.45" stopColor="#4a35a3" /><stop offset="1" stopColor="#261b52" />
-        </linearGradient>
-        <linearGradient id="ps-tower" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#5b47b8" /><stop offset="1" stopColor="#2a1e58" />
-        </linearGradient>
-        <linearGradient id="ps-drum" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#f1eaff" /><stop offset="1" stopColor="#c4b5fd" />
-        </linearGradient>
-        <radialGradient id="ps-glow"><stop offset="0" stopColor="#b78cff" stopOpacity="0.55" /><stop offset="1" stopColor="#b78cff" stopOpacity="0" /></radialGradient>
-        <clipPath id="ps-drumclip"><rect x="675" y="238" width="140" height="64" rx="32" /></clipPath>
-      </defs>
-
-      <circle className="ps-glow" cx="600" cy="210" r="190" fill="url(#ps-glow)" />
-      <g className="ps-stars" fill="#e9ddff">
-        <circle cx="90" cy="40" r="1.6" /><circle cx="330" cy="58" r="1.2" /><circle cx="470" cy="26" r="1.8" /><circle cx="700" cy="52" r="1.3" /><circle cx="880" cy="88" r="1.6" /><circle cx="820" cy="30" r="1.1" />
-      </g>
-
-      {/* ground and weighbridge */}
-      <rect x="0" y="340" width="960" height="80" fill="#0c0820" />
-      <line x1="0" y1="340" x2="960" y2="340" stroke="#7a5cff" strokeOpacity="0.45" />
-      <rect x="640" y="338" width="240" height="12" rx="3" fill="#3b2a7a" stroke="#8a6bff" strokeWidth="1.5" />
-      <rect x="884" y="292" width="66" height="40" rx="7" fill="#120c2a" stroke="#63c493" strokeWidth="1.5" />
-      <text x="917" y="311" textAnchor="middle" fill="#63c493" fontSize="13" fontWeight="700" fontFamily="var(--mn-font-display)">24,560</text>
-      <text x="917" y="325" textAnchor="middle" fill="#8fd9b5" fontSize="9" fontFamily="var(--mn-font-body)">NET KG</text>
-
-      {/* cement silos */}
-      <rect x="58" y="62" width="216" height="6" rx="3" fill="#8a6bff" opacity="0.7" />
-      {silos.map((x) => (
-        <g key={x}>
-          <rect x={x} y="70" width="52" height="190" rx="14" fill="url(#ps-silo)" />
-          <path d={`M${x} 258 H${x + 52} L${x + 38} 298 H${x + 14} Z`} fill="#2a1e58" stroke="#6d4fd6" strokeWidth="1.5" />
-          <line x1={x + 8} y1="296" x2={x + 4} y2="340" stroke="#5b47b8" strokeWidth="3" />
-          <line x1={x + 44} y1="296" x2={x + 48} y2="340" stroke="#5b47b8" strokeWidth="3" />
-          <rect x={x + 6} y="84" width="6" height="150" rx="3" fill="#ffffff" opacity="0.12" />
-        </g>
-      ))}
-      <path d="M236 128 H540" stroke="#5b47b8" strokeWidth="7" strokeLinecap="round" />
-      <path className="ps-flow" d="M236 128 H540" stroke="#c4b5fd" strokeWidth="2" strokeLinecap="round" strokeDasharray="6 16" />
-
-      {/* aggregate bins + inclined conveyor */}
-      <rect x="298" y="230" width="196" height="8" rx="3" fill="#5b47b8" />
-      {hoppers.map((x) => (
-        <g key={x}>
-          <path d={`M${x} 150 H${x + 56} L${x + 40} 230 H${x + 16} Z`} fill="#2f2266" stroke="#7a5cff" strokeWidth="1.5" />
-          <path d={`M${x + 6} 188 H${x + 50} L${x + 38} 226 H${x + 18} Z`} fill="#8a4fff" opacity="0.55" />
-        </g>
-      ))}
-      <line x1="310" y1="238" x2="310" y2="340" stroke="#3b2a7a" strokeWidth="4" />
-      <line x1="482" y1="238" x2="482" y2="340" stroke="#3b2a7a" strokeWidth="4" />
-      <line x1="300" y1="332" x2="558" y2="152" stroke="#2a1e58" strokeWidth="14" strokeLinecap="round" />
-      <line className="ps-belt" x1="300" y1="332" x2="558" y2="152" stroke="#b78cff" strokeWidth="4" strokeLinecap="round" strokeDasharray="10 14" />
-      <line x1="420" y1="250" x2="420" y2="340" stroke="#3b2a7a" strokeWidth="4" />
-
-      {/* batching tower */}
-      <rect x="540" y="120" width="112" height="220" rx="6" fill="url(#ps-tower)" />
-      <rect x="530" y="98" width="132" height="30" rx="7" fill="#5b47b8" />
-      <rect x="560" y="142" width="72" height="36" rx="5" fill="#120c2a" stroke="#8a4fff" strokeWidth="1.5" />
-      <g fill="#8a4fff">
-        <rect className="ps-bar ps-bar-1" x="568" y="160" width="9" height="12" rx="2" />
-        <rect className="ps-bar ps-bar-2" x="582" y="152" width="9" height="20" rx="2" />
-        <rect className="ps-bar ps-bar-3" x="596" y="156" width="9" height="16" rx="2" />
-        <rect className="ps-bar ps-bar-4" x="610" y="149" width="9" height="23" rx="2" />
-      </g>
-      <circle cx="596" cy="246" r="36" fill="#1a1238" stroke="#b78cff" strokeWidth="3" />
-      <g className="ps-vanes" stroke="#c4b5fd" strokeWidth="4" strokeLinecap="round">
-        <line x1="596" y1="216" x2="596" y2="276" /><line x1="570" y1="231" x2="622" y2="261" /><line x1="570" y1="261" x2="622" y2="231" />
-      </g>
-      <circle cx="596" cy="246" r="6" fill="#e9ddff" />
-      <path d="M596 288 L622 306 H660" stroke="#8a6bff" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-
-      {/* transit mixer */}
-      <g className="ps-truck">
-        <rect x="660" y="300" width="196" height="22" rx="4" fill="#2a1e58" stroke="#7a5cff" strokeWidth="1.5" />
-        <path d="M824 300 V262 Q824 250 836 250 H864 L884 282 V300 Z" fill="#4c35a5" stroke="#8a6bff" strokeWidth="1.5" />
-        <path d="M838 258 H862 L876 284 H838 Z" fill="#c4b5fd" opacity="0.85" />
-        <g transform="rotate(-10 745 270)">
-          <rect x="675" y="238" width="140" height="64" rx="32" fill="url(#ps-drum)" />
-          <g className="ps-stripes" clipPath="url(#ps-drumclip)" fill="#6c2bd9" opacity="0.32">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <rect key={i} x={660 + i * 28} y="226" width="11" height="90" transform="skewX(-22)" />
-            ))}
-          </g>
-          <rect x="675" y="238" width="140" height="64" rx="32" fill="none" stroke="#8a4fff" strokeWidth="2" />
-        </g>
-        <g fill="#120c2a" stroke="#b78cff" strokeWidth="3">
-          <circle cx="692" cy="326" r="15" /><circle cx="732" cy="326" r="15" /><circle cx="846" cy="326" r="15" />
-        </g>
-        <g fill="#b78cff"><circle cx="692" cy="326" r="4" /><circle cx="732" cy="326" r="4" /><circle cx="846" cy="326" r="4" /></g>
-      </g>
-    </svg>
+    <img
+      className="mn-lp-photo"
+      src={PLANT_SRC}
+      srcSet={PLANT_SRCSET}
+      sizes="(max-width: 1200px) 100vw, 1152px"
+      width={1600}
+      height={900}
+      alt="A ready-mix concrete plant: cement silos and the batching tower on the right, aggregate bins and stockpiles on the left, a conveyor between them, and transit mixers on the yard"
+      loading="lazy"
+      decoding="async"
+    />
   );
 }
+
+/** How the photograph is used; picked at build time while the options are compared. */
+const PHOTO_MODE = process.env.NEXT_PUBLIC_LP_PHOTO || 'a';
 
 /** Where an enterprise enquiry about a self-hosted installation goes. */
 const CONTACT_EMAIL = 'hello@mixnovas.com';
 
 export default function LandingPage() {
   return (
-    <div className="mn-app mn-lp">
+    <div className="mn-app mn-lp" data-photo={PHOTO_MODE}>
       <header className="mn-lp-nav">
         <div className="mn-lp-wrap mn-lp-nav-inner">
           <Logo size="md" plate />
@@ -298,6 +227,7 @@ export default function LandingPage() {
 
       <main>
         <section className="mn-lp-hero">
+          <div className="mn-lp-hero-photo" aria-hidden="true" />
           <Aurora watermark />
           <div className="mn-lp-wrap mn-lp-hero-inner">
             <div className="mn-lp-hero-copy">
@@ -346,9 +276,9 @@ export default function LandingPage() {
               </p>
             </Reveal>
             <Reveal delay={120}>
-              <div className="mn-lp-plant">
+              <div className="mn-lp-plant mn-lp-plant--photo">
                 <Aurora dots={false} />
-                <PlantScene />
+                <PlantPhoto />
                 {CALLOUTS.map((c) => (
                   <div className={`mn-lp-callout mn-lp-callout-${c.cls}`} key={c.cls}>
                     <i className="mn-lp-callout-dot" aria-hidden="true" />

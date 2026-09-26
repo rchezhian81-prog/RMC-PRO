@@ -14,6 +14,7 @@ import { PlatformModule } from './platform/platform.module';
 import { SetupModule } from './setup/setup.module';
 import { MastersModule } from './masters/masters.module';
 import { SalesModule } from './sales/sales.module';
+import { WhatsAppModule } from './sales/whatsapp.module';
 import { OrdersModule } from './orders/orders.module';
 import { ProductionModule } from './production/production.module';
 import { DispatchModule } from './dispatch/dispatch.module';
@@ -31,6 +32,8 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { ImportModule } from './imports/import.module';
 import { CorrectionModule } from './corrections/correction.module';
 import { GpsModule } from './gps/gps.module';
+import { DriverModule } from './driver/driver.module';
+import { PumpModule } from './pump/pump.module';
 
 /**
  * Root module. Phase-1 foundation (DEV-PLAN §5): config → throttler → database
@@ -55,6 +58,7 @@ import { GpsModule } from './gps/gps.module';
     PlatformModule,
     SetupModule,
     MastersModule,
+    WhatsAppModule,
     SalesModule,
     OrdersModule,
     ProductionModule,
@@ -74,6 +78,8 @@ import { GpsModule } from './gps/gps.module';
     ImportModule,
     CorrectionModule,
     GpsModule,
+    DriverModule,
+    PumpModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: UserThrottlerGuard }],
 })

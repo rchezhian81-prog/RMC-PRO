@@ -449,6 +449,60 @@ else:
       *)    bad  "plan limits" "could not read /plan-usage" ;;
     esac
 
+    # Phase-2 close-out connections. None of these is a fault when absent — a
+    # company may simply not use them — so they are reported as ok / info, and
+    # skipped when the verification account may not read them (they need
+    # integrations.manage, which the read-only auditor deliberately lacks).
+    if printf '%s' "$subs" | python3 -c 'import sys,json; d=json.load(sys.stdin).get("data") or {}; sys.exit(0 if "driver_app" in (d.get("modules") or []) else 1)' 2>/dev/null; then
+      ok "driver app module" "enabled — drivers with a linked login see My Trips"
+    else
+      warn "driver app module" "not enabled for this company — Admin portal → Tenants → Modules → Driver App"
+    fi
+    wa=$(curl -sS --max-time 20 -o "$tmp/wa.json" -w '%{http_code}' "${auth[@]}" "${API}/api/v1/integrations/whatsapp" 2>/dev/null)
+    case "$wa" in
+      200)
+        wa_out=$(python3 - "$tmp/wa.json" 2>/dev/null <<'PY'
+import sys, json
+d = json.load(open(sys.argv[1])).get("data") or {}
+if d.get("configured"):
+    src = "this company's account" if d.get("source") == "tenant" else "the server env fallback"
+    tpl = f", template {d.get('templateName')}" if d.get("templateName") else ", free text (24-hour window)"
+    print(f"OK|connected via {src}{tpl}")
+elif not d.get("encryptionAvailable"):
+    print("WARN|not connected, and the server has no credential key — run scripts/ops/cred-key-ensure.sh")
+else:
+    print("INFO|not connected — shares open a chat window (Settings → WhatsApp Business to connect)")
+PY
+)
+        case "${wa_out%%|*}" in
+          OK)   ok   "whatsapp business" "${wa_out#*|}" ;;
+          WARN) warn "whatsapp business" "${wa_out#*|}" ;;
+          *)    skip "whatsapp business" "${wa_out#*|}" ;;
+        esac ;;
+      403) skip "whatsapp business" "not readable by this account (needs integrations.manage)" ;;
+      *)   warn "whatsapp business" "unexpected HTTP $wa from /integrations/whatsapp" ;;
+    esac
+    gk=$(curl -sS --max-time 20 -o "$tmp/gk.json" -w '%{http_code}' "${auth[@]}" "${API}/api/v1/gps/ingest-key" 2>/dev/null)
+    case "$gk" in
+      200)
+        gk_out=$(python3 - "$tmp/gk.json" 2>/dev/null <<'PY'
+import sys, json
+d = json.load(open(sys.argv[1])).get("data") or {}
+if d.get("configured"):
+    used = f"last position {d.get('lastUsedAt')}" if d.get("lastUsedAt") else "nothing received yet"
+    print(f"OK|key …{d.get('keyHint')} active, {used}")
+else:
+    print("INFO|no vendor key issued — Settings → GPS vendor feed (only needed with a tracking vendor)")
+PY
+)
+        case "${gk_out%%|*}" in
+          OK) ok "gps vendor feed" "${gk_out#*|}" ;;
+          *)  skip "gps vendor feed" "${gk_out#*|}" ;;
+        esac ;;
+      403) skip "gps vendor feed" "not readable by this account (needs integrations.manage)" ;;
+      *)   warn "gps vendor feed" "unexpected HTTP $gk from /gps/ingest-key" ;;
+    esac
+
     # Audit trail: the endpoint must exist and answer with a list. Its most
     # important property — that the app role cannot alter or delete entries — is
     # a database grant, not something an API call can see, so that is asserted in

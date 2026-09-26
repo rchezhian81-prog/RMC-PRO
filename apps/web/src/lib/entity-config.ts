@@ -62,7 +62,7 @@ const DOCUMENT_TYPES = [
   'quotation', 'rate_contract', 'order', 'production_plan', 'batch_ticket',
   'dispatch', 'delivery_challan', 'invoice', 'receipt', 'weighbridge',
   'material_inward', 'goods_receipt', 'purchase_order', 'purchase_bill',
-  'purchase_payment', 'expense_voucher', 'maintenance_job', 'qc_cube_set', 'lead',
+  'purchase_payment', 'expense_voucher', 'maintenance_job', 'qc_cube_set', 'lead', 'pump_job',
 ] as const;
 const DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPES.map((d) => ({ value: d, label: titleCase(d.replace(/_/g, ' ')) }));
 
@@ -188,6 +188,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'permitExpiry', label: 'Permit expiry', type: 'date' },
       { key: 'pollutionExpiry', label: 'Pollution (PUC) expiry', type: 'date' },
       { key: 'roadTaxExpiry', label: 'Road tax expiry', type: 'date' },
+      { key: 'gpsDeviceId', label: 'GPS device ID (IMEI)' },
     ],
   },
   drivers: {
@@ -200,6 +201,9 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
       { key: 'mobile', label: 'Mobile' },
       { key: 'licenseNo', label: 'License No' },
       { key: 'licenseExpiry', label: 'License expiry', type: 'date' },
+      // The login this driver uses on the phone (My Trips). Options come from
+      // Setup → Users; a user without users.manage sees the list empty.
+      { key: 'userId', label: 'Login account (for My Trips)', ref: { path: 'users', value: 'id', label: 'email' } },
     ],
   },
   transporters: {

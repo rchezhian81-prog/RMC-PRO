@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { NumberingService } from '../sales/numbering.service';
-import { WhatsAppService } from '../sales/whatsapp.service';
 import { PdfService } from '../sales/pdf.service';
 import { InvoiceController, ReceiptController, CreditNoteController, BillingReportsController } from './billing.controllers';
 import { InvoiceService } from './invoice.service';
@@ -24,7 +23,6 @@ import { BillingReportsService } from './billing-reports.service';
     CreditNoteService,
     BillingReportsService,
     NumberingService,
-    WhatsAppService,
     PdfService,
     TenantGuard,
     PermissionsGuard,

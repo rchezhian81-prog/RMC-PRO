@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { getAccess } from '../../../lib/session';
 import {
   ClipboardList, Lock, Ticket, Truck, PackageCheck, ReceiptText, Clock, Wallet, TrendingDown,
   AlertTriangle, MonitorSmartphone, ArrowUpRight,
@@ -46,6 +48,13 @@ type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
  *   operations  → the remaining counters as compact tiles
  */
 export default function DashboardPage() {
+  const router = useRouter();
+  // A driver's login holds My Trips and nothing else: the dashboard's reports
+  // would only refuse them, so they land on their trips instead.
+  useEffect(() => {
+    const a = getAccess();
+    if (!a.isOwner && a.has('driver.trips') && !a.has('reports.view') && !a.has('orders.view')) router.replace('/app/driver');
+  }, [router]);
   const [s, setS] = useState<Row | null>(null);
   const [funnel, setFunnel] = useState<Row | null>(null);
   const [aging, setAging] = useState<Row | null>(null);

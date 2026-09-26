@@ -22,7 +22,7 @@ export const MODULE_CATALOG: ModuleDef[] = [
   { key: 'reports', name: 'Reports', phase: 1 },
   { key: 'approvals', name: 'Approvals', phase: 1 },
   { key: 'offline_sync', name: 'Offline Sync', phase: 1 },
-  { key: 'driver_app', name: 'Driver App', phase: 2 },
+  { key: 'driver_app', name: 'Driver App (phone: My Trips)', phase: 2 },
   { key: 'gps', name: 'GPS Tracking', phase: 2 },
   { key: 'batching_integration', name: 'Batching Integration', phase: 2 },
   { key: 'qc', name: 'QC / Lab', phase: 2 },

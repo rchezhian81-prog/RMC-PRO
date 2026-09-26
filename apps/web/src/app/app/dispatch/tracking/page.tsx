@@ -24,6 +24,7 @@ interface TrackSummary { pings: number; pathKm: number; straightLineKm: number }
 
 export default function LiveTrackingPage() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [fleet, setFleet] = useState<Row[]>([]);
   const [dispatches, setDispatches] = useState<Row[]>([]);
   const [track, setTrack] = useState<Row | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,12 +42,15 @@ export default function LiveTrackingPage() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadLive = useCallback(async () => {
-    setRows(await gpsApi.live());
+    const [live, fl] = await Promise.all([gpsApi.live(), gpsApi.fleet().catch(() => [] as Row[])]);
+    setRows(live);
+    setFleet(fl);
   }, []);
 
   async function reloadAll() {
-    const [live, disp] = await Promise.all([gpsApi.live(), dispatchApi.list()]);
+    const [live, disp, fl] = await Promise.all([gpsApi.live(), dispatchApi.list(), gpsApi.fleet().catch(() => [] as Row[])]);
     setRows(live);
+    setFleet(fl);
     setDispatches((Array.isArray(disp) ? disp : []).filter((d) => TRACKABLE.includes(String(d.dispatchStatus))));
   }
   useEffect(() => {
@@ -90,7 +94,7 @@ export default function LiveTrackingPage() {
         </label>
         <Button variant="secondary" size="sm" onClick={() => loadLive().catch((e) => setError(String(e)))}>Refresh now</Button>
       </div>
-      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px' }}>Live position of every in-transit load, from GPS fixes posted by the vehicle device.</p>
+      <p style={{ color: 'var(--mn-muted)', fontSize: 13, margin: '0 0 16px' }}>Live position of every in-transit load, from the driver&apos;s phone (My Trips), a GPS vendor feed (Settings → GPS vendor feed) or a manual fix.</p>
       {error && <div style={{ marginBottom: 14 }}><ErrorState message={error} /></div>}
       {msg && (
         <p style={{ color: 'var(--mn-success)', background: 'var(--mn-success-tint)', border: '1px solid var(--mn-success)', borderRadius: 'var(--mn-radius-md)', padding: '10px 12px', fontSize: 13 }}>{msg}</p>
@@ -123,6 +127,37 @@ export default function LiveTrackingPage() {
             </Table>
           ) : (
             <EmptyState title="No loads on the road" description="In-transit dispatches with a recent GPS fix appear here." />
+          )}
+        </Card>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <Card title="Fleet — last known positions" padded={false}>
+          {fleet.some((v) => v.lastLocationAt) ? (
+            <Table>
+              <thead>
+                <tr><Th>Vehicle</Th><Th>Type</Th><Th>Driver</Th><Th>Trip</Th><Th>Last seen</Th><Th numeric>Speed</Th><Th>Location</Th></tr>
+              </thead>
+              <tbody>
+                {fleet.filter((v) => v.lastLocationAt).map((v) => (
+                  <tr key={String(v.id)}>
+                    <Td style={{ fontWeight: 600 }}>{String(v.vehicleNo)}</Td>
+                    <Td>{String(v.vehicleType ?? '—')}</Td>
+                    <Td>{String(v.driverName ?? '—')}</Td>
+                    <Td>{v.dispatchNo ? <>{String(v.dispatchNo)} <StatusBadge status={String(v.dispatchStatus)} /></> : <span style={{ color: 'var(--mn-muted)' }}>Idle</span>}</Td>
+                    <Td>{ageLabel(v.ageSeconds)}</Td>
+                    <Td numeric>{v.lastSpeedKmph != null ? `${Number(v.lastSpeedKmph).toFixed(0)} km/h` : '—'}</Td>
+                    <Td>
+                      <a href={`https://maps.google.com/?q=${coord(v.lastLatitude)},${coord(v.lastLongitude)}`} target="_blank" rel="noreferrer" style={{ color: 'var(--mn-primary)' }}>
+                        {coord(v.lastLatitude)}, {coord(v.lastLongitude)}
+                      </a>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          ) : (
+            <EmptyState title="No vehicle has reported a position yet" description="Positions arrive from the driver's phone, a GPS vendor feed, or a manual fix below." />
           )}
         </Card>
       </div>

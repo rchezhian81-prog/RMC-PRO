@@ -24,52 +24,64 @@ export class GpsService {
 
   /** Record one GPS fix for a dispatch and roll it onto the dispatch's latest. */
   recordPing(tenantId: string, dispatchId: string, dto: Record<string, unknown>) {
+    return this.db.runInTenant(tenantId, (m) => this.recordPingWithin(m, tenantId, dispatchId, dto));
+  }
+
+  /** The same, inside a caller's tenant transaction (the vendor feed records many fixes in one). */
+  async recordPingWithin(m: EntityManager, tenantId: string, dispatchId: string, dto: Record<string, unknown>) {
     const latitude = Number(dto.latitude);
     const longitude = Number(dto.longitude);
     if (!isValidLatLng(latitude, longitude)) throw badReq('A valid latitude (-90..90) and longitude (-180..180) are required');
 
-    return this.db.runInTenant(tenantId, async (m) => {
-      const dispatch = await m.getRepository(Dispatch).findOne({ where: { id: dispatchId } });
-      if (!dispatch) throw notFound();
-      if (CLOSED.has(dispatch.dispatchStatus)) throw badReq(`Dispatch is ${dispatch.dispatchStatus} — tracking is closed`);
+    const dispatch = await m.getRepository(Dispatch).findOne({ where: { id: dispatchId } });
+    if (!dispatch) throw notFound();
+    if (CLOSED.has(dispatch.dispatchStatus)) throw badReq(`Dispatch is ${dispatch.dispatchStatus} — tracking is closed`);
 
-      const recordedAt = dto.recordedAt ? new Date(String(dto.recordedAt)) : new Date();
-      // A bad device timestamp would otherwise write an Invalid Date (500) or a
-      // future fix that makes the live board's staleness age go negative.
-      if (Number.isNaN(recordedAt.getTime())) throw badReq('recordedAt is not a valid timestamp');
-      if (recordedAt.getTime() > Date.now() + 60_000) throw badReq('recordedAt cannot be in the future');
-      const speedKmph = numOrNull(dto.speedKmph);
-      if (speedKmph !== null && speedKmph < 0) throw badReq('Speed cannot be negative');
-      const heading = numOrNull(dto.heading);
-      if (heading !== null && (heading < 0 || heading > 360)) throw badReq('Heading must be between 0 and 360 degrees');
-      const accuracyM = numOrNull(dto.accuracyM);
-      if (accuracyM !== null && accuracyM < 0) throw badReq('Accuracy cannot be negative');
-      const repo = m.getRepository(DispatchLocationPing);
-      const ping = await repo.save(
-        repo.create({
-          tenantId, dispatchId, vehicleId: dispatch.vehicleId,
-          latitude: String(latitude), longitude: String(longitude),
-          speedKmph: speedKmph === null ? null : String(speedKmph),
-          heading: heading === null ? null : String(heading),
-          accuracyM: accuracyM === null ? null : String(accuracyM),
-          source: (dto.source as string) ?? 'device',
-          recordedAt,
-        }),
-      );
+    const recordedAt = dto.recordedAt ? new Date(String(dto.recordedAt)) : new Date();
+    // A bad device timestamp would otherwise write an Invalid Date (500) or a
+    // future fix that makes the live board's staleness age go negative.
+    if (Number.isNaN(recordedAt.getTime())) throw badReq('recordedAt is not a valid timestamp');
+    if (recordedAt.getTime() > Date.now() + 60_000) throw badReq('recordedAt cannot be in the future');
+    const speedKmph = numOrNull(dto.speedKmph);
+    if (speedKmph !== null && speedKmph < 0) throw badReq('Speed cannot be negative');
+    const heading = numOrNull(dto.heading);
+    if (heading !== null && (heading < 0 || heading > 360)) throw badReq('Heading must be between 0 and 360 degrees');
+    const accuracyM = numOrNull(dto.accuracyM);
+    if (accuracyM !== null && accuracyM < 0) throw badReq('Accuracy cannot be negative');
+    const repo = m.getRepository(DispatchLocationPing);
+    const ping = await repo.save(
+      repo.create({
+        tenantId, dispatchId, vehicleId: dispatch.vehicleId,
+        latitude: String(latitude), longitude: String(longitude),
+        speedKmph: speedKmph === null ? null : String(speedKmph),
+        heading: heading === null ? null : String(heading),
+        accuracyM: accuracyM === null ? null : String(accuracyM),
+        source: (dto.source as string) ?? 'device',
+        recordedAt,
+      }),
+    );
 
-      // Only a fix at least as new as the current "latest" moves the dispatch's
-      // last-known position. Buffered fixes upload out of order (10:02 processed
-      // before 10:00), and the unconditional write left the live board showing
-      // the truck minutes behind — permanently, if that was the final batch
-      // before tracking closed. The ping row itself is always kept for the track.
+    // Only a fix at least as new as the current "latest" moves the dispatch's
+    // last-known position. Buffered fixes upload out of order (10:02 processed
+    // before 10:00), and the unconditional write left the live board showing
+    // the truck minutes behind — permanently, if that was the final batch
+    // before tracking closed. The ping row itself is always kept for the track.
+    await m.query(
+      `UPDATE dispatches
+          SET last_latitude = $2, last_longitude = $3, last_location_at = $4, last_speed_kmph = $5
+        WHERE id = $1 AND (last_location_at IS NULL OR last_location_at <= $4)`,
+      [dispatchId, String(latitude), String(longitude), recordedAt, speedKmph === null ? null : String(speedKmph)],
+    );
+    // The vehicle keeps its last known position too, so it stays on the fleet
+    // map after the trip closes (same newest-wins rule).
+    if (dispatch.vehicleId) {
       await m.query(
-        `UPDATE dispatches
-            SET last_latitude = $2, last_longitude = $3, last_location_at = $4, last_speed_kmph = $5
+        `UPDATE vehicles SET last_latitude = $2, last_longitude = $3, last_location_at = $4, last_speed_kmph = $5
           WHERE id = $1 AND (last_location_at IS NULL OR last_location_at <= $4)`,
-        [dispatchId, String(latitude), String(longitude), recordedAt, speedKmph === null ? null : String(speedKmph)],
+        [dispatch.vehicleId, String(latitude), String(longitude), recordedAt, speedKmph === null ? null : String(speedKmph)],
       );
-      return ping;
-    });
+    }
+    return ping;
   }
 
   /**

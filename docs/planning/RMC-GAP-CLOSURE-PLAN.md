@@ -61,6 +61,10 @@ breadth on top of that spine**, not rework of it.
 | F1 | Excel bulk import framework | Platform | Important | — | 2 | **done** |
 | F2 | Doc-numbering activation + correction trail | Platform | Nice | — | 1–2 | **done** |
 | G1 | Self-hosted licence keys | Platform | Parked | — | 1–2 | **backlog** |
+| H1 | Driver phone screen (`driver_app`: My Trips, status buttons, phone position feed) | Dispatch | Important | — | 1 | **done** |
+| H2 | Pump management (pump register, pump jobs, hours, charge reconciliation) | Dispatch | Important | — | 1 | **done** |
+| H3 | WhatsApp Business API adapter (Meta Cloud; per-company sealed token; auto-send + resend) | Sales | Important | — | 1 | **done** |
+| H4 | GPS vendor push feed (per-company ingest key; vehicle last position; live trips) | GPS | Important | — | 1 | **done** |
 
 **Recommended order:** D1 → A1 → A2 → A3 → B2 → B1 → C1 → D2 / E1 → A4 / D3 / D4 → F1 / F2.
 

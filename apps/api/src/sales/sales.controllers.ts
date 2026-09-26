@@ -225,4 +225,10 @@ export class NotificationsController {
   history(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) {
     return this.whatsapp.history(tid(u), limit);
   }
+
+  /** Send a logged or failed message again through the connected WhatsApp Business account. */
+  @Post(':id/resend') @RequirePermissions('whatsapp.send')
+  resend(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.whatsapp.resend(tid(u), id);
+  }
 }

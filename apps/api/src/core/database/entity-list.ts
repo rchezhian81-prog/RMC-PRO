@@ -93,6 +93,9 @@ import {
   ImportJob,
   DocumentCorrection,
   DispatchLocationPing,
+  GpsIngestKey,
+  PumpJob,
+  TenantWhatsAppCredential,
 } from './entities';
 
 /** Explicit entity list (avoids ts/js glob resolution differences). */
@@ -191,4 +194,7 @@ export const ENTITIES = [
   ImportJob,
   DocumentCorrection,
   DispatchLocationPing,
+  GpsIngestKey,
+  PumpJob,
+  TenantWhatsAppCredential,
 ];

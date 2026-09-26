@@ -3,7 +3,6 @@ import { TenantGuard } from '../rbac/tenant.guard';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { NumberingService } from '../sales/numbering.service';
 import { StockService } from '../production/stock.service';
-import { WhatsAppService } from '../sales/whatsapp.service';
 import { PdfService } from '../sales/pdf.service';
 import {
   PurchaseOrderController,
@@ -35,7 +34,6 @@ import { PurchaseReportsService } from './purchase-reports.service';
     PurchaseReportsService,
     NumberingService,
     StockService,
-    WhatsAppService,
     PdfService,
     TenantGuard,
     PermissionsGuard,

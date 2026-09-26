@@ -9,7 +9,7 @@ import {
   Lock, FlaskConical, CalendarRange, ListOrdered, Ticket, Boxes, BarChart3, Receipt, PackagePlus,
   Scale, SlidersHorizontal, TrendingDown, ReceiptText, Wallet, Clock, MonitorSmartphone, LogOut, Menu, X, FileMinus,
   Ruler, ArrowLeftRight,
-  Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine, Navigation,
+  Sparkles, UserCog, ScrollText, ShoppingCart, Wrench, Fuel, Coins, ListTree, Upload, PenLine, Navigation, Smartphone, Droplets,
   ChevronDown, PanelLeft, MessageSquare, Bot,
 } from 'lucide-react';
 import { aiApi, api } from '../../lib/api';
@@ -124,6 +124,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, module: 'dispatch' },
       { href: '/app/dispatch/tracking', label: 'Live Tracking', icon: <Navigation size={IS} />, perm: 'gps.view', module: 'gps' },
+      { href: '/app/dispatch/pumps', label: 'Pumps', icon: <Droplets size={IS} />, perm: 'pump.view', module: 'dispatch' },
+      { href: '/app/driver', label: 'My Trips (driver)', icon: <Smartphone size={IS} />, perm: 'driver.trips', module: 'driver_app' },
       { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, module: 'dispatch' },
       { href: '/app/dispatch/delivery-register', label: 'Delivery Register', icon: <BarChart3 size={IS} />, perm: 'reports.view', module: 'dispatch' },
       { href: '/app/dispatch/fleet-utilization', label: 'Fleet Utilization', icon: <BarChart3 size={IS} />, module: 'dispatch' },
@@ -278,10 +280,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // admin bypass permission checks, matching the server.
   void accessVersion; // recomputed whenever the stored access is refreshed
   const access = getAccess();
+  // A driver's phone login holds driver.trips and no operational read key: the
+  // API refuses it the board, the masters and the reports, so the menu shows it
+  // only the screens it can open — My Trips and My Account. (Screens without a
+  // permission of their own are otherwise offered to every role of the module.)
+  const driverOnly =
+    !access.isOwner && access.has('driver.trips') &&
+    !['orders.view', 'masters.view', 'reports.view', 'dispatch.update_status', 'delivery_challans.create', 'gps.view'].some((k) => access.has(k));
   const groups = GROUPS.map((g) => ({
     ...g,
     items: g.items.filter(
       (it) =>
+        (!driverOnly || it.perm === 'driver.trips' || it.href === '/app/account') &&
         (!it.perm || access.has(it.perm)) &&
         // The owner bypasses permissions but not the subscription: a module
         // outside the plan is refused for them too.

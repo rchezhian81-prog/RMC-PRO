@@ -15,6 +15,7 @@ import {
   Transporter,
   Uom,
   UomConversion,
+  User,
   Vehicle,
 } from '../core/database/entities';
 
@@ -129,6 +130,38 @@ export class DriversService extends TenantCrudService<Driver> {
   // Mobile.
   protected override validateWrite(dto: Record<string, unknown>): void {
     assertFields(validateMasterFields(dto));
+  }
+
+  /**
+   * The "Login account" a driver signs in with on the phone must be a user of
+   * THIS company, and one login can stand for one driver only — otherwise a
+   * typo'd or foreign id would satisfy the FK (Postgres checks it as the owner,
+   * past RLS) and My Trips would show someone else's deliveries.
+   */
+  private async assertLoginLink(tenantId: string, dto: Record<string, unknown>, selfId?: string): Promise<void> {
+    if (dto.userId === undefined) return;
+    if (dto.userId === null || dto.userId === '') { dto.userId = null; return; }
+    const userId = String(dto.userId);
+    await this.db.runInTenant(tenantId, async (m) => {
+      const user = await m.getRepository(User).findOne({ where: { id: userId } });
+      if (!user || user.userType !== 'tenant_user') {
+        assertFields({ userId: 'Choose a login account of this company (Setup → Users).' });
+      }
+      const taken = await m.getRepository(Driver).findOne({ where: { userId } });
+      if (taken && taken.id !== selfId) {
+        assertFields({ userId: `That login is already linked to driver ${taken.driverName} (${taken.driverCode}).` });
+      }
+    });
+  }
+
+  override async create(tenantId: string, dto: Record<string, unknown>, userId?: string | null): Promise<Driver> {
+    await this.assertLoginLink(tenantId, dto);
+    return super.create(tenantId, dto, userId);
+  }
+
+  override async update(tenantId: string, id: string, dto: Record<string, unknown>, userId?: string | null): Promise<Driver> {
+    await this.assertLoginLink(tenantId, dto, id);
+    return super.update(tenantId, id, dto, userId);
   }
 }
 

@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { ArrowDownToLine, CheckCircle2, Cpu, Download, Plus, RefreshCw, Scale, Truck, XCircle } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, Cpu, Download, Plug, Plus, RefreshCw, Scale, Truck, XCircle } from 'lucide-react';
 import { formatDateTime } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
 import { crud, openPdf, weighbridgeApi, weighbridgeIndicatorApi, type Row } from '../../../../lib/api';
+import { chooseSerialPort, readSerialFrames, serialSupported } from '../../../../lib/serial-reader';
 import { Card } from '../../../../components/ui/Card';
 import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
@@ -132,7 +133,19 @@ export default function WeighbridgePage() {
       return;
     }
     try {
-      const reading = await weighbridgeIndicatorApi.read(indicatorId);
+      // A serial indicator is plugged into this PC: the browser reads the COM
+      // port and hands the raw frames to the server, which parses them like
+      // every other source. Needs Chrome or Edge.
+      const device = indicators.find((d) => String(d.id) === indicatorId);
+      let rawFrames: string[] | undefined;
+      if (device && String(device.connectionType) === 'serial') {
+        if (!serialSupported()) {
+          setError('This indicator is read over the COM port, which needs Chrome or Edge on the weighbridge PC.');
+          return;
+        }
+        rawFrames = await readSerialFrames({ baudRate: Number(device.baudRate ?? 9600) });
+      }
+      const reading = await weighbridgeIndicatorApi.read(indicatorId, rawFrames);
       const w = String(reading.weightKg);
       if (target === 'gross') {
         setForm((f) => ({ ...f, grossWeight: w }));
@@ -339,6 +352,22 @@ export default function WeighbridgePage() {
                   <option key={String(d.id)} value={String(d.id)}>{String(d.name)}{d.isActive === false ? ' (inactive)' : ''}</option>
                 ))}
               </Select>
+              {indicators.some((d) => String(d.id) === indicatorId && String(d.connectionType) === 'serial') && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  icon={<Plug size={14} />}
+                  title="Pick the COM port the indicator is plugged into (the browser remembers it)"
+                  onClick={async () => {
+                    setError(null);
+                    if (!serialSupported()) { setError('Choosing a COM port needs Chrome or Edge on the weighbridge PC.'); return; }
+                    if (await chooseSerialPort()) setMsg('COM port chosen. Press Get to read the weight.');
+                  }}
+                >
+                  COM port
+                </Button>
+              )}
             </Field>
           )}
           <Field label="Gross (kg)" required>
@@ -459,7 +488,7 @@ function IndicatorCard({ indicators, plants, busy, onDone, onError }: { indicato
   return (
     <Card title={<span className="mn-board-card-title"><Cpu size={16} aria-hidden /> Indicators <span className="mn-board-card-count">{indicators.length}</span></span>}>
       <p className="mn-board-form-hint" style={{ margin: '0 0 12px' }}>
-        The scale head the plant reads weights from. A <strong>simulated</strong> one returns a fixed demo weight; a <strong>TCP</strong> one is read over the network; a <strong>serial</strong> one is read by the plant-side app.
+        The scale head the plant reads weights from. A <strong>simulated</strong> one returns a fixed demo weight; a <strong>TCP</strong> one is read over the network; a <strong>serial</strong> one is plugged into this PC's COM port and read by this browser (Chrome or Edge); press Get and pick the port once.
       </p>
       {indicators.length > 0 && (
         <div className="mn-wb-devs">
@@ -506,8 +535,8 @@ function IndicatorCard({ indicators, plants, busy, onDone, onError }: { indicato
         )}
         {dev.connectionType === 'serial' && (
           <>
-            <Field label="COM port"><Input value={dev.comPort} onChange={(e) => setDev({ ...dev, comPort: e.target.value })} placeholder="COM3" /></Field>
-            <Field label="Baud"><Input type="number" inputMode="numeric" value={dev.baudRate} onChange={(e) => setDev({ ...dev, baudRate: e.target.value })} /></Field>
+            <Field label="COM port" help="A label for your records; the actual port is picked in the browser when you press Get."><Input value={dev.comPort} onChange={(e) => setDev({ ...dev, comPort: e.target.value })} placeholder="COM3" /></Field>
+            <Field label="Baud" help="As set on the indicator; 9600 is the usual."><Input type="number" inputMode="numeric" value={dev.baudRate} onChange={(e) => setDev({ ...dev, baudRate: e.target.value })} /></Field>
           </>
         )}
         <div className="mn-wb-dev-submit">

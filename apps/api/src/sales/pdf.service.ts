@@ -191,7 +191,12 @@ export interface PurchaseOrderPdfItem {
   materialLabel: string;
   uom?: string | null;
   quantity: string | number;
+  /** The unit and figure as keyed, when the line was ordered in another unit. */
+  enteredUom?: string | null;
+  enteredQuantity?: string | number | null;
   rate: string | number;
+  /** Trade discount off the rate, as a percentage. */
+  discountPct?: string | number | null;
   gstRate: string | number;
   taxableAmount: string | number;
   taxAmount: string | number;
@@ -210,6 +215,8 @@ export interface PurchaseOrderPdfData extends CompanyBlock {
   items: PurchaseOrderPdfItem[];
   taxableAmount: string | number;
   taxAmount: string | number;
+  /** Signed paise that take taxable + GST to the whole-rupee total. */
+  roundOff?: string | number | null;
   totalAmount: string | number;
   remarks?: string | null;
 }
@@ -1181,10 +1188,11 @@ export class PdfService {
       doc.moveDown(0.6);
 
       const cols = [
-        { key: 'material', label: 'Material', w: 170, align: 'left' as const },
+        { key: 'material', label: 'Material', w: 135, align: 'left' as const },
         { key: 'uom', label: 'UOM', w: 45, align: 'left' as const },
         { key: 'qty', label: 'Qty', w: 60, align: 'right' as const },
-        { key: 'rate', label: 'Rate', w: 65, align: 'right' as const },
+        { key: 'rate', label: 'Rate', w: 60, align: 'right' as const },
+        { key: 'disc', label: 'Disc%', w: 40, align: 'right' as const },
         { key: 'gst', label: 'GST%', w: 40, align: 'right' as const },
         { key: 'taxable', label: 'Taxable', w: 70, align: 'right' as const },
         { key: 'total', label: 'Total', w: 65, align: 'right' as const },
@@ -1202,7 +1210,11 @@ export class PdfService {
       header();
       for (const it of data.items) {
         if (y > doc.page.height - 160) { doc.addPage(); y = doc.page.margins.top; header(); }
-        drawRow([it.materialLabel || '-', it.uom || '-', money(it.quantity), money(it.rate), String(Number(it.gstRate) || 0), money(it.taxableAmount), money(it.lineTotal)], false);
+        // A line ordered in another unit (bags for a tonne material) says so
+        // beside the material, so the supplier reads the figure they quoted.
+        const asKeyed = it.enteredUom && it.enteredQuantity != null ? ` (${money(it.enteredQuantity)} ${it.enteredUom})` : '';
+        const disc = Number(it.discountPct) || 0;
+        drawRow([`${it.materialLabel || '-'}${asKeyed}`, it.uom || '-', money(it.quantity), money(it.rate), disc ? String(disc) : '-', String(Number(it.gstRate) || 0), money(it.taxableAmount), money(it.lineTotal)], false);
       }
       doc.y = y + 10;
       doc.x = left;
@@ -1211,6 +1223,7 @@ export class PdfService {
       };
       totalLine('Taxable', money(data.taxableAmount));
       totalLine('GST', money(data.taxAmount));
+      if (Number(data.roundOff ?? 0) !== 0) totalLine('Round off', money(data.roundOff ?? 0));
       totalLine('Total', `INR ${money(data.totalAmount)}`, true);
       doc.font('Helvetica').fontSize(9).text(`Amount in words: ${amountInWords(data.totalAmount)}`, left, doc.y, { align: 'right' });
       if (data.remarks) {

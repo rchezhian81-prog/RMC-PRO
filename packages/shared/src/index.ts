@@ -10,3 +10,4 @@ export * from './validation';
 export * from './ui-flag';
 export * from './gst-states';
 export * from './document-viewer';
+export * from './uom';

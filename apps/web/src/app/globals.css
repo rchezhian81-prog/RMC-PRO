@@ -3987,9 +3987,23 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 /* ============================================================================
    MATERIAL INWARD — the document-list rows above, plus the "new inward" form
    ============================================================================ */
-.mn-mi-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
-.mn-mi-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 6px; }
+.mn-mi-form { display: grid; gap: 4px; }
+/* The truck's header: plant, supplier, truck, challan and bill numbers. */
+.mn-mi-head { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0 12px; align-items: end; }
+.mn-mi-head > * { min-width: 0; }
+/* One line per material on the truck. */
+.mn-mi-lines { display: grid; gap: 8px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-md); padding: 8px 12px 12px; }
+.mn-mi-line { display: grid; grid-template-columns: minmax(170px, 2fr) minmax(70px, 0.5fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(100px, 0.8fr) minmax(110px, 0.8fr) auto; gap: 8px; align-items: center; }
+.mn-mi-line > * { min-width: 0; }
+.mn-mi-line--head { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-muted); padding: 2px 0; }
+.mn-mi-line .is-num { text-align: right; }
+.mn-mi-line .mn-input.is-num { text-align: right; }
+.mn-mi-line-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.mn-mi-form-submit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0 6px; }
 .mn-mi-form-submit button { white-space: nowrap; }
+.mn-mi-form-submit .mn-ord-meta { white-space: normal; flex: 1 1 200px; }
+.mn-mi-by { color: var(--mn-muted); }
+.mn-mi-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 .mn-mi .mn-ord-cols--acts,
 .mn-mi .mn-ord-row--acts { grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.5fr) minmax(130px, 0.7fr) minmax(150px, 0.85fr) minmax(100px, auto) auto; }
 .mn-mi .mn-ord-who .mn-ord-meta { white-space: normal; }
@@ -3998,8 +4012,10 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 .mn-mi-acts { display: flex; gap: 4px; justify-content: flex-end; }
 .mn-mi-acts button { white-space: nowrap; }
 .mn-mi-instock { text-decoration: none; color: var(--mn-success); font-weight: 600; white-space: nowrap; }
+button.mn-mi-instock { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; text-align: left; }
+button.mn-mi-instock:hover { text-decoration: underline; }
 @media (max-width: 1180px) {
-  .mn-mi-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mn-mi-head { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
   .mn-mi .mn-ord-row--acts {
@@ -4014,11 +4030,14 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-mi .mn-ord-row--acts .mn-ord-status { grid-area: status; justify-self: end; align-self: start; }
   .mn-mi .mn-ord-row--acts .mn-ord-val:nth-of-type(3) { grid-area: val; }
   .mn-mi .mn-ord-row--acts .mn-ord-val:nth-of-type(4) { grid-area: value; }
-  .mn-mi-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; }
-  .mn-mi-form { grid-template-columns: 1fr 1fr; }
+  .mn-mi-acts { grid-area: acts; justify-content: flex-start; padding-top: 4px; flex-wrap: wrap; }
+  .mn-mi-head { grid-template-columns: 1fr 1fr; }
+  .mn-mi-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-mi-line > :first-child { grid-column: 1 / -1; }
+  .mn-mi-line--head { display: none; }
 }
 @media (max-width: 480px) {
-  .mn-mi-form { grid-template-columns: 1fr; }
+  .mn-mi-head { grid-template-columns: 1fr; }
 }
 
 /* ============================================================================
@@ -4467,10 +4486,15 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
    PURCHASE — orders, goods receipts and vendor bills on the document-list bones
    ============================================================================ */
 .mn-pu-form { display: grid; gap: 4px; }
-.mn-pu-form-head { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(150px, 0.8fr); gap: 0 16px; }
+.mn-pu-form-head { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr); gap: 0 16px; }
 .mn-pu-form-head > * { min-width: 0; }
 .mn-pu-lines { display: grid; gap: 8px; border: 1px solid var(--mn-border); border-radius: var(--mn-radius-md); padding: 8px 12px 12px; }
-.mn-pu-line { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(90px, 0.7fr) minmax(110px, 0.8fr) minmax(70px, 0.5fr) minmax(110px, 0.8fr) auto; gap: 8px; align-items: center; }
+.mn-pu-line { display: grid; grid-template-columns: minmax(160px, 2fr) minmax(70px, 0.5fr) minmax(90px, 0.7fr) minmax(100px, 0.8fr) minmax(70px, 0.5fr) minmax(60px, 0.45fr) minmax(110px, 0.8fr) auto; gap: 8px; align-items: center; }
+/* Order totals under the lines: taxable, GST, round-off and the whole-rupee grand total. */
+.mn-pu-totals { display: grid; grid-template-columns: auto auto; gap: 2px 14px; margin: 0; flex: 1 1 200px; justify-content: end; font-size: 13px; }
+.mn-pu-totals dt { color: var(--mn-muted); text-align: right; }
+.mn-pu-totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; min-width: 90px; }
+.mn-pu-totals .mn-pu-totals-grand { font-weight: 700; color: var(--mn-text); }
 .mn-pu-line > * { min-width: 0; }
 .mn-pu-line--head { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-muted); padding: 2px 0; }
 .mn-pu-line .is-num { text-align: right; }
@@ -4532,6 +4556,7 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
   .mn-gr-line > :first-child { grid-column: 1 / -1; }
   .mn-gr-line--head { display: none; }
   .mn-pu-form-submit, .mn-gr-form-submit { margin-left: 0; }
+  .mn-pu-totals { justify-content: start; }
   .mn-pu .mn-ord-row--acts, .mn-gr .mn-ord-row--acts, .mn-vb .mn-ord-row--acts, .mn-vb-pay-row {
     grid-template-columns: minmax(0, 1fr) auto !important;
     grid-template-areas:

@@ -18,7 +18,7 @@ import {
 import { NumberingService } from '../sales/numbering.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { isInterstateSupply } from '../billing/tax.util';
-import { summariseMatch, deriveGstSplit, type MatchLineInput } from './purchase.util';
+import { summariseMatch, deriveGstSplit, isValidDiscountPct, purchaseLineAmounts, purchaseTotals, type MatchLineInput, type PurchaseLineAmounts } from './purchase.util';
 import { documentDate } from '../common/business-date.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Vendor bill not found' });
@@ -179,7 +179,7 @@ export class VendorBillService {
       const itemRepo = m.getRepository(VendorBillItem);
       const poItemRepo = m.getRepository(PurchaseOrderItem);
       const matchInputs: MatchLineInput[] = [];
-      let taxable = 0, tax = 0;
+      const amounts: PurchaseLineAmounts[] = [];
       for (const line of lines) {
         const quantity = num(line.quantity);
         if (quantity <= 0) throw badReq('Each line needs a quantity greater than zero');
@@ -203,20 +203,22 @@ export class VendorBillService {
         // an explicit rate on the line.
         const gstRate = round2(line.gstRate !== undefined ? num(line.gstRate) : poItem ? num(poItem.gstRate) : 18);
         if (gstRate < 0) throw badReq('Each line GST rate must be zero or more');
-        const lineTaxable = round2(quantity * rate);
-        const lineTax = round2((lineTaxable * gstRate) / 100);
+        // The trade discount agreed on the PO line carries onto the bill unless
+        // the caller states one, so the payable reflects the price agreed.
+        const discountPct = round2(line.discountPct !== undefined ? num(line.discountPct) : poItem ? num(poItem.discountPct) : 0);
+        if (!isValidDiscountPct(discountPct)) throw badReq('Each line discount must be between 0 and 100 percent');
+        const money = purchaseLineAmounts({ quantity, rate, gstRate, discountPct });
         await itemRepo.save(
           itemRepo.create({
             tenantId, vendorBillId: bill.id, purchaseOrderItemId: poItemId,
             materialId: (line.materialId as string) || null, materialLabel: (line.materialLabel as string) ?? null,
             uom: (line.uom as string) ?? null,
-            quantity: String(quantity), rate: String(rate), gstRate: String(gstRate),
-            taxableAmount: String(lineTaxable), taxAmount: String(lineTax),
-            lineTotal: String(round2(lineTaxable + lineTax)),
+            quantity: String(quantity), rate: String(rate), discountPct: String(discountPct), gstRate: String(gstRate),
+            taxableAmount: String(money.taxableAmount), taxAmount: String(money.taxAmount),
+            lineTotal: String(money.lineTotal),
           }),
         );
-        taxable = round2(taxable + lineTaxable);
-        tax = round2(tax + lineTax);
+        amounts.push(money);
 
         // Build a 3-way match input when we can tie the line to a PO line. The
         // ceiling is the accepted quantity MINUS what other live bills have
@@ -238,11 +240,15 @@ export class VendorBillService {
         }
       }
 
-      const total = round2(taxable + tax);
+      // The same maths as the purchase order: the payable is a whole rupee,
+      // with the signed difference kept as the round-off.
+      const totals = purchaseTotals(amounts);
+      const total = totals.totalAmount;
       // With PO lines to compare, run the 3-way match; otherwise it's unmatched.
       const matchStatus = matchInputs.length ? summariseMatch(matchInputs).status : 'unmatched';
       await billRepo.update(bill.id, {
-        taxableAmount: String(taxable), taxAmount: String(tax), totalAmount: String(total),
+        taxableAmount: String(totals.taxableAmount), taxAmount: String(totals.taxAmount),
+        roundOff: String(totals.roundOff), totalAmount: String(total),
         outstandingAmount: String(total), matchStatus,
       });
       return this.loadFull(m, bill.id);

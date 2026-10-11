@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+=======
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+>>>>>>> origin/main
 import type { Response } from 'express';
 import { dateRange } from '../common/date-range.util';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
@@ -28,11 +32,32 @@ export class MaterialInwardController {
   @Post() @RequirePermissions('stock.adjust')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.create(tid(u), dto); }
 
+  /** One truck, several materials: a shared header and a line per material, one inward each, in one transaction. */
+  @Post('batch') @RequirePermissions('stock.adjust')
+  createBatch(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) { return this.service.createBatch(tid(u), dto); }
+
   @Post(':id/post') @RequirePermissions('stock.adjust')
   post(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.post(tid(u), id, u.userId); }
 
   @Post(':id/cancel') @RequirePermissions('stock.adjust')
   cancel(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.cancel(tid(u), id); }
+
+  /** The supplier's invoice: `{ name, mime, data }` with the bytes base64 (PNG, JPG, WebP or PDF, 3 MB or less). */
+  @Put(':id/attachment') @RequirePermissions('stock.adjust')
+  setAttachment(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.setAttachment(tid(u), id, dto); }
+
+  @Delete(':id/attachment') @RequirePermissions('stock.adjust')
+  removeAttachment(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.removeAttachment(tid(u), id); }
+
+  @Get(':id/attachment')
+  async attachment(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const { name, mime, buffer } = await this.service.getAttachment(tid(u), id);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `inline; filename="${name.replace(/["\\]/g, '')}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(buffer);
+  }
 }
 
 @Controller('weighbridge')

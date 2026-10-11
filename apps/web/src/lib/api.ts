@@ -775,8 +775,14 @@ export const challansApi = {
 export const materialInwardApi = {
   list: (status?: string, limit?: number) => apiFetch<Row[]>(`/material-inwards${listQs(status, limit)}`),
   create: (b: Record<string, unknown>) => post('/material-inwards', b),
+  /** One truck, several materials: a shared header and a line per material; one inward per line, created together. */
+  createBatch: (b: Record<string, unknown>) => apiFetch<Row[]>('/material-inwards/batch', { method: 'POST', body: JSON.stringify(b) }),
   post: (id: string) => post(`/material-inwards/${id}/post`),
   cancel: (id: string) => post(`/material-inwards/${id}/cancel`),
+  /** Attach (or replace) the supplier's invoice. `data` is base64 (no data-URL prefix). */
+  attach: (id: string, file: { name: string; mime: string; data: string }) =>
+    apiFetch<Row>(`/material-inwards/${id}/attachment`, { method: 'PUT', body: JSON.stringify(file) }),
+  removeAttachment: (id: string) => apiFetch<Row>(`/material-inwards/${id}/attachment`, { method: 'DELETE' }),
 };
 
 export const weighbridgeApi = {
@@ -1437,6 +1443,49 @@ export async function openPdf(path: string, name?: string | null): Promise<void>
       // Pop-ups blocked: a download needs no window and keeps the real name.
       const a = document.createElement('a');
       a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+}
+
+/**
+ * Open a stored attachment (an inward's supplier invoice) in a new tab. The
+ * bytes need the Authorization header, so they are fetched into a blob; a PDF
+ * gets the document viewer page, an image is shown as it is.
+ */
+export async function openAttachment(path: string, name?: string | null): Promise<void> {
+  const tab = window.open('', '_blank');
+  try {
+    const token = getSession()?.token;
+    const res = await fetch(`${BASE}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) {
+      let reason = `The file could not be opened (HTTP ${res.status}).`;
+      try {
+        const j = (await res.json()) as { error?: { message?: string }; message?: string } | null;
+        reason = j?.error?.message ?? j?.message ?? reason;
+      } catch {
+        // A non-JSON body — keep the status-code message.
+      }
+      throw new Error(reason);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const isPdf = (res.headers.get('content-type') ?? '').includes('pdf');
+    if (tab) {
+      if (isPdf) {
+        tab.document.open();
+        tab.document.write(documentViewerHtml({ url, filename: documentFilename(res.headers.get('content-disposition'), name) }));
+        tab.document.close();
+      } else {
+        tab.location.href = url;
+      }
+      tab.addEventListener('pagehide', () => URL.revokeObjectURL(url));
+    } else {
+      const a = document.createElement('a');
+      a.href = url; a.download = name || 'invoice'; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
   } catch (e) {

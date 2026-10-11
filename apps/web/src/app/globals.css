@@ -5518,7 +5518,8 @@ button.mn-mi-instock:hover { text-decoration: underline; }
 
 /* Material / plant filter row on Inventory reports (beside the period bar). */
 .mn-ir-filters .mn-input { width: auto; min-width: 160px; }
-=======
+
+/* ============================================================================
    TOP BAR CLOCK · SEVERITY LEGEND · DASHBOARD PERIOD · SECURITY SETTING
    ============================================================================ */
 /* The date and time at the right of the top bar: muted, fixed-width digits so

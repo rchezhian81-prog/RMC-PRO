@@ -67,6 +67,10 @@ export class InvoiceItem extends TenantScopedEntity {
   @Column({ name: 'invoice_id', type: 'uuid' }) invoiceId!: string;
   @Column({ name: 'challan_id', type: 'uuid', nullable: true }) challanId!: string | null;
   @Column({ name: 'grade_id', type: 'uuid', nullable: true }) gradeId!: string | null;
+  /** What the line bills: 'concrete', or a charge added from the order terms (transport, transport_lump, pump_job, pump_hours, waiting, return_fee). Null on lines raised before the basis existed. */
+  @Column({ name: 'charge_type', type: 'varchar', nullable: true }) chargeType!: string | null;
+  /** The order the line bills for — set so a once-per-order charge is never added twice. */
+  @Column({ name: 'order_id', type: 'uuid', nullable: true }) orderId!: string | null;
   @Column({ name: 'description', type: 'varchar', nullable: true }) description!: string | null;
   @Column({ name: 'hsn_sac', type: 'varchar', nullable: true }) hsnSac!: string | null;
   @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;

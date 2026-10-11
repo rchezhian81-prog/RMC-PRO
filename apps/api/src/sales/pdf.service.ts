@@ -4,8 +4,16 @@ import { amountInWords } from '../common/amount-in-words.util';
 import type { Company } from '../core/database/entities';
 import SVGtoPDF from 'svg-to-pdfkit';
 import { qrMatrix } from './qr.util';
+import { CHARGE_BASIS, chargeBasisLabel, perM3Rate } from '@rmc/shared';
 
-export interface QuotationPdfItem {
+/** The basis of each charge on a priced line (per m³ when absent). */
+export interface ChargeBases {
+  transportBasis?: string | null;
+  pumpBasis?: string | null;
+  waitingBasis?: string | null;
+}
+
+export interface QuotationPdfItem extends ChargeBases {
   gradeLabel: string;
   estimatedQuantity: string | number;
   ratePerM3: string | number;
@@ -33,7 +41,7 @@ export interface QuotationPdfData extends CompanyBlock {
   items: QuotationPdfItem[];
 }
 
-export interface RateContractPdfItem {
+export interface RateContractPdfItem extends ChargeBases {
   gradeLabel: string;
   ratePerM3: string | number;
   transportCharge: string | number;
@@ -310,6 +318,50 @@ export interface StatementPdfData extends CompanyBlock {
   closing: string | number;
 }
 
+/**
+ * The charges on a line that are NOT per m³, as the document says them:
+ * "Transport ₹1,500 per trip", "Pump ₹3,500 per job", "Waiting ₹400 per hour
+ * after the free period". Empty when every charge is per m³ (the table's
+ * figures then speak for themselves).
+ */
+function chargeBasisNotes(it: ChargeBases & { transportCharge: string | number; pumpCharge: string | number; waitingCharge: string | number }): string[] {
+  const notes: string[] = [];
+  const t = it.transportBasis ?? CHARGE_BASIS.PER_M3;
+  const p = it.pumpBasis ?? CHARGE_BASIS.PER_M3;
+  const w = it.waitingBasis ?? CHARGE_BASIS.PER_M3;
+  if (t !== CHARGE_BASIS.PER_M3) notes.push(`Transport ₹${money(it.transportCharge)} ${chargeBasisLabel(t)}`);
+  if (p !== CHARGE_BASIS.PER_M3) notes.push(`Pump ₹${money(it.pumpCharge)} ${chargeBasisLabel(p)}`);
+  if (w !== CHARGE_BASIS.PER_M3) notes.push(`Waiting ₹${money(it.waitingCharge)} ${chargeBasisLabel(w)} after the free period`);
+  return notes;
+}
+
+/** A charge cell: the figure, suffixed with its basis when it is not per m³. */
+function chargeCell(amount: string | number, basis: string | null | undefined): string {
+  const b = basis ?? CHARGE_BASIS.PER_M3;
+  return b === CHARGE_BASIS.PER_M3 ? money(amount) : `${money(amount)} ${chargeBasisLabel(b).replace('per ', '/')}`;
+}
+
+/**
+ * Print the basis notes of the lines that carry one, below the table: one
+ * line per grade, so a reader knows which charges are billed on their own.
+ */
+function drawChargeBasisNotes(
+  doc: PDFKit.PDFDocument,
+  items: Array<ChargeBases & { gradeLabel: string; transportCharge: string | number; pumpCharge: string | number; waitingCharge: string | number }>,
+  left: number,
+): void {
+  const lines = items
+    .map((it) => ({ grade: it.gradeLabel || '-', notes: chargeBasisNotes(it) }))
+    .filter((l) => l.notes.length > 0);
+  if (!lines.length) return;
+  doc.x = left;
+  doc.moveDown(0.2);
+  doc.font('Helvetica-Bold').fontSize(8.5).text('Charges billed on their own basis');
+  doc.font('Helvetica').fontSize(8.5);
+  for (const l of lines) doc.text(`${l.grade}: ${l.notes.join('; ')}. The per-m³ figures above apply to the rest.`);
+  doc.moveDown(0.4);
+}
+
 const money = (v: string | number): string =>
   Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -568,9 +620,9 @@ export class PdfService {
             it.gradeLabel || '-',
             money(it.estimatedQuantity),
             money(it.ratePerM3),
-            money(it.transportCharge),
-            money(it.pumpCharge),
-            money(it.waitingCharge),
+            chargeCell(it.transportCharge, it.transportBasis),
+            chargeCell(it.pumpCharge, it.pumpBasis),
+            chargeCell(it.waitingCharge, it.waitingBasis),
             it.gstApplicable ? 'Yes' : 'No',
           ],
           false,
@@ -583,6 +635,7 @@ export class PdfService {
 
       doc.y = y + 10;
       doc.x = left;
+      drawChargeBasisNotes(doc, data.items, left);
       if (data.paymentTerms) {
         doc.font('Helvetica-Bold').fontSize(9).text('Payment terms: ', { continued: true });
         doc.font('Helvetica').text(data.paymentTerms);
@@ -665,14 +718,19 @@ export class PdfService {
       };
       drawRow(cols.map((c) => c.label), true, '#eef1f6');
       for (const it of data.items) {
-        const allIn = Number(it.ratePerM3 || 0) + Number(it.transportCharge || 0) + Number(it.pumpCharge || 0) + Number(it.waitingCharge || 0);
+        // The all-in ₹/m³ folds in only the charges that are per m³; a charge
+        // on another basis is billed on its own and is noted below the table.
+        const allIn = perM3Rate({
+          rate: it.ratePerM3, transport: it.transportCharge, transportBasis: it.transportBasis,
+          pump: it.pumpCharge, pumpBasis: it.pumpBasis, waiting: it.waitingCharge, waitingBasis: it.waitingBasis,
+        });
         drawRow(
           [
             it.gradeLabel || '-',
             money(it.ratePerM3),
-            money(it.transportCharge),
-            money(it.pumpCharge),
-            money(it.waitingCharge),
+            chargeCell(it.transportCharge, it.transportBasis),
+            chargeCell(it.pumpCharge, it.pumpBasis),
+            chargeCell(it.waitingCharge, it.waitingBasis),
             money(allIn),
             it.gstApplicable ? `${Number(it.gstRate || 0)}%` : 'No',
           ],
@@ -686,6 +744,7 @@ export class PdfService {
 
       doc.y = y + 10;
       doc.x = left;
+      drawChargeBasisNotes(doc, data.items, left);
       const term = (label: string, value?: string | null) => {
         if (!value) return;
         doc.moveDown(0.3);

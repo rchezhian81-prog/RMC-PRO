@@ -1,4 +1,5 @@
 import { gstStateCode } from '../compliance/gst-payload.util';
+import { estimateLineValue } from '@rmc/shared';
 
 import { round2 } from '../common/money.util';
 
@@ -59,6 +60,12 @@ export interface QuoteLine {
   transport?: number;
   pump?: number;
   waiting?: number;
+  /** The basis of each charge (per_m3 when absent — see @rmc/shared charge-basis). */
+  transportBasis?: string | null;
+  pumpBasis?: string | null;
+  waitingBasis?: string | null;
+  /** Truck load for a per-trip transport estimate; the shared default when absent. */
+  truckM3?: number;
   gstRate: number;
   /** false → the line is treated as GST-exempt (rate 0). */
   gstApplicable?: boolean;
@@ -75,15 +82,22 @@ export interface TaxSummary {
 }
 
 /**
- * Sum the GST across quotation/order lines. Each line's taxable base is
- * quantity × (rate + transport + pump + waiting), so the freight charges are
- * taxed consistently and the total reconciles with the eventual invoice
- * (whose rate bundles the same per-m³ charges).
+ * Sum the GST across quotation/order lines. Each line's taxable base is its
+ * estimated value under the charge bases — quantity × (rate + transport +
+ * pump + waiting) when every charge is per m³, else the concrete plus each
+ * charge counted the way its basis says — so the freight charges are taxed
+ * consistently and the total reconciles with the eventual invoice.
  */
 export function summariseGst(lines: QuoteLine[], isInterstate: boolean): TaxSummary {
   let taxable = 0, cgst = 0, sgst = 0, igst = 0, total = 0;
   for (const l of lines) {
-    const base = round2(l.quantity * (l.rate + (l.transport ?? 0) + (l.pump ?? 0) + (l.waiting ?? 0)));
+    const base = round2(estimateLineValue({
+      qty: l.quantity, rate: l.rate,
+      transport: l.transport ?? 0, transportBasis: l.transportBasis,
+      pump: l.pump ?? 0, pumpBasis: l.pumpBasis,
+      waiting: l.waiting ?? 0, waitingBasis: l.waitingBasis,
+      truckM3: l.truckM3,
+    }));
     const rate = l.gstApplicable === false ? 0 : l.gstRate;
     const t = computeGstOnTaxable(base, rate, 0, isInterstate);
     taxable += t.taxableAmount;

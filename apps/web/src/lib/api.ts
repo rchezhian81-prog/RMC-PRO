@@ -450,6 +450,10 @@ export interface SettingRow {
   description: string;
   type: 'string' | 'number' | 'boolean' | 'enum';
   options: { value: string; label: string }[] | null;
+  /** Bounds of a number setting, from the catalogue; null when open. */
+  min?: number | null;
+  max?: number | null;
+  integer?: boolean;
   value: string;
 }
 export const settings = {

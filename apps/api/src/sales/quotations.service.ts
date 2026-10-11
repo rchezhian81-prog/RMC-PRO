@@ -2,7 +2,7 @@ import { listLimit } from '../common/list-limit.util';
 import { attachCustomerName } from '../common/attach-customer-name';
 import { assertSalesRefs } from './sales-refs.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
   Company,
@@ -20,6 +20,8 @@ import { WhatsAppService } from './whatsapp.service';
 import { companyBlock, type QuotationPdfData } from './pdf.service';
 import { quotationShareMessage } from '../common/share-messages.util';
 import { documentDay, userNames } from '../common/user-names';
+import { estimateLineValue } from '@rmc/shared';
+import { lineEstimateInput, pickChargeBases, readBillingTerms } from '../billing/charge-basis.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) =>
@@ -33,6 +35,9 @@ const ITEM_FIELDS = [
   'transportCharge',
   'pumpCharge',
   'waitingCharge',
+  'transportBasis',
+  'pumpBasis',
+  'waitingBasis',
   'gstApplicable',
   'gstRate',
   'remarks',
@@ -74,16 +79,19 @@ export class QuotationsService {
         : [];
       const siteName = new Map(sites.map((s) => [s.id, s.siteName]));
       const ids = rows.map((r) => r.id);
-      const sums: Array<{ quotationId: string; itemCount: number; totalM3: number; estimatedValue: number }> = ids.length
-        ? await m.query(
-            `SELECT quotation_id AS "quotationId", COUNT(*)::int AS "itemCount",
-                    COALESCE(SUM(estimated_quantity), 0)::float AS "totalM3",
-                    COALESCE(SUM(estimated_quantity * (rate_per_m3 + transport_charge + pump_charge + waiting_charge)), 0)::float AS "estimatedValue"
-               FROM quotation_items WHERE quotation_id = ANY($1) GROUP BY quotation_id`,
-            [ids],
-          )
-        : [];
-      const sum = new Map(sums.map((s) => [s.quotationId, s]));
+      // Each line is valued under its charge bases (a per-trip transport
+      // charge counts trips at the tenant's truck load), exactly as the order
+      // draft will value it — so the list says what the quotation is worth.
+      const { truckM3 } = await readBillingTerms(m);
+      const lineRows = ids.length ? await m.getRepository(QuotationItem).find({ where: { quotationId: In(ids) } }) : [];
+      const sum = new Map<string, { itemCount: number; totalM3: number; estimatedValue: number }>();
+      for (const it of lineRows) {
+        const e = sum.get(it.quotationId) ?? { itemCount: 0, totalM3: 0, estimatedValue: 0 };
+        e.itemCount += 1;
+        e.totalM3 += num(it.estimatedQuantity);
+        e.estimatedValue += estimateLineValue(lineEstimateInput(it, it.estimatedQuantity, truckM3));
+        sum.set(it.quotationId, e);
+      }
       return named.map((r) => {
         const s = sum.get(r.id);
         return {
@@ -111,10 +119,12 @@ export class QuotationsService {
       ? await m.getRepository(Customer).findOne({ where: { id: quotation.customerId } })
       : null;
     const interstate = isInterstateSupply(company?.state, customer?.state);
+    const { truckM3 } = await readBillingTerms(m);
     const taxSummary = summariseGst(
       items.map((it) => ({
         quantity: num(it.estimatedQuantity), rate: num(it.ratePerM3),
         transport: num(it.transportCharge), pump: num(it.pumpCharge), waiting: num(it.waitingCharge),
+        transportBasis: it.transportBasis, pumpBasis: it.pumpBasis, waitingBasis: it.waitingBasis, truckM3,
         gstRate: num(it.gstRate), gstApplicable: it.gstApplicable,
       })),
       interstate,
@@ -133,6 +143,9 @@ export class QuotationsService {
       approvedAt: quotation.approvalStatus === 'approved' ? quotation.approvedAt : null,
       items,
       taxSummary,
+      // The truck load the per-trip estimate counts with, so the screen's
+      // live read-out and the saved totals agree.
+      truckM3,
     };
   }
 
@@ -203,6 +216,9 @@ export class QuotationsService {
     for (const f of ['estimatedQuantity', 'ratePerM3', 'transportCharge', 'pumpCharge', 'waitingCharge', 'gstRate'] as const) {
       if (out[f] != null && Number(out[f]) < 0) throw badReq(`${f} cannot be negative`);
     }
+    // The basis of each charge: per m³ unless the line says per trip / lump
+    // sum / per job / per hour. Anything else is refused by name.
+    Object.assign(out, pickChargeBases(raw));
     return out;
   }
 
@@ -377,6 +393,9 @@ export class QuotationsService {
           transportCharge: it.transportCharge,
           pumpCharge: it.pumpCharge,
           waitingCharge: it.waitingCharge,
+          transportBasis: it.transportBasis,
+          pumpBasis: it.pumpBasis,
+          waitingBasis: it.waitingBasis,
           gstApplicable: it.gstApplicable,
         })),
       };

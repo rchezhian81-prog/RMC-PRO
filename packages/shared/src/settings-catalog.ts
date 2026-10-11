@@ -77,6 +77,27 @@ export const SETTINGS_CATALOG: readonly SettingDef[] = [
     default: '',
   },
   {
+    key: 'billing.default_truck_m3',
+    label: 'Truck load for trip estimates (m³)',
+    description:
+      'The load one transit mixer carries. A transport charge quoted per trip is estimated as the trips the quantity takes at this load; the invoice counts the actual challans.',
+    type: 'number',
+    default: '6',
+    min: 1,
+    max: 12,
+  },
+  {
+    key: 'billing.waiting_free_minutes',
+    label: 'Free waiting time on site (minutes)',
+    description:
+      'Minutes between reaching the site and the start of the pour that are not charged. A waiting charge quoted per hour bills the time beyond this, rounded up to the next quarter hour.',
+    type: 'number',
+    default: '60',
+    min: 0,
+    max: 240,
+    integer: true,
+  },
+  {
     key: 'security.idle_timeout_minutes',
     label: 'Sign out after inactivity (minutes)',
     description:

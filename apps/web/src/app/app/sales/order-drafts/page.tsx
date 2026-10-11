@@ -6,6 +6,7 @@ import { CheckCircle2, ChevronRight, ClipboardList, FilePlus, FileSignature, Fil
 import { formatDate, formatDateTime } from '../../../../lib/format-date';
 import { money, moneyShort } from '../../../../lib/money';
 import { orderDraftsApi, ordersApi, type Row } from '../../../../lib/api';
+import { allPerM3, chargeWords, linePerM3, lineParts } from '../../../../lib/charge-basis';
 import { Card } from '../../../../components/ui/Card';
 import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
@@ -270,7 +271,7 @@ export default function OrderDraftsPage() {
             padded={false}
           >
             <p className="mn-pp-hint">
-              {sel.requiredDatetime ? `Wanted ${formatDateTime(sel.requiredDatetime)}. ` : ''}All amounts per m³; the line value is qty × (rate + transport + pump + waiting), before GST.{sel.specialInstructions ? ` Instructions: ${String(sel.specialInstructions)}` : ''}
+              {sel.requiredDatetime ? `Wanted ${formatDateTime(sel.requiredDatetime)}. ` : ''}The line value is qty × (rate + the charges that are per m³), plus a per-trip transport charge by trips and a lump sum or per-job pump once, before GST; per-hour charges are billed on the hours.{sel.specialInstructions ? ` Instructions: ${String(sel.specialInstructions)}` : ''}
             </p>
             <div className="mn-id-scroll">
               <table className="mn-table mn-odr-table">
@@ -279,25 +280,27 @@ export default function OrderDraftsPage() {
                     <th>Grade</th>
                     <th className="is-num">Qty m³</th>
                     <th className="is-num">Rate/m³</th>
-                    <th className="is-num">All-in/m³</th>
+                    <th className="is-num">Per m³</th>
                     <th className="is-num">GST</th>
                     <th className="is-num">Line value</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((it) => {
-                    const allIn = num(it.ratePerM3) + num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
+                    // Each line valued under its charge bases, at the tenant's truck load for a per-trip transport charge.
+                    const perM3 = linePerM3(it);
+                    const value = lineParts(it, it.quantityM3, sel.truckM3).total;
                     return (
                       <tr key={String(it.id)}>
                         <td><span className="mn-od-grade">{String(it.gradeLabel ?? '')}</span>{it.slumpRequired ? <span className="mn-od-rate-meta">slump {String(it.slumpRequired)}</span> : null}</td>
                         <td className="is-num mn-od-num">{qty(it.quantityM3)}</td>
                         <td className="is-num">
                           <span className="mn-od-num">{money(it.ratePerM3)}</span>
-                          {allIn - num(it.ratePerM3) > 0 && <span className="mn-od-rate-meta">+ {[num(it.transportCharge) ? `transport ${money(it.transportCharge)}` : '', num(it.pumpCharge) ? `pump ${money(it.pumpCharge)}` : '', num(it.waitingCharge) ? `waiting ${money(it.waitingCharge)}` : ''].filter(Boolean).join(' · ')}</span>}
+                          {chargeWords(it) && <span className="mn-od-rate-meta">+ {chargeWords(it)}</span>}
                         </td>
-                        <td className="is-num mn-od-num">{money(allIn)}</td>
+                        <td className="is-num mn-od-num" title={allPerM3(it) ? 'Rate + transport + pump + waiting, all per m³' : 'Rate plus the charges that are per m³; the rest are billed on their own basis'}>{money(perM3)}</td>
                         <td className="is-num">{num(it.gstRate)}%</td>
-                        <td className="is-num mn-od-num">{money(num(it.quantityM3) * allIn)}</td>
+                        <td className="is-num mn-od-num">{money(value)}</td>
                       </tr>
                     );
                   })}

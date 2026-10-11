@@ -75,6 +75,9 @@ export class QuotationItem extends TenantScopedEntity {
   @Column({ name: 'transport_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) transportCharge!: string;
   @Column({ name: 'pump_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) pumpCharge!: string;
   @Column({ name: 'waiting_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) waitingCharge!: string;
+  @Column({ name: 'transport_basis', type: 'varchar', default: 'per_m3' }) transportBasis!: string;
+  @Column({ name: 'pump_basis', type: 'varchar', default: 'per_m3' }) pumpBasis!: string;
+  @Column({ name: 'waiting_basis', type: 'varchar', default: 'per_m3' }) waitingBasis!: string;
   @Column({ name: 'gst_applicable', type: 'boolean', default: true }) gstApplicable!: boolean;
   @Column({ name: 'gst_rate', type: 'numeric', precision: 5, scale: 2, default: 18 }) gstRate!: string;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
@@ -122,6 +125,9 @@ export class RateContractItem extends TenantScopedEntity {
   @Column({ name: 'transport_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) transportCharge!: string;
   @Column({ name: 'pump_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) pumpCharge!: string;
   @Column({ name: 'waiting_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) waitingCharge!: string;
+  @Column({ name: 'transport_basis', type: 'varchar', default: 'per_m3' }) transportBasis!: string;
+  @Column({ name: 'pump_basis', type: 'varchar', default: 'per_m3' }) pumpBasis!: string;
+  @Column({ name: 'waiting_basis', type: 'varchar', default: 'per_m3' }) waitingBasis!: string;
   @Column({ name: 'gst_applicable', type: 'boolean', default: true }) gstApplicable!: boolean;
   @Column({ name: 'gst_rate', type: 'numeric', precision: 5, scale: 2, default: 18 }) gstRate!: string;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;

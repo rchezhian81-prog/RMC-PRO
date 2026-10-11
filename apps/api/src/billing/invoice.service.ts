@@ -3,22 +3,25 @@ import { attachCustomerName } from '../common/attach-customer-name';
 import { hasEwayBill } from '../common/eway-status.util';
 import { CreditNoteService } from './credit-note.service';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { In, type EntityManager } from 'typeorm';
+import { In, IsNull, type EntityManager } from 'typeorm';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import {
   Company,
   Customer,
   DeliveryChallan,
+  Dispatch,
   Invoice,
   InvoiceChallan,
   InvoiceItem,
   Order,
   OrderItem,
   PaymentAllocation,
+  PumpJob,
   Site,
   Transporter,
 } from '../core/database/entities';
-import { isYmdDate, resolveGstStateCode } from '@rmc/shared';
+import { CHARGE_BASIS, billableWaitingHours, isYmdDate, perM3Rate, resolveGstStateCode } from '@rmc/shared';
+import { readBillingTerms, type BillingTerms } from './charge-basis.util';
 import { NumberingService } from '../sales/numbering.service';
 import { WhatsAppService } from '../sales/whatsapp.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
@@ -42,6 +45,39 @@ const addDays = (iso: string, days: number): string => {
 
 /** e-way transport modes NIC accepts (mapped to codes in the payload builder). */
 const TRANSPORT_MODES = new Set(['road', 'rail', 'air', 'ship']);
+
+/** SAC codes for the charges billed beside the concrete: goods transport, and support services for pumping / waiting. */
+const SAC_TRANSPORT = '9965';
+const SAC_SERVICE = '998719';
+
+const inr = (v: number): string => '₹' + round2(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+/** Delivered challans of one order line (the grade's line on the order), as one invoice bills them. */
+interface ChargeGroup {
+  orderId: string;
+  item: OrderItem;
+  challans: DeliveryChallan[];
+}
+
+/** A charge line the order terms add to an invoice — planned before it is written, so the picker can preview it. */
+export interface PlannedCharge {
+  /** transport (per trip) · transport_lump · pump_job · pump_hours · waiting */
+  type: string;
+  description: string;
+  hsnSac: string;
+  uom: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+  gstRate: number;
+  orderId: string;
+  /** The challan the charge belongs to (waiting), else null. */
+  challanId: string | null;
+  /** The challans the charge was counted over (a per-trip count, or the challans that brought the order in). */
+  challanIds: string[];
+  /** Completed pump jobs whose hours this line bills (pump_hours only). */
+  pumpJobIds: string[];
+}
 
 /**
  * Invoicing (DEV-PLAN B12). Generates a GST invoice from DELIVERED, not-yet-
@@ -156,54 +192,190 @@ export class InvoiceService {
         else itemsByOrder.set(it.orderId, [it]);
       }
 
+      // Preview the charge lines the order terms would add if every listed
+      // challan of an order were billed together: trips counted, a lump sum or
+      // per-job pump once, unbilled pump hours, waiting beyond the free period.
+      // The form narrows the preview to the challans actually ticked.
+      const terms = await readBillingTerms(m);
+      const groups = new Map<string, ChargeGroup>();
+      for (const c of challans) {
+        if (!c.orderId) continue;
+        const item = this.pickOrderLine(itemsByOrder.get(c.orderId), c.gradeId);
+        if (!item) continue;
+        const g = groups.get(item.id) ?? { orderId: c.orderId, item, challans: [] };
+        g.challans.push(c);
+        groups.set(item.id, g);
+      }
+      const planned = await this.planCharges(m, terms, [...groups.values()]);
+      const chargesByOrder = new Map<string, PlannedCharge[]>();
+      for (const p of planned) {
+        const arr = chargesByOrder.get(p.orderId);
+        if (arr) arr.push(p);
+        else chargesByOrder.set(p.orderId, [p]);
+      }
+
       return challans.map((c) => {
         const order = c.orderId ? orderById.get(c.orderId) ?? null : null;
         const policy: ReturnBillingPolicy = isReturnBillingPolicy(order?.returnBillingPolicy) ? order!.returnBillingPolicy : 'net';
         const billing = resolveReturnBilling(c.quantityM3, c.returnQuantityM3, policy, order?.returnFeePerM3);
         return {
           ...c,
+          // The concrete rate plus only the charges that are per m³.
           suggestedRate: this.agreedRate(itemsByOrder.get(c.orderId ?? ''), c.gradeId),
           returnBillingPolicy: policy,
           billedQuantityM3: billing.billedQuantity,
           returnFee: billing.returnFee,
+          extraCharges: (c.orderId ? chargesByOrder.get(c.orderId) : undefined) ?? [],
         };
       });
     });
   }
 
-  /**
-   * The all-in agreed rate per m³ from a pre-loaded set of an order's items —
-   * the batched counterpart of agreedLine().rate. Same selection (the line for
-   * this grade, else the first) and same charge sum; 0 when the order has no
-   * items or none was loaded (an ad-hoc challan with no order).
-   */
-  private agreedRate(items: OrderItem[] | undefined, gradeId: string | null): number {
-    const item = items?.find((i) => i.gradeId === gradeId) ?? items?.[0];
-    if (!item) return 0;
-    return round2(num(item.ratePerM3) + num(item.transportCharge) + num(item.pumpCharge) + num(item.waitingCharge));
+  /** The order line for a grade — the line for this grade, else the first. */
+  private pickOrderLine(items: OrderItem[] | undefined, gradeId: string | null): OrderItem | undefined {
+    return items?.find((i) => i.gradeId === gradeId) ?? items?.[0];
   }
 
   /**
-   * The all-in agreed price per m³ for a grade on an order — the concrete rate
-   * plus its transport, pump and waiting charges (all quoted per m³). This is
-   * what the customer signed up to pay, so it is what the invoice should bill.
-   * Returns 0 when the order line cannot be found (e.g. an ad-hoc challan).
+   * The charge lines the order terms add beside the concrete lines, for a set
+   * of challans grouped by order line. Nothing is written here: fromChallans
+   * writes what this plans, and the challan picker shows the same plan.
+   *
+   *   - transport per trip: one line per order line, one trip per challan;
+   *   - transport lump sum / pump per job: once per order, on the first
+   *     invoice that bills it (a draft or issued invoice already carrying the
+   *     charge for the order means it is not added again);
+   *   - pump per hour: the hours of the order's completed pump jobs not yet
+   *     billed, as one line;
+   *   - waiting per hour: per challan, the time from reaching the site to the
+   *     start of the pour beyond the free period, rounded up to the quarter
+   *     hour.
+   *
+   * Taxed at the order line's GST rate, like the concrete it travels with.
+   */
+  private async planCharges(m: EntityManager, terms: BillingTerms, groups: ChargeGroup[]): Promise<PlannedCharge[]> {
+    const out: PlannedCharge[] = [];
+    if (!groups.length) return out;
+    const orderIds = [...new Set(groups.map((g) => g.orderId))];
+    // Once-per-order charges already carried by a live (draft or issued) invoice.
+    const carried: Array<{ orderId: string; chargeType: string }> = await m.query(
+      `SELECT ii.order_id AS "orderId", ii.charge_type AS "chargeType"
+         FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+        WHERE ii.order_id = ANY($1::uuid[]) AND ii.charge_type IN ('transport_lump', 'pump_job')
+          AND i.invoice_status IN ('draft', 'issued')`,
+      [orderIds],
+    );
+    const already = new Set(carried.map((c) => `${c.orderId}:${c.chargeType}`));
+    const onceKey = (orderId: string, type: string) => `${orderId}:${type}`;
+    const needHours = groups.some((g) => g.item.pumpBasis === CHARGE_BASIS.PER_HOUR);
+    const unbilledJobs = needHours
+      ? await m.getRepository(PumpJob).find({ where: { orderId: In(orderIds), status: 'completed', invoiceItemId: IsNull() } })
+      : [];
+    const jobsByOrder = new Map<string, PumpJob[]>();
+    for (const j of unbilledJobs) {
+      if (!j.orderId) continue;
+      const arr = jobsByOrder.get(j.orderId);
+      if (arr) arr.push(j);
+      else jobsByOrder.set(j.orderId, [j]);
+    }
+    const dispatchIds = groups
+      .filter((g) => g.item.waitingBasis === CHARGE_BASIS.PER_HOUR)
+      .flatMap((g) => g.challans.map((c) => c.dispatchId).filter((v): v is string => !!v));
+    const dispatches = dispatchIds.length ? await m.getRepository(Dispatch).find({ where: { id: In(dispatchIds) } }) : [];
+    const dispatchById = new Map(dispatches.map((d) => [d.id, d]));
+
+    for (const g of groups) {
+      const it = g.item;
+      const gstRate = round2(num(it.gstRate));
+      const challanIds = g.challans.map((c) => c.id);
+      const push = (p: Omit<PlannedCharge, 'amount' | 'gstRate' | 'orderId' | 'challanIds'> & { challanIds?: string[] }) =>
+        out.push({ ...p, challanIds: p.challanIds ?? challanIds, amount: round2(p.quantity * p.rate), gstRate, orderId: g.orderId });
+
+      const transport = round2(num(it.transportCharge));
+      if (it.transportBasis === CHARGE_BASIS.PER_TRIP && transport > 0 && g.challans.length) {
+        const n = g.challans.length;
+        push({
+          type: 'transport', description: `Transport — ${n} ${n === 1 ? 'trip' : 'trips'} × ${inr(transport)}`,
+          hsnSac: SAC_TRANSPORT, uom: 'trip', quantity: n, rate: transport, challanId: null, pumpJobIds: [],
+        });
+      } else if (it.transportBasis === CHARGE_BASIS.LUMP_SUM && transport > 0 && !already.has(onceKey(g.orderId, 'transport_lump'))) {
+        already.add(onceKey(g.orderId, 'transport_lump'));
+        push({ type: 'transport_lump', description: 'Transport (lump sum)', hsnSac: SAC_TRANSPORT, uom: 'lot', quantity: 1, rate: transport, challanId: null, pumpJobIds: [] });
+      }
+
+      const pump = round2(num(it.pumpCharge));
+      if (it.pumpBasis === CHARGE_BASIS.PER_JOB && pump > 0 && !already.has(onceKey(g.orderId, 'pump_job'))) {
+        already.add(onceKey(g.orderId, 'pump_job'));
+        push({ type: 'pump_job', description: 'Pump charge (per job)', hsnSac: SAC_SERVICE, uom: 'job', quantity: 1, rate: pump, challanId: null, pumpJobIds: [] });
+      } else if (it.pumpBasis === CHARGE_BASIS.PER_HOUR && pump > 0 && !already.has(onceKey(g.orderId, 'pump_hours'))) {
+        const jobs = jobsByOrder.get(g.orderId) ?? [];
+        const hours = round2(jobs.reduce((s, j) => s + num(j.pumpHours), 0));
+        if (hours > 0) {
+          // The same jobs must not be billed twice when an order has two lines on this basis.
+          already.add(onceKey(g.orderId, 'pump_hours'));
+          push({
+            type: 'pump_hours', description: `Pumping — ${hours} ${hours === 1 ? 'hour' : 'hours'} × ${inr(pump)}`,
+            hsnSac: SAC_SERVICE, uom: 'hour', quantity: hours, rate: pump, challanId: null, pumpJobIds: jobs.map((j) => j.id),
+          });
+        }
+      }
+
+      const waiting = round2(num(it.waitingCharge));
+      if (it.waitingBasis === CHARGE_BASIS.PER_HOUR && waiting > 0) {
+        for (const c of g.challans) {
+          const d = c.dispatchId ? dispatchById.get(c.dispatchId) : undefined;
+          const hours = billableWaitingHours(d?.siteArrivalTime, d?.pourStartTime, terms.waitingFreeMinutes);
+          if (hours <= 0) continue;
+          push({
+            type: 'waiting', description: `Waiting — ${c.challanNo}, ${hours} h × ${inr(waiting)}`,
+            hsnSac: SAC_SERVICE, uom: 'hour', quantity: hours, rate: waiting, challanId: c.id, challanIds: [c.id], pumpJobIds: [],
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The agreed rate per m³ from a pre-loaded set of an order's items — the
+   * batched counterpart of agreedLine().rate. Same selection (the line for
+   * this grade, else the first) and the same sum: the concrete rate plus only
+   * the charges that are per m³ (a charge per trip, per job, per hour or as a
+   * lump sum is billed on its own line). 0 when the order has no items or
+   * none was loaded (an ad-hoc challan with no order).
+   */
+  private agreedRate(items: OrderItem[] | undefined, gradeId: string | null): number {
+    const item = this.pickOrderLine(items, gradeId);
+    if (!item) return 0;
+    return perM3Rate({
+      rate: item.ratePerM3, transport: item.transportCharge, transportBasis: item.transportBasis,
+      pump: item.pumpCharge, pumpBasis: item.pumpBasis, waiting: item.waitingCharge, waitingBasis: item.waitingBasis,
+    });
+  }
+
+  /**
+   * The agreed price per m³ for a grade on an order — the concrete rate plus
+   * the transport, pump and waiting charges that are themselves per m³. A
+   * charge on any other basis is added as its own line by planCharges. This
+   * is what the customer signed up to pay, so it is what the invoice bills.
+   * The rate is 0 when the order line cannot be found (an ad-hoc challan).
    */
   private async agreedLine(
     m: EntityManager,
     orderId: string | null,
     gradeId: string | null,
-  ): Promise<{ rate: number; gstRate: number }> {
-    if (!orderId) return { rate: 0, gstRate: 18 };
+  ): Promise<{ rate: number; gstRate: number; item: OrderItem | null }> {
+    if (!orderId) return { rate: 0, gstRate: 18, item: null };
     const items = await m.getRepository(OrderItem).find({ where: { orderId } });
-    const item = items.find((i) => i.gradeId === gradeId) ?? items[0];
-    if (!item) return { rate: 0, gstRate: 18 };
+    const item = this.pickOrderLine(items, gradeId);
+    if (!item) return { rate: 0, gstRate: 18, item: null };
     return {
-      rate: round2(num(item.ratePerM3) + num(item.transportCharge) + num(item.pumpCharge) + num(item.waitingCharge)),
+      rate: this.agreedRate(items, gradeId),
       // The order line already stores its resolved GST rate (0 for an exempt
       // line), so the invoice bills the rate the customer agreed to, not a
       // blanket 18%.
       gstRate: num(item.gstRate),
+      item,
     };
   }
 
@@ -280,6 +452,9 @@ export class InvoiceService {
       const linkRepo = m.getRepository(InvoiceChallan);
       const challanRepo = m.getRepository(DeliveryChallan);
       let taxable = 0, cgst = 0, sgst = 0, igst = 0, cess = 0;
+      // The challans billed, by the order line that prices them, for the
+      // charge lines the order terms add after the concrete.
+      const groups = new Map<string, ChargeGroup>();
 
       for (const line of lines) {
         // Lock the challan row before the not_invoiced check: two concurrent
@@ -314,9 +489,16 @@ export class InvoiceService {
         const cessRate = round2(num(line.cessRate));
         const t = computeLineTax(quantity, rate, gstRate, cessRate, isInterstate);
 
+        if (agreed.item && challan.orderId) {
+          const g = groups.get(agreed.item.id) ?? { orderId: challan.orderId, item: agreed.item, challans: [] };
+          g.challans.push(challan);
+          groups.set(agreed.item.id, g);
+        }
+
         await itemRepo.save(
           itemRepo.create({
             tenantId, invoiceId: invoice.id, challanId: challan.id, gradeId: challan.gradeId,
+            chargeType: 'concrete', orderId: challan.orderId,
             description: (line.description as string) ?? `${challan.gradeLabel ?? 'Concrete'} — ${challan.challanNo}`,
             hsnSac: (line.hsnSac as string) ?? null, uom: (line.uom as string) ?? 'm3',
             quantity: String(quantity), rate: String(rate), taxableAmount: String(t.taxableAmount),
@@ -341,6 +523,7 @@ export class InvoiceService {
           await itemRepo.save(
             itemRepo.create({
               tenantId, invoiceId: invoice.id, challanId: challan.id, gradeId: challan.gradeId,
+              chargeType: 'return_fee', orderId: challan.orderId,
               description: `Return / short-load charge — ${challan.challanNo}`,
               hsnSac: (line.hsnSac as string) ?? null, uom: 'm3',
               quantity: String(billing.returnedQuantity), rate: String(feeRate), taxableAmount: String(ft.taxableAmount),
@@ -354,6 +537,32 @@ export class InvoiceService {
           );
           taxable += ft.taxableAmount; cgst += ft.cgstAmount; sgst += ft.sgstAmount; igst += ft.igstAmount; cess += ft.cessAmount;
         }
+      }
+
+      // After the concrete: the charges the order terms bill on their own
+      // basis — trips, a lump sum, a pump job, pump hours, waiting hours.
+      const terms = await readBillingTerms(m);
+      const pumpJobRepo = m.getRepository(PumpJob);
+      for (const p of await this.planCharges(m, terms, [...groups.values()])) {
+        const t = computeLineTax(p.quantity, p.rate, p.gstRate, 0, isInterstate);
+        const saved = await itemRepo.save(
+          itemRepo.create({
+            tenantId, invoiceId: invoice.id, challanId: p.challanId, gradeId: null,
+            chargeType: p.type, orderId: p.orderId,
+            description: p.description, hsnSac: p.hsnSac, uom: p.uom,
+            quantity: String(p.quantity), rate: String(p.rate), taxableAmount: String(t.taxableAmount),
+            gstRate: String(p.gstRate),
+            cgstRate: String(t.cgstRate), cgstAmount: String(t.cgstAmount),
+            sgstRate: String(t.sgstRate), sgstAmount: String(t.sgstAmount),
+            igstRate: String(t.igstRate), igstAmount: String(t.igstAmount),
+            cessRate: String(t.cessRate), cessAmount: String(t.cessAmount),
+            lineTotal: String(t.lineTotal),
+          }),
+        );
+        // The pump jobs whose hours this line bills remember it, so a later
+        // invoice does not bill them again (cancel releases them).
+        if (p.pumpJobIds.length) await pumpJobRepo.update({ id: In(p.pumpJobIds) }, { invoiceItemId: saved.id });
+        taxable += t.taxableAmount; cgst += t.cgstAmount; sgst += t.sgstAmount; igst += t.igstAmount; cess += t.cessAmount;
       }
 
       const grand = taxable + cgst + sgst + igst + cess;
@@ -497,6 +706,14 @@ export class InvoiceService {
       const challanRepo = m.getRepository(DeliveryChallan);
       for (const l of links) await challanRepo.update(l.challanId, { invoiceStatus: 'not_invoiced' });
       await linkRepo.delete({ invoiceId: id });
+      // Pump hours this invoice billed are billable again; the once-per-order
+      // charges (lump-sum transport, per-job pump) are re-added by the next
+      // invoice because a cancelled invoice no longer counts as carrying them.
+      await m.query(
+        `UPDATE pump_jobs SET invoice_item_id = NULL, updated_at = now()
+          WHERE invoice_item_id IN (SELECT id FROM invoice_items WHERE invoice_id = $1)`,
+        [id],
+      );
       await repo.update(id, { invoiceStatus: 'cancelled', paymentStatus: 'cancelled' });
       return { result: await this.loadFull(m, id), invoiceNo: invoice.invoiceNo, total: invoice.totalAmount };
     });

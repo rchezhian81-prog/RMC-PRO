@@ -16,6 +16,8 @@ import { attachCustomerName } from '../common/attach-customer-name';
 import { NumberingService } from './numbering.service';
 import { summariseGst, isInterstateSupply, type QuoteLine } from '../billing/tax.util';
 import { documentDate } from '../common/business-date.util';
+import { estimateLineValue } from '@rmc/shared';
+import { lineEstimateInput, readBillingTerms, type PricedLine } from '../billing/charge-basis.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -95,19 +97,30 @@ export class OrdersDraftService {
     const items = await m
       .getRepository(OrderItem)
       .find({ where: { orderId: id }, order: { createdAt: 'ASC' } });
-    return { ...order, items };
+    const { truckM3 } = await readBillingTerms(m);
+    return { ...order, items, truckM3 };
   }
 
   get(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
   }
 
-  private lineValue(quantity: number, rate: number, transport: number, pump: number, waiting: number): number {
-    // Transport/pump/waiting are per-m³ (quoted per cubic metre), exactly like
-    // summariseGst and the invoice's all-in rate — so the ex-GST order value
-    // reconciles with estimatedOrderValueInclGst and the eventual invoice
-    // instead of understating them by (qty − 1) × freight.
-    return quantity * (rate + transport + pump + waiting);
+  private lineValue(line: PricedLine, quantity: number, truckM3: number): number {
+    // Each charge counts the way its basis says — per m³ with the quantity,
+    // per trip at the tenant's truck load, a lump sum or a per-job pump once,
+    // a per-hour charge not at all until the hours are known — exactly like
+    // summariseGst, so the ex-GST order value reconciles with
+    // estimatedOrderValueInclGst and the eventual invoice.
+    return estimateLineValue(lineEstimateInput(line, quantity, truckM3));
+  }
+
+  /** The three bases a priced line carries, copied onto the order line it becomes. */
+  private bases(line: PricedLine) {
+    return {
+      transportBasis: String(line.transportBasis ?? 'per_m3'),
+      pumpBasis: String(line.pumpBasis ?? 'per_m3'),
+      waitingBasis: String(line.waitingBasis ?? 'per_m3'),
+    };
   }
 
   /**
@@ -195,20 +208,16 @@ export class OrdersDraftService {
       );
 
       const itemRepo = m.getRepository(OrderItem);
+      const { truckM3 } = await readBillingTerms(m);
       let total = 0;
       const gstLines: QuoteLine[] = [];
       for (const it of items) {
         const qty = num(it.estimatedQuantity);
-        total += this.lineValue(
-          qty,
-          num(it.ratePerM3),
-          num(it.transportCharge),
-          num(it.pumpCharge),
-          num(it.waitingCharge),
-        );
+        total += this.lineValue(it, qty, truckM3);
         gstLines.push({
           quantity: qty, rate: num(it.ratePerM3),
           transport: num(it.transportCharge), pump: num(it.pumpCharge), waiting: num(it.waitingCharge),
+          ...this.bases(it), truckM3,
           gstRate: it.gstRate != null ? num(it.gstRate) : 18, gstApplicable: it.gstApplicable,
         });
         await itemRepo.save(
@@ -222,6 +231,7 @@ export class OrdersDraftService {
             transportCharge: it.transportCharge,
             pumpCharge: it.pumpCharge,
             waitingCharge: it.waitingCharge,
+            ...this.bases(it),
             gstRate: it.gstApplicable === false ? '0' : (it.gstRate ?? '18'),
             lineStatus: 'draft',
           }),
@@ -290,6 +300,7 @@ export class OrdersDraftService {
       );
 
       const itemRepo = m.getRepository(OrderItem);
+      const { truckM3 } = await readBillingTerms(m);
       let total = 0;
       const gstLines: QuoteLine[] = [];
       for (const line of lines) {
@@ -302,16 +313,11 @@ export class OrdersDraftService {
         if (!match) throw badReq(`No rate contract item matches grade ${String(line.gradeLabel ?? line.gradeId ?? '(unspecified)')}`);
         const qty = num(line.quantityM3);
         if (qty <= 0) throw badReq('Each line quantity (m³) must be greater than zero');
-        total += this.lineValue(
-          qty,
-          num(match.ratePerM3),
-          num(match.transportCharge),
-          num(match.pumpCharge),
-          num(match.waitingCharge),
-        );
+        total += this.lineValue(match, qty, truckM3);
         gstLines.push({
           quantity: qty, rate: num(match.ratePerM3),
           transport: num(match.transportCharge), pump: num(match.pumpCharge), waiting: num(match.waitingCharge),
+          ...this.bases(match), truckM3,
           gstRate: match.gstRate != null ? num(match.gstRate) : 18, gstApplicable: match.gstApplicable,
         });
         await itemRepo.save(
@@ -325,6 +331,7 @@ export class OrdersDraftService {
             transportCharge: match.transportCharge,
             pumpCharge: match.pumpCharge,
             waitingCharge: match.waitingCharge,
+            ...this.bases(match),
             gstRate: match.gstApplicable === false ? '0' : (match.gstRate ?? '18'),
             lineStatus: 'draft',
           }),

@@ -7,12 +7,21 @@ import { fleetMaintenanceAlerts, type MaintenanceDueRow } from './fleet-maintena
 import { concreteSlaAlerts, CONCRETE_SLA_MINUTES, type OnRoadSlaRow } from './concrete-sla.util';
 import { computeCustomerExposure } from '../orders/exposure.util';
 
-export type AlertSeverity = 'danger' | 'warning' | 'info';
+/**
+ * The colour tone a rule assigns — what the rules and the digest have always
+ * produced. The public `severity` word is derived from it (below) so the
+ * screen never has to read meaning from a colour.
+ */
+export type AlertTone = 'danger' | 'warning' | 'info';
 
-export interface Alert {
+/** The three severities every alert carries: high (act now), medium (soon), low (for information). */
+export type AlertSeverity = 'high' | 'medium' | 'low';
+
+/** What a rule produces: the tone it would paint the alert in. */
+export interface RuleAlert {
   /** Stable identifier for the rule that produced this alert. */
   key: string;
-  severity: AlertSeverity;
+  severity: AlertTone;
   /** One-line headline, already formatted for display (₹ in Indian grouping). */
   title: string;
   /** Supporting sentence — names, counts, what to do. */
@@ -21,6 +30,28 @@ export interface Alert {
   href: string;
   count?: number;
   amount?: number;
+}
+
+/** What GET /alerts returns: the rule's alert with its severity word and tone. */
+export interface Alert extends Omit<RuleAlert, 'severity'> {
+  severity: AlertSeverity;
+  tone: AlertTone;
+}
+
+/**
+ * Tone → severity. Overdue money, negative stock, expired papers, failed cubes
+ * and concrete past its working life are painted danger by their rules and
+ * read as high; due-soon papers, credit holds and low stock are warning →
+ * medium; the informational context lines are info → low.
+ */
+export const SEVERITY_BY_TONE: Record<AlertTone, AlertSeverity> = { danger: 'high', warning: 'medium', info: 'low' };
+export const TONE_BY_SEVERITY: Record<AlertSeverity, AlertTone> = { high: 'danger', medium: 'warning', low: 'info' };
+const SEVERITY_RANK: Record<AlertSeverity, number> = { high: 0, medium: 1, low: 2 };
+
+/** Attach the severity word to a rule's alert, keeping its tone for the colour. */
+export function toPublicAlert(a: RuleAlert): Alert {
+  const { severity: tone, ...rest } = a;
+  return { ...rest, severity: SEVERITY_BY_TONE[tone] ?? 'low', tone };
 }
 
 const inr = (v: unknown): string =>
@@ -191,7 +222,7 @@ export class AlertsService {
       const mo = month[0] ?? {};
       const qt = quotes[0] ?? {};
       const bl = backlog[0] ?? {};
-      const out: Alert[] = [];
+      const out: RuleAlert[] = [];
 
       // ---- Money at risk -----------------------------------------------
       const over90 = num(r.over90_amount);
@@ -375,11 +406,11 @@ export class AlertsService {
         });
       }
 
-      return out;
+      return out.map(toPublicAlert);
     });
 
-    const rank: Record<AlertSeverity, number> = { danger: 0, warning: 1, info: 2 };
-    alerts.sort((a, b) => rank[a.severity] - rank[b.severity] || (b.amount ?? 0) - (a.amount ?? 0));
+    // High → medium → low; within a band, the larger sum of money first.
+    alerts.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || (b.amount ?? 0) - (a.amount ?? 0));
     return { alerts, generatedAt: new Date().toISOString() };
   }
 }

@@ -4,6 +4,8 @@ import * as bcrypt from 'bcryptjs';
 import {
   ROLE_KEYS, passwordProblemMessage, validateCompanyProfile,
   SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue, isPlatformPermission, SYSTEM_ROLE_KEYS,
+  IDLE_TIMEOUT_SETTING_KEY,
+  idleTimeoutMinutes,
 } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { TenantDbService } from '../core/database/tenant-db.service';
@@ -198,6 +200,19 @@ export class SettingsService {
       details: { key, value },
     });
     return result;
+  }
+
+  /**
+   * The idle sign-out window every signed-in user of the company needs, read
+   * without settings.manage: the browser applies it, so a cashier or a driver
+   * must be able to ask for it even though they can neither see nor change the
+   * rest of the catalogue. One number, nothing else leaks.
+   */
+  idleTimeout(tenantId: string) {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const row = await m.getRepository(TenantSetting).findOne({ where: { settingKey: IDLE_TIMEOUT_SETTING_KEY } });
+      return { minutes: idleTimeoutMinutes(row?.settingValue) };
+    });
   }
 }
 

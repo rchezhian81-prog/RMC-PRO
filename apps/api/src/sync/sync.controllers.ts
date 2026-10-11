@@ -6,7 +6,7 @@ import { RequireModule } from '../rbac/module.decorator';
 import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions } from '../rbac/permissions.decorator';
 import { SyncService } from './sync.service';
-import { DashboardService } from './dashboard.service';
+import { DashboardService, parseDashboardPeriod } from './dashboard.service';
 import { ReportsService } from './reports.service';
 
 const tid = (u: AuthUser) => u.tenantId as string;
@@ -67,8 +67,15 @@ export class SyncController {
 export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
-  @Get('summary') summary(@CurrentUser() u: AuthUser) { return this.service.summary(tid(u), u.userId); }
-  @Get('operations-funnel') funnel(@CurrentUser() u: AuthUser) { return this.service.operationsFunnel(tid(u)); }
+  // `from`/`to` (YYYY-MM-DD, both or neither, at most 366 days) scope the
+  // event counts and sums; the point-in-time figures stay live. Without them
+  // the figures are all-time, as they always were.
+  @Get('summary') summary(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.summary(tid(u), u.userId, parseDashboardPeriod(from, to));
+  }
+  @Get('operations-funnel') funnel(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.operationsFunnel(tid(u), parseDashboardPeriod(from, to));
+  }
 
   // Daily activity trend-lines (read-only). `days` clamps to 7–90 in the
   // service; `metrics` is an optional csv subset of the catalogued series.

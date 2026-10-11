@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { BellRing, Building2, CheckCircle2, Landmark, RefreshCw, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { BellRing, Building2, CheckCircle2, Landmark, LockKeyhole, RefreshCw, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
 import { formatDateTime } from '../../../lib/format-date';
 import { settings, gstCredentialsApi, gstApi, opsApi, whatsappIntegrationApi, gpsApi, type SettingRow, type GstCredentialStatus, type GstStatus, type AlertingStatus, type WhatsAppStatus, type GpsIngestKeyStatus } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
@@ -33,6 +33,10 @@ const PLAIN: Record<string, string> = {
   whatsapp_notifications: 'Offer WhatsApp sends for receipts and dispatches.',
   invoice_footer_note: 'A line printed at the foot of every tax invoice: bank terms, a thank-you, a notice.',
 };
+
+/** Settings that live in their own card rather than the general list. */
+const IDLE_KEY = 'security.idle_timeout_minutes';
+const SECURITY_KEYS = new Set([IDLE_KEY]);
 
 export default function SettingsPage() {
   const [rows, setRows] = useState<SettingRow[]>([]);
@@ -82,6 +86,8 @@ export default function SettingsPage() {
   }
 
   const changed = rows.filter((r) => (draft[r.key] ?? '') !== r.value).length;
+  const general = rows.filter((r) => !SECURITY_KEYS.has(r.key));
+  const idle = rows.find((r) => r.key === IDLE_KEY);
 
   return (
     <div className="mn-ord mn-se">
@@ -106,12 +112,12 @@ export default function SettingsPage() {
 
       {error && <ErrorState message={error} />}
 
-      <Card title={<span className="mn-board-card-title"><SettingsIcon size={16} aria-hidden /> How the app behaves <span className="mn-board-card-count">{rows.length}</span></span>} actions={<span className="mn-ord-how">Each setting saves on its own; Save lights up when the value changed.</span>} padded={false}>
+      <Card title={<span className="mn-board-card-title"><SettingsIcon size={16} aria-hidden /> How the app behaves <span className="mn-board-card-count">{general.length}</span></span>} actions={<span className="mn-ord-how">Each setting saves on its own; Save lights up when the value changed.</span>} padded={false}>
         {!loaded ? (
           <div className="mn-ord-skel"><TableSkeleton cols={3} /></div>
         ) : (
           <div className="mn-se-list">
-            {rows.map((r) => {
+            {general.map((r) => {
               const v = draft[r.key] ?? '';
               const dirty = v !== r.value;
               const set = (val: string) => setDraft((p) => ({ ...p, [r.key]: val }));
@@ -146,6 +152,40 @@ export default function SettingsPage() {
           </div>
         )}
       </Card>
+
+      {idle && (
+        <Card title={<span className="mn-board-card-title"><LockKeyhole size={16} aria-hidden /> Security</span>} actions={<span className="mn-ord-how">Applies on each person's next sign-in.</span>}>
+          <p className="mn-se-blurb">A browser left open on a shared counter stays signed in until someone signs out. Set how long the app waits without a tap or a key before it signs the person out on its own.</p>
+          <div className="mn-se-security">
+            <div className="mn-se-security-field">
+            <Field label="Sign out after inactivity (minutes)" help="Applies to everyone in the company on their next sign-in. 0 keeps people signed in until they sign out.">
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={1440}
+                step={1}
+                value={draft[IDLE_KEY] ?? ''}
+                onChange={(e) => setDraft((p) => ({ ...p, [IDLE_KEY]: e.target.value }))}
+              />
+            </Field>
+            </div>
+            <div className="mn-se-save">
+              <Button
+                variant={(draft[IDLE_KEY] ?? '') !== idle.value ? undefined : 'ghost'}
+                size="sm"
+                icon={<Save size={14} />}
+                onClick={() => save(IDLE_KEY)}
+                disabled={(draft[IDLE_KEY] ?? '') === idle.value}
+                loading={savingKey === IDLE_KEY}
+              >
+                Save
+              </Button>
+              {savedKey === IDLE_KEY && (draft[IDLE_KEY] ?? '') === idle.value && <span className="mn-ord-meta mn-se-saved"><CheckCircle2 size={13} aria-hidden /> Saved</span>}
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="mn-ir-two">
         <GstCredentialsCard />

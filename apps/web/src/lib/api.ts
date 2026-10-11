@@ -459,6 +459,8 @@ export const settings = {
       method: 'PUT',
       body: JSON.stringify({ value }),
     }),
+  /** The company's idle sign-out window, readable by any signed-in user. 0 = never. */
+  idleTimeout: () => apiFetch<{ minutes: number }>('/settings/idle-timeout'),
 };
 
 export const usersApi = {
@@ -1139,9 +1141,18 @@ export interface TrendsResult {
   series: TrendSeries[];
 }
 
+/** A dashboard window: both ends inclusive YYYY-MM-DD, at most 366 days. */
+export interface DashboardPeriod {
+  from: string;
+  to: string;
+}
+const periodQuery = (p?: DashboardPeriod | null) =>
+  p && p.from && p.to ? `?from=${encodeURIComponent(p.from)}&to=${encodeURIComponent(p.to)}` : '';
+
 export const dashboardApi = {
-  summary: () => apiFetch<Row>('/dashboard/summary'),
-  funnel: () => apiFetch<Row>('/dashboard/operations-funnel'),
+  /** Event counts and sums follow the period (all time when absent); the live figures never do. */
+  summary: (period?: DashboardPeriod | null) => apiFetch<Row>(`/dashboard/summary${periodQuery(period)}`),
+  funnel: (period?: DashboardPeriod | null) => apiFetch<Row>(`/dashboard/operations-funnel${periodQuery(period)}`),
   /** Daily activity trend-lines (default 30-day window). Read-only. */
   trends: (days = 30) => apiFetch<TrendsResult>(`/dashboard/trends?days=${days}`),
 };
@@ -1151,9 +1162,13 @@ export const reportsCatalogApi = {
 };
 
 // ---- Alerts & message templates (no external service required) ----
+export type AlertSeverity = 'high' | 'medium' | 'low';
 export interface Alert {
   key: string;
-  severity: 'danger' | 'warning' | 'info';
+  /** high = act now, medium = soon, low = for information. */
+  severity: AlertSeverity;
+  /** The colour the rule paints it in; the word above is what it means. */
+  tone?: 'danger' | 'warning' | 'info';
   title: string;
   detail: string;
   href: string;

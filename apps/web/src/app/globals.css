@@ -5404,3 +5404,78 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 .mn-td-user-acts .mn-btn { white-space: nowrap; }
 .mn-td .mn-ord-cols--acts,
 .mn-td .mn-ord-row--acts { grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(70px, auto) minmax(230px, auto); }
+
+/* ============================================================================
+   TOP BAR CLOCK · SEVERITY LEGEND · DASHBOARD PERIOD · SECURITY SETTING
+   ============================================================================ */
+/* The date and time at the right of the top bar: muted, fixed-width digits so
+   the minute tick does not shift the controls beside it. Gone on a phone. */
+.mn-topbar-clock {
+  font-size: 12.5px;
+  color: var(--mn-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .mn-topbar-clock { display: none; }
+}
+
+/* Severity: colour + the word, never colour alone. Chips in the legend rows,
+   a badge beside each alert title. The three tones are the design tokens. */
+.mn-sev-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-sev-lead { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-subtle); }
+.mn-sev-chip {
+  --sev: var(--mn-info);
+  --sev-tint: var(--mn-info-tint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--sev);
+  background: var(--sev-tint);
+  border: 1px solid color-mix(in srgb, var(--sev) 35%, transparent);
+}
+.mn-sev-chip[data-severity='high'] { --sev: var(--mn-danger); --sev-tint: var(--mn-danger-tint); }
+.mn-sev-chip[data-severity='medium'] { --sev: var(--mn-warning); --sev-tint: var(--mn-warning-tint); }
+.mn-sev-chip[data-severity='low'] { --sev: var(--mn-info); --sev-tint: var(--mn-info-tint); }
+.mn-sev-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sev); flex: none; }
+/* On the hero gradient the tint would vanish: a translucent white pill with
+   the word in white and only the dot in the severity colour (lightened so the
+   red and amber hold contrast on violet). */
+.mn-sev-legend--dark { margin-top: 14px; }
+.mn-sev-legend--dark .mn-sev-lead { color: #d9ccff; }
+.mn-sev-chip--dark { color: #ffffff; background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.22); }
+.mn-sev-chip--dark[data-severity='high'] { --sev: #ff8a8a; }
+.mn-sev-chip--dark[data-severity='medium'] { --sev: #ffc555; }
+.mn-sev-chip--dark[data-severity='low'] { --sev: #c9a8ff; }
+.mn-sev-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.mn-alerts-legend { padding: 10px 16px; border-bottom: 1px solid var(--mn-border); background: var(--mn-surface-2); }
+.mn-alert-row:hover { background: var(--mn-surface-2); }
+
+/* Dashboard period bar — the delivery register's bar, with the label of the
+   window in force at the end of the chip strip. */
+.mn-dash-period .mn-board-strip { align-items: center; }
+.mn-dash-period-label { white-space: nowrap; }
+.mn-dash-period .mn-board-chip:disabled { cursor: progress; opacity: 0.7; transform: none; }
+/* Operations tile: "in the period" / "now" under the figure. */
+.mn-op-h { display: block; margin-top: 4px; font-size: 11px; color: var(--mn-subtle); }
+
+/* Settings → Security: one field and its Save side by side. */
+.mn-se-security { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.mn-se-security-field { flex: 1 1 280px; max-width: 420px; }
+.mn-se-security-field > div { margin-bottom: 0; }
+.mn-se-security .mn-se-save { padding-top: 24px; }

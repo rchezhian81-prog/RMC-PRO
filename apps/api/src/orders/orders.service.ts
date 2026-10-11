@@ -24,6 +24,7 @@ import { creditExposureValue } from './credit-value.util';
 import { attachCustomerName } from '../common/attach-customer-name';
 import { recordHistory } from './history.util';
 import { isReturnBillingPolicy } from '../billing/return-billing.util';
+import { readBillingTerms } from '../billing/charge-basis.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Order not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -180,10 +181,15 @@ export class OrdersService {
     // Names for the screen header: who the order is for, where it pours, which plant makes it.
     const site = order.siteId ? await m.getRepository(Site).findOne({ where: { id: order.siteId } }) : null;
     const plant = order.plantId ? await m.getRepository(Plant).findOne({ where: { id: order.plantId } }) : null;
+    // Each line valued under its charge bases, with the tenant's truck load
+    // for a per-trip transport charge — the same reading the draft stored as
+    // the estimated order value the credit check counts.
+    const { truckM3 } = await readBillingTerms(m);
     const taxSummary = summariseGst(
       items.map((it) => ({
         quantity: num(it.quantityM3), rate: num(it.ratePerM3),
         transport: num(it.transportCharge), pump: num(it.pumpCharge), waiting: num(it.waitingCharge),
+        transportBasis: it.transportBasis, pumpBasis: it.pumpBasis, waitingBasis: it.waitingBasis, truckM3,
         gstRate: num(it.gstRate),
       })),
       isInterstateSupply(company?.state, customer?.state),
@@ -217,7 +223,7 @@ export class OrdersService {
       customerName: customer?.customerName ?? null,
       siteName: site?.siteName ?? null,
       plantName: plant?.plantName ?? plant?.plantCode ?? null,
-      items: itemsWithQuantities, history, creditHolds: holds, taxSummary, pourSlots, pourSummary, quantities,
+      items: itemsWithQuantities, history, creditHolds: holds, taxSummary, pourSlots, pourSummary, quantities, truckM3,
     };
   }
 

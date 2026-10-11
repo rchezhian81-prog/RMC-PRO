@@ -79,6 +79,7 @@ import { DriverPumpWhatsAppGps1720000073000 } from './migrations/1720000073000-D
 import { MastersUsersLeadsFields1720000074000 } from './migrations/1720000074000-MastersUsersLeadsFields';
 import { QuotationApprovalPumpEdit1720000076000 } from './migrations/1720000076000-QuotationApprovalPumpEdit';
 import { PurchaseInwardFields1720000077000 } from './migrations/1720000077000-PurchaseInwardFields';
+import { ChargeBasis1720000078000 } from './migrations/1720000078000-ChargeBasis';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -172,6 +173,7 @@ export const AppDataSource = new DataSource({
   MastersUsersLeadsFields1720000074000,
   QuotationApprovalPumpEdit1720000076000,
   PurchaseInwardFields1720000077000,
+  ChargeBasis1720000078000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

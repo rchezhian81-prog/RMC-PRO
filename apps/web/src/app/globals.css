@@ -5505,6 +5505,15 @@ button.mn-mi-instock:hover { text-decoration: underline; }
 .mn-qd-live-main { font-size: 13px; }
 .mn-qd-live-main strong { font-size: 15px; font-family: var(--mn-font-display); }
 .mn-qd-item-foot { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+/* A charge field: the amount beside the basis it is charged on (per m³, per trip, …). */
+.mn-cb-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(88px, auto); gap: 6px; }
+.mn-cb-field select.mn-input { width: auto; padding-left: 8px; padding-right: 24px; }
+/* The charges an invoice adds from the order terms, previewed under the challan list. */
+.mn-inv-extra { padding: 10px 16px 0; border-top: 1px solid var(--mn-border); }
+.mn-inv-extra-title { display: block; font-size: 13px; font-weight: 600; color: var(--mn-text); margin-bottom: 4px; }
+.mn-inv-extra ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.mn-inv-extra li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--mn-muted); }
+.mn-inv-extra li strong { color: var(--mn-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 640px) {
   .mn-qd-live { grid-column: 1 / -1; padding-bottom: 8px; white-space: normal; }
 }

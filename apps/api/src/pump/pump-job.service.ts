@@ -334,6 +334,10 @@ export class PumpJobService {
                 bool_or(COALESCE(oi.pump_required, false)) OR bool_or(COALESCE(s.pump_required, false)) AS "pumpRequired",
                 CASE WHEN COALESCE(sum(oi.quantity_m3), 0) > 0
                      THEN sum(oi.pump_charge * oi.quantity_m3) / sum(oi.quantity_m3) ELSE MAX(oi.pump_charge) END::float AS "pumpChargePerM3",
+                COALESCE(MAX(oi.pump_basis) FILTER (WHERE oi.pump_basis <> 'per_m3'), 'per_m3') AS "pumpBasis",
+                COALESCE((SELECT sum(ii.taxable_amount) FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
+                           WHERE ii.order_id = o.id AND ii.charge_type IN ('pump_job', 'pump_hours')
+                             AND i.invoice_status IN ('draft', 'issued')), 0)::float AS "invoicedPumpCharge",
                 COALESCE((SELECT sum(dc.quantity_m3 - COALESCE(dc.return_quantity_m3, 0)) FROM delivery_challans dc
                            WHERE dc.order_id = o.id AND dc.challan_status = 'delivered'), 0)::float AS "deliveredM3"
            FROM orders o
@@ -349,6 +353,7 @@ export class PumpJobService {
         byOrder.set(String(f.orderId), {
           orderId: String(f.orderId), orderNo: String(f.orderNo), customerName: (f.customerName as string) ?? null,
           pumpRequired: Boolean(f.pumpRequired), pumpChargePerM3: Number(f.pumpChargePerM3) || 0,
+          pumpBasis: (f.pumpBasis as string) ?? 'per_m3', invoicedPumpCharge: Number(f.invoicedPumpCharge) || 0,
           deliveredM3: Number(f.deliveredM3) || 0, jobs: [],
         });
       }

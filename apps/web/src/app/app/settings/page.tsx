@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { BellRing, Building2, CheckCircle2, Landmark, LockKeyhole, RefreshCw, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { BellRing, Building2, CheckCircle2, Landmark, LockKeyhole, Receipt, RefreshCw, Save, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
 import { formatDateTime } from '../../../lib/format-date';
 import { settings, gstCredentialsApi, gstApi, opsApi, whatsappIntegrationApi, gpsApi, type SettingRow, type GstCredentialStatus, type GstStatus, type AlertingStatus, type WhatsAppStatus, type GpsIngestKeyStatus } from '../../../lib/api';
 import { Card } from '../../../components/ui/Card';
@@ -37,6 +37,9 @@ const PLAIN: Record<string, string> = {
 /** Settings that live in their own card rather than the general list. */
 const IDLE_KEY = 'security.idle_timeout_minutes';
 const SECURITY_KEYS = new Set([IDLE_KEY]);
+const TRUCK_KEY = 'billing.default_truck_m3';
+const WAITING_FREE_KEY = 'billing.waiting_free_minutes';
+const BILLING_KEYS = new Set([TRUCK_KEY, WAITING_FREE_KEY]);
 
 export default function SettingsPage() {
   const [rows, setRows] = useState<SettingRow[]>([]);
@@ -86,8 +89,38 @@ export default function SettingsPage() {
   }
 
   const changed = rows.filter((r) => (draft[r.key] ?? '') !== r.value).length;
-  const general = rows.filter((r) => !SECURITY_KEYS.has(r.key));
+  const general = rows.filter((r) => !SECURITY_KEYS.has(r.key) && !BILLING_KEYS.has(r.key));
   const idle = rows.find((r) => r.key === IDLE_KEY);
+  const billing = rows.filter((r) => BILLING_KEYS.has(r.key));
+
+  /** One numeric setting with its own Save, for the cards that keep a setting apart from the general list. */
+  const numberField = (r: SettingRow, label: string, help: string) => {
+    const v = draft[r.key] ?? '';
+    const dirty = v !== r.value;
+    return (
+      <div className="mn-se-security" key={r.key}>
+        <div className="mn-se-security-field">
+          <Field label={label} help={help}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              min={r.min ?? undefined}
+              max={r.max ?? undefined}
+              step={r.integer ? 1 : 'any'}
+              value={v}
+              onChange={(e) => setDraft((p) => ({ ...p, [r.key]: e.target.value }))}
+            />
+          </Field>
+        </div>
+        <div className="mn-se-save">
+          <Button variant={dirty ? undefined : 'ghost'} size="sm" icon={<Save size={14} />} onClick={() => save(r.key)} disabled={!dirty} loading={savingKey === r.key}>
+            Save
+          </Button>
+          {savedKey === r.key && !dirty && <span className="mn-ord-meta mn-se-saved"><CheckCircle2 size={13} aria-hidden /> Saved</span>}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="mn-ord mn-se">
@@ -152,6 +185,19 @@ export default function SettingsPage() {
           </div>
         )}
       </Card>
+
+      {billing.length > 0 && (
+        <Card title={<span className="mn-board-card-title"><Receipt size={16} aria-hidden /> Billing</span>} actions={<span className="mn-ord-how">Read when a line is estimated and when an invoice is raised.</span>}>
+          <p className="mn-se-blurb">A quotation or order line may charge transport per trip, pumping per job or per hour, and waiting per hour instead of per m³. These two figures feed those charges: the truck load the per-trip estimate counts with, and the time on site that is not charged before waiting starts to count.</p>
+          {billing.map((r) => numberField(
+            r,
+            r.key === TRUCK_KEY ? 'Truck load for trip estimates (m³)' : 'Free waiting time on site (minutes)',
+            r.key === TRUCK_KEY
+              ? 'A transport charge quoted per trip is estimated as the trips the quantity takes at this load (1 to 12 m³). The invoice counts the actual challans.'
+              : 'Minutes from reaching the site to the start of the pour that are not charged (0 to 240). Waiting beyond this is billed per hour, rounded up to the next quarter hour.',
+          ))}
+        </Card>
+      )}
 
       {idle && (
         <Card title={<span className="mn-board-card-title"><LockKeyhole size={16} aria-hidden /> Security</span>} actions={<span className="mn-ord-how">Applies on each person's next sign-in.</span>}>

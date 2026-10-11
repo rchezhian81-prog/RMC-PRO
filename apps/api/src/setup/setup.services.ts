@@ -167,6 +167,9 @@ export class SettingsService {
         description: def.description,
         type: def.type,
         options: def.options ?? null,
+        min: def.min ?? null,
+        max: def.max ?? null,
+        integer: def.integer ?? false,
         value: byKey.has(def.key) ? byKey.get(def.key) ?? '' : def.default,
       }));
     });

@@ -18,6 +18,9 @@ import { Loading, ErrorState } from '../../../../../components/ui/States';
 import { AlertSurface } from '../../../../../components/ui/AlertSurface';
 import { useConfirm } from '../../../../../components/ui/ConfirmDialog';
 import { todayLocal } from '../../../../../lib/report-range';
+import { ChargeField } from '../../../../../components/ChargeField';
+import { PUMP_BASES, TRANSPORT_BASES, WAITING_BASES } from '@rmc/shared';
+import { DEFAULT_BASES, allPerM3, chargeWords, estimateWords, linePerM3, lineParts } from '../../../../../lib/charge-basis';
 
 /**
  * Quotation detail — one quotation from draft to order.
@@ -72,7 +75,7 @@ export default function QuotationDetail() {
   const [customers, setCustomers] = useState<Row[]>([]);
   const [sites, setSites] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
-  const EMPTY_ITEM = { gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18' };
+  const EMPTY_ITEM = { gradeId: '', gradeLabel: '', estimatedQuantity: '', ratePerM3: '', transportCharge: '', pumpCharge: '', waitingCharge: '', gstRate: '18', ...DEFAULT_BASES };
   const [item, setItem] = useState(EMPTY_ITEM);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [header, setHeader] = useState({ customerId: '', siteId: '', validUntil: '', paymentTerms: '' });
@@ -130,6 +133,9 @@ export default function QuotationDetail() {
       transportCharge: Number(item.transportCharge || 0),
       pumpCharge: Number(item.pumpCharge || 0),
       waitingCharge: Number(item.waitingCharge || 0),
+      transportBasis: item.transportBasis,
+      pumpBasis: item.pumpBasis,
+      waitingBasis: item.waitingBasis,
       gstRate: Number(item.gstRate || 0),
     };
     await run(async () => {
@@ -146,6 +152,7 @@ export default function QuotationDetail() {
       estimatedQuantity: String(it.estimatedQuantity ?? ''), ratePerM3: String(it.ratePerM3 ?? ''),
       transportCharge: String(it.transportCharge ?? ''), pumpCharge: String(it.pumpCharge ?? ''),
       waitingCharge: String(it.waitingCharge ?? ''), gstRate: String(it.gstRate ?? '18'),
+      transportBasis: String(it.transportBasis || 'per_m3'), pumpBasis: String(it.pumpBasis || 'per_m3'), waitingBasis: String(it.waitingBasis || 'per_m3'),
     });
   }
   function cancelEditItem() {
@@ -171,11 +178,18 @@ export default function QuotationDetail() {
   const converted = String(q.status) === 'converted';
   const locked = status === 'approved';
   const rev = num(q.revisionNo);
-  const lineAllIn = (it: Record<string, unknown>) => num(it.ratePerM3) + num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
-  const lineTotal = (it: Row) => num(it.estimatedQuantity) * lineAllIn(it);
+  // Each line is valued under its charge bases: per-m³ charges with the
+  // quantity, a per-trip transport charge by the trips at the tenant's truck
+  // load, a lump sum or a per-job pump once, a per-hour charge not until it
+  // is billed. The API uses the same shared estimate for the totals.
+  const truckM3 = num(q.truckM3) || 6;
+  const lineTotal = (it: Row) => lineParts(it, it.estimatedQuantity, truckM3).total;
   // The line being typed, priced the same way the table prices a saved line.
-  const liveAllIn = lineAllIn(item);
-  const liveValue = num(item.estimatedQuantity) * liveAllIn;
+  const liveParts = lineParts(item, item.estimatedQuantity, truckM3);
+  const livePerM3 = linePerM3(item);
+  const liveAll = allPerM3(item);
+  const liveNotes = estimateWords(item, liveParts);
+  const liveValue = liveParts.total;
   const liveWithGst = liveValue * (1 + num(item.gstRate) / 100);
   const approvedOn = q.approvedAt ? new Date(String(q.approvedAt)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
   const totalM3 = items.reduce((t, it) => t + num(it.estimatedQuantity), 0);
@@ -295,7 +309,7 @@ export default function QuotationDetail() {
                   <Th>Grade</Th>
                   <Th numeric>Qty m³</Th>
                   <Th numeric>Rate/m³</Th>
-                  <Th numeric>All-in/m³</Th>
+                  <Th numeric>Per m³</Th>
                   <Th>GST</Th>
                   <Th numeric>Line value</Th>
                   {!locked && <Th />}
@@ -308,11 +322,9 @@ export default function QuotationDetail() {
                     <Td numeric className="mn-od-num">{qty(it.estimatedQuantity)}</Td>
                     <Td numeric>
                       <span className="mn-od-num">{money2(it.ratePerM3)}</span>
-                      {lineAllIn(it) - num(it.ratePerM3) > 0 && (
-                        <span className="mn-od-rate-meta">+ {[num(it.transportCharge) ? `transport ${money2(it.transportCharge)}` : '', num(it.pumpCharge) ? `pump ${money2(it.pumpCharge)}` : '', num(it.waitingCharge) ? `waiting ${money2(it.waitingCharge)}` : ''].filter(Boolean).join(' · ')}</span>
-                      )}
+                      {chargeWords(it) && <span className="mn-od-rate-meta">+ {chargeWords(it)}</span>}
                     </Td>
-                    <Td numeric className="mn-od-num">{money2(lineAllIn(it))}</Td>
+                    <Td numeric className="mn-od-num" title={allPerM3(it) ? 'Rate + transport + pump + waiting, all per m³' : 'Rate plus the charges that are per m³; the rest are billed on their own basis'}>{money2(linePerM3(it))}</Td>
                     <Td>{it.gstApplicable === false ? <span className="mn-ord-meta">exempt</span> : `${num(it.gstRate)}%`}</Td>
                     <Td numeric className="mn-od-num">{money2(lineTotal(it))}</Td>
                     {!locked && (
@@ -333,13 +345,13 @@ export default function QuotationDetail() {
               </tbody>
             </Table>
             <div className="mn-od-lines-foot">
-              <span className="mn-ord-meta">All-in/m³ = rate + transport + pump + waiting. Line value = qty × all-in, before GST.</span>
+              <span className="mn-ord-meta">Per m³ = rate + the charges that are per m³. Line value = qty × per m³, plus a per-trip transport charge by trips ({qty(truckM3)} m³ a truck) and a lump sum or per-job pump once, before GST. Per-hour charges are billed on the hours.</span>
               <span className="mn-od-lines-total">Quoted <strong>{money2(quoted)}</strong> <span className="mn-ord-meta">ex-GST</span></span>
             </div>
             {!locked ? (
               <div className="mn-qd-item-wrap">
                 <p className="mn-board-form-hint" style={{ margin: '0 0 10px' }}>
-                  <strong>{editingItemId ? 'Editing a line.' : 'Add a grade line.'}</strong> All amounts are per m³: <strong>Rate</strong> is the concrete, <strong>Transport</strong> the delivery to site, <strong>Pump</strong> the pumping charge, <strong>Waiting</strong> a truck kept waiting. Leave a charge at 0 if it does not apply.
+                  <strong>{editingItemId ? 'Editing a line.' : 'Add a grade line.'}</strong> <strong>Rate</strong> is the concrete per m³. <strong>Transport</strong> is the delivery to site, per m³, per trip or a lump sum; <strong>Pump</strong> the pumping charge, per m³, per job or per hour; <strong>Waiting</strong> a truck kept on site, per m³ or per hour after the free period. Leave a charge at 0 if it does not apply.
                 </p>
                 <Form onSubmit={submitItem} className="mn-qd-item-form">
                   <Field label="Grade">
@@ -352,15 +364,20 @@ export default function QuotationDetail() {
                   </Field>
                   <Num label="Qty m³" v={item.estimatedQuantity} on={(v) => setItem({ ...item, estimatedQuantity: v })} />
                   <Num label="Rate/m³" v={item.ratePerM3} on={(v) => setItem({ ...item, ratePerM3: v })} />
-                  <Num label="Transport" v={item.transportCharge} on={(v) => setItem({ ...item, transportCharge: v })} />
-                  <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
-                  <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
                   <Num label="GST %" v={item.gstRate} on={(v) => setItem({ ...item, gstRate: v })} />
+                  <ChargeField label="Transport" amount={item.transportCharge} basis={item.transportBasis} bases={TRANSPORT_BASES} onAmount={(v) => setItem({ ...item, transportCharge: v })} onBasis={(v) => setItem({ ...item, transportBasis: v })} />
+                  <ChargeField label="Pump" amount={item.pumpCharge} basis={item.pumpBasis} bases={PUMP_BASES} onAmount={(v) => setItem({ ...item, pumpCharge: v })} onBasis={(v) => setItem({ ...item, pumpBasis: v })} />
+                  <ChargeField label="Waiting" amount={item.waitingCharge} basis={item.waitingBasis} bases={WAITING_BASES} onAmount={(v) => setItem({ ...item, waitingCharge: v })} onBasis={(v) => setItem({ ...item, waitingBasis: v })} />
                   <div className="mn-qd-item-foot">
                     {/* Live read-out: the figures the line will carry, before it is added. */}
                     <div className="mn-qd-live" aria-live="polite">
-                      <span>All-in ₹/m³ <strong>{money2(liveAllIn)}</strong> <span className="mn-ord-meta">= rate + transport + pump + waiting</span></span>
-                      <span className="mn-qd-live-main">Line value <strong>{money2(liveValue)}</strong> <span className="mn-ord-meta">= {qty(item.estimatedQuantity)} m³ × all-in, ex-GST</span></span>
+                      {liveAll ? (
+                        <span>All-in ₹/m³ <strong>{money2(livePerM3)}</strong> <span className="mn-ord-meta">= rate + transport + pump + waiting</span></span>
+                      ) : (
+                        <span>Concrete ₹/m³ <strong>{money2(livePerM3)}</strong> <span className="mn-ord-meta">= rate + the charges that are per m³</span></span>
+                      )}
+                      {liveNotes.map((n) => <span key={n} className="mn-ord-meta">{n}</span>)}
+                      <span className="mn-qd-live-main">Line value <strong>{money2(liveValue)}</strong> <span className="mn-ord-meta">{liveAll ? `= ${qty(item.estimatedQuantity)} m³ × all-in, ex-GST` : `= ${qty(item.estimatedQuantity)} m³ × ₹/m³ + the charges above, ex-GST`}</span></span>
                       <span>With GST ({num(item.gstRate)}%) <strong>{money2(liveWithGst)}</strong></span>
                     </div>
                     <div className="mn-qd-item-submit">

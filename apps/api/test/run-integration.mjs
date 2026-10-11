@@ -69,6 +69,9 @@ const ALL_TESTS = [
   // carrying them; the multi-line inward batch with bill number, posted-by
   // and the supplier's invoice attached. Seeds its own material + supplier.
   'test/purchase-inward-fields.test.mjs',
+  // A basis for each charge (per trip / per job / per hour / lump sum) from the
+  // quotation to the invoice lines. Creates its own tenant.
+  'test/charge-basis.test.mjs',
   'test/weighbridge-hardware.test.mjs',
   'test/batching-integration.test.mjs',
   'test/pilot-gaps.test.mjs',

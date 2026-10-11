@@ -55,6 +55,9 @@ export class OrderItem extends TenantScopedEntity {
   @Column({ name: 'transport_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) transportCharge!: string;
   @Column({ name: 'pump_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) pumpCharge!: string;
   @Column({ name: 'waiting_charge', type: 'numeric', precision: 14, scale: 2, default: 0 }) waitingCharge!: string;
+  @Column({ name: 'transport_basis', type: 'varchar', default: 'per_m3' }) transportBasis!: string;
+  @Column({ name: 'pump_basis', type: 'varchar', default: 'per_m3' }) pumpBasis!: string;
+  @Column({ name: 'waiting_basis', type: 'varchar', default: 'per_m3' }) waitingBasis!: string;
   @Column({ name: 'gst_rate', type: 'numeric', precision: 5, scale: 2, default: 18 }) gstRate!: string;
   @Column({ name: 'slump_required', type: 'varchar', nullable: true }) slumpRequired!: string | null;
   @Column({ name: 'pump_required', type: 'boolean', default: false }) pumpRequired!: boolean;

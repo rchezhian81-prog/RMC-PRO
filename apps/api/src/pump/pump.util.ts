@@ -79,6 +79,13 @@ export interface OrderPumpFacts {
   pumpRequired: boolean;
   /** The pump charge per m³ on the order lines (quantity-weighted), i.e. what the invoice bills. */
   pumpChargePerM3: number;
+  /**
+   * The basis the order's pump charge is billed on: per_m3 (the default), or
+   * per_job / per_hour when the charge is a line of its own on the invoice.
+   */
+  pumpBasis?: string | null;
+  /** Σ invoice lines (pump_job / pump_hours, live invoices) billed for the order's pumping — what the invoices carry under a per-job or per-hour basis. */
+  invoicedPumpCharge?: number;
   /** Concrete delivered on the order (delivered challans, net of returns). */
   deliveredM3: number;
   jobs: PumpJobLite[];
@@ -90,6 +97,8 @@ export interface PumpReconciliationRow {
   customerName: string | null;
   pumpRequired: boolean;
   pumpChargePerM3: number;
+  /** per_m3 · per_job · per_hour — how the order bills its pumping. */
+  pumpBasis: string;
   deliveredM3: number;
   jobs: number;
   openJobs: number;
@@ -97,7 +106,11 @@ export interface PumpReconciliationRow {
   pumpHours: number;
   /** Σ job charge amounts (what the pump jobs say the pumping is worth). */
   jobChargeAmount: number;
-  /** pumpChargePerM3 × deliveredM3 — what the order's billing already carries for pumping. */
+  /**
+   * What the order's billing carries for pumping: pumpChargePerM3 × deliveredM3
+   * under the per-m³ basis, else the pump_job / pump_hours invoice lines
+   * raised for the order.
+   */
   billedPumpCharge: number;
   /** Plain-words findings; empty when everything lines up. */
   flags: string[];
@@ -120,7 +133,13 @@ export function reconcilePumpJobs(orders: OrderPumpFacts[]): { rows: PumpReconci
     const pumpedM3 = round(done.reduce((s, j) => s + (Number(j.pumpedM3) || 0), 0), 3);
     const pumpHours = round(done.reduce((s, j) => s + (Number(j.hours) || 0), 0), 2);
     const jobChargeAmount = round(done.reduce((s, j) => s + (Number(j.chargeAmount) || 0), 0), 2);
-    const billedPumpCharge = round((Number(o.pumpChargePerM3) || 0) * (Number(o.deliveredM3) || 0), 2);
+    const pumpBasis = o.pumpBasis === 'per_job' || o.pumpBasis === 'per_hour' ? o.pumpBasis : 'per_m3';
+    // Under per job / per hour the pump charge is a line of its own on the
+    // invoice, so "billed" is what those lines add up to, not a per-m³ figure
+    // multiplied out.
+    const billedPumpCharge = pumpBasis === 'per_m3'
+      ? round((Number(o.pumpChargePerM3) || 0) * (Number(o.deliveredM3) || 0), 2)
+      : round(Number(o.invoicedPumpCharge) || 0, 2);
     const flags: string[] = [];
     // A pump was asked for (order / line / site flag) or is being billed
     // (a pump charge on the lines) — either way a pour with no pump job is a gap.
@@ -137,7 +156,7 @@ export function reconcilePumpJobs(orders: OrderPumpFacts[]): { rows: PumpReconci
     }
     return {
       orderId: o.orderId, orderNo: o.orderNo, customerName: o.customerName,
-      pumpRequired: o.pumpRequired, pumpChargePerM3: round(o.pumpChargePerM3, 2), deliveredM3: round(delivered, 3),
+      pumpRequired: o.pumpRequired, pumpChargePerM3: round(o.pumpChargePerM3, 2), pumpBasis, deliveredM3: round(delivered, 3),
       jobs: live.length, openJobs: live.length - done.length,
       pumpedM3, pumpHours, jobChargeAmount, billedPumpCharge, flags,
     };

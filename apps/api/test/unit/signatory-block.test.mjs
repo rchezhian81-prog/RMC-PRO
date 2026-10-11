@@ -58,21 +58,21 @@ test('every document opens with the supplier block: name, address, GSTIN and PAN
   }
 });
 
-test('one company block, built once and drawn once, for all ten documents', () => {
+test('one company block, built once and drawn once, for all eleven documents', () => {
   const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src/sales/pdf.service.ts'), 'utf8'));
   assert.equal((src.match(/function drawCompanyHeader\(/g) ?? []).length, 1, 'one header drawer');
-  assert.equal((src.match(/drawCompanyHeader\(doc, data, left\)/g) ?? []).length, 10, 'invoice, receipt, challan, quotation, weighbridge, statement, purchase order, payment voucher, payment advice, credit note');
+  assert.equal((src.match(/drawCompanyHeader\(doc, data, left\)/g) ?? []).length, 11, 'invoice, receipt, challan, quotation, rate contract, weighbridge, statement, purchase order, payment voucher, payment advice, credit note');
   assert.equal((src.match(/export function companyBlock\(/g) ?? []).length, 1, 'one builder');
-  for (const f of ['billing/invoice.service.ts', 'billing/receipt.service.ts', 'dispatch/delivery-challan.service.ts', 'sales/quotations.service.ts', 'inventory/weighbridge.service.ts']) {
+  for (const f of ['billing/invoice.service.ts', 'billing/receipt.service.ts', 'dispatch/delivery-challan.service.ts', 'sales/quotations.service.ts', 'sales/rate-contracts.service.ts', 'inventory/weighbridge.service.ts']) {
     const svcSrc = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src', f), 'utf8'));
     assert.match(svcSrc, /\.\.\.companyBlock\(company\)/, `${f} spreads the shared block`);
     assert.doesNotMatch(svcSrc, /companyGstin: company\?\.gstin/, `${f} no longer assembles the block by hand`);
   }
 });
 
-test('one signature block, drawn by one helper, on the seven documents that close with it', () => {
+test('one signature block, drawn by one helper, on the eight documents that close with it', () => {
   const src = codeOnly(readFileSync(resolve(repoRoot, 'apps/api/src/sales/pdf.service.ts'), 'utf8'));
   assert.equal((src.match(/function drawSignatoryBlock\(/g) ?? []).length, 1, 'one definition');
-  assert.equal((src.match(/drawSignatoryBlock\(doc, data\.companyName, left, right\)/g) ?? []).length, 7, 'invoice, receipt, quotation, statement, purchase order, payment advice, credit note');
+  assert.equal((src.match(/drawSignatoryBlock\(doc, data\.companyName, left, right\)/g) ?? []).length, 8, 'invoice, receipt, quotation, rate contract, statement, purchase order, payment advice, credit note');
   assert.equal((src.match(/Authorised Signatory/g) ?? []).length, 1, 'the wording lives in the helper only');
 });

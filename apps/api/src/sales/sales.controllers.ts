@@ -77,7 +77,7 @@ export class QuotationsController {
   }
   @Post() @RequirePermissions('quotations.create')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.service.create(tid(u), dto);
+    return this.service.create(tid(u), dto, u.userId);
   }
   @Patch(':id') @RequirePermissions('quotations.create')
   update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
@@ -145,7 +145,10 @@ export class QuotationsController {
 @RequireModule('sales')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class RateContractsController {
-  constructor(private readonly service: RateContractsService) {}
+  constructor(
+    private readonly service: RateContractsService,
+    private readonly pdf: PdfService,
+  ) {}
 
   @Get() @RequirePermissions('rate_contracts.view')
   list(@CurrentUser() u: AuthUser, @Query('limit') limit?: string) {
@@ -155,9 +158,19 @@ export class RateContractsController {
   get(@CurrentUser() u: AuthUser, @Param('id') id: string) {
     return this.service.get(tid(u), id);
   }
+  // Rate contract PDF — streamed as application/pdf (bypasses the JSON envelope).
+  @Get(':id/pdf') @RequirePermissions('rate_contracts.view')
+  async pdfDoc(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    const data = await this.service.pdfData(tid(u), id);
+    const buffer = await this.pdf.rateContractPdf(data);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${data.rateContractNo}.pdf"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
+  }
   @Post() @RequirePermissions('rate_contracts.create')
   create(@CurrentUser() u: AuthUser, @Body() dto: Record<string, unknown>) {
-    return this.service.create(tid(u), dto);
+    return this.service.create(tid(u), dto, u.userId);
   }
   @Patch(':id') @RequirePermissions('rate_contracts.create')
   update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {

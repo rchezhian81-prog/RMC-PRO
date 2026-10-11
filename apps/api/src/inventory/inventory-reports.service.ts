@@ -30,23 +30,33 @@ export class InventoryReportsService {
     );
   }
 
-  /** Stock value = current_quantity × material standard_rate. */
-  valuation(tenantId: string) {
+  /**
+   * Stock value = current_quantity × material standard_rate, optionally for
+   * one material and / or one plant. Each balance row is per plant, so the
+   * report carries the plant beside the material.
+   */
+  valuation(tenantId: string, filter: ReportFilter = {}) {
     return this.db.runInTenant(tenantId, async (m) => {
-      const rows = await m
+      const qb = m
         .getRepository(StockBalance)
         .createQueryBuilder('b')
         .innerJoin('materials', 'mt', 'mt.id = b.material_id')
+        .leftJoin('plants', 'p', 'p.id = b.plant_id')
         .select([
           'b.material_label AS material',
           'mt.material_code AS "materialCode"',
+          'b.material_id AS "materialId"',
+          'b.plant_id AS "plantId"',
+          'p.plant_name AS "plantName"',
           'b.uom AS uom',
           'b.current_quantity AS "currentQuantity"',
           'mt.standard_rate AS "standardRate"',
           '(b.current_quantity * mt.standard_rate) AS value',
         ])
-        .orderBy('value', 'DESC')
-        .getRawMany();
+        .orderBy('value', 'DESC');
+      if (filter.materialId) qb.andWhere('b.material_id = :materialId', { materialId: filter.materialId });
+      if (filter.plantId) qb.andWhere('b.plant_id = :plantId', { plantId: filter.plantId });
+      const rows = await qb.getRawMany();
       const total = rows.reduce((s, r) => s + Number(r.value ?? 0), 0);
       return { rows, total };
     });
@@ -58,13 +68,14 @@ export class InventoryReportsService {
    * moved it (received, opening, adjusted up; batched, adjusted down,
    * negative-stock issues) so the report reads as a story, not two sums.
    */
-  movement(tenantId: string, from?: string, to?: string) {
+  movement(tenantId: string, from?: string, to?: string, filter: ReportFilter = {}) {
     return this.db.runInTenant(tenantId, (m) => {
       const qb = m
         .getRepository(StockTransaction)
         .createQueryBuilder('s')
         .select('COALESCE(s.material_label, :none)', 'material')
         .addSelect('MAX(mt.material_code)', 'materialCode')
+        .addSelect('MAX(s.material_id::text)', 'materialId')
         .addSelect('MAX(mt.uom)', 'uom')
         .addSelect('COALESCE(SUM(s.in_quantity), 0)::float', 'totalIn')
         .addSelect('COALESCE(SUM(s.out_quantity), 0)::float', 'totalOut')
@@ -79,7 +90,15 @@ export class InventoryReportsService {
         .setParameter('none', 'Unspecified');
       if (from) qb.andWhere('s.created_at::date >= :from', { from });
       if (to) qb.andWhere('s.created_at::date <= :to', { to });
+      if (filter.materialId) qb.andWhere('s.material_id = :materialId', { materialId: filter.materialId });
+      if (filter.plantId) qb.andWhere('s.plant_id = :plantId', { plantId: filter.plantId });
       return qb.groupBy('s.material_label').orderBy('material', 'ASC').getRawMany();
     });
   }
+}
+
+/** Optional narrowing of a report to one material and / or one plant. */
+export interface ReportFilter {
+  materialId?: string;
+  plantId?: string;
 }

@@ -19,6 +19,7 @@ import { NumberingService } from './numbering.service';
 import { WhatsAppService } from './whatsapp.service';
 import { companyBlock, type QuotationPdfData } from './pdf.service';
 import { quotationShareMessage } from '../common/share-messages.util';
+import { documentDay, userNames } from '../common/user-names';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) =>
@@ -118,12 +119,18 @@ export class QuotationsService {
       })),
       interstate,
     );
-    // Names for the screen header: who the quotation is for and where it pours.
+    // Names for the screen header: who the quotation is for and where it pours,
+    // who prepared it (the sales user, else the login that raised it) and who
+    // approved it.
     const site = quotation.siteId ? await m.getRepository(Site).findOne({ where: { id: quotation.siteId } }) : null;
+    const nameOf = await userNames(m, [quotation.salesUserId, quotation.createdBy, quotation.approvedBy]);
     return {
       ...quotation,
       customerName: customer?.customerName ?? null,
       siteName: site?.siteName ?? null,
+      preparedByName: nameOf(quotation.salesUserId) ?? nameOf(quotation.createdBy),
+      approvedByName: quotation.approvalStatus === 'approved' ? nameOf(quotation.approvedBy) : null,
+      approvedAt: quotation.approvalStatus === 'approved' ? quotation.approvedAt : null,
       items,
       taxSummary,
     };
@@ -133,16 +140,12 @@ export class QuotationsService {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
   }
 
-  create(tenantId: string, dto: Record<string, unknown>) {
+  create(tenantId: string, dto: Record<string, unknown>, createdBy?: string | null) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(Quotation);
       const quotationNo = await this.numbering.next(m, tenantId, 'quotation', 'QTN-');
       const rest = nullifyEmpty(dto);
-      delete rest.id;
-      delete rest.tenantId;
-      delete rest.quotationNo;
-      delete rest.revisionNo;
-      delete rest.approvalStatus;
+      for (const k of ['id', 'tenantId', 'quotationNo', 'revisionNo', 'approvalStatus', 'createdBy', 'approvedBy', 'approvedAt']) delete rest[k];
       // `status` (active/converted) is the conversion state — set only by the
       // order path and by createRevision, never from the client body.
       delete rest.status;
@@ -156,6 +159,7 @@ export class QuotationsService {
           quotationNo,
           approvalStatus: 'draft',
           revisionNo: 0,
+          createdBy: createdBy ?? null,
         } as Record<string, unknown>),
       );
       // Optionally accept inline items on create.
@@ -180,7 +184,7 @@ export class QuotationsService {
         throw badReq('Approved quotation is locked; create a revision to change it');
       }
       const rest = nullifyEmpty(dto);
-      for (const k of ['id', 'tenantId', 'quotationNo', 'revisionNo', 'approvalStatus', 'status', 'items']) {
+      for (const k of ['id', 'tenantId', 'quotationNo', 'revisionNo', 'approvalStatus', 'status', 'items', 'createdBy', 'approvedBy', 'approvedAt']) {
         delete rest[k];
       }
       assertValidity(rest.quotationDate ?? quotation.quotationDate, rest.validUntil ?? quotation.validUntil);
@@ -262,11 +266,12 @@ export class QuotationsService {
   }
 
   submit(tenantId: string, id: string) {
-    return this.transition(tenantId, id, ['draft', 'rejected'], 'submitted');
+    return this.transition(tenantId, id, ['draft', 'rejected'], 'submitted', { approvedBy: null, approvedAt: null });
   }
 
+  /** Approving records who and when: the PDF prints both under the terms. */
   async approve(tenantId: string, id: string, userId: string) {
-    const full = await this.transition(tenantId, id, ['submitted'], 'approved');
+    const full = await this.transition(tenantId, id, ['submitted'], 'approved', { approvedBy: userId, approvedAt: new Date() });
     await this.audit.record({
       tenantId,
       actorUserId: userId,
@@ -282,6 +287,8 @@ export class QuotationsService {
   async reject(tenantId: string, id: string, userId: string, reason?: string) {
     const full = await this.transition(tenantId, id, ['submitted'], 'rejected', {
       remarks: reason ?? null,
+      approvedBy: null,
+      approvedAt: null,
     });
     await this.audit.record({
       tenantId,
@@ -321,6 +328,9 @@ export class QuotationsService {
         revisionNo: nextRev,
         approvalStatus: 'draft',
         status: 'active',
+        // The earlier approval belongs to the snapshot, not to the new draft.
+        approvedBy: null,
+        approvedAt: null,
       });
       return this.loadFull(m, id);
     });
@@ -357,6 +367,9 @@ export class QuotationsService {
         siteName: site?.siteName ?? null,
         paymentTerms: full.paymentTerms,
         remarks: full.remarks,
+        preparedByName: full.preparedByName,
+        approvedByName: full.approvedByName,
+        approvedOn: documentDay(full.approvedAt),
         items: full.items.map((it) => ({
           gradeLabel: it.gradeLabel ?? '',
           estimatedQuantity: it.estimatedQuantity,

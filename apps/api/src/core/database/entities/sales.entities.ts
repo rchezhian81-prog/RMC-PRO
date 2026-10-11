@@ -55,6 +55,11 @@ export class Quotation extends TenantScopedEntity {
   @Column({ name: 'pricing_type', type: 'varchar', default: 'credit' }) pricingType!: string;
   @Column({ name: 'remarks', type: 'text', nullable: true }) remarks!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
+  /** The login that raised it — the preparer when no sales user is named. */
+  @Column({ name: 'created_by', type: 'uuid', nullable: true }) createdBy!: string | null;
+  /** Who approved it and when; cleared on reject and on a new revision. */
+  @Column({ name: 'approved_by', type: 'uuid', nullable: true }) approvedBy!: string | null;
+  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true }) approvedAt!: Date | null;
 }
 
 /** Quotation line item with grade-wise rate + charges (Doc 6 §8.3). */
@@ -98,6 +103,11 @@ export class RateContract extends TenantScopedEntity {
   @Column({ name: 'approval_status', type: 'varchar', default: 'draft' }) approvalStatus!: string;
   @Column({ name: 'remarks', type: 'text', nullable: true }) remarks!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
+  /** The login that raised it — the preparer. */
+  @Column({ name: 'created_by', type: 'uuid', nullable: true }) createdBy!: string | null;
+  /** Who approved it and when; cleared on reject. */
+  @Column({ name: 'approved_by', type: 'uuid', nullable: true }) approvedBy!: string | null;
+  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true }) approvedAt!: Date | null;
 }
 
 /** Rate contract line item (Doc 6.1 R2). */

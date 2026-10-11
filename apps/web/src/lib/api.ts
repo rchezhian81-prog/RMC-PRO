@@ -567,6 +567,7 @@ export const rateContractsApi = {
   submit: (id: string) => post(`/rate-contracts/${id}/submit`),
   approve: (id: string) => post(`/rate-contracts/${id}/approve`),
   reject: (id: string, reason: string) => post(`/rate-contracts/${id}/reject`, { reason }),
+  pdfUrl: (id: string) => `/rate-contracts/${id}/pdf`,
 };
 
 export const orderDraftsApi = {
@@ -824,11 +825,22 @@ export const negativeStockApi = {
   reject: (id: string, remarks: string) => post(`/negative-stock-requests/${id}/reject`, { remarks }),
 };
 
+/** Optional narrowing of an inventory report to one material and / or one plant. */
+export type InventoryReportFilter = { materialId?: string; plantId?: string };
+const inventoryQs = (filter: InventoryReportFilter = {}, from?: string, to?: string) => {
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  if (filter.materialId) qs.set('materialId', filter.materialId);
+  if (filter.plantId) qs.set('plantId', filter.plantId);
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+};
 export const inventoryReportsApi = {
   lowStock: () => apiFetch<Row[]>('/inventory-reports/low-stock'),
   negativeStock: () => apiFetch<Row[]>('/inventory-reports/negative-stock'),
-  valuation: () => apiFetch<{ rows: Row[]; total: number }>('/inventory-reports/valuation'),
-  movement: (from?: string, to?: string) => apiFetch<Row[]>(`/inventory-reports/movement${dateQs(from, to)}`),
+  valuation: (filter?: InventoryReportFilter) => apiFetch<{ rows: Row[]; total: number }>(`/inventory-reports/valuation${inventoryQs(filter)}`),
+  movement: (from?: string, to?: string, filter?: InventoryReportFilter) => apiFetch<Row[]>(`/inventory-reports/movement${inventoryQs(filter, from, to)}`),
 };
 
 // ---- Billing & payments (Sprint 9) ----

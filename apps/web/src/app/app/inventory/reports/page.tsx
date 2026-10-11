@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowDownToLine, BookOpen, CalendarRange, Package, PackageMinus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, BookOpen, CalendarRange, Filter, Package, PackageMinus, RefreshCw } from 'lucide-react';
 import { currentMonthRange, settledFailure, settledReason, settledValue, todayLocal } from '../../../../lib/report-range';
 import { formatDate } from '../../../../lib/format-date';
 import { money, moneyShort } from '../../../../lib/money';
-import { inventoryReportsApi, type Row } from '../../../../lib/api';
+import { crud, inventoryReportsApi, type InventoryReportFilter, type Row } from '../../../../lib/api';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
 import { StatCard } from '../../../../components/ui/StatCard';
 import { Button } from '../../../../components/ui/Button';
-import { Input } from '../../../../components/ui/Field';
+import { Input, Select } from '../../../../components/ui/Field';
 import { ExportButton } from '../../../../components/ExportButton';
 import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui/States';
 
@@ -32,6 +32,10 @@ import { ErrorState, EmptyState, TableSkeleton } from '../../../../components/ui
 const num = (v: unknown) => (v == null || v === '' ? 0 : Number(v)) || 0;
 const qty = (v: unknown) => num(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 const signed = (v: unknown) => (num(v) === 0 ? '—' : `${num(v) > 0 ? '+' : '−'}${qty(Math.abs(num(v)))}`);
+/** A report row passes the material / plant narrowing (a row without the id is kept). */
+const matchesFilter = (r: Row, f: InventoryReportFilter) =>
+  (!f.materialId || !r.materialId || String(r.materialId) === f.materialId) &&
+  (!f.plantId || !r.plantId || String(r.plantId) === f.plantId);
 
 type Range = { from: string; to: string };
 const ymd = (d: Date) => {
@@ -65,11 +69,15 @@ export default function InventoryReportsPage() {
   // Bounds the movement report; the stock views are point-in-time.
   const [range, setRange] = useState<Range>(currentMonthRange());
   const [draft, setDraft] = useState<Range>(currentMonthRange());
+  // Narrow the movement and valuation tables to one material and / or plant.
+  const [filter, setFilter] = useState<InventoryReportFilter>({});
+  const [materials, setMaterials] = useState<Row[]>([]);
+  const [plants, setPlants] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async (r: Range) => {
+  const load = useCallback(async (r: Range, f: InventoryReportFilter = {}) => {
     setError(null);
     setBusy(true);
     try {
@@ -78,8 +86,8 @@ export default function InventoryReportsPage() {
       const out = await Promise.allSettled([
         inventoryReportsApi.lowStock(),
         inventoryReportsApi.negativeStock(),
-        inventoryReportsApi.valuation(),
-        inventoryReportsApi.movement(r.from || undefined, r.to || undefined),
+        inventoryReportsApi.valuation(f),
+        inventoryReportsApi.movement(r.from || undefined, r.to || undefined, f),
       ]);
       setLow(settledValue(out[0]) ?? []);
       setNegative(settledValue(out[1]) ?? []);
@@ -97,13 +105,25 @@ export default function InventoryReportsPage() {
   // The first paint reads the mount-time window; later loads go through apply().
   useEffect(() => {
     load(currentMonthRange()).catch((e) => setError(String(e)));
+    // The pick-lists for the filters — a failure leaves the selects empty, nothing more.
+    crud('materials').list().then(setMaterials).catch(() => setMaterials([]));
+    crud('plants').list().then(setPlants).catch(() => setPlants([]));
   }, [load]);
 
-  function apply(r: Range) {
+  function apply(r: Range, f: InventoryReportFilter = filter) {
     setRange(r);
     setDraft(r);
-    load(r).catch((e) => setError(String(e)));
+    setFilter(f);
+    load(r, f).catch((e) => setError(String(e)));
   }
+
+  // The same narrowing client-side, so a row set already on screen answers at once.
+  const movementRows = useMemo(() => movement.filter((r) => matchesFilter(r, filter)), [movement, filter]);
+  const valuationRows = useMemo(() => (valuation?.rows ?? []).filter((r) => matchesFilter(r, filter)), [valuation, filter]);
+  const valuationTotal = useMemo(() => valuationRows.reduce((t, r) => t + num(r.value), 0), [valuationRows]);
+  const materialName = filter.materialId ? String(materials.find((m) => String(m.id) === filter.materialId)?.materialName ?? '') : '';
+  const plantName = filter.plantId ? String(plants.find((p) => String(p.id) === filter.plantId)?.plantName ?? '') : '';
+  const filterLabel = [materialName, plantName].filter(Boolean).join(' · ');
 
   const now = new Date();
   const activePreset = PRESETS.find((p) => {
@@ -113,9 +133,10 @@ export default function InventoryReportsPage() {
   const periodLabel = range.from || range.to ? `${range.from ? formatDate(range.from) : 'the start'} → ${range.to ? formatDate(range.to) : 'today'}` : 'all time';
 
   const rateOf = useMemo(() => new Map((valuation?.rows ?? []).map((r) => [String(r.material), num(r.standardRate)])), [valuation]);
-  const receivedValue = useMemo(() => movement.reduce((t, r) => t + num(r.received) * (rateOf.get(String(r.material)) ?? 0), 0), [movement, rateOf]);
-  const batchedValue = useMemo(() => movement.reduce((t, r) => t + num(r.batched) * (rateOf.get(String(r.material)) ?? 0), 0), [movement, rateOf]);
-  const totals = useMemo(() => movement.reduce((t, r) => ({ in: t.in + num(r.totalIn), out: t.out + num(r.totalOut), moves: t.moves + num(r.movements) }), { in: 0, out: 0, moves: 0 }), [movement]);
+  const receivedValue = useMemo(() => movementRows.reduce((t, r) => t + num(r.received) * (rateOf.get(String(r.material)) ?? 0), 0), [movementRows, rateOf]);
+  const batchedValue = useMemo(() => movementRows.reduce((t, r) => t + num(r.batched) * (rateOf.get(String(r.material)) ?? 0), 0), [movementRows, rateOf]);
+  const totals = useMemo(() => movementRows.reduce((t, r) => ({ in: t.in + num(r.totalIn), out: t.out + num(r.totalOut), moves: t.moves + num(r.movements) }), { in: 0, out: 0, moves: 0 }), [movementRows]);
+  const exportSubtitle = [periodLabel, filterLabel].filter(Boolean).join(' · ');
 
   return (
     <div className="mn-ord mn-ir">
@@ -164,8 +185,8 @@ export default function InventoryReportsPage() {
       {error && <ErrorState message={error} />}
 
       <div className="mn-od-kpis mn-qd-kpis">
-        <StatCard label="Stock value" value={valuation ? moneyShort(valuation.total) : '—'} tone="info" />
-        <StatCard label="Materials" value={valuation ? String(valuation.rows.length) : '—'} />
+        <StatCard label={filterLabel ? 'Stock value (filtered)' : 'Stock value'} value={valuation ? moneyShort(valuationTotal) : '—'} tone="info" />
+        <StatCard label="Materials" value={valuation ? String(new Set(valuationRows.map((r) => String(r.material))).size) : '—'} />
         <StatCard label="Below reorder" value={loaded ? String(low.length) : '—'} tone={low.length ? 'warning' : 'neutral'} />
         <StatCard label="Negative" value={loaded ? String(negative.length) : '—'} tone={negative.length ? 'danger' : 'neutral'} />
         <StatCard label="Received in period" value={loaded ? moneyShort(receivedValue) : '—'} tone={receivedValue > 0 ? 'success' : 'neutral'} />
@@ -196,21 +217,45 @@ export default function InventoryReportsPage() {
           <Input type="date" aria-label="To" value={draft.to} min={draft.from || undefined} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
           <Button type="submit" variant="secondary" size="sm" disabled={busy || (draft.from === range.from && draft.to === range.to)}>Apply</Button>
         </form>
+        {/* Material and plant narrow the movement and valuation tables; the stock notes stay company-wide. */}
+        <div className="mn-dr-range mn-ir-filters" role="group" aria-label="Material and plant filters">
+          <Filter size={14} aria-hidden />
+          <Select aria-label="Material" value={filter.materialId ?? ''} onChange={(e) => apply(range, { ...filter, materialId: e.target.value || undefined })} disabled={busy}>
+            <option value="">All materials</option>
+            {materials.map((m) => (
+              <option key={String(m.id)} value={String(m.id)}>{String(m.materialName ?? m.materialCode ?? '')}</option>
+            ))}
+          </Select>
+          <Select aria-label="Plant" value={filter.plantId ?? ''} onChange={(e) => apply(range, { ...filter, plantId: e.target.value || undefined })} disabled={busy}>
+            <option value="">All plants</option>
+            {plants.map((p) => (
+              <option key={String(p.id)} value={String(p.id)}>{String(p.plantName ?? p.plantCode ?? '')}</option>
+            ))}
+          </Select>
+          {(filter.materialId || filter.plantId) && <Button type="button" variant="ghost" size="sm" onClick={() => apply(range, {})} disabled={busy}>Clear</Button>}
+        </div>
       </div>
 
       <Card
-        title={<span className="mn-board-card-title"><ArrowDownToLine size={16} aria-hidden /> Movement <span className="mn-board-card-count">{movement.length}</span></span>}
+        title={<span className="mn-board-card-title"><ArrowDownToLine size={16} aria-hidden /> Movement <span className="mn-board-card-count">{movementRows.length}</span></span>}
         actions={
           <div className="mn-ir-tools">
-            <span className="mn-ord-how">{periodLabel} · {totals.moves} {totals.moves === 1 ? 'movement' : 'movements'}</span>
-            <ExportButton rows={movement} columns={['material', 'materialCode', 'uom', 'received', 'opening', 'adjustedUp', 'batched', 'adjustedDown', 'negativeIssued', 'totalIn', 'totalOut']} filename="stock-movement" />
+            <span className="mn-ord-how">{periodLabel}{filterLabel ? ` · ${filterLabel}` : ''} · {totals.moves} {totals.moves === 1 ? 'movement' : 'movements'}</span>
+            <ExportButton
+              rows={movementRows}
+              columns={['material', 'materialCode', 'uom', 'received', 'opening', 'adjustedUp', 'batched', 'adjustedDown', 'negativeIssued', 'totalIn', 'totalOut']}
+              labels={{ uom: 'Unit', adjustedUp: 'Adjusted up', adjustedDown: 'Adjusted down', negativeIssued: 'Issued below zero' }}
+              filename="stock-movement"
+              title="Stock movement"
+              subtitle={exportSubtitle}
+            />
           </div>
         }
         padded={false}
       >
         {!loaded ? (
           <TableSkeleton cols={7} />
-        ) : movement.length ? (
+        ) : movementRows.length ? (
           <div className="mn-id-scroll">
             <Table>
               <thead>
@@ -225,7 +270,7 @@ export default function InventoryReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {movement.map((r) => {
+                {movementRows.map((r) => {
                   const adjusted = num(r.adjustedUp) - num(r.adjustedDown);
                   const net = num(r.totalIn) - num(r.totalOut);
                   const unit = String(r.uom ?? '');
@@ -247,7 +292,7 @@ export default function InventoryReportsPage() {
               </tbody>
               <tfoot>
                 <tr className="mn-ir-total">
-                  <Td colSpan={4}>All materials · {periodLabel}</Td>
+                  <Td colSpan={4}>{materialName || 'All materials'}{plantName ? ` · ${plantName}` : ''} · {periodLabel}</Td>
                   <Td numeric>{qty(totals.in)}</Td>
                   <Td numeric>{qty(totals.out)}</Td>
                   <Td numeric><span className={`mn-od-num${totals.in - totals.out < 0 ? ' mn-id-bad' : ''}`}>{signed(totals.in - totals.out)}</span></Td>
@@ -262,13 +307,22 @@ export default function InventoryReportsPage() {
       </Card>
 
       <Card
-        title={<span className="mn-board-card-title"><Package size={16} aria-hidden /> Stock valuation <span className="mn-board-card-count">{valuation?.rows.length ?? 0}</span></span>}
-        actions={<ExportButton rows={valuation?.rows ?? []} columns={['material', 'materialCode', 'currentQuantity', 'uom', 'standardRate', 'value']} filename="stock-valuation" />}
+        title={<span className="mn-board-card-title"><Package size={16} aria-hidden /> Stock valuation <span className="mn-board-card-count">{valuationRows.length}</span></span>}
+        actions={
+          <ExportButton
+            rows={valuationRows}
+            columns={['material', 'materialCode', 'plantName', 'currentQuantity', 'uom', 'standardRate', 'value']}
+            labels={{ uom: 'Unit', plantName: 'Plant', currentQuantity: 'On hand', standardRate: 'Standard rate' }}
+            filename="stock-valuation"
+            title="Stock valuation"
+            subtitle={filterLabel || null}
+          />
+        }
         padded={false}
       >
         {!loaded ? (
           <TableSkeleton cols={4} />
-        ) : valuation?.rows?.length ? (
+        ) : valuationRows.length ? (
           <div className="mn-id-scroll">
             <Table>
               <thead>
@@ -280,11 +334,11 @@ export default function InventoryReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {valuation.rows.map((r) => (
-                  <tr key={String(r.material)}>
+                {valuationRows.map((r) => (
+                  <tr key={`${String(r.material)}·${String(r.plantId ?? '')}`}>
                     <Td>
                       <span className="mn-od-num">{String(r.material)}</span>
-                      <span className="mn-od-rate-meta">{String(r.materialCode ?? '')}</span>
+                      <span className="mn-od-rate-meta">{String(r.materialCode ?? '')}{r.plantName ? ` · ${String(r.plantName)}` : ''}</span>
                     </Td>
                     <Td numeric><span className={num(r.currentQuantity) < 0 ? 'mn-id-bad' : undefined}>{qty(r.currentQuantity)} {String(r.uom ?? '')}</span></Td>
                     <Td numeric>{num(r.standardRate) > 0 ? `${money(r.standardRate)}/${String(r.uom ?? 'unit')}` : <span className="mn-ord-meta">no rate</span>}</Td>
@@ -294,8 +348,8 @@ export default function InventoryReportsPage() {
               </tbody>
               <tfoot>
                 <tr className="mn-ir-total">
-                  <Td colSpan={3}>Stock value at standard rates</Td>
-                  <Td numeric><span className="mn-ir-total-value">{money(valuation.total)}</span></Td>
+                  <Td colSpan={3}>Stock value at standard rates{filterLabel ? ` · ${filterLabel}` : ''}</Td>
+                  <Td numeric><span className="mn-ir-total-value">{money(valuationTotal)}</span></Td>
                 </tr>
               </tfoot>
             </Table>

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { formatDate } from '../../../../lib/format-date';
 import { crud, ordersApi, pumpApi, type Row } from '../../../../lib/api';
 import { getAccess } from '../../../../lib/session';
@@ -47,18 +48,68 @@ export default function PumpsPage() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const [form, setForm] = useState({ pumpVehicleId: '', orderId: '', operatorDriverId: '', scheduledDate: ymd(new Date()), scheduledTime: '', pipelineLengthM: '', chargeBasis: 'per_m3', rate: '', remarks: '' });
+  const EMPTY_FORM = { pumpVehicleId: '', orderId: '', operatorDriverId: '', scheduledDate: ymd(new Date()), scheduledTime: '', pipelineLengthM: '', chargeBasis: 'per_m3', rate: '', remarks: '' };
+  const [form, setForm] = useState(EMPTY_FORM);
+  // The planned job loaded into the form, or null when the form plans a new one.
+  const [editing, setEditing] = useState<{ id: string; jobNo: string } | null>(null);
+  const formCard = useRef<HTMLDivElement>(null);
   const canManage = getAccess().has('pump.manage');
 
   async function reload() {
     const [p, j, o, d, r] = await Promise.all([
       pumpApi.pumps(),
       pumpApi.list({ status: filterStatus || undefined, limit: 200 }),
-      ordersApi.list(undefined, 200).catch(() => [] as Row[]),
+      // Only confirmed orders can have a pump booked; the picker puts the ones
+      // that asked for a pump first, then the newest.
+      ordersApi.list('confirmed', 200).catch(() => [] as Row[]),
       crud('drivers').list({ active: true }).catch(() => [] as Row[]),
       pumpApi.utilisation(from, to).catch(() => null),
     ]);
-    setPumps(p); setJobs(j); setOrders(o); setDrivers(d); setReport(r);
+    setPumps(p); setJobs(j); setDrivers(d); setReport(r);
+    setOrders([...o].sort((a, b) => Number(Boolean(b.pumpRequired)) - Number(Boolean(a.pumpRequired))));
+  }
+
+  /** `Customer · Site · Order no` — the customer first, as the yard asks for it. */
+  const orderLabel = (o: Row) => [String(o.customerName ?? 'Customer not set'), o.siteName ? String(o.siteName) : '', String(o.orderNo ?? '')].filter(Boolean).join(' · ') + (o.pumpRequired ? ' · pump required' : '');
+
+  function startEdit(j: Row) {
+    setEditing({ id: String(j.id), jobNo: String(j.jobNo) });
+    setForm({
+      pumpVehicleId: String(j.pumpVehicleId ?? ''),
+      orderId: String(j.orderId ?? ''),
+      operatorDriverId: String(j.operatorDriverId ?? ''),
+      scheduledDate: String(j.scheduledDate ?? '').slice(0, 10),
+      scheduledTime: String(j.scheduledTime ?? ''),
+      pipelineLengthM: j.pipelineLengthM == null ? '' : String(j.pipelineLengthM),
+      chargeBasis: String(j.chargeBasis ?? 'per_m3'),
+      rate: j.rate == null ? '' : String(j.rate),
+      remarks: String(j.remarks ?? ''),
+    });
+    setError(null); setMsg(null);
+    formCard.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function cancelEdit() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+  }
+
+  /** The body for plan and for save alike — a blank means "clear it" on save. */
+  const body = () => ({
+    pumpVehicleId: form.pumpVehicleId, orderId: form.orderId || null, operatorDriverId: form.operatorDriverId || null,
+    scheduledDate: form.scheduledDate || null, scheduledTime: form.scheduledTime || null,
+    pipelineLengthM: form.pipelineLengthM ? Number(form.pipelineLengthM) : null,
+    chargeBasis: form.chargeBasis, rate: form.rate ? Number(form.rate) : 0, remarks: form.remarks || null,
+  });
+
+  async function save() {
+    if (!editing) return;
+    if (!form.pumpVehicleId) { setError('Choose the pump'); return; }
+    const { id, jobNo } = editing;
+    await run(async () => {
+      await pumpApi.update(id, body());
+      setEditing(null);
+      setForm(EMPTY_FORM);
+    }, `Pump job ${jobNo} updated.`);
   }
   useEffect(() => {
     reload().catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setLoaded(true));
@@ -106,6 +157,10 @@ export default function PumpsPage() {
   }
 
   const t = report?.reconciliation.totals ?? {};
+  // While editing, the job's order may have moved past 'confirmed' and so be
+  // missing from the picker; keep it selectable under its own label.
+  const currentJob = editing && form.orderId && !orders.some((o) => String(o.id) === form.orderId) ? jobs.find((j) => String(j.id) === editing.id) : undefined;
+  const currentOrder = currentJob ? [String(currentJob.customerName ?? ''), currentJob.siteName ? String(currentJob.siteName) : '', String(currentJob.orderNo ?? '')].filter(Boolean).join(' · ') || 'Current order' : null;
 
   return (
     <div>
@@ -148,24 +203,26 @@ export default function PumpsPage() {
       </div>
 
       {canManage && (
-        <div style={{ marginBottom: 18 }}>
-          <Card title="Plan a pump job">
-            <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: 18 }} ref={formCard} className={editing ? 'mn-pj-editing' : undefined}>
+          <Card title={editing ? `Edit job ${editing.jobNo}` : 'Plan a pump job'}>
+            <div className="mn-pj-form">
               <div style={{ minWidth: 170 }}>
                 <Field label="Pump" required>
                   <select className="mn-input" value={form.pumpVehicleId} onChange={(e) => setForm({ ...form, pumpVehicleId: e.target.value })}>
                     <option value="">— select —</option>
-                    {pumps.filter((p) => String(p.status) !== 'inactive').map((p) => <option key={String(p.id)} value={String(p.id)}>{String(p.vehicleNo)}</option>)}
+                    {pumps.filter((p) => String(p.status) !== 'inactive' || String(p.id) === form.pumpVehicleId).map((p) => <option key={String(p.id)} value={String(p.id)}>{String(p.vehicleNo)}</option>)}
                   </select>
                 </Field>
               </div>
-              <div style={{ minWidth: 220 }}>
-                <Field label="Order (customer / site)">
+              <div style={{ minWidth: 260 }}>
+                <Field label="Order (customer · site · order no)">
                   <select className="mn-input" value={form.orderId} onChange={(e) => setForm({ ...form, orderId: e.target.value })}>
                     <option value="">— none —</option>
-                    {orders.filter((o) => !['cancelled', 'closed'].includes(String(o.orderStatus))).map((o) => (
-                      <option key={String(o.id)} value={String(o.id)}>{String(o.orderNo)} · {String(o.customerName ?? '')}{o.siteName ? ` · ${String(o.siteName)}` : ''}</option>
+                    {orders.map((o) => (
+                      <option key={String(o.id)} value={String(o.id)}>{orderLabel(o)}</option>
                     ))}
+                    {/* The job's own order when it is no longer confirmed (delivered, closed), so editing does not silently drop it. */}
+                    {currentOrder && <option value={form.orderId}>{currentOrder}</option>}
                   </select>
                 </Field>
               </div>
@@ -189,8 +246,18 @@ export default function PumpsPage() {
               </div>
               <div style={{ width: 120 }}><Field label="Rate ₹"><Input type="number" step="any" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} disabled={form.chargeBasis === 'included'} /></Field></div>
               <div style={{ minWidth: 200 }}><Field label="Remarks"><Input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} /></Field></div>
-              <Button onClick={create} loading={busy}>Plan job</Button>
+              <div className="mn-pj-form-acts">
+                {editing ? (
+                  <>
+                    <Button onClick={save} loading={busy}>Save changes</Button>
+                    <Button variant="ghost" onClick={cancelEdit} disabled={busy}>Cancel</Button>
+                  </>
+                ) : (
+                  <Button onClick={create} loading={busy}>Plan job</Button>
+                )}
+              </div>
             </div>
+            {editing && <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--mn-muted)' }}>The plan can be changed until pumping starts. The charge is worked out again from the basis and the rate.</p>}
           </Card>
         </div>
       )}
@@ -229,6 +296,7 @@ export default function PumpsPage() {
                           {canManage && (NEXT[st] ?? []).map((n) => (
                             <Button key={n.status} size="sm" variant={n.status === 'completed' ? 'primary' : 'secondary'} onClick={() => advance(j, n.status)} disabled={busy} style={{ marginRight: 6 }}>{n.label}</Button>
                           ))}
+                          {canManage && ['planned', 'on_site'].includes(st) && <Button size="sm" variant="ghost" icon={<Pencil size={13} />} onClick={() => startEdit(j)} disabled={busy} style={{ marginRight: 6 }}>Edit</Button>}
                           {canManage && ['planned', 'on_site'].includes(st) && <Button size="sm" variant="ghost" onClick={() => cancel(j)} disabled={busy}>Cancel</Button>}
                         </Td>
                       </tr>

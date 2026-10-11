@@ -5404,3 +5404,73 @@ a.mn-ord-note--bad:hover { border-color: var(--mn-danger); }
 .mn-td-user-acts .mn-btn { white-space: nowrap; }
 .mn-td .mn-ord-cols--acts,
 .mn-td .mn-ord-row--acts { grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(70px, auto) minmax(230px, auto); }
+
+/* ============================================================================
+   EXPORT MENU — CSV / Excel / PDF from one button (components/ExportButton)
+   ============================================================================ */
+.mn-export { position: relative; display: inline-flex; flex-direction: column; align-items: flex-end; }
+.mn-export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 170px;
+  padding: 4px;
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-md);
+  box-shadow: var(--mn-shadow-pop);
+  display: grid;
+  gap: 2px;
+}
+.mn-export-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mn-text);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--mn-radius-md) - 2px);
+  text-align: left;
+  cursor: pointer;
+}
+.mn-export-item:hover,
+.mn-export-item:focus-visible { background: var(--mn-purple-50); color: var(--mn-primary); outline: none; }
+.mn-export-error { font-size: 12px; color: var(--mn-danger); white-space: nowrap; margin-top: 4px; }
+
+/* ============================================================================
+   LIVE LINE READ-OUT — the all-in rate and line value while a line is typed
+   ============================================================================ */
+.mn-qd-live {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--mn-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+.mn-qd-live strong { color: var(--mn-text); font-variant-numeric: tabular-nums; }
+.mn-qd-live-main { font-size: 13px; }
+.mn-qd-live-main strong { font-size: 15px; font-family: var(--mn-font-display); }
+.mn-qd-item-foot { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .mn-qd-live { grid-column: 1 / -1; padding-bottom: 8px; white-space: normal; }
+}
+
+/* ============================================================================
+   PUMP JOB FORM — plan / edit in the same form
+   ============================================================================ */
+.mn-pj-form { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.mn-pj-form-acts { display: flex; gap: 6px; align-items: center; }
+.mn-pj-editing { outline: 2px solid color-mix(in srgb, var(--mn-primary) 35%, transparent); outline-offset: -2px; }
+
+/* Material / plant filter row on Inventory reports (beside the period bar). */
+.mn-ir-filters .mn-input { width: auto; min-width: 160px; }

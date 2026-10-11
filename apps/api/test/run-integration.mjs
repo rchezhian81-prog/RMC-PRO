@@ -77,6 +77,10 @@ const ALL_TESTS = [
   'test/gps-tracking.test.mjs',
   'test/driver-app.test.mjs',
   'test/pump-management.test.mjs',
+  // Approver / preparer names on quotations and rate contracts (and the rate
+  // contract PDF), editing a planned pump job, inventory report filters.
+  // Seeds its own quotations, orders, pump and operator; tops up stock.
+  'test/quotation-approver-pump-edit.test.mjs',
   'test/whatsapp-cloud.test.mjs',
   'test/gps-vendor-feed.test.mjs',
   'test/qc-cube-integrity.test.mjs',

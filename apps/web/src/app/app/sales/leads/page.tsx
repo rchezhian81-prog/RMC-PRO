@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { CalendarClock, CheckCircle2, FileText, MessageSquare, PhoneCall, Plus, RefreshCw, Trophy, UserPlus, X, XCircle } from 'lucide-react';
+import { Building2, CalendarClock, CheckCircle2, FileText, MessageSquare, PhoneCall, Plus, RefreshCw, Trophy, UserPlus, X, XCircle } from 'lucide-react';
 import { formatDate, formatDateTime } from '../../../../lib/format-date';
 import { todayLocal } from '../../../../lib/report-range';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { leadsApi, type Row } from '../../../../lib/api';
+import { leadsApi, usersApi, type Row } from '../../../../lib/api';
+import { getAccess, getSession } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
 import { Badge, StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
@@ -20,14 +21,17 @@ import { useConfirm } from '../../../../components/ui/ConfirmDialog';
  * Sales leads — the enquiries and where each one stands.
  *
  * A stage strip (new / qualified / quoted / won / lost) with live counts
- * doubles as the filter, a summary pill counts the open leads and the
+ * doubles as the filter, with a Mine chip for the leads assigned to the
+ * signed-in person; a summary pill counts the open leads and the
  * follow-ups due today, notes call out the follow-ups that are overdue or
  * due today, and each lead is one tappable row: number and source, who and
- * how to reach them, what they need and where, the next follow-up (overdue
- * in red, today in amber) with the last outcome, and the stage. Opening a
- * lead shows the worksheet: log a follow-up (and move the stage), the
- * follow-up history, and the details to edit; Won and Lost are one press.
- * Same layout in both skins; every colour reads the semantic tokens.
+ * how to reach them (and the marketing person), what they need and where,
+ * the next follow-up (overdue in red, today in amber) with the last outcome,
+ * and the stage. Opening a lead shows the worksheet: log a follow-up (and
+ * move the stage), the follow-up history, and the details to edit; Won and
+ * Lost are one press, and a qualified lead becomes a customer (and site)
+ * under Masters with Create customer. Same layout in both skins; every
+ * colour reads the semantic tokens.
  */
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
@@ -39,6 +43,8 @@ const STAGES: Array<{ key: string; label: string; tone: Tone; hint: string }> = 
   { key: 'lost', label: 'Lost', tone: 'danger', hint: 'Did not convert; the reason is kept' },
 ];
 const OPEN = ['new', 'qualified', 'quoted'];
+/** The stages at which a lead is real enough to become a customer under Masters. */
+const CONVERTIBLE = ['qualified', 'quoted', 'won'];
 const stageOf = (r: Row) => String(r.leadStage ?? 'new');
 const toneOf = (stage: string): Tone => STAGES.find((s) => s.key === stage)?.tone ?? 'neutral';
 const labelOf = (stage: string) => STAGES.find((s) => s.key === stage)?.label.toLowerCase() ?? stage;
@@ -69,13 +75,18 @@ function followupCell(r: Row): { label: string; tone: Tone } {
 }
 
 export default function LeadsPage() {
-  const { prompt } = useConfirm();
+  const { prompt, confirm } = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [sel, setSel] = useState<Row | null>(null);
-  const blank = () => ({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '', requirementNotes: '', nextFollowupDate: '' });
+  const blank = () => ({ customerName: '', contactPerson: '', mobile: '', siteLocation: '', leadSource: '', requirementNotes: '', nextFollowupDate: '', assignedSalesUserId: '' });
   const [form, setForm] = useState(blank);
   const [showForm, setShowForm] = useState(false);
-  const [edit, setEdit] = useState({ customerName: '', contactPerson: '', mobile: '', email: '', siteLocation: '', leadSource: '', requirementNotes: '', lostReason: '' });
+  const [edit, setEdit] = useState({ customerName: '', contactPerson: '', mobile: '', email: '', siteLocation: '', leadSource: '', requirementNotes: '', lostReason: '', assignedSalesUserId: '' });
+  // The company's people, for the Marketing person select. Only someone who
+  // can list users gets the select; everyone else still sees the name.
+  const [people, setPeople] = useState<Row[] | null>(null);
+  const canPickPerson = getAccess().has('users.manage');
+  const myUserId = getSession()?.userId ?? null;
   const [fu, setFu] = useState({ notes: '', outcome: '', nextFollowupDate: '', leadStage: '' });
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +106,13 @@ export default function LeadsPage() {
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
   }, [reload]);
+
+  useEffect(() => {
+    if (!canPickPerson) return;
+    usersApi.list()
+      .then((u) => setPeople(u.filter((p) => String(p.status ?? '') === 'active' && p.userType !== 'super_admin')))
+      .catch(() => setPeople(null));
+  }, [canPickPerson]);
 
   // Arriving with ?lead=<id> (a link from a message) opens that lead.
   useEffect(() => {
@@ -124,6 +142,7 @@ export default function LeadsPage() {
       customerName: String(l.customerName ?? ''), contactPerson: String(l.contactPerson ?? ''),
       mobile: String(l.mobile ?? ''), email: String(l.email ?? ''), siteLocation: String(l.siteLocation ?? ''), leadSource: String(l.leadSource ?? ''),
       requirementNotes: String(l.requirementNotes ?? ''), lostReason: String(l.lostReason ?? ''),
+      assignedSalesUserId: String(l.assignedSalesUserId ?? ''),
     });
     setFu({ notes: '', outcome: '', nextFollowupDate: '', leadStage: '' });
     setMsg(null);
@@ -155,7 +174,10 @@ export default function LeadsPage() {
     setError(null);
     setBusy(true);
     try {
-      await leadsApi.update(String(sel.id), edit);
+      // Without the select, the person stays as it is rather than being cleared.
+      const body: Record<string, unknown> = { ...edit };
+      if (!canPickPerson) delete body.assignedSalesUserId;
+      await leadsApi.update(String(sel.id), body);
       await open(String(sel.id));
       await reload();
       setMsg('Details saved.');
@@ -180,6 +202,30 @@ export default function LeadsPage() {
       await open(String(sel.id));
       await reload();
       setMsg(fu.nextFollowupDate ? `Follow-up logged; next one on ${formatDate(fu.nextFollowupDate)}.` : 'Follow-up logged.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Make the customer (and the site, when there is a location) under Masters from this lead. */
+  async function createCustomer(r: Row) {
+    const location = String(r.siteLocation ?? '').trim();
+    if (!(await confirm({
+      title: `Create customer ${String(r.customerName)}`,
+      message: location
+        ? `A customer is created under Masters → Customers with the name, contact, mobile and email from this lead, numbered from the customer series, and a site "${location}" is created for it under Masters → Sites. Credit limit, GSTIN and state are filled in there afterwards.`
+        : 'A customer is created under Masters → Customers with the name, contact, mobile and email from this lead, numbered from the customer series. No site is created because the lead has no site location; add one under Masters → Sites. Credit limit, GSTIN and state are filled in there afterwards.',
+      confirmLabel: 'Create customer',
+    }))) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const made = await leadsApi.createCustomer(String(r.id));
+      await reload();
+      if (sel && sel.id === r.id) await open(String(r.id));
+      setMsg(`Customer ${made.customerName} (${made.customerCode}) created${made.siteCode ? ` with site ${made.siteCode}` : ''}. Finish the details under Masters.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {
@@ -240,8 +286,11 @@ export default function LeadsPage() {
     for (const r of rows) m.set(stageOf(r), (m.get(stageOf(r)) ?? 0) + 1);
     return m;
   }, [rows]);
+  const mine = rows.filter((r) => myUserId && String(r.assignedSalesUserId ?? '') === myUserId);
   const shown = useMemo(() => {
-    const list = filter ? rows.filter((r) => stageOf(r) === filter) : rows;
+    const list = filter === 'mine'
+      ? rows.filter((r) => myUserId && String(r.assignedSalesUserId ?? '') === myUserId)
+      : filter ? rows.filter((r) => stageOf(r) === filter) : rows;
     // Overdue first, then due today, then by next date; won and lost last.
     const rank = (r: Row) => {
       const stage = stageOf(r);
@@ -253,7 +302,7 @@ export default function LeadsPage() {
       return 2;
     };
     return [...list].sort((a, b) => rank(a) - rank(b) || String(a.nextFollowupDate ?? '').localeCompare(String(b.nextFollowupDate ?? '')));
-  }, [rows, filter]);
+  }, [rows, filter, myUserId]);
   const openLeads = rows.filter((r) => OPEN.includes(stageOf(r)));
   const overdue = openLeads.filter((r) => (daysUntil(r.nextFollowupDate) ?? 1) < 0).length;
   const dueToday = openLeads.filter((r) => daysUntil(r.nextFollowupDate) === 0).length;
@@ -301,6 +350,19 @@ export default function LeadsPage() {
             </button>
           );
         })}
+        {myUserId && (
+          <button
+            type="button"
+            className={`mn-board-chip${filter === 'mine' ? ' is-on' : ''}${mine.length === 0 ? ' is-empty' : ''}`}
+            data-tone="info"
+            aria-pressed={filter === 'mine'}
+            title="Leads where you are the marketing person"
+            onClick={() => setFilter(filter === 'mine' ? '' : 'mine')}
+          >
+            <span className="mn-board-chip-n">{mine.length}</span>
+            <span className="mn-board-chip-l">Mine</span>
+          </button>
+        )}
         {filter && (
           <button type="button" className="mn-board-chip mn-board-chip-clear" onClick={() => setFilter('')}>
             Show all
@@ -352,6 +414,14 @@ export default function LeadsPage() {
                 {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
               </Select>
             </Field>
+            {canPickPerson && (
+              <Field label="Marketing person" help="Who follows this lead up; it shows under Mine for them.">
+                <Select value={form.assignedSalesUserId} onChange={(e) => setForm({ ...form, assignedSalesUserId: e.target.value })}>
+                  <option value="">—</option>
+                  {(people ?? []).map((p) => <option key={String(p.id)} value={String(p.id)}>{String(p.name ?? p.email ?? '')}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field label="Next follow-up" help="When to call back. Leave blank and it shows as not planned.">
               <Input type="date" min={todayLocal()} value={form.nextFollowupDate} onChange={(e) => setForm({ ...form, nextFollowupDate: e.target.value })} />
             </Field>
@@ -403,6 +473,7 @@ export default function LeadsPage() {
                   <div className="mn-ord-who">
                     <span className="mn-ord-cust">{String(r.customerName ?? '—')}</span>
                     <span className="mn-ord-meta">{[r.contactPerson, r.mobile].filter(Boolean).map(String).join(' · ') || 'No contact yet'}</span>
+                    {r.assignedSalesUserName ? <span className="mn-ord-meta">Marketing: {String(r.assignedSalesUserName)}</span> : null}
                   </div>
                   <div className="mn-ld-need">
                     <span className="mn-ld-need-text">{r.requirementNotes ? String(r.requirementNotes) : <span className="mn-ord-meta">Requirement not noted</span>}</span>
@@ -418,6 +489,7 @@ export default function LeadsPage() {
                   <div className="mn-ord-status">
                     <StatusBadge status={stage} />
                     {r.quotationNo ? <Badge tone="info">{String(r.quotationNo)}</Badge> : null}
+                    {r.linkedCustomerCode ? <Badge tone="success">{String(r.linkedCustomerCode)}</Badge> : null}
                   </div>
                   <div className="mn-ord-act mn-ld-acts" onClick={(e) => e.stopPropagation()}>
                     {OPEN.includes(stage) && <Button size="sm" variant="ghost" icon={<Trophy size={14} />} onClick={() => markWon(r)} disabled={busy}>Won</Button>}
@@ -430,8 +502,8 @@ export default function LeadsPage() {
           </div>
         ) : (
           <EmptyState
-            title={filter ? `No ${labelOf(filter)} leads` : 'No leads yet'}
-            description={filter ? 'Nothing at this stage right now. Press the chip again to see every lead.' : 'Capture the first enquiry with New lead: who is asking, what they need, and when to call back.'}
+            title={filter === 'mine' ? 'No leads assigned to you' : filter ? `No ${labelOf(filter)} leads` : 'No leads yet'}
+            description={filter === 'mine' ? 'A lead shows here when you are set as its marketing person.' : filter ? 'Nothing at this stage right now. Press the chip again to see every lead.' : 'Capture the first enquiry with New lead: who is asking, what they need, and when to call back.'}
             action={filter ? <Button variant="secondary" size="sm" onClick={() => setFilter('')}>Show all leads</Button> : <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>New lead</Button>}
           />
         )}
@@ -455,6 +527,11 @@ export default function LeadsPage() {
                   <Link href={`/app/sales/quotations/${String(sel.quotationId)}`} className="mn-ord-link"><Button size="sm" variant="ghost" icon={<FileText size={14} />}>Quotation</Button></Link>
                 ) : selStage !== 'lost' ? (
                   <Link href="/app/sales/quotations" className="mn-ord-link"><Button size="sm" variant="ghost" icon={<FileText size={14} />}>Quote it</Button></Link>
+                ) : null}
+                {sel.customerId ? (
+                  <Link href="/app/entity/customers" className="mn-ord-link" title="Open under Masters → Customers"><Button size="sm" variant="ghost" icon={<Building2 size={14} />}>Customer: {String(sel.linkedCustomerName ?? sel.customerName)}</Button></Link>
+                ) : CONVERTIBLE.includes(selStage) ? (
+                  <Button size="sm" variant="secondary" icon={<Building2 size={14} />} onClick={() => createCustomer(sel)} disabled={busy}>Create customer</Button>
                 ) : null}
                 <Button size="sm" variant="ghost" icon={<X size={14} />} onClick={close}>Close</Button>
               </div>
@@ -541,9 +618,24 @@ export default function LeadsPage() {
                   {[...new Set([...SOURCES, ...(edit.leadSource ? [edit.leadSource] : [])])].map((s) => <option key={s} value={s}>{s}</option>)}
                 </Select>
               </Field>
-              <Field label="What they need">
-                <Input value={edit.requirementNotes} onChange={(e) => setEdit({ ...edit, requirementNotes: e.target.value })} />
-              </Field>
+              {canPickPerson ? (
+                <Field label="Marketing person" help="Who follows this lead up.">
+                  <Select value={edit.assignedSalesUserId} onChange={(e) => setEdit({ ...edit, assignedSalesUserId: e.target.value })}>
+                    <option value="">—</option>
+                    {(people ?? []).map((p) => <option key={String(p.id)} value={String(p.id)}>{String(p.name ?? p.email ?? '')}</option>)}
+                    {edit.assignedSalesUserId && !(people ?? []).some((p) => String(p.id) === edit.assignedSalesUserId) ? <option value={edit.assignedSalesUserId}>{String(sel.assignedSalesUserName ?? 'Current person')}</option> : null}
+                  </Select>
+                </Field>
+              ) : (
+                <Field label="Marketing person">
+                  <Input value={String(sel.assignedSalesUserName ?? '')} placeholder="Not assigned" readOnly />
+                </Field>
+              )}
+              <div className="mn-ld-wide">
+                <Field label="What they need">
+                  <Input value={edit.requirementNotes} onChange={(e) => setEdit({ ...edit, requirementNotes: e.target.value })} />
+                </Field>
+              </div>
               {selStage === 'lost' && (
                 <Field label="Why it was lost">
                   <Input value={edit.lostReason} onChange={(e) => setEdit({ ...edit, lostReason: e.target.value })} />

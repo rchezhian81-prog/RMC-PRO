@@ -7,6 +7,7 @@ import {
   PlanUsageController,
   RolesController,
   SettingsController,
+  UserFilesController,
   UsersController,
 } from './setup.controllers';
 import {
@@ -16,6 +17,7 @@ import {
   SettingsService,
   UsersService,
 } from './setup.services';
+import { NumberingService } from '../sales/numbering.service';
 
 @Module({
   controllers: [
@@ -24,6 +26,7 @@ import {
     NumberSeriesController,
     PlanUsageController,
     UsersController,
+    UserFilesController,
     RolesController,
   ],
   providers: [
@@ -32,6 +35,8 @@ import {
     NumberSeriesService,
     UsersService,
     RolesService,
+    // Employee codes left blank are numbered from the `employee` series.
+    NumberingService,
     TenantGuard,
     PermissionsGuard,
   ],

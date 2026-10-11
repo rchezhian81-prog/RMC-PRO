@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
 import { validateMasterFields } from '@rmc/shared';
 import { AuditService } from '../audit/audit.service';
 import { TenantCrudService } from '../common/tenant-crud.service';
 import { assertFields } from '../common/validation';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { computeAllExposures, computeCustomerExposure } from '../orders/exposure.util';
+import { NumberingService, defaultPrefixFor } from '../sales/numbering.service';
 import {
   ConcreteGrade,
   Customer,
@@ -19,14 +21,23 @@ import {
   Vehicle,
 } from '../core/database/entities';
 
+/** True when a code field was left blank, so the server numbers the record. */
+const isBlank = (v: unknown): boolean => v === undefined || v === null || String(v).trim() === '';
+
 @Injectable()
 export class CustomersService extends TenantCrudService<Customer> {
-  constructor(db: TenantDbService, audit: AuditService) {
-    super(db, Customer, { orderBy: 'customerCode', required: ['customerCode', 'customerName'], resource: 'customer', labelField: 'customerName' }, audit);
+  constructor(db: TenantDbService, audit: AuditService, private readonly numbering: NumberingService) {
+    // The code is not required: left blank, it is allocated from the `customer`
+    // number series (CUST-0001) inside the create transaction.
+    super(db, Customer, { orderBy: 'customerCode', required: ['customerName'], resource: 'customer', labelField: 'customerName' }, audit);
   }
   // GSTIN, mobile, creditLimit, creditDays.
   protected override validateWrite(dto: Record<string, unknown>): void {
     assertFields(validateMasterFields(dto));
+  }
+
+  protected override async beforeInsert(m: EntityManager, tenantId: string, dto: Record<string, unknown>): Promise<void> {
+    if (isBlank(dto.customerCode)) dto.customerCode = await this.numbering.next(m, tenantId, 'customer', defaultPrefixFor('customer'));
   }
 
   /**
@@ -47,12 +58,17 @@ export class CustomersService extends TenantCrudService<Customer> {
 
 @Injectable()
 export class SitesService extends TenantCrudService<Site> {
-  constructor(db: TenantDbService, audit: AuditService) {
-    super(db, Site, { orderBy: 'siteCode', required: ['siteCode', 'siteName'], resource: 'site', labelField: 'siteName' }, audit);
+  constructor(db: TenantDbService, audit: AuditService, private readonly numbering: NumberingService) {
+    // Same as customers: a blank code comes from the `site` series (SITE-0001).
+    super(db, Site, { orderBy: 'siteCode', required: ['siteName'], resource: 'site', labelField: 'siteName' }, audit);
   }
   // Mobile.
   protected override validateWrite(dto: Record<string, unknown>): void {
     assertFields(validateMasterFields(dto));
+  }
+
+  protected override async beforeInsert(m: EntityManager, tenantId: string, dto: Record<string, unknown>): Promise<void> {
+    if (isBlank(dto.siteCode)) dto.siteCode = await this.numbering.next(m, tenantId, 'site', defaultPrefixFor('site'));
   }
 }
 

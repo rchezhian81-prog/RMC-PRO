@@ -210,7 +210,7 @@ async function performFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
 export interface LoginResult {
   access_token: string;
   refresh_token: string;
-  user: { email: string; userType: string };
+  user: { id: string; email: string; userType: string };
   tenant: { code: string } | null;
   permissions: string[];
   roles: string[];
@@ -227,7 +227,7 @@ export interface PlanUsage {
   plants: { used: number; limit: number | null };
 }
 export interface MeResult {
-  user: { email: string; userType: string };
+  user: { id: string; email: string; userType: string };
   tenant: { code: string; name: string; status: string } | null;
   permissions: string[];
   roles: string[];
@@ -469,6 +469,21 @@ export const usersApi = {
     apiFetch<Row>('/users', { method: 'POST', body: JSON.stringify(b) }),
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  /** Upload / replace a user's photo. `data` is base64 (no data-URL prefix). */
+  uploadPhoto: (id: string, mime: string, data: string) =>
+    apiFetch<{ hasPhoto: boolean; photoMime: string }>(`/users/${id}/photo`, { method: 'PUT', body: JSON.stringify({ mime, data }) }),
+  removePhoto: (id: string) => apiFetch<{ hasPhoto: boolean }>(`/users/${id}/photo`, { method: 'DELETE' }),
+  /** Upload / replace a user's ID proof (image or PDF) with its file name. */
+  uploadIdProof: (id: string, mime: string, data: string, name: string) =>
+    apiFetch<{ idProofName: string; idProofMime: string }>(`/users/${id}/id-proof`, { method: 'PUT', body: JSON.stringify({ mime, data, name }) }),
+  removeIdProof: (id: string) => apiFetch<{ idProofName: null }>(`/users/${id}/id-proof`, { method: 'DELETE' }),
+  /**
+   * The photo as an object URL for an <img>. The route needs the bearer token,
+   * so a plain src would be refused; the caller revokes the URL when done.
+   */
+  photoObjectUrl: (id: string) => fetchObjectUrl(`/users/${id}/photo`),
+  /** Open the ID proof (image or PDF) in a new tab. */
+  openIdProof: (id: string, name?: string | null) => openPdf(`/users/${id}/id-proof`, name),
 };
 
 /** What the tenant's plan allows, and how much of it is already used. */
@@ -532,6 +547,9 @@ export const leadsApi = {
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/leads/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   addFollowup: (id: string, b: Record<string, unknown>) => post(`/leads/${id}/followups`, b),
+  /** Create the customer (and the site, when the lead has a location) under Masters from this lead. */
+  createCustomer: (id: string) =>
+    apiFetch<{ customerId: string; customerCode: string; customerName: string; siteId: string | null; siteCode: string | null }>(`/leads/${id}/create-customer`, { method: 'POST' }),
 };
 
 export const quotationsApi = {
@@ -1359,6 +1377,26 @@ export async function openWhatsAppShare(call: () => Promise<Row>): Promise<strin
  * `name` is the document number the caller already has; the API's own
  * Content-Disposition filename wins when the browser lets us read it.
  */
+/**
+ * Fetch an authenticated binary route (a stored image) and return an object URL
+ * for an <img>. Throws with the server's message when it is refused.
+ */
+export async function fetchObjectUrl(path: string): Promise<string> {
+  const token = getSession()?.token;
+  const res = await fetch(`${BASE}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    let reason = `The file could not be loaded (HTTP ${res.status}).`;
+    try {
+      const j = (await res.json()) as { error?: { message?: string }; message?: string } | null;
+      reason = j?.error?.message ?? j?.message ?? reason;
+    } catch {
+      // A non-JSON body: keep the status-code message.
+    }
+    throw new Error(reason);
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
 export async function openPdf(path: string, name?: string | null): Promise<void> {
   const tab = window.open('', '_blank');
   try {

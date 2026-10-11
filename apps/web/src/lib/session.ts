@@ -8,6 +8,8 @@ export interface Session {
   token: string;
   userType: string;
   email: string;
+  /** This person's user id, so screens can pick out what is assigned to them. */
+  userId?: string;
   /** Effective permission keys for this user (for UI gating). */
   permissions?: string[];
   /** Role keys held by this user (company_owner => full access). */

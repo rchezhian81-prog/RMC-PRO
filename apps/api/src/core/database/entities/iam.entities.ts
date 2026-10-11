@@ -58,6 +58,40 @@ export class User extends BaseUuidEntity {
    */
   @Column({ name: 'must_change_password', type: 'boolean', default: false })
   mustChangePassword!: boolean;
+
+  /** Employee code; allocated from the `employee` number series when left blank. */
+  @Column({ name: 'employee_code', type: 'varchar', nullable: true })
+  employeeCode!: string | null;
+
+  /** male | female | other */
+  @Column({ name: 'gender', type: 'varchar', nullable: true })
+  gender!: string | null;
+
+  @Column({ name: 'date_of_joining', type: 'date', nullable: true })
+  dateOfJoining!: string | null;
+
+  @Column({ name: 'address', type: 'varchar', nullable: true })
+  address!: string | null;
+
+  /**
+   * A photo and an ID proof, stored like the company logo: the validated
+   * content type and the raw bytes base64-encoded. Never part of the user
+   * list; served by their own routes.
+   */
+  @Column({ name: 'photo_mime', type: 'varchar', nullable: true })
+  photoMime!: string | null;
+
+  @Column({ name: 'photo_data', type: 'text', nullable: true })
+  photoData!: string | null;
+
+  @Column({ name: 'id_proof_name', type: 'varchar', nullable: true })
+  idProofName!: string | null;
+
+  @Column({ name: 'id_proof_mime', type: 'varchar', nullable: true })
+  idProofMime!: string | null;
+
+  @Column({ name: 'id_proof_data', type: 'text', nullable: true })
+  idProofData!: string | null;
 }
 
 /** Global permission catalog (Design Doc 6 §6.3). No tenant_id. */

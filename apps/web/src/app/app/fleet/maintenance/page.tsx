@@ -59,6 +59,7 @@ const PAPERS: Array<{ key: string; label: string }> = [
   { key: 'permitExpiry', label: 'permit' },
   { key: 'pollutionExpiry', label: 'PUC' },
   { key: 'roadTaxExpiry', label: 'road tax' },
+  { key: 'serviceExpiry', label: 'service' },
 ];
 
 export default function FleetMaintenancePage() {

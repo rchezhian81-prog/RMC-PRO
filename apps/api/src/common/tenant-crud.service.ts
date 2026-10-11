@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type {
   DeepPartial,
+  EntityManager,
   EntityTarget,
   FindManyOptions,
   FindOptionsWhere,
@@ -117,6 +118,14 @@ export class TenantCrudService<T extends ObjectLiteral> {
    */
   protected validateWrite(_dto: Record<string, unknown>): void {}
 
+  /**
+   * Per-entity hook run INSIDE the create transaction, just before the row is
+   * built, on the same connection. Masters that number themselves (a customer
+   * or site code left blank) fill the code in here from Number Series, so the
+   * number is only consumed if the insert commits. Default is a no-op.
+   */
+  protected async beforeInsert(_m: EntityManager, _tenantId: string, _dto: Record<string, unknown>): Promise<void> {}
+
   async create(tenantId: string, dto: Record<string, unknown>, userId?: string | null): Promise<T> {
     const missing = (this.opts.required ?? []).filter(
       (k) => dto[k] === undefined || dto[k] === null || dto[k] === '',
@@ -129,13 +138,15 @@ export class TenantCrudService<T extends ObjectLiteral> {
       });
     }
     this.validateWrite(dto);
-    const saved = await this.db.runInTenant(tenantId, (m) => {
+    const saved = await this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(this.entity);
+      const body = withoutSystemFields(dto);
+      await this.beforeInsert(m, tenantId, body);
       // Strip server-owned columns before create. A client-supplied `id` matching
       // an existing row would make repo.save() UPDATE (overwrite) that row instead
       // of inserting — a within-tenant row-overwrite via the create endpoint — and
       // the created/updated timestamps and actor columns must not be forgeable.
-      const entity = repo.create({ ...withoutSystemFields(dto), tenantId } as unknown as DeepPartial<T>);
+      const entity = repo.create({ ...body, tenantId } as unknown as DeepPartial<T>);
       return repo.save(entity);
     });
     await this.recordAudit(tenantId, userId, AUDIT_ACTIONS.MASTER_CREATE, saved, 'Created');

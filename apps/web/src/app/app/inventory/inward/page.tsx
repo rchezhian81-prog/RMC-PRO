@@ -1,13 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
-import { ArrowDownToLine, CheckCircle2, ClipboardCheck, Package, RefreshCw, Scale, Truck, XCircle } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, ClipboardCheck, Package, Paperclip, Plus, RefreshCw, Scale, Trash2, Truck, XCircle } from 'lucide-react';
+import { convertUom, reachableUoms, type UomConversionRow } from '@rmc/shared';
 import { formatDateTime } from '../../../../lib/format-date';
 import { money } from '../../../../lib/money';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { crud, materialInwardApi, type Row } from '../../../../lib/api';
+import { crud, materialInwardApi, openAttachment, type Row } from '../../../../lib/api';
+import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
@@ -23,13 +25,15 @@ import { useConfirm } from '../../../../components/ui/ConfirmDialog';
  * A status strip (draft / posted / cancelled) with live counts doubles as
  * the filter, a summary pill totals the accepted value on screen, and each
  * inward is one row: number and when it arrived, the material with the
- * supplier, truck and challan, what was accepted against what came (with
- * the rejected part called out), the value at the rate keyed (flagged when
- * far from the material's standard rate), the status, and Post / Cancel for
- * a draft. Drafts still to post get a note. The "new inward" form reads the
- * unit and the standard rate off the material, defaults accepted to
- * received, and shows the value as you type. Same layout in both skins;
- * every colour reads the semantic tokens.
+ * supplier, truck, challan and bill numbers, what was accepted against what
+ * came (with the rejected part called out), the value at the rate keyed
+ * (flagged when far from the material's standard rate), the status, who
+ * posted it, the attached invoice, and Post / Cancel for a draft. Drafts
+ * still to post get a note. The "new inward" form is one truck: a header
+ * (plant, supplier, truck, challan and bill numbers) and a line per
+ * material on it — unit, received, accepted, rate, value as you type — and
+ * posting it writes one numbered inward per line. Same layout in both
+ * skins; every colour reads the semantic tokens.
  */
 
 const num = (v: unknown) => (v == null || v === '' ? 0 : Number(v)) || 0;
@@ -46,7 +50,26 @@ const labelOf = (status: string) => STATUSES.find((s) => s.key === status)?.labe
 /** A rate more than a fifth away from the material's standard rate is worth a second look. */
 const rateOff = (r: Row) => num(r.standardRate) > 0 && Math.abs(num(r.rate) - num(r.standardRate)) / num(r.standardRate) > 0.2;
 
-const EMPTY = { plantId: '', supplierId: '', materialId: '', quantityReceived: '', quantityAccepted: '', rate: '', vehicleNo: '', supplierChallanNo: '' };
+const EMPTY_HEAD = { plantId: '', supplierId: '', vehicleNo: '', supplierChallanNo: '', supplierBillNo: '' };
+/** `uom` is the unit the figures are keyed in — the material's own, or one convertible from it. */
+interface InwardLine { materialId: string; uom: string; quantityReceived: string; quantityAccepted: string; rate: string }
+const emptyLine = (): InwardLine => ({ materialId: '', uom: '', quantityReceived: '', quantityAccepted: '', rate: '' });
+
+const INVOICE_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf,.png,.jpg,.jpeg,.webp,.pdf';
+const INVOICE_MAX_BYTES = 3 * 1024 * 1024;
+
+/** Read a File as base64 with no data-URL prefix. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      resolve(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function MaterialInwardPage() {
   const { confirm } = useConfirm();
@@ -54,22 +77,29 @@ export default function MaterialInwardPage() {
   const [materials, setMaterials] = useState<Row[]>([]);
   const [suppliers, setSuppliers] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
+  const [conversions, setConversions] = useState<UomConversionRow[]>([]);
   const [filter, setFilter] = useState('');
-  const [form, setForm] = useState(EMPTY);
+  const [head, setHead] = useState(EMPTY_HEAD);
+  const [lines, setLines] = useState<InwardLine[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const win = useListWindow();
+  const canAdjust = getAccess().has('stock.adjust');
+  // One hidden file input serves every row; the row it is for is remembered here.
+  const fileInput = useRef<HTMLInputElement>(null);
+  const attachFor = useRef<Row | null>(null);
 
   const reload = useCallback(async () => {
-    const [i, m, s, p] = await Promise.all([materialInwardApi.list(undefined, win.limit), crud('materials').list(), crud('suppliers').list(), crud('plants').list()]);
+    const [i, m, s, p, c] = await Promise.all([materialInwardApi.list(undefined, win.limit), crud('materials').list(), crud('suppliers').list(), crud('plants').list(), crud('uom-conversions').list()]);
     setRows(i);
     setMaterials(m);
     setSuppliers(s);
     setPlants(p);
-    setForm((f) => (f.plantId || p.length !== 1 ? f : { ...f, plantId: String(p[0]?.id ?? '') }));
+    setConversions(c.map((r) => ({ from: String(r.fromUom ?? ''), to: String(r.toUom ?? ''), factor: num(r.factor) })));
+    setHead((h) => (h.plantId || p.length !== 1 ? h : { ...h, plantId: String(p[0]?.id ?? '') }));
   }, [win.limit]);
 
   useEffect(() => {
@@ -107,34 +137,58 @@ export default function MaterialInwardPage() {
     }
   }
 
-  const chosen = materials.find((x) => String(x.id) === form.materialId);
-  function pickMaterial(id: string) {
+  // ---- the truck being keyed ----
+  const setLine = (i: number, patch: Partial<InwardLine>) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  const materialOf = (l: InwardLine) => materials.find((x) => String(x.id) === l.materialId);
+  /** The units a line may be keyed in: the material's own plus every unit a conversion reaches. */
+  const unitsFor = (l: InwardLine) => reachableUoms(materialOf(l)?.uom as string | undefined, conversions);
+  function pickMaterial(i: number, id: string) {
     const m = materials.find((x) => String(x.id) === id);
     // The standard rate is the starting point; the supplier's rate on the challan overrides it.
-    setForm((f) => ({ ...f, materialId: id, rate: f.rate || (m && num(m.standardRate) > 0 ? String(num(m.standardRate)) : '') }));
+    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, materialId: id, uom: String(m?.uom ?? ''), rate: l.rate || (m && num(m.standardRate) > 0 ? String(num(m.standardRate)) : '') } : l)));
   }
-  const received = num(form.quantityReceived);
-  const accepted = form.quantityAccepted === '' ? received : num(form.quantityAccepted);
-  const preview = accepted * num(form.rate);
+  /** A keyed figure in the material's own unit (the rate and stock are per that unit). */
+  const ownQty = (l: InwardLine, v: string) => {
+    const own = String(materialOf(l)?.uom ?? '');
+    if (!l.uom || !own || l.uom === own) return num(v);
+    return convertUom(num(v), l.uom, own, conversions) ?? 0;
+  };
+  const acceptedOf = (l: InwardLine) => (l.quantityAccepted === '' ? l.quantityReceived : l.quantityAccepted);
+  const lineValue = (l: InwardLine) => ownQty(l, acceptedOf(l)) * num(l.rate);
+  const liveLines = lines.filter((l) => l.materialId && num(l.quantityReceived) > 0);
+  const formValue = liveLines.reduce((t, l) => t + lineValue(l), 0);
 
   async function create(e: FormEvent) {
     e.preventDefault();
-    if (!form.materialId) { setError('Pick the material that arrived.'); return; }
-    if (!(received > 0)) { setError('Enter the quantity received.'); return; }
-    if (accepted < 0 || accepted > received + 0.0005) { setError('Accepted cannot be more than received.'); return; }
+    if (!liveLines.length) { setError('Add at least one line with the material and the quantity received.'); return; }
+    for (const l of liveLines) {
+      if (num(acceptedOf(l)) < 0 || num(acceptedOf(l)) > num(l.quantityReceived) + 0.0005) { setError(`Accepted cannot be more than received for ${String(materialOf(l)?.materialName ?? 'a line')}.`); return; }
+    }
     await run(async () => {
-      const created = (await materialInwardApi.create({
-        plantId: form.plantId || undefined,
-        supplierId: form.supplierId || undefined,
-        materialId: form.materialId,
-        vehicleNo: form.vehicleNo.trim() || undefined,
-        supplierChallanNo: form.supplierChallanNo.trim() || undefined,
-        quantityReceived: received,
-        quantityAccepted: form.quantityAccepted === '' ? undefined : accepted,
-        rate: num(form.rate),
-      })) as Row;
-      setForm((f) => ({ ...EMPTY, plantId: f.plantId }));
-      return `${String(created?.inwardNo ?? 'Inward')} created as a draft. Post it to add ${qty(accepted)} ${String(chosen?.uom ?? '')} to stock.`;
+      const created = await materialInwardApi.createBatch({
+        plantId: head.plantId || undefined,
+        supplierId: head.supplierId || undefined,
+        vehicleNo: head.vehicleNo.trim() || undefined,
+        supplierChallanNo: head.supplierChallanNo.trim() || undefined,
+        supplierBillNo: head.supplierBillNo.trim() || undefined,
+        lines: liveLines.map((l) => {
+          const own = String(materialOf(l)?.uom ?? '');
+          const other = l.uom && own && l.uom !== own;
+          return {
+            materialId: l.materialId,
+            ...(other ? { enteredUom: l.uom } : {}),
+            quantityReceived: num(l.quantityReceived),
+            quantityAccepted: l.quantityAccepted === '' ? undefined : num(l.quantityAccepted),
+            rate: num(l.rate),
+          };
+        }),
+      });
+      setHead((h) => ({ ...EMPTY_HEAD, plantId: h.plantId }));
+      setLines([emptyLine()]);
+      const nos = created.map((r) => String(r.inwardNo ?? '')).filter(Boolean).join(', ');
+      return created.length === 1
+        ? `${nos} created as a draft. Post it to add the accepted quantity to stock.`
+        : `${created.length} inwards created as drafts (${nos}). Post each one to add its accepted quantity to stock.`;
     });
   }
 
@@ -148,6 +202,28 @@ export default function MaterialInwardPage() {
   async function cancel(r: Row) {
     if (!(await confirm({ title: 'Cancel inward', message: `Cancel ${String(r.inwardNo)}? Nothing has reached stock yet; the entry stays on record as cancelled.`, confirmLabel: 'Cancel inward', danger: true }))) return;
     await run(() => materialInwardApi.cancel(String(r.id)), `${String(r.inwardNo)} cancelled.`);
+  }
+
+  // ---- the supplier's invoice on a row ----
+  function chooseInvoice(r: Row) {
+    attachFor.current = r;
+    if (fileInput.current) fileInput.current.value = '';
+    fileInput.current?.click();
+  }
+  async function invoiceChosen(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const r = attachFor.current;
+    if (!file || !r) return;
+    if (file.size > INVOICE_MAX_BYTES) { setError('The invoice must be 3 MB or smaller. A phone photo at a lower quality setting, or the PDF, will fit.'); return; }
+    await run(async () => {
+      const data = await fileToBase64(file);
+      await materialInwardApi.attach(String(r.id), { name: file.name, mime: file.type || 'application/pdf', data });
+      return `Invoice ${file.name} attached to ${String(r.inwardNo)}.`;
+    });
+  }
+  async function removeInvoice(r: Row) {
+    if (!(await confirm({ title: 'Remove invoice', message: `Remove the attached invoice from ${String(r.inwardNo)}? The inward itself stays as it is.`, confirmLabel: 'Remove invoice', danger: true }))) return;
+    await run(() => materialInwardApi.removeAttachment(String(r.id)), `Invoice removed from ${String(r.inwardNo)}.`);
   }
 
   const shown = filter ? rows.filter((r) => String(r.status) === filter) : rows;
@@ -227,57 +303,84 @@ export default function MaterialInwardPage() {
 
       <Card title={<span className="mn-board-card-title"><Truck size={16} aria-hidden /> New inward</span>}>
         <Form onSubmit={create} className="mn-mi-form">
-          {multiPlant && (
-            <Field label="Plant">
-              <Select value={form.plantId} onChange={(e) => setForm({ ...form, plantId: e.target.value })}>
-                <option value="">Pick the plant</option>
-                {plants.map((p) => (
-                  <option key={String(p.id)} value={String(p.id)}>{String(p.plantName ?? p.plantCode)}</option>
+          <div className="mn-mi-head">
+            {multiPlant && (
+              <Field label="Plant">
+                <Select value={head.plantId} onChange={(e) => setHead({ ...head, plantId: e.target.value })}>
+                  <option value="">Pick the plant</option>
+                  {plants.map((p) => (
+                    <option key={String(p.id)} value={String(p.id)}>{String(p.plantName ?? p.plantCode)}</option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <Field label="Supplier" help={suppliers.length ? undefined : 'No suppliers yet: add them under Masters → Suppliers'}>
+              <Select value={head.supplierId} onChange={(e) => setHead({ ...head, supplierId: e.target.value })}>
+                <option value="">{suppliers.length ? 'Pick the supplier' : 'No suppliers set up'}</option>
+                {suppliers.map((s) => (
+                  <option key={String(s.id)} value={String(s.id)}>{String(s.supplierName)}</option>
                 ))}
               </Select>
             </Field>
-          )}
-          <Field label="Supplier" help={suppliers.length ? undefined : 'No suppliers yet: add them under Masters → Suppliers'}>
-            <Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
-              <option value="">{suppliers.length ? 'Pick the supplier' : 'No suppliers set up'}</option>
-              {suppliers.map((s) => (
-                <option key={String(s.id)} value={String(s.id)}>{String(s.supplierName)}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Material" required>
-            <Select value={form.materialId} onChange={(e) => pickMaterial(e.target.value)} required>
-              <option value="">Pick the material</option>
-              {materials.map((m) => (
-                <option key={String(m.id)} value={String(m.id)}>{String(m.materialName)}{m.uom ? ` (${String(m.uom)})` : ''}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={chosen ? `Received (${String(chosen.uom ?? '')})` : 'Received'} required>
-            <Input type="number" step="any" inputMode="decimal" min={0} value={form.quantityReceived} onChange={(e) => setForm({ ...form, quantityReceived: e.target.value })} required placeholder="On the challan" />
-          </Field>
-          <Field label={chosen ? `Accepted (${String(chosen.uom ?? '')})` : 'Accepted'}>
-            <Input type="number" step="any" inputMode="decimal" min={0} value={form.quantityAccepted} onChange={(e) => setForm({ ...form, quantityAccepted: e.target.value })} placeholder="Same as received" />
-          </Field>
-          <Field label={chosen ? `Rate (₹ per ${String(chosen.uom ?? 'unit')})` : 'Rate'}>
-            <Input type="number" step="any" inputMode="decimal" min={0} value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} placeholder={chosen && num(chosen.standardRate) > 0 ? `Standard ${money(chosen.standardRate)}` : '0'} />
-          </Field>
-          <Field label="Truck">
-            <Input value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} placeholder="TN 01 AB 1234" />
-          </Field>
-          <Field label="Supplier challan no">
-            <Input value={form.supplierChallanNo} onChange={(e) => setForm({ ...form, supplierChallanNo: e.target.value })} placeholder="On the delivery note" />
-          </Field>
+            <Field label="Truck">
+              <Input value={head.vehicleNo} onChange={(e) => setHead({ ...head, vehicleNo: e.target.value })} placeholder="TN 01 AB 1234" />
+            </Field>
+            <Field label="Supplier challan no">
+              <Input value={head.supplierChallanNo} onChange={(e) => setHead({ ...head, supplierChallanNo: e.target.value })} placeholder="On the delivery note" />
+            </Field>
+            <Field label="Supplier bill no" help="When the invoice travels with the load.">
+              <Input value={head.supplierBillNo} onChange={(e) => setHead({ ...head, supplierBillNo: e.target.value })} placeholder="On the supplier's invoice" />
+            </Field>
+          </div>
+          <div className="mn-mi-lines">
+            <div className="mn-mi-line mn-mi-line--head" aria-hidden>
+              <span>Material</span>
+              <span>Unit</span>
+              <span className="is-num">Received</span>
+              <span className="is-num">Accepted</span>
+              <span className="is-num">Rate</span>
+              <span className="is-num">Line value</span>
+              <span />
+            </div>
+            {lines.map((l, i) => {
+              const mt = materialOf(l);
+              const units = unitsFor(l);
+              const own = String(mt?.uom ?? '');
+              const converted = l.uom && own && l.uom !== own;
+              return (
+                <div key={i} className="mn-mi-line">
+                  <Select value={l.materialId} onChange={(e) => pickMaterial(i, e.target.value)} aria-label="Material">
+                    <option value="">Pick the material</option>
+                    {materials.map((m) => (
+                      <option key={String(m.id)} value={String(m.id)}>{String(m.materialName)}{m.uom ? ` (${String(m.uom)})` : ''}</option>
+                    ))}
+                  </Select>
+                  <Select value={l.uom} onChange={(e) => setLine(i, { uom: e.target.value })} aria-label="Unit" disabled={units.length <= 1} title={units.length > 1 ? 'The material\'s own unit, or one a conversion reaches' : own ? `Stocked in ${own}; add a unit conversion to receive in another unit` : 'Pick a material first'}>
+                    {!units.length && <option value="">unit</option>}
+                    {units.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </Select>
+                  <Input type="number" step="any" inputMode="decimal" min={0} className="is-num" value={l.quantityReceived} onChange={(e) => setLine(i, { quantityReceived: e.target.value })} placeholder={l.uom || own || 'On the challan'} aria-label="Received" title={converted && num(l.quantityReceived) > 0 ? `${qty(ownQty(l, l.quantityReceived))} ${own}` : undefined} />
+                  <Input type="number" step="any" inputMode="decimal" min={0} className="is-num" value={l.quantityAccepted} onChange={(e) => setLine(i, { quantityAccepted: e.target.value })} placeholder="Same as received" aria-label="Accepted" />
+                  <Input type="number" step="any" inputMode="decimal" min={0} className="is-num" value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} placeholder={own ? `₹ per ${own}` : '₹ per unit'} aria-label="Rate" title={mt && num(mt.standardRate) > 0 ? `Standard ${money(mt.standardRate)} per ${own || 'unit'}` : undefined} />
+                  <span className="mn-mi-line-value is-num" title={converted && num(l.quantityReceived) > 0 ? `${qty(ownQty(l, acceptedOf(l)))} ${own} accepted` : undefined}>{lineValue(l) > 0 ? money(lineValue(l)) : '—'}</span>
+                  <Button type="button" variant="ghost" size="sm" icon={<Trash2 size={14} />} aria-label="Remove line" disabled={lines.length === 1} onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))} />
+                </div>
+              );
+            })}
+          </div>
           <div className="mn-mi-form-submit">
-            <Button type="submit" icon={<ArrowDownToLine size={14} />} loading={busy} disabled={!form.materialId}>Receive</Button>
-            <span className="mn-ord-meta">{received > 0 ? `${qty(accepted)} ${String(chosen?.uom ?? '')} accepted${num(form.rate) > 0 ? ` = ${money(preview)}` : ''}` : 'Creates a draft; post it to add the accepted quantity to stock'}</span>
+            <Button type="button" variant="ghost" size="sm" icon={<Plus size={14} />} onClick={() => setLines((p) => [...p, emptyLine()])}>Add line</Button>
+            <Button type="submit" icon={<ArrowDownToLine size={14} />} loading={busy} disabled={!liveLines.length}>Receive</Button>
+            <span className="mn-ord-meta">{liveLines.length ? `${liveLines.length} ${liveLines.length === 1 ? 'line' : 'lines'}${formValue > 0 ? ` = ${money(formValue)}` : ''}; one draft inward per line. Post each to add its accepted quantity to stock.` : 'Creates a draft inward per line; post each to add the accepted quantity to stock. The rate is per the material\'s own unit; pick another unit on a line to key the challan figure in bags or litres where a conversion is set up.'}</span>
           </div>
         </Form>
       </Card>
 
+      <input ref={fileInput} type="file" accept={INVOICE_ACCEPT} className="mn-mi-file" aria-hidden tabIndex={-1} onChange={invoiceChosen} />
+
       <Card
         title={<span className="mn-board-card-title"><ArrowDownToLine size={16} aria-hidden /> Inwards <span className="mn-board-card-count">{shown.length}</span></span>}
-        actions={<ExportButton rows={shown} columns={['inwardNo', 'createdAt', 'supplierName', 'materialLabel', 'vehicleNo', 'supplierChallanNo', 'quantityReceived', 'quantityAccepted', 'uom', 'rate', 'amount', 'status']} filename="material-inwards" />}
+        actions={<ExportButton rows={shown} columns={['inwardNo', 'createdAt', 'supplierName', 'materialLabel', 'vehicleNo', 'supplierChallanNo', 'supplierBillNo', 'quantityReceived', 'quantityAccepted', 'uom', 'enteredQuantity', 'enteredUom', 'rate', 'amount', 'status', 'postedByName']} filename="material-inwards" />}
         padded={false}
       >
         {!loaded ? (
@@ -298,11 +401,18 @@ export default function MaterialInwardPage() {
               const acc = num(r.quantityAccepted);
               const rejected = Math.max(0, rec - acc);
               const off = rateOff(r);
+              const hasInvoice = r.hasAttachment === true;
               return (
                 <div key={String(r.id)} className={`mn-ord-row mn-ord-row--acts mn-mi-row${status === 'cancelled' ? ' is-void' : ''}`} data-tone={toneOf(status)}>
                   <div className="mn-ord-id">
                     <span className="mn-ord-no">{String(r.inwardNo ?? '')}</span>
                     <span className="mn-ord-meta">{formatDateTime(r.createdAt)}{r.slipNo ? <><span className="mn-ord-dot" aria-hidden>·</span>slip {String(r.slipNo)}</> : null}</span>
+                    {status === 'posted' && r.postedByName ? <span className="mn-ord-meta mn-mi-by">Posted by {String(r.postedByName)}</span> : null}
+                    {hasInvoice ? (
+                      <button type="button" className="mn-ord-meta mn-mi-instock" onClick={() => openAttachment(`/material-inwards/${String(r.id)}/attachment`, r.attachmentName ? String(r.attachmentName) : null).catch((e) => setError(String(e)))} title={r.attachmentName ? String(r.attachmentName) : 'Open the attached invoice'}>
+                        <Paperclip size={12} aria-hidden /> Invoice
+                      </button>
+                    ) : null}
                   </div>
                   <div className="mn-ord-who">
                     <span className="mn-ord-cust">{String(r.materialLabel ?? '')}</span>
@@ -310,12 +420,13 @@ export default function MaterialInwardPage() {
                       {String(r.supplierName ?? 'Supplier not recorded')}
                       {r.vehicleNo ? <><span className="mn-ord-dot" aria-hidden>·</span>{String(r.vehicleNo)}</> : null}
                       {r.supplierChallanNo ? <><span className="mn-ord-dot" aria-hidden>·</span>challan {String(r.supplierChallanNo)}</> : null}
+                      {r.supplierBillNo ? <><span className="mn-ord-dot" aria-hidden>·</span>bill {String(r.supplierBillNo)}</> : null}
                       {multiPlant && r.plantName ? <><span className="mn-ord-dot" aria-hidden>·</span>{String(r.plantName)}</> : null}
                     </span>
                   </div>
                   <div className="mn-ord-val">
                     <span className="mn-ord-amt">{qty(acc)} {String(r.uom ?? '')}</span>
-                    <span className={`mn-ord-meta${rejected > 0 ? ' mn-mi-rej' : ''}`}>{rejected > 0 ? `${qty(rec)} received, ${qty(rejected)} rejected` : 'all of it accepted'}</span>
+                    <span className={`mn-ord-meta${rejected > 0 ? ' mn-mi-rej' : ''}`}>{rejected > 0 ? `${qty(rec)} received, ${qty(rejected)} rejected` : 'all of it accepted'}{r.enteredUom && r.enteredQuantity != null ? ` · keyed as ${qty(r.enteredQuantity)} ${String(r.enteredUom)}` : ''}</span>
                   </div>
                   <div className="mn-ord-val">
                     <span className="mn-ord-amt">{money(r.amount)}</span>
@@ -329,7 +440,15 @@ export default function MaterialInwardPage() {
                         <Button size="sm" variant="ghost" icon={<XCircle size={14} />} onClick={() => cancel(r)} disabled={busy} aria-label={`Cancel ${String(r.inwardNo)}`}>Cancel</Button>
                       </>
                     ) : status === 'posted' ? (
-                      <Link href="/app/production/stock" className="mn-ord-meta mn-mi-instock">In stock</Link>
+                      <>
+                        <Link href="/app/production/stock" className="mn-ord-meta mn-mi-instock">In stock</Link>
+                        {canAdjust && (
+                          <Button size="sm" variant="ghost" icon={<Paperclip size={14} />} onClick={() => chooseInvoice(r)} disabled={busy} aria-label={`${hasInvoice ? 'Replace' : 'Attach'} invoice on ${String(r.inwardNo)}`}>{hasInvoice ? 'Replace invoice' : 'Attach invoice'}</Button>
+                        )}
+                        {canAdjust && hasInvoice && (
+                          <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} onClick={() => removeInvoice(r)} disabled={busy} aria-label={`Remove invoice from ${String(r.inwardNo)}`}>Remove</Button>
+                        )}
+                      </>
                     ) : null}
                   </div>
                 </div>

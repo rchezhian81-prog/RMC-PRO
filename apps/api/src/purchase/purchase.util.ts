@@ -1,4 +1,4 @@
-import { round2 } from '../common/money.util';
+import { round2, roundTo } from '../common/money.util';
 
 /**
  * Purchase / AP-lite helpers (Plan D2). Pure arithmetic — the 3-way match
@@ -93,6 +93,70 @@ export function summariseMatch(inputs: MatchLineInput[], tolerancePct = 2): Matc
   const qtyOk = lines.every((l) => l.qtyOk);
   const priceOk = lines.every((l) => l.priceOk);
   return { status: qtyOk && priceOk ? 'matched' : 'over_tolerance', qtyOk, priceOk, lines };
+}
+
+export interface PurchaseLineInput {
+  /** Quantity in the material's own UOM. */
+  quantity: number;
+  /** Rate per unit, before discount. */
+  rate: number;
+  /** GST on the discounted taxable value, as a percentage. */
+  gstRate: number;
+  /** Trade discount off the rate, as a percentage (0–100). */
+  discountPct?: number;
+}
+
+export interface PurchaseLineAmounts {
+  taxableAmount: number;
+  taxAmount: number;
+  lineTotal: number;
+}
+
+/** True for a discount a line can carry: a finite percentage from 0 to 100. */
+export function isValidDiscountPct(value: unknown): boolean {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 100;
+}
+
+/**
+ * One purchase line's money: taxable = qty × rate × (1 − discount%/100),
+ * tax on the taxable, and the line total. Rounded to the paise at each step
+ * so the stored columns add up exactly.
+ */
+export function purchaseLineAmounts(line: PurchaseLineInput): PurchaseLineAmounts {
+  const quantity = Number(line.quantity) || 0;
+  const rate = round2(line.rate);
+  const discountPct = Number(line.discountPct) || 0;
+  const gstRate = round2(line.gstRate);
+  const taxableAmount = round2(quantity * rate * (1 - discountPct / 100));
+  const taxAmount = round2((taxableAmount * gstRate) / 100);
+  return { taxableAmount, taxAmount, lineTotal: round2(taxableAmount + taxAmount) };
+}
+
+export interface PurchaseTotals {
+  taxableAmount: number;
+  taxAmount: number;
+  /** Signed paise that take taxable + tax to the nearest whole rupee. */
+  roundOff: number;
+  /** A whole-rupee figure: taxable + tax + roundOff. */
+  totalAmount: number;
+}
+
+/**
+ * Fold the lines into the document's totals, rounding the grand total to
+ * the nearest rupee (half away from zero, like a tax invoice) and keeping the
+ * signed difference as the round-off.
+ */
+export function purchaseTotals(lines: PurchaseLineAmounts[]): PurchaseTotals {
+  let taxableAmount = 0;
+  let taxAmount = 0;
+  for (const l of lines) {
+    taxableAmount = round2(taxableAmount + l.taxableAmount);
+    taxAmount = round2(taxAmount + l.taxAmount);
+  }
+  const grand = round2(taxableAmount + taxAmount);
+  const totalAmount = roundTo(grand, 0);
+  return { taxableAmount, taxAmount, roundOff: round2(totalAmount - grand), totalAmount };
 }
 
 /** Payment status of a vendor bill given its total and paid amounts. */

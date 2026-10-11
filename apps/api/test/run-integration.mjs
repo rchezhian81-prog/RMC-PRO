@@ -65,6 +65,10 @@ const ALL_TESTS = [
   'test/order-to-cash.test.mjs',
   'test/purchase-cycle.test.mjs',
   'test/purchase-guards.test.mjs',
+  // PO line discount, round-off and a line keyed in another unit; the bill
+  // carrying them; the multi-line inward batch with bill number, posted-by
+  // and the supplier's invoice attached. Seeds its own material + supplier.
+  'test/purchase-inward-fields.test.mjs',
   'test/weighbridge-hardware.test.mjs',
   'test/batching-integration.test.mjs',
   'test/pilot-gaps.test.mjs',

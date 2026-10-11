@@ -9,7 +9,10 @@ import { WhatsAppService } from '../sales/whatsapp.service';
 import { companyBlock, type PurchaseOrderPdfData } from '../sales/pdf.service';
 import { purchaseOrderShareMessage } from '../common/share-messages.util';
 import { NumberingService } from '../sales/numbering.service';
-import { documentDate } from '../common/business-date.util';
+import { businessToday, documentDate } from '../common/business-date.util';
+import { isValidDiscountPct, purchaseLineAmounts, purchaseTotals, type PurchaseLineAmounts } from './purchase.util';
+import { resolveEnteredQuantity, uomConversionRows } from '../inventory/entered-uom.util';
+import type { UomConversionRow } from '../masters/uom.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Purchase order not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -88,9 +91,10 @@ export class PurchaseOrderService {
         deliverTo: plant ? [plant.plantName, plant.city].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') : null,
         items: full.items.map((it) => ({
           materialLabel: it.materialLabel ?? '', uom: it.uom, quantity: it.quantity, rate: it.rate, gstRate: it.gstRate,
+          discountPct: it.discountPct, enteredUom: it.enteredUom, enteredQuantity: it.enteredQuantity,
           taxableAmount: it.taxableAmount, taxAmount: it.taxAmount, lineTotal: it.lineTotal,
         })),
-        taxableAmount: full.taxableAmount, taxAmount: full.taxAmount, totalAmount: full.totalAmount,
+        taxableAmount: full.taxableAmount, taxAmount: full.taxAmount, roundOff: full.roundOff, totalAmount: full.totalAmount,
         remarks: full.remarks,
       };
       return { data, poNo: full.poNo };
@@ -126,6 +130,12 @@ export class PurchaseOrderService {
     if (!supplierId) throw badReq('supplierId required');
     const lines = Array.isArray(dto.lines) ? (dto.lines as Record<string, unknown>[]) : [];
     if (!lines.length) throw badReq('At least one line is required');
+    // The order is dated the day it was placed — typed in, defaulting to
+    // today. It may be backdated (an order phoned in yesterday and keyed
+    // today) but not placed in the future beyond tomorrow.
+    const orderDate = documentDate(dto.orderDate);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(orderDate) || Number.isNaN(Date.parse(orderDate))) throw badReq('Order date must be a date (YYYY-MM-DD)');
+    if (orderDate > businessToday(new Date(Date.now() + 86_400_000))) throw badReq('Order date cannot be later than tomorrow');
 
     return this.db.runInTenant(tenantId, async (m) => {
       const supplier = await m.getRepository(Supplier).findOne({ where: { id: supplierId } });
@@ -138,7 +148,7 @@ export class PurchaseOrderService {
         poRepo.create({
           tenantId, poNo, supplierId,
           plantId: (dto.plantId as string) ?? null,
-          orderDate: documentDate(dto.orderDate),
+          orderDate,
           expectedDate: (dto.expectedDate as string) ?? null,
           status: 'draft', remarks: (dto.remarks as string) ?? null,
         }),
@@ -146,35 +156,47 @@ export class PurchaseOrderService {
 
       const itemRepo = m.getRepository(PurchaseOrderItem);
       const materialRepo = m.getRepository(Material);
-      let taxable = 0, tax = 0;
+      // Loaded once per order, only when a line is keyed in another unit.
+      let conversions: UomConversionRow[] | null = null;
+      const amounts: PurchaseLineAmounts[] = [];
       for (const line of lines) {
         const materialId = (line.materialId as string) || null;
-        const quantity = num(line.quantity);
+        const material = materialId ? await materialRepo.findOne({ where: { id: materialId } }) : null;
+        if (materialId && !material) throw badReq('Material not found');
+        const uom = ((line.uom as string) ?? material?.uom ?? null) || null;
+        // Keyed in another unit (bags for a tonne material)? Convert through the
+        // tenant's conversion table; the keyed unit and figure are kept too.
+        if (line.enteredUom && !conversions) conversions = await uomConversionRows(m);
+        const resolved = resolveEnteredQuantity(line, uom, conversions ?? []);
+        if (!resolved.ok) throw badReq(resolved.reason);
+        const quantity = resolved.quantity;
         if (quantity <= 0) throw badReq('Each line needs a quantity greater than zero');
         const rate = round2(num(line.rate));
+        if (rate < 0) throw badReq('Each line rate must be zero or more');
+        const discountPct = round2(num(line.discountPct));
+        if (!isValidDiscountPct(discountPct)) throw badReq('Each line discount must be between 0 and 100 percent');
         const gstRate = round2(line.gstRate !== undefined ? num(line.gstRate) : 18);
-        const lineTaxable = round2(quantity * rate);
-        const lineTax = round2((lineTaxable * gstRate) / 100);
-        let materialLabel: string | null = (line.materialLabel as string) ?? null;
-        if (!materialLabel && materialId) {
-          const material = await materialRepo.findOne({ where: { id: materialId } });
-          materialLabel = material?.materialName ?? null;
-        }
+        if (gstRate < 0) throw badReq('Each line GST rate must be zero or more');
+        const money = purchaseLineAmounts({ quantity, rate, gstRate, discountPct });
+        const materialLabel: string | null = (line.materialLabel as string) || material?.materialName || null;
         await itemRepo.save(
           itemRepo.create({
-            tenantId, purchaseOrderId: po.id, materialId, materialLabel,
-            uom: (line.uom as string) ?? null,
-            quantity: String(quantity), rate: String(rate), gstRate: String(gstRate),
-            taxableAmount: String(lineTaxable), taxAmount: String(lineTax),
-            lineTotal: String(round2(lineTaxable + lineTax)), receivedQuantity: '0',
+            tenantId, purchaseOrderId: po.id, materialId, materialLabel, uom,
+            quantity: String(quantity),
+            enteredUom: resolved.enteredUom,
+            enteredQuantity: resolved.enteredQuantity == null ? null : String(resolved.enteredQuantity),
+            rate: String(rate), discountPct: String(discountPct), gstRate: String(gstRate),
+            taxableAmount: String(money.taxableAmount), taxAmount: String(money.taxAmount),
+            lineTotal: String(money.lineTotal), receivedQuantity: '0',
           }),
         );
-        taxable = round2(taxable + lineTaxable);
-        tax = round2(tax + lineTax);
+        amounts.push(money);
       }
 
+      const totals = purchaseTotals(amounts);
       await poRepo.update(po.id, {
-        taxableAmount: String(taxable), taxAmount: String(tax), totalAmount: String(round2(taxable + tax)),
+        taxableAmount: String(totals.taxableAmount), taxAmount: String(totals.taxAmount),
+        roundOff: String(totals.roundOff), totalAmount: String(totals.totalAmount),
       });
       return this.loadFull(m, po.id);
     });

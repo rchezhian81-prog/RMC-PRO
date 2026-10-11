@@ -52,13 +52,24 @@ export class MaterialInward extends TenantScopedEntity {
   @Column({ name: 'material_label', type: 'varchar', nullable: true }) materialLabel!: string | null;
   @Column({ name: 'vehicle_no', type: 'varchar', nullable: true }) vehicleNo!: string | null;
   @Column({ name: 'supplier_challan_no', type: 'varchar', nullable: true }) supplierChallanNo!: string | null;
+  /** The supplier's invoice number, when the bill travels with the load. */
+  @Column({ name: 'supplier_bill_no', type: 'varchar', nullable: true }) supplierBillNo!: string | null;
   @Column({ name: 'weighbridge_entry_id', type: 'uuid', nullable: true }) weighbridgeEntryId!: string | null;
   @Column({ name: 'quantity_received', type: 'numeric', precision: 16, scale: 3, default: 0 }) quantityReceived!: string;
   @Column({ name: 'quantity_accepted', type: 'numeric', precision: 16, scale: 3, default: 0 }) quantityAccepted!: string;
   @Column({ name: 'rate', type: 'numeric', precision: 14, scale: 2, default: 0 }) rate!: string;
   @Column({ name: 'amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) amount!: string;
   @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;
+  /** The unit and received figure as keyed, when entered in a unit other than the material's own. */
+  @Column({ name: 'entered_uom', type: 'varchar', nullable: true }) enteredUom!: string | null;
+  @Column({ name: 'entered_quantity', type: 'numeric', precision: 16, scale: 3, nullable: true }) enteredQuantity!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
+  /** Who posted the accepted quantity to stock. */
+  @Column({ name: 'posted_by_user_id', type: 'uuid', nullable: true }) postedByUserId!: string | null;
+  /** The supplier's invoice attached at the gate: name, type and base64 bytes. The bytes are never selected by default. */
+  @Column({ name: 'attachment_name', type: 'varchar', nullable: true }) attachmentName!: string | null;
+  @Column({ name: 'attachment_mime', type: 'varchar', nullable: true }) attachmentMime!: string | null;
+  @Column({ name: 'attachment_data', type: 'text', nullable: true, select: false }) attachmentData!: string | null;
 }
 
 /**

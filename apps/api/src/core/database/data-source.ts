@@ -77,6 +77,7 @@ import { RoleArchive1720000071000 } from './migrations/1720000071000-RoleArchive
 import { PasswordReset1720000072000 } from './migrations/1720000072000-PasswordReset';
 import { DriverPumpWhatsAppGps1720000073000 } from './migrations/1720000073000-DriverPumpWhatsAppGps';
 import { MastersUsersLeadsFields1720000074000 } from './migrations/1720000074000-MastersUsersLeadsFields';
+import { PurchaseInwardFields1720000077000 } from './migrations/1720000077000-PurchaseInwardFields';
 
 /**
  * CLI DataSource for migrations & seed.
@@ -168,6 +169,7 @@ export const AppDataSource = new DataSource({
   PasswordReset1720000072000,
   DriverPumpWhatsAppGps1720000073000,
   MastersUsersLeadsFields1720000074000,
+  PurchaseInwardFields1720000077000,
   ],
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',

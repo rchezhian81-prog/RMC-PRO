@@ -20,6 +20,8 @@ export class PurchaseOrder extends TenantScopedEntity {
   @Column({ name: 'expected_date', type: 'date', nullable: true }) expectedDate!: string | null;
   @Column({ name: 'taxable_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxableAmount!: string;
   @Column({ name: 'tax_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxAmount!: string;
+  /** Signed difference that takes taxable + tax to the whole-rupee total. */
+  @Column({ name: 'round_off', type: 'numeric', precision: 16, scale: 2, default: 0 }) roundOff!: string;
   @Column({ name: 'total_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) totalAmount!: string;
   /** draft → issued → partially_received → received → closed; or cancelled. */
   @Column({ name: 'status', type: 'varchar', default: 'draft' }) status!: string;
@@ -33,8 +35,14 @@ export class PurchaseOrderItem extends TenantScopedEntity {
   @Column({ name: 'material_id', type: 'uuid', nullable: true }) materialId!: string | null;
   @Column({ name: 'material_label', type: 'varchar', nullable: true }) materialLabel!: string | null;
   @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;
+  /** Quantity in the material's own UOM (what stock and receipts count in). */
   @Column({ name: 'quantity', type: 'numeric', precision: 16, scale: 3, default: 0 }) quantity!: string;
+  /** The unit and figure as keyed, when the line was entered in another unit (bags for a tonne material). */
+  @Column({ name: 'entered_uom', type: 'varchar', nullable: true }) enteredUom!: string | null;
+  @Column({ name: 'entered_quantity', type: 'numeric', precision: 16, scale: 3, nullable: true }) enteredQuantity!: string | null;
   @Column({ name: 'rate', type: 'numeric', precision: 14, scale: 2, default: 0 }) rate!: string;
+  /** Trade discount off the rate, as a percentage (0–100). */
+  @Column({ name: 'discount_pct', type: 'numeric', precision: 6, scale: 2, default: 0 }) discountPct!: string;
   @Column({ name: 'gst_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) gstRate!: string;
   @Column({ name: 'taxable_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxableAmount!: string;
   @Column({ name: 'tax_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxAmount!: string;
@@ -88,6 +96,8 @@ export class VendorBill extends TenantScopedEntity {
   @Column({ name: 'due_date', type: 'date', nullable: true }) dueDate!: string | null;
   @Column({ name: 'taxable_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxableAmount!: string;
   @Column({ name: 'tax_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxAmount!: string;
+  /** Signed difference that takes taxable + tax to the whole-rupee total. */
+  @Column({ name: 'round_off', type: 'numeric', precision: 16, scale: 2, default: 0 }) roundOff!: string;
   @Column({ name: 'total_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) totalAmount!: string;
   @Column({ name: 'paid_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) paidAmount!: string;
   @Column({ name: 'outstanding_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) outstandingAmount!: string;
@@ -111,6 +121,8 @@ export class VendorBillItem extends TenantScopedEntity {
   @Column({ name: 'uom', type: 'varchar', nullable: true }) uom!: string | null;
   @Column({ name: 'quantity', type: 'numeric', precision: 16, scale: 3, default: 0 }) quantity!: string;
   @Column({ name: 'rate', type: 'numeric', precision: 14, scale: 2, default: 0 }) rate!: string;
+  /** Trade discount off the rate, as a percentage (0–100); inherited from the PO line. */
+  @Column({ name: 'discount_pct', type: 'numeric', precision: 6, scale: 2, default: 0 }) discountPct!: string;
   @Column({ name: 'gst_rate', type: 'numeric', precision: 6, scale: 2, default: 0 }) gstRate!: string;
   @Column({ name: 'taxable_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxableAmount!: string;
   @Column({ name: 'tax_amount', type: 'numeric', precision: 16, scale: 2, default: 0 }) taxAmount!: string;

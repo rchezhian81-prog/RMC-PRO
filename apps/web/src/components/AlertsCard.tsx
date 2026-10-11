@@ -3,17 +3,23 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, AlertOctagon, Info, BellRing, RefreshCw, CheckCircle2, ChevronRight } from 'lucide-react';
-import { alertsApi, type Alert } from '../lib/api';
+import { alertsApi, type Alert, type AlertSeverity } from '../lib/api';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { ErrorState } from './ui/States';
 import { isUiV2 } from '../lib/ui-flag';
+import { SeverityLegend, SEVERITY_COLOR, SEVERITY_LABEL, SEVERITY_ORDER } from './SeverityLegend';
 
-const STYLE: Record<Alert['severity'], { color: string; tint: string; icon: typeof Info; label: string }> = {
-  danger: { color: 'var(--mn-danger)', tint: 'var(--mn-danger-tint)', icon: AlertOctagon, label: 'Action needed' },
-  warning: { color: 'var(--mn-warning)', tint: 'var(--mn-warning-tint)', icon: AlertTriangle, label: 'Attention' },
-  info: { color: 'var(--mn-info)', tint: 'var(--mn-info-tint)', icon: Info, label: 'For information' },
-};
+/** Icon per severity; the colours come from the shared legend so the two always agree. */
+const ICON: Record<AlertSeverity, typeof Info> = { high: AlertOctagon, medium: AlertTriangle, low: Info };
+const RANK: Record<AlertSeverity, number> = { high: 0, medium: 1, low: 2 };
+
+/** An alert from before the severity word existed is read from its tone. */
+function severityOf(a: Alert): AlertSeverity {
+  if (a.severity in RANK) return a.severity;
+  const t = a.tone ?? 'info';
+  return t === 'danger' ? 'high' : t === 'warning' ? 'medium' : 'low';
+}
 
 /**
  * "What needs attention today" — computed from the plant's own data by SQL
@@ -41,20 +47,18 @@ export function AlertsCard() {
     void load();
   }, []);
 
-  const urgent = (alerts ?? []).filter((a) => a.severity !== 'info').length;
+  // High first, then medium, then low; the API sorts the same way, but the
+  // order is part of the card's promise, so it does not rely on that.
+  const sorted = (alerts ?? [])
+    .map((a) => ({ a, s: severityOf(a) }))
+    .sort((x, y) => RANK[x.s] - RANK[y.s]);
+  const urgent = sorted.filter((x) => x.s !== 'low').length;
 
   // V2 severity rail: a left accent keyline whose colour reflects the most-severe
   // alert, so the whole card signals the day's state at a glance. Neutral while
   // loading/unknown; green when all-clear. Flag-OFF passes no style (unchanged).
-  const railColor = !alerts
-    ? 'var(--mn-border-strong)'
-    : alerts.some((a) => a.severity === 'danger')
-      ? 'var(--mn-danger)'
-      : alerts.some((a) => a.severity === 'warning')
-        ? 'var(--mn-warning)'
-        : alerts.length
-          ? 'var(--mn-info)'
-          : 'var(--mn-success)';
+  const worst = SEVERITY_ORDER.find((s) => sorted.some((x) => x.s === s));
+  const railColor = !alerts ? 'var(--mn-border-strong)' : worst ? SEVERITY_COLOR[worst].color : 'var(--mn-success)';
   const railStyle = isUiV2() ? { borderLeft: `3px solid ${railColor}` } : undefined;
 
   return (
@@ -99,19 +103,25 @@ export function AlertsCard() {
         </div>
       ) : (
         <div>
-          {alerts.map((a, i) => {
-            const s = STYLE[a.severity];
-            const Icon = s.icon;
+          <div className="mn-alerts-legend">
+            <SeverityLegend lead="Severity" />
+          </div>
+          {sorted.map(({ a, s }, i) => {
+            const c = SEVERITY_COLOR[s];
+            const Icon = ICON[s];
             return (
               <Link
                 key={a.key}
                 href={a.href}
+                className="mn-alert-row"
+                data-severity={s}
                 style={{
                   display: 'flex',
                   gap: 12,
                   alignItems: 'flex-start',
-                  padding: '12px 16px',
+                  padding: '12px 16px 12px 13px',
                   borderTop: i === 0 ? 'none' : '1px solid var(--mn-border)',
+                  borderLeft: `3px solid ${c.color}`,
                   textDecoration: 'none',
                   color: 'inherit',
                 }}
@@ -119,8 +129,8 @@ export function AlertsCard() {
                 <span
                   aria-hidden
                   style={{
-                    background: s.tint,
-                    color: s.color,
+                    background: c.tint,
+                    color: c.color,
                     borderRadius: 8,
                     width: 30,
                     height: 30,
@@ -132,7 +142,12 @@ export function AlertsCard() {
                   <Icon size={16} />
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>{a.title}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</span>
+                    <span className="mn-sev-badge" data-severity={s} style={{ color: c.color, background: c.tint }}>
+                      {SEVERITY_LABEL[s]}
+                    </span>
+                  </span>
                   <span style={{ display: 'block', color: 'var(--mn-muted)', fontSize: 12.5, marginTop: 2 }}>
                     {a.detail}
                   </span>

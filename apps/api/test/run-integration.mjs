@@ -87,6 +87,9 @@ const ALL_TESTS = [
   'test/password-reset.test.mjs',
   'test/observability.test.mjs',
   'test/dashboard-trends.test.mjs',
+  // Dashboard period (summary + funnel from/to, live figures untouched, the
+  // 366-day cap), the idle sign-out setting and its public read, alert severity.
+  'test/dashboard-period-idle.test.mjs',
   'test/metrics.test.mjs',
   'test/sync-pagination.test.mjs',
   'test/rls-users.test.mjs',

@@ -19,6 +19,12 @@ export interface SettingDef {
   default: string;
   /** Allowed values for an `enum` setting. */
   options?: { value: string; label: string }[];
+  /** For a `number` setting: the smallest value accepted (inclusive). */
+  min?: number;
+  /** For a `number` setting: the largest value accepted (inclusive). */
+  max?: number;
+  /** For a `number` setting: whole numbers only. */
+  integer?: boolean;
 }
 
 export const SETTINGS_CATALOG: readonly SettingDef[] = [
@@ -70,7 +76,36 @@ export const SETTINGS_CATALOG: readonly SettingDef[] = [
     type: 'string',
     default: '',
   },
+  {
+    key: 'security.idle_timeout_minutes',
+    label: 'Sign out after inactivity (minutes)',
+    description:
+      'Minutes without any activity in the browser before a signed-in user is signed out automatically. Applies to everyone in the company on their next sign-in. 0 keeps people signed in until they sign out.',
+    type: 'number',
+    default: '30',
+    min: 0,
+    max: 1440,
+    integer: true,
+  },
 ];
+
+/** The idle sign-out setting's key, default and ceiling — shared by the API and the browser. */
+export const IDLE_TIMEOUT_SETTING_KEY = 'security.idle_timeout_minutes';
+export const IDLE_TIMEOUT_DEFAULT_MINUTES = 30;
+export const IDLE_TIMEOUT_MAX_MINUTES = 1440;
+
+/**
+ * Read a stored idle-timeout value the way the browser will apply it: a whole
+ * number of minutes within the catalogue bounds, the default when the value is
+ * missing or unreadable. 0 means "never sign out for inactivity".
+ */
+export function idleTimeoutMinutes(raw: string | null | undefined): number {
+  const v = String(raw ?? '').trim();
+  if (v === '') return IDLE_TIMEOUT_DEFAULT_MINUTES;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return IDLE_TIMEOUT_DEFAULT_MINUTES;
+  return Math.min(IDLE_TIMEOUT_MAX_MINUTES, Math.floor(n));
+}
 
 export const SETTINGS_BY_KEY: Record<string, SettingDef> = Object.fromEntries(
   SETTINGS_CATALOG.map((d) => [d.key, d]),
@@ -87,7 +122,11 @@ export function validateSettingValue(key: string, value: string): string | null 
   const v = String(value ?? '').trim();
   if (v === '') return null; // empty clears the value; the default then applies
   if (def.type === 'number') {
-    if (!Number.isFinite(Number(v))) return 'Enter a number.';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 'Enter a number.';
+    if (def.integer && !Number.isInteger(n)) return 'Enter a whole number.';
+    if (def.min != null && n < def.min) return `Enter ${def.min} or more.`;
+    if (def.max != null && n > def.max) return `Enter ${def.max} or less.`;
   } else if (def.type === 'boolean') {
     if (v !== 'true' && v !== 'false') return 'Enter true or false.';
   } else if (def.type === 'enum') {

@@ -11,6 +11,8 @@ import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
 import { ConfirmProvider } from '../../components/ui/ConfirmDialog';
 import { isUiV2 } from '../../lib/ui-flag';
+import { TopbarClock } from '../../components/TopbarClock';
+import { IdleLogout } from '../../components/IdleLogout';
 
 /**
  * The platform portal's shell: the same rail, top bar and content column as
@@ -96,6 +98,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </button>
           <div style={{ fontFamily: 'var(--mn-font-display)', fontWeight: 600, fontSize: 16 }}>{title}</div>
           <div style={{ flex: 1 }} />
+          <TopbarClock />
           <ThemeToggle />
           <span className="mn-topbar-email" style={{ fontSize: 13, color: 'var(--mn-muted)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {email}
@@ -123,6 +126,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {/* The platform portal has no company setting to read: a fixed half hour. */}
+      <IdleLogout minutes={30} />
     </div>
     </ConfirmProvider>
   );

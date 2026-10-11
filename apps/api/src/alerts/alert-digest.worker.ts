@@ -86,7 +86,9 @@ export class AlertDigestWorker implements OnModuleInit, OnModuleDestroy {
         this.lastProcessed.set(tenantId, now.toISOString().slice(0, 10));
         try {
           const { alerts } = await this.alerts.list(tenantId);
-          const digest = buildAlertDigest(alerts, this.minSeverity);
+          // The digest ranks by tone (its floor is an env-configured tone), so
+          // hand it each alert's tone as its severity.
+          const digest = buildAlertDigest(alerts.map((a) => ({ ...a, severity: a.tone })), this.minSeverity);
           if (!digest) continue;
           await this.errorAlerts.captureOps({
             key: `alert_digest:${tenantId}`,

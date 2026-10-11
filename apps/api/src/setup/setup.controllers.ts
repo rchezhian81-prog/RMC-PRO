@@ -49,6 +49,11 @@ export class SettingsController {
   @Get() list(@CurrentUser() u: AuthUser) {
     return this.svc.list(u.tenantId as string);
   }
+  // Any signed-in user of the company: the browser needs this one number to
+  // sign them out after inactivity, whatever their role.
+  @Get('idle-timeout') idleTimeout(@CurrentUser() u: AuthUser) {
+    return this.svc.idleTimeout(u.tenantId as string);
+  }
   @Put(':key')
   @RequirePermissions('settings.manage')
   set(

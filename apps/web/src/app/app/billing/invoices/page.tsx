@@ -82,7 +82,48 @@ function payment(r: Row): { label: string; note: string; tone: Tone } {
   return { label: `${money(owed)} due`, note: `${part}Due ${formatDate(r.dueDate)}`, tone: days <= 3 ? 'warning' : 'neutral' };
 }
 
-interface LineForm { challanId: string; challanNo: string; quantity: number; hsnSac: string; uom: string; rate: string; gstRate: string; }
+/** A charge line the order terms add beside the concrete, as the API previews it (see invoice.service planCharges). */
+interface ExtraCharge {
+  type: string;
+  description: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+  uom: string;
+  orderId: string;
+  challanId: string | null;
+  challanIds: string[];
+}
+
+interface LineForm { challanId: string; challanNo: string; quantity: number; hsnSac: string; uom: string; rate: string; gstRate: string; orderId: string; extraCharges: ExtraCharge[]; }
+
+/**
+ * The charges the order terms will add for the challans being billed (those
+ * with a rate): a per-trip transport line counts only the ticked challans of
+ * its order, a waiting line comes with its challan, and a once-per-order
+ * charge (lump-sum transport, per-job pump, pump hours) comes with the order.
+ */
+function extraChargesFor(lines: LineForm[]): ExtraCharge[] {
+  const picked = lines.filter((l) => Number(l.rate) > 0);
+  const pickedIds = new Set(picked.map((l) => l.challanId));
+  const seen = new Set<string>();
+  const out: ExtraCharge[] = [];
+  for (const l of picked) {
+    if (!l.orderId || seen.has(l.orderId)) continue;
+    seen.add(l.orderId);
+    for (const e of l.extraCharges) {
+      if (e.challanId) {
+        if (pickedIds.has(e.challanId)) out.push(e);
+      } else if (e.type === 'transport') {
+        const n = e.challanIds.filter((id) => pickedIds.has(id)).length;
+        if (n > 0) out.push({ ...e, quantity: n, amount: Math.round(n * e.rate * 100) / 100, description: `Transport — ${n} ${n === 1 ? 'trip' : 'trips'} × ${money(e.rate)}` });
+      } else {
+        out.push(e);
+      }
+    }
+  }
+  return out;
+}
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -141,6 +182,8 @@ export default function InvoicesPage() {
           // than re-types it. 0 (no order line found) leaves it blank to fill in.
           rate: Number(c.suggestedRate) > 0 ? String(c.suggestedRate) : '',
           gstRate: '18',
+          orderId: String(c.orderId ?? ''),
+          extraCharges: Array.isArray(c.extraCharges) ? (c.extraCharges as ExtraCharge[]) : [],
         })),
       );
     } catch (e) {
@@ -190,6 +233,8 @@ export default function InvoicesPage() {
   }, [rows]);
   const drafts = counts.get('draft') ?? 0;
   const lineTotal = useMemo(() => lines.reduce((t, l) => t + l.quantity * num(l.rate), 0), [lines]);
+  const extras = useMemo(() => extraChargesFor(lines), [lines]);
+  const extraTotal = useMemo(() => extras.reduce((t, e) => t + e.amount, 0), [extras]);
 
   return (
     <div className="mn-ord mn-inv">
@@ -311,9 +356,26 @@ export default function InvoicesPage() {
                   ))}
                 </tbody>
               </Table>
+              {extras.length > 0 && (
+                <div className="mn-inv-extra">
+                  <span className="mn-inv-extra-title">Charges added from the order terms</span>
+                  <ul>
+                    {extras.map((e, i) => (
+                      <li key={`${e.type}-${e.challanId ?? e.orderId}-${i}`}>
+                        <span>{e.description}</span>
+                        <strong>{money(e.amount)}</strong>
+                      </li>
+                    ))}
+                    <li>
+                      <span>Total of these charges, before GST</span>
+                      <strong>{money(extraTotal)}</strong>
+                    </li>
+                  </ul>
+                </div>
+              )}
               <div className="mn-inv-submit">
                 <span className="mn-inv-submit-sum">
-                  {lines.length} {lines.length === 1 ? 'challan' : 'challans'} · <strong>{money(lineTotal)}</strong> before GST
+                  {lines.length} {lines.length === 1 ? 'challan' : 'challans'} · <strong>{money(lineTotal + extraTotal)}</strong> before GST{extras.length ? ` (concrete ${money(lineTotal)} + charges ${money(extraTotal)})` : ''}
                 </span>
                 <Button onClick={create} loading={creating}>Create draft invoice</Button>
               </div>

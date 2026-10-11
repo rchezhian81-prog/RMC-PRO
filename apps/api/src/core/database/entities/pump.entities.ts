@@ -35,4 +35,6 @@ export class PumpJob extends TenantScopedEntity {
   @Column({ name: 'status', type: 'varchar', default: 'planned' }) status!: string;
   @Column({ name: 'remarks', type: 'varchar', nullable: true }) remarks!: string | null;
   @Column({ name: 'created_by', type: 'uuid', nullable: true }) createdBy!: string | null;
+  /** The invoice line that billed this job's hours (an order whose pump charge is per hour); cleared when that invoice is cancelled. */
+  @Column({ name: 'invoice_item_id', type: 'uuid', nullable: true }) invoiceItemId!: string | null;
 }

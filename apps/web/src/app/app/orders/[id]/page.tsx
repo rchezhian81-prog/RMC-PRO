@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Factory, History, Lock, MapPin, RefreshCw, ShieldAlert, XCircle } from 'lucide-react';
 import { ordersApi, type Row } from '../../../../lib/api';
 import { money } from '../../../../lib/money';
+import { allPerM3, chargeWords, linePerM3 } from '../../../../lib/charge-basis';
 import { formatDate, formatDateTime } from '../../../../lib/format-date';
 import { Card } from '../../../../components/ui/Card';
 import { Table, Th, Td } from '../../../../components/ui/Table';
@@ -162,7 +163,8 @@ export default function OrderDetail() {
   const balance = num(q.balanceM3 ?? Math.max(ordered - delivered, 0));
   const pct = (v: number) => (ordered > 0 ? Math.max(0, Math.min(100, (v / ordered) * 100)) : 0);
   const done = status === 'confirmed' && ordered > 0 && balance <= 0;
-  const chargesOf = (it: Row) => num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
+  // The charges on a line in words, each with its basis unless per m³.
+  const chargesOf = (it: Row) => chargeWords(it);
 
   return (
     <div className="mn-od">
@@ -332,8 +334,8 @@ export default function OrderDetail() {
                       <Td numeric className="mn-od-num" style={{ color: num(it.balanceM3) > 0 ? 'var(--mn-warning)' : undefined }}>{it.balanceM3 == null ? '—' : qty(it.balanceM3)}</Td>
                       <Td numeric>
                         <span className="mn-od-num">{money2(it.ratePerM3)}</span>
-                        {chargesOf(it) > 0 && (
-                          <span className="mn-od-rate-meta" title={`Transport ${money2(it.transportCharge)} · Pump ${money2(it.pumpCharge)} · Waiting ${money2(it.waitingCharge)}`}>+ {money2(chargesOf(it))} charges</span>
+                        {chargesOf(it) && (
+                          <span className="mn-od-rate-meta" title={chargesOf(it)}>+ {allPerM3(it) ? `${money2(linePerM3(it) - num(it.ratePerM3))} charges` : chargesOf(it)}</span>
                         )}
                       </Td>
                       <Td>{it.lineStatus ? <StatusBadge status={String(it.lineStatus)} /> : '—'}</Td>
@@ -348,7 +350,7 @@ export default function OrderDetail() {
               </tbody>
             </Table>
             <div className="mn-od-lines-foot">
-              <span className="mn-ord-meta">Charges per m³ are transport + pump + waiting; hover a figure for the split.</span>
+              <span className="mn-ord-meta">Charges are transport + pump + waiting, per m³ unless a basis is shown; hover a figure for the split. A charge per trip, per job, per hour or as a lump sum is billed on its own line.</span>
               <span className="mn-od-lines-total">Estimated value <strong>{money2(o.estimatedOrderValue)}</strong> <span className="mn-ord-meta">ex-GST</span></span>
             </div>
           </Card>

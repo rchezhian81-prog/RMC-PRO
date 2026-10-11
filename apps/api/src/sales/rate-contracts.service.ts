@@ -11,6 +11,7 @@ import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
 import { companyBlock, type RateContractPdfData } from './pdf.service';
 import { documentDay, userNames } from '../common/user-names';
+import { pickChargeBases, readBillingTerms } from '../billing/charge-basis.util';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -26,6 +27,9 @@ const ITEM_FIELDS = [
   'transportCharge',
   'pumpCharge',
   'waitingCharge',
+  'transportBasis',
+  'pumpBasis',
+  'waitingBasis',
   'gstApplicable',
   'gstRate',
   'remarks',
@@ -123,6 +127,7 @@ export class RateContractsService {
     ]);
     // Who prepared it (the login that raised it) and who approved it, by name.
     const nameOf = await userNames(m, [contract.createdBy, contract.approvedBy]);
+    const { truckM3 } = await readBillingTerms(m);
     return {
       ...contract,
       ...names(contract),
@@ -132,6 +137,8 @@ export class RateContractsService {
       approvedAt: contract.approvalStatus === 'approved' ? contract.approvedAt : null,
       items,
       orders,
+      // The truck load a per-trip transport charge is estimated with on screen.
+      truckM3,
     };
   }
 
@@ -168,6 +175,9 @@ export class RateContractsService {
           transportCharge: it.transportCharge,
           pumpCharge: it.pumpCharge,
           waitingCharge: it.waitingCharge,
+          transportBasis: it.transportBasis,
+          pumpBasis: it.pumpBasis,
+          waitingBasis: it.waitingBasis,
           gstApplicable: it.gstApplicable,
           gstRate: it.gstRate,
         })),
@@ -182,6 +192,8 @@ export class RateContractsService {
     for (const f of ['ratePerM3', 'transportCharge', 'pumpCharge', 'waitingCharge', 'gstRate'] as const) {
       if (out[f] != null && Number(out[f]) < 0) throw badReq(`${f} cannot be negative`);
     }
+    // The basis of each charge (per m³ unless said otherwise); an unknown value is refused.
+    Object.assign(out, pickChargeBases(raw));
     return out;
   }
 

@@ -5,10 +5,12 @@ import type { EntityManager } from 'typeorm';
 
 type Row = Record<string, unknown>;
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { RateContract, RateContractItem } from '../core/database/entities';
+import { Company, Customer, RateContract, RateContractItem, Site } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
 import { NumberingService } from './numbering.service';
+import { companyBlock, type RateContractPdfData } from './pdf.service';
+import { documentDay, userNames } from '../common/user-names';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
 const badReq = (message: string) => new BadRequestException({ code: 'VALIDATION_ERROR', message });
@@ -119,11 +121,58 @@ export class RateContractsService {
         [id],
       ) as Promise<Row[]>,
     ]);
-    return { ...contract, ...names(contract), ...(stats.get(id) ?? { orderCount: 0, orderedM3: 0, orderValue: 0 }), items, orders };
+    // Who prepared it (the login that raised it) and who approved it, by name.
+    const nameOf = await userNames(m, [contract.createdBy, contract.approvedBy]);
+    return {
+      ...contract,
+      ...names(contract),
+      ...(stats.get(id) ?? { orderCount: 0, orderedM3: 0, orderValue: 0 }),
+      preparedByName: nameOf(contract.createdBy),
+      approvedByName: contract.approvalStatus === 'approved' ? nameOf(contract.approvedBy) : null,
+      approvedAt: contract.approvalStatus === 'approved' ? contract.approvedAt : null,
+      items,
+      orders,
+    };
   }
 
   get(tenantId: string, id: string) {
     return this.db.runInTenant(tenantId, (m) => this.loadFull(m, id));
+  }
+
+  /** Everything the rate contract PDF prints: the company block, the parties, the grade rates and the names. */
+  pdfData(tenantId: string, id: string): Promise<RateContractPdfData> {
+    return this.db.runInTenant(tenantId, async (m) => {
+      const full = await this.loadFull(m, id);
+      const company = (await m.getRepository(Company).find({ take: 1 }))[0];
+      const customer = full.customerId ? await m.getRepository(Customer).findOne({ where: { id: full.customerId } }) : null;
+      const site = full.siteId ? await m.getRepository(Site).findOne({ where: { id: full.siteId } }) : null;
+      return {
+        ...companyBlock(company),
+        rateContractNo: full.rateContractNo,
+        validFrom: full.validFrom,
+        validTo: full.validTo,
+        approvalStatus: full.approvalStatus,
+        customerName: customer?.customerName ?? 'Customer',
+        customerAddress: [customer?.billingAddress, customer?.city, customer?.state, customer?.pincode].map((v) => String(v ?? '').trim()).filter(Boolean).join(', ') || null,
+        siteName: site?.siteName ?? null,
+        paymentTerms: full.paymentTerms,
+        transportTerms: full.transportTerms,
+        pumpTerms: full.pumpTerms,
+        remarks: full.remarks,
+        preparedByName: full.preparedByName,
+        approvedByName: full.approvedByName,
+        approvedOn: documentDay(full.approvedAt),
+        items: full.items.map((it) => ({
+          gradeLabel: it.gradeLabel ?? '',
+          ratePerM3: it.ratePerM3,
+          transportCharge: it.transportCharge,
+          pumpCharge: it.pumpCharge,
+          waitingCharge: it.waitingCharge,
+          gstApplicable: it.gstApplicable,
+          gstRate: it.gstRate,
+        })),
+      };
+    });
   }
 
   private pickItem(raw: Record<string, unknown>): Record<string, unknown> {
@@ -136,12 +185,12 @@ export class RateContractsService {
     return out;
   }
 
-  create(tenantId: string, dto: Record<string, unknown>) {
+  create(tenantId: string, dto: Record<string, unknown>, createdBy?: string | null) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(RateContract);
       const rateContractNo = await this.numbering.next(m, tenantId, 'rate_contract', 'RC-');
       const rest = nullifyEmpty(dto);
-      for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items']) delete rest[k];
+      for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items', 'createdBy', 'approvedBy', 'approvedAt']) delete rest[k];
       assertWindow(rest.validFrom, rest.validTo);
       await assertSalesRefs(m, rest);
       const contract = await repo.save(
@@ -150,6 +199,7 @@ export class RateContractsService {
           tenantId,
           rateContractNo,
           approvalStatus: 'draft',
+          createdBy: createdBy ?? null,
         } as Record<string, unknown>),
       );
       if (Array.isArray(dto.items)) {
@@ -173,7 +223,7 @@ export class RateContractsService {
         throw badReq('Approved rate contract is locked');
       }
       const rest = nullifyEmpty(dto);
-      for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items']) delete rest[k];
+      for (const k of ['id', 'tenantId', 'rateContractNo', 'approvalStatus', 'items', 'createdBy', 'approvedBy', 'approvedAt']) delete rest[k];
       assertWindow(rest.validFrom ?? contract.validFrom, rest.validTo ?? contract.validTo);
       await assertSalesRefs(m, rest, contract.customerId);
       await repo.update(id, rest as Record<string, unknown>);
@@ -234,11 +284,12 @@ export class RateContractsService {
   }
 
   submit(tenantId: string, id: string) {
-    return this.transition(tenantId, id, ['draft', 'rejected'], 'submitted');
+    return this.transition(tenantId, id, ['draft', 'rejected'], 'submitted', { approvedBy: null, approvedAt: null });
   }
 
+  /** Approving records who and when: the PDF prints both under the terms. */
   async approve(tenantId: string, id: string, userId: string) {
-    const full = await this.transition(tenantId, id, ['submitted'], 'approved');
+    const full = await this.transition(tenantId, id, ['submitted'], 'approved', { approvedBy: userId, approvedAt: new Date() });
     await this.audit.record({
       tenantId,
       actorUserId: userId,
@@ -252,7 +303,7 @@ export class RateContractsService {
   }
 
   async reject(tenantId: string, id: string, userId: string, reason?: string) {
-    const full = await this.transition(tenantId, id, ['submitted'], 'rejected', { remarks: reason ?? null });
+    const full = await this.transition(tenantId, id, ['submitted'], 'rejected', { remarks: reason ?? null, approvedBy: null, approvedAt: null });
     await this.audit.record({
       tenantId,
       actorUserId: userId,

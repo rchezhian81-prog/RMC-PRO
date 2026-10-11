@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { dateRange } from '../common/date-range.util';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
@@ -153,6 +153,24 @@ export class InventoryReportsController {
 
   @Get('low-stock') low(@CurrentUser() u: AuthUser) { return this.service.lowStock(tid(u)); }
   @Get('negative-stock') negative(@CurrentUser() u: AuthUser) { return this.service.negativeStock(tid(u)); }
-  @Get('valuation') valuation(@CurrentUser() u: AuthUser) { return this.service.valuation(tid(u)); }
-  @Get('movement') movement(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string) { return this.service.movement(tid(u), ...dateRange(from, to)); }
+  @Get('valuation')
+  valuation(@CurrentUser() u: AuthUser, @Query('materialId') materialId?: string, @Query('plantId') plantId?: string) {
+    return this.service.valuation(tid(u), reportFilter(materialId, plantId));
+  }
+  @Get('movement')
+  movement(@CurrentUser() u: AuthUser, @Query('from') from?: string, @Query('to') to?: string, @Query('materialId') materialId?: string, @Query('plantId') plantId?: string) {
+    return this.service.movement(tid(u), ...dateRange(from, to), reportFilter(materialId, plantId));
+  }
+}
+
+/** A material / plant narrowing from the query string; anything that is not a uuid is refused outright. */
+function reportFilter(materialId?: string, plantId?: string): { materialId?: string; plantId?: string } {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const pick = (label: string, v?: string): string | undefined => {
+    const s = (v ?? '').trim();
+    if (!s) return undefined;
+    if (!uuid.test(s)) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `${label} must be an id` });
+    return s;
+  };
+  return { materialId: pick('materialId', materialId), plantId: pick('plantId', plantId) };
 }

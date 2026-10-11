@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Download, FileText, History, Hourglass, MapPin, Plus, RefreshCw, Send, Share2, XCircle } from 'lucide-react';
+import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Download, FileText, History, Hourglass, MapPin, Plus, RefreshCw, Send, Share2, UserRound, XCircle } from 'lucide-react';
 import { crud, orderDraftsApi, openPdf, quotationsApi, type Row, openWhatsAppShare } from '../../../../../lib/api';
 import { money } from '../../../../../lib/money';
 import { formatDate, formatDateTime } from '../../../../../lib/format-date';
@@ -171,8 +171,13 @@ export default function QuotationDetail() {
   const converted = String(q.status) === 'converted';
   const locked = status === 'approved';
   const rev = num(q.revisionNo);
-  const lineAllIn = (it: Row) => num(it.ratePerM3) + num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
+  const lineAllIn = (it: Record<string, unknown>) => num(it.ratePerM3) + num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
   const lineTotal = (it: Row) => num(it.estimatedQuantity) * lineAllIn(it);
+  // The line being typed, priced the same way the table prices a saved line.
+  const liveAllIn = lineAllIn(item);
+  const liveValue = num(item.estimatedQuantity) * liveAllIn;
+  const liveWithGst = liveValue * (1 + num(item.gstRate) / 100);
+  const approvedOn = q.approvedAt ? new Date(String(q.approvedAt)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
   const totalM3 = items.reduce((t, it) => t + num(it.estimatedQuantity), 0);
   const quoted = items.reduce((t, it) => t + lineTotal(it), 0);
   const validRaw = String(q.validUntil ?? '').slice(0, 10);
@@ -220,6 +225,10 @@ export default function QuotationDetail() {
             <span className="mn-od-fact"><ClipboardList size={13} aria-hidden /> Quoted {formatDate(q.quotationDate ?? q.createdAt)}</span>
             <span className="mn-od-fact" data-tone={validity.tone}><CalendarClock size={13} aria-hidden /> {q.validUntil ? `Valid till ${formatDate(q.validUntil)}` : 'No expiry'} · <span className="mn-qd-validity">{validity.label}</span></span>
             <span className="mn-od-fact">{q.paymentTerms ? String(q.paymentTerms) : 'Terms not set'} · {String(q.pricingType) === 'credit' ? 'credit pricing' : 'cash pricing'}</span>
+            <span className="mn-od-fact"><UserRound size={13} aria-hidden /> Prepared by {q.preparedByName ? String(q.preparedByName) : '—'}</span>
+            <span className="mn-od-fact" data-tone={status === 'approved' ? 'success' : undefined}>
+              <CheckCircle2 size={13} aria-hidden /> {status === 'approved' ? `Approved by ${q.approvedByName ? String(q.approvedByName) : '—'}${approvedOn ? ` on ${approvedOn}` : ''}` : 'Not yet approved'}
+            </span>
           </p>
         </div>
         <div className="mn-board-tools">
@@ -347,9 +356,17 @@ export default function QuotationDetail() {
                   <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
                   <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
                   <Num label="GST %" v={item.gstRate} on={(v) => setItem({ ...item, gstRate: v })} />
-                  <div className="mn-qd-item-submit">
-                    <Button type="submit" variant={editingItemId ? 'primary' : 'secondary'} icon={editingItemId ? undefined : <Plus size={14} />}>{editingItemId ? 'Update line' : 'Add line'}</Button>
-                    {editingItemId && <Button type="button" variant="ghost" onClick={cancelEditItem}>Cancel</Button>}
+                  <div className="mn-qd-item-foot">
+                    {/* Live read-out: the figures the line will carry, before it is added. */}
+                    <div className="mn-qd-live" aria-live="polite">
+                      <span>All-in ₹/m³ <strong>{money2(liveAllIn)}</strong> <span className="mn-ord-meta">= rate + transport + pump + waiting</span></span>
+                      <span className="mn-qd-live-main">Line value <strong>{money2(liveValue)}</strong> <span className="mn-ord-meta">= {qty(item.estimatedQuantity)} m³ × all-in, ex-GST</span></span>
+                      <span>With GST ({num(item.gstRate)}%) <strong>{money2(liveWithGst)}</strong></span>
+                    </div>
+                    <div className="mn-qd-item-submit">
+                      <Button type="submit" variant={editingItemId ? 'primary' : 'secondary'} icon={editingItemId ? undefined : <Plus size={14} />}>{editingItemId ? 'Update line' : 'Add line'}</Button>
+                      {editingItemId && <Button type="button" variant="ghost" onClick={cancelEditItem}>Cancel</Button>}
+                    </div>
                   </div>
                 </Form>
               </div>

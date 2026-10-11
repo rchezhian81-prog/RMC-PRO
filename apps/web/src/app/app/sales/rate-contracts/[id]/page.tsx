@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, FileSignature, FileText, Hourglass, MapPin, Plus, RefreshCw, Send, XCircle } from 'lucide-react';
-import { crud, orderDraftsApi, rateContractsApi, type Row } from '../../../../../lib/api';
+import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Download, FileSignature, FileText, Hourglass, MapPin, Plus, RefreshCw, Send, UserRound, XCircle } from 'lucide-react';
+import { crud, openPdf, orderDraftsApi, rateContractsApi, type Row } from '../../../../../lib/api';
 import { money } from '../../../../../lib/money';
 import { formatDate } from '../../../../../lib/format-date';
 import { Card } from '../../../../../components/ui/Card';
@@ -183,7 +183,10 @@ export default function RateContractDetail() {
     : to === 0 ? { label: 'Ends today', tone: 'warning' as const }
     : to <= 30 ? { label: `Ends in ${to} ${to === 1 ? 'day' : 'days'}`, tone: 'warning' as const }
     : { label: `${to} days left`, tone: 'neutral' as const };
-  const lineAllIn = (it: Row) => num(it.ratePerM3) + num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
+  const lineAllIn = (it: Record<string, unknown>) => num(it.ratePerM3) + num(it.transportCharge) + num(it.pumpCharge) + num(it.waitingCharge);
+  // The rate being typed, priced the same way the table prices a saved grade.
+  const liveAllIn = lineAllIn(item);
+  const approvedOn = rc.approvedAt ? new Date(String(rc.approvedAt)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null;
   const rates = items.map((it) => num(it.ratePerM3));
   const minRate = rates.length ? Math.min(...rates) : 0;
   const maxRate = rates.length ? Math.max(...rates) : 0;
@@ -208,6 +211,10 @@ export default function RateContractDetail() {
             <span className="mn-od-fact"><MapPin size={13} aria-hidden /> {rc.siteName ? String(rc.siteName) : 'All sites'}</span>
             <span className="mn-od-fact" data-tone={validity.tone}><CalendarClock size={13} aria-hidden /> {rc.validFrom || rc.validTo ? `${rc.validFrom ? formatDate(rc.validFrom) : '…'} → ${rc.validTo ? formatDate(rc.validTo) : '…'}` : 'No dates'} · <span className="mn-qd-validity">{validity.label}</span></span>
             <span className="mn-od-fact">{rc.paymentTerms ? String(rc.paymentTerms) : 'Payment terms not set'}</span>
+            <span className="mn-od-fact"><UserRound size={13} aria-hidden /> Prepared by {rc.preparedByName ? String(rc.preparedByName) : '—'}</span>
+            <span className="mn-od-fact" data-tone={status === 'approved' ? 'success' : undefined}>
+              <CheckCircle2 size={13} aria-hidden /> {status === 'approved' ? `Approved by ${rc.approvedByName ? String(rc.approvedByName) : '—'}${approvedOn ? ` on ${approvedOn}` : ''}` : 'Not yet approved'}
+            </span>
           </p>
         </div>
         <div className="mn-board-tools">
@@ -215,6 +222,7 @@ export default function RateContractDetail() {
           {status === 'rejected' && <Button icon={<Send size={14} />} onClick={() => run(() => rateContractsApi.submit(id), 'Re-submitted')} loading={busy}>Re-submit</Button>}
           {status === 'submitted' && <Button icon={<CheckCircle2 size={14} />} onClick={() => run(() => rateContractsApi.approve(id), 'Approved: the rates are locked and orders can be booked under the contract')} loading={busy}>Approve</Button>}
           {status === 'submitted' && <Button variant="secondary" icon={<XCircle size={14} />} onClick={() => run(async () => { const reason = await prompt({ title: 'Reject rate contract', label: 'Why (the salesperson sees this)', defaultValue: '' }); if (reason !== null) await rateContractsApi.reject(id, reason || 'Not accepted'); }, 'Rate contract rejected')}>Reject</Button>}
+          <Button variant="secondary" icon={<Download size={16} />} onClick={() => openPdf(rateContractsApi.pdfUrl(id), String(rc?.rateContractNo ?? '')).catch((e) => setError(String(e)))}>Print / PDF</Button>
           <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => run(async () => undefined)} loading={busy}>Refresh</Button>
         </div>
       </header>
@@ -341,9 +349,16 @@ export default function RateContractDetail() {
                   <Num label="Pump" v={item.pumpCharge} on={(v) => setItem({ ...item, pumpCharge: v })} />
                   <Num label="Waiting" v={item.waitingCharge} on={(v) => setItem({ ...item, waitingCharge: v })} />
                   <Num label="GST %" v={item.gstRate} on={(v) => setItem({ ...item, gstRate: v })} />
-                  <div className="mn-qd-item-submit">
-                    <Button type="submit" variant={editingItemId ? 'primary' : 'secondary'} icon={editingItemId ? undefined : <Plus size={14} />}>{editingItemId ? 'Update rate' : 'Add rate'}</Button>
-                    {editingItemId && <Button type="button" variant="ghost" onClick={cancelEditItem}>Cancel</Button>}
+                  <div className="mn-qd-item-foot">
+                    {/* Live read-out: the all-in rate the grade will carry, before it is added. */}
+                    <div className="mn-qd-live" aria-live="polite">
+                      <span className="mn-qd-live-main">All-in ₹/m³ <strong>{money2(liveAllIn)}</strong> <span className="mn-ord-meta">= rate + transport + pump + waiting, ex-GST</span></span>
+                      <span>With GST ({num(item.gstRate)}%) <strong>{money2(liveAllIn * (1 + num(item.gstRate) / 100))}</strong> per m³</span>
+                    </div>
+                    <div className="mn-qd-item-submit">
+                      <Button type="submit" variant={editingItemId ? 'primary' : 'secondary'} icon={editingItemId ? undefined : <Plus size={14} />}>{editingItemId ? 'Update rate' : 'Add rate'}</Button>
+                      {editingItemId && <Button type="button" variant="ghost" onClick={cancelEditItem}>Cancel</Button>}
+                    </div>
                   </div>
                 </Form>
               </div>

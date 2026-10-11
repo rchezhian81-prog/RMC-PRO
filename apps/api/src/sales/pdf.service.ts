@@ -26,7 +26,39 @@ export interface QuotationPdfData extends CompanyBlock {
   siteName?: string | null;
   paymentTerms?: string | null;
   remarks?: string | null;
+  preparedByName?: string | null;
+  approvedByName?: string | null;
+  /** `dd MMM yyyy`, or null while the document is not yet approved. */
+  approvedOn?: string | null;
   items: QuotationPdfItem[];
+}
+
+export interface RateContractPdfItem {
+  gradeLabel: string;
+  ratePerM3: string | number;
+  transportCharge: string | number;
+  pumpCharge: string | number;
+  waitingCharge: string | number;
+  gstApplicable: boolean;
+  gstRate: string | number;
+}
+
+export interface RateContractPdfData extends CompanyBlock {
+  rateContractNo: string;
+  validFrom?: string | null;
+  validTo?: string | null;
+  approvalStatus: string;
+  customerName: string;
+  customerAddress?: string | null;
+  siteName?: string | null;
+  paymentTerms?: string | null;
+  transportTerms?: string | null;
+  pumpTerms?: string | null;
+  remarks?: string | null;
+  preparedByName?: string | null;
+  approvedByName?: string | null;
+  approvedOn?: string | null;
+  items: RateContractPdfItem[];
 }
 
 export interface ChallanPdfData extends CompanyBlock {
@@ -386,6 +418,28 @@ function drawSignatoryBlock(doc: PDFKit.PDFDocument, companyName: string, left: 
 }
 
 /**
+ * "Prepared by <name>" and "Approved by <name> on <date>" under the terms of a
+ * quotation or a rate contract — the two names a customer looks for before
+ * acting on a price. A draft, submitted or rejected document says plainly
+ * that it is not yet approved, so a printout of a draft cannot pass for one.
+ */
+function drawPreparedApproved(
+  doc: PDFKit.PDFDocument,
+  data: { preparedByName?: string | null; approvedByName?: string | null; approvedOn?: string | null; approvalStatus: string },
+  left: number,
+): void {
+  doc.x = left;
+  doc.moveDown(0.6);
+  doc.font('Helvetica').fontSize(9).fillColor('#000');
+  doc.text(`Prepared by ${data.preparedByName?.trim() || '—'}`);
+  if (data.approvalStatus === 'approved') {
+    doc.text(`Approved by ${data.approvedByName?.trim() || '—'}${data.approvedOn ? ` on ${data.approvedOn}` : ''}`);
+  } else {
+    doc.fillColor('#555').text('Not yet approved').fillColor('#000');
+  }
+}
+
+/**
  * Draw the e-invoice signed-QR block (runbook 01 §5): the government QR printed
  * as pdfkit rectangles from the module matrix, with the IRN / Ack details beside
  * it. Purely additive and never fatal — like the logo, a QR problem must never be
@@ -538,11 +592,116 @@ export class PdfService {
         doc.font('Helvetica-Bold').fontSize(9).text('Remarks: ', { continued: true });
         doc.font('Helvetica').text(data.remarks);
       }
+      drawPreparedApproved(doc, data, left);
 
       drawSignatoryBlock(doc, data.companyName, left, right);
       doc.moveDown(1.5);
       doc.fontSize(8).fillColor('#777').text(
         'This is a system-generated quotation. Rates are exclusive of GST unless stated otherwise.',
+        { align: 'center' },
+      );
+
+      doc.end();
+    });
+  }
+
+  /**
+   * Rate contract PDF — the grade rates a customer has agreed for a period,
+   * with the transport / pump / payment terms and the names of who prepared
+   * and who approved it. Same page furniture as the quotation.
+   */
+  rateContractPdf(data: RateContractPdfData): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 44 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (c: Buffer) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+
+      drawCompanyHeader(doc, data, left);
+
+      doc.moveDown(0.5);
+      doc.fontSize(15).font('Helvetica-Bold').text('RATE CONTRACT', { align: 'right' });
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`No: ${data.rateContractNo}`, { align: 'right' });
+      doc.text(`Status: ${data.approvalStatus}`, { align: 'right' });
+      if (data.validFrom || data.validTo) doc.text(`Valid: ${data.validFrom ?? '…'} to ${data.validTo ?? '…'}`, { align: 'right' });
+
+      doc.moveDown(0.6);
+      doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#cccccc').stroke().strokeColor('#000');
+      doc.moveDown(0.6);
+
+      doc.fontSize(10).font('Helvetica-Bold').text('Customer');
+      doc.font('Helvetica').text(data.customerName);
+      if (data.customerAddress) doc.font('Helvetica').fontSize(9).text(data.customerAddress);
+      doc.moveDown(0.2);
+      doc.font('Helvetica-Bold').fontSize(10).text('Site / Project');
+      doc.font('Helvetica').text(data.siteName ?? 'All sites of the customer');
+      doc.moveDown(0.8);
+
+      const cols = [
+        { key: 'grade', label: 'Grade', w: 110, align: 'left' as const },
+        { key: 'rate', label: 'Rate/m³', w: 80, align: 'right' as const },
+        { key: 'transport', label: 'Transport', w: 76, align: 'right' as const },
+        { key: 'pump', label: 'Pump', w: 70, align: 'right' as const },
+        { key: 'waiting', label: 'Waiting', w: 70, align: 'right' as const },
+        { key: 'allin', label: 'All-in/m³', w: 80, align: 'right' as const },
+        { key: 'gst', label: 'GST', w: 46, align: 'center' as const },
+      ];
+      let y = doc.y;
+      const drawRow = (cells: string[], bold: boolean, fill?: string) => {
+        const rowH = 20;
+        if (fill) doc.rect(left, y - 3, right - left, rowH).fill(fill).fillColor('#000');
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor('#000');
+        let x = left;
+        cols.forEach((c, i) => {
+          doc.text(cells[i] ?? '', x + 4, y + 2, { width: c.w - 8, align: c.align });
+          x += c.w;
+        });
+        y += rowH;
+      };
+      drawRow(cols.map((c) => c.label), true, '#eef1f6');
+      for (const it of data.items) {
+        const allIn = Number(it.ratePerM3 || 0) + Number(it.transportCharge || 0) + Number(it.pumpCharge || 0) + Number(it.waitingCharge || 0);
+        drawRow(
+          [
+            it.gradeLabel || '-',
+            money(it.ratePerM3),
+            money(it.transportCharge),
+            money(it.pumpCharge),
+            money(it.waitingCharge),
+            money(allIn),
+            it.gstApplicable ? `${Number(it.gstRate || 0)}%` : 'No',
+          ],
+          false,
+        );
+        if (y > doc.page.height - 120) {
+          doc.addPage();
+          y = doc.page.margins.top;
+        }
+      }
+
+      doc.y = y + 10;
+      doc.x = left;
+      const term = (label: string, value?: string | null) => {
+        if (!value) return;
+        doc.moveDown(0.3);
+        doc.font('Helvetica-Bold').fontSize(9).text(`${label}: `, { continued: true });
+        doc.font('Helvetica').text(value);
+      };
+      term('Payment terms', data.paymentTerms);
+      term('Transport terms', data.transportTerms);
+      term('Pump terms', data.pumpTerms);
+      term('Remarks', data.remarks);
+      drawPreparedApproved(doc, data, left);
+
+      drawSignatoryBlock(doc, data.companyName, left, right);
+      doc.moveDown(1.5);
+      doc.fontSize(8).fillColor('#777').text(
+        'This is a system-generated rate contract. Rates are per m³ and exclusive of GST unless stated otherwise.',
         { align: 'center' },
       );
 

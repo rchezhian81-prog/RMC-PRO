@@ -171,17 +171,37 @@ export class PumpJobService {
     });
   }
 
-  /** Edit the plan while the job has not started pumping. */
+  /**
+   * Edit the plan — the pump, the order, the operator, the date and time, the
+   * pipeline, the charge basis and rate, the remarks — while the job has not
+   * started pumping (planned or on site). Once pumping has begun the plan is
+   * history: the hours and the charge are being worked out from it.
+   */
   update(tenantId: string, id: string, dto: Record<string, unknown>) {
     return this.db.runInTenant(tenantId, async (m) => {
       const repo = m.getRepository(PumpJob);
       const job = await repo.findOne({ where: { id } });
       if (!job) throw notFound();
-      if (!['planned', 'on_site'].includes(job.status)) throw badReq(`Job ${job.jobNo} is ${job.status} and its plan can no longer be edited`);
+      if (!['planned', 'on_site'].includes(job.status)) {
+        throw badReq(`Job ${job.jobNo} is ${job.status.replace('_', ' ')} and its plan can no longer be edited`);
+      }
       const patch: Partial<PumpJob> = {};
       if (dto.pumpVehicleId !== undefined) {
         const v = await this.resolvePump(m, String(dto.pumpVehicleId));
         patch.pumpVehicleId = v.id;
+      }
+      if (dto.orderId !== undefined) {
+        const orderId = str(dto.orderId);
+        if (orderId) {
+          const order = await m.getRepository(Order).findOne({ where: { id: orderId } });
+          if (!order) throw badReq('Order not found');
+          if (order.orderStatus === 'cancelled') throw badReq(`Order ${order.orderNo} is cancelled — a pump cannot be booked against it`);
+          patch.orderId = order.id;
+          patch.customerId = order.customerId ?? job.customerId;
+          patch.siteId = order.siteId ?? job.siteId;
+        } else {
+          patch.orderId = null;
+        }
       }
       if (dto.operatorDriverId !== undefined) {
         const opId = str(dto.operatorDriverId);

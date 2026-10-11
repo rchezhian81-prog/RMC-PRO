@@ -106,7 +106,27 @@ export class OrdersService {
     return this.db.runInTenant(tenantId, async (m) => {
       const where = status ? { orderStatus: status } : {};
       const orders = await m.getRepository(Order).find({ where, order: { createdAt: 'DESC' }, take: listLimit(limit) });
-      return attachCustomerName(m, orders);
+      const named = await attachCustomerName(m, orders);
+      // The site by name and whether a pump is wanted — flagged on a line or
+      // on the site, or a pump charge priced on a line, the same reading the
+      // pump reconciliation uses — so a picker can read "Customer · Site ·
+      // Order no" and put the orders that need a pump first. One grouped
+      // query for the page.
+      const ids = orders.map((o) => o.id);
+      const extra: Array<{ id: string; siteName: string | null; pumpRequired: boolean }> = ids.length
+        ? await m.query(
+            `SELECT o.id, s.site_name AS "siteName",
+                    (COALESCE(bool_or(oi.pump_required OR COALESCE(oi.pump_charge, 0) > 0), false) OR COALESCE(s.pump_required, false)) AS "pumpRequired"
+               FROM orders o
+               LEFT JOIN sites s ON s.id = o.site_id
+               LEFT JOIN order_items oi ON oi.order_id = o.id
+              WHERE o.id = ANY($1::uuid[])
+              GROUP BY o.id, s.site_name, s.pump_required`,
+            [ids],
+          )
+        : [];
+      const byId = new Map(extra.map((e) => [e.id, e]));
+      return named.map((o) => ({ ...o, siteName: byId.get(o.id)?.siteName ?? null, pumpRequired: byId.get(o.id)?.pumpRequired ?? false }));
     });
   }
 

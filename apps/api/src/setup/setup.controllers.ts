@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards, Query } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Put, Res, UseGuards, Query } from '@nestjs/common';
+import type { Response } from 'express';
 import { BaseCrudController } from '../common/base-crud.controller';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../rbac/tenant.guard';
@@ -6,6 +7,8 @@ import { PermissionsGuard } from '../rbac/permissions.guard';
 import { RequirePermissions, RequireAnyPermission } from '../rbac/permissions.decorator';
 import { CurrentUser, type AuthUser } from '../auth/auth-user';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
+import { UserAccessService } from '../rbac/user-access.service';
+import { isTenantOwner } from '../rbac/access';
 import { NumberSeries } from '../core/database/entities';
 import {
   CompanyService,
@@ -48,6 +51,11 @@ export class SettingsController {
   constructor(private readonly svc: SettingsService) {}
   @Get() list(@CurrentUser() u: AuthUser) {
     return this.svc.list(u.tenantId as string);
+  }
+  // Any signed-in user of the company: the browser needs this one number to
+  // sign them out after inactivity, whatever their role.
+  @Get('idle-timeout') idleTimeout(@CurrentUser() u: AuthUser) {
+    return this.svc.idleTimeout(u.tenantId as string);
   }
   @Put(':key')
   @RequirePermissions('settings.manage')
@@ -104,6 +112,64 @@ export class UsersController {
     // The caller is passed through so the service can refuse an admin acting
     // on the owner, or on themselves in a way that locks them out.
     return this.svc.update(u.tenantId as string, id, dto, u.userId);
+  }
+
+  /** Upload / replace a user's photo. Body: { mime, data } (base64). */
+  @Put(':id/photo') setPhoto(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.svc.setPhoto(u.tenantId as string, id, dto.mime, dto.data, u.userId);
+  }
+  @Delete(':id/photo') removePhoto(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.svc.removePhoto(u.tenantId as string, id, u.userId);
+  }
+  /** Upload / replace a user's ID proof. Body: { mime, data (base64), name? }. */
+  @Put(':id/id-proof') setIdProof(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.svc.setIdProof(u.tenantId as string, id, dto.mime, dto.data, dto.name, u.userId);
+  }
+  @Delete(':id/id-proof') removeIdProof(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.svc.removeIdProof(u.tenantId as string, id, u.userId);
+  }
+}
+
+/**
+ * The stored files of a user, served as bytes (outside the JSON envelope).
+ * Its own controller, with no class-level permission: a person may fetch
+ * THEIR OWN photo or ID proof; anyone else's needs users.manage (or the
+ * company owner), which is checked here by hand.
+ */
+@Controller('users')
+@UseGuards(JwtAuthGuard, TenantGuard)
+export class UserFilesController {
+  constructor(
+    private readonly svc: UsersService,
+    private readonly userAccess: UserAccessService,
+  ) {}
+
+  private async assertMayRead(u: AuthUser, id: string): Promise<void> {
+    if (u.userId === id) return;
+    const access = await this.userAccess.get(u.tenantId as string, u.userId);
+    if (isTenantOwner(access) || access.permissions.includes('users.manage')) return;
+    throw new ForbiddenException({ code: 'PERMISSION_DENIED', message: 'Missing required permission: users.manage' });
+  }
+
+  @Get(':id/photo')
+  async photo(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    await this.assertMayRead(u, id);
+    const { mime, buffer } = await this.svc.getPhoto(u.tenantId as string, id);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.end(buffer);
+  }
+
+  @Get(':id/id-proof')
+  async idProof(@CurrentUser() u: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    await this.assertMayRead(u, id);
+    const { mime, name, buffer } = await this.svc.getIdProof(u.tenantId as string, id);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Content-Disposition', `inline; filename="${name.replace(/["\r\n]/g, '')}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.end(buffer);
   }
 }
 

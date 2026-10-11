@@ -23,16 +23,22 @@ function useLogin() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // If we were signed out because the company was blocked, say so — otherwise
   // arriving back at a blank sign-in form looks like the session simply expired,
-  // and the operator retypes a password that was never the problem.
+  // and the operator retypes a password that was never the problem. A sign-out
+  // for inactivity (?reason=idle) gets a quieter note: nothing went wrong.
   useEffect(() => {
     const reason = window.sessionStorage.getItem(BLOCKED_REASON_KEY);
-    if (!reason) return;
-    window.sessionStorage.removeItem(BLOCKED_REASON_KEY);
-    setError(reason);
+    if (reason) {
+      window.sessionStorage.removeItem(BLOCKED_REASON_KEY);
+      setError(reason);
+    }
+    if (new URLSearchParams(window.location.search).get('reason') === 'idle') {
+      setNotice('You were signed out after a period of inactivity. Sign in again to continue.');
+    }
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -48,6 +54,7 @@ function useLogin() {
         token: r.access_token,
         userType: r.user.userType,
         email: r.user.email,
+        userId: r.user.id,
         permissions: r.permissions,
         roles: r.roles,
         modules: r.modules,
@@ -63,13 +70,18 @@ function useLogin() {
     }
   }
 
-  return { login, setLogin, password, setPassword, error, busy, onSubmit };
+  return { login, setLogin, password, setPassword, error, notice, busy, onSubmit };
 }
 
 function LoginForm() {
-  const { login, setLogin, password, setPassword, error, busy, onSubmit } = useLogin();
+  const { login, setLogin, password, setPassword, error, notice, busy, onSubmit } = useLogin();
   return (
     <form onSubmit={onSubmit} className="mn-login-form">
+      {notice && !error && (
+        <div className="mn-login-error" role="status">
+          <AlertSurface tone="info">{notice}</AlertSurface>
+        </div>
+      )}
       <Field label="Email, mobile or user ID">
         <Input
           id="mn-login"

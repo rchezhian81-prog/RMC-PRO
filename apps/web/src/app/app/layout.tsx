@@ -20,6 +20,8 @@ import { ConfirmProvider } from '../../components/ui/ConfirmDialog';
 import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import { Button } from '../../components/ui/Button';
 import { OfflineBanner } from '../../components/OfflineBanner';
+import { TopbarClock } from '../../components/TopbarClock';
+import { IdleLogout } from '../../components/IdleLogout';
 
 const IS = 18;
 
@@ -388,6 +390,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             {currentLabel(pathname)}
           </div>
           <div style={{ flex: 1 }} />
+          <TopbarClock />
           <ThemeToggle />
           <span className="mn-topbar-email" style={{ fontSize: 13, color: 'var(--mn-muted)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {email}
@@ -417,6 +420,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
       <OfflineBanner />
+      {/* The company's idle window; signs out across every tab together. */}
+      <IdleLogout />
     </div>
     </ConfirmProvider>
   );

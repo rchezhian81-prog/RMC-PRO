@@ -89,8 +89,15 @@ const ALL_TESTS = [
   // Forgot / reset password, the first-sign-in change, and support's levers on a
   // company login (new password, off / on). Creates its own tenant.
   'test/password-reset.test.mjs',
+  // Auto-numbered customer / site / employee codes, the new vehicle and
+  // supplier fields, user photo + ID proof, and Create customer from a lead.
+  // Creates its own tenant (its leads must not number the pilot's lead series).
+  'test/masters-users-leads.test.mjs',
   'test/observability.test.mjs',
   'test/dashboard-trends.test.mjs',
+  // Dashboard period (summary + funnel from/to, live figures untouched, the
+  // 366-day cap), the idle sign-out setting and its public read, alert severity.
+  'test/dashboard-period-idle.test.mjs',
   'test/metrics.test.mjs',
   'test/sync-pagination.test.mjs',
   'test/rls-users.test.mjs',

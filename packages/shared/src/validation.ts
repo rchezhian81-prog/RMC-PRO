@@ -144,6 +144,11 @@ export function validateMasterFields(dto: Record<string, unknown>): Record<strin
   if (mobile && !isValidMobile(mobile)) {
     errors.mobile = 'Enter a valid 10-digit mobile number.';
   }
+  // A supplier's second number is checked exactly like the first.
+  const altMobile = str('altMobile');
+  if (altMobile && !isValidMobile(altMobile)) {
+    errors.altMobile = 'Enter a valid 10-digit mobile number.';
+  }
   const pincode = str('pincode');
   if (pincode && !isValidPincode(pincode)) {
     errors.pincode = 'Enter a valid 6-digit PIN code.';

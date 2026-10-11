@@ -55,6 +55,16 @@ const OWNERSHIP_OPTIONS = [
   { value: 'own', label: 'Own' },
   { value: 'hired', label: 'Hired' },
 ];
+const SUPPLY_CATEGORY_OPTIONS = [
+  { value: 'cement', label: 'Cement' },
+  { value: 'aggregates', label: 'Aggregates (sand, metal)' },
+  { value: 'admixture', label: 'Admixture' },
+  { value: 'fly_ash', label: 'Fly ash / GGBS' },
+  { value: 'spares', label: 'Spares and parts' },
+  { value: 'fuel', label: 'Fuel' },
+  { value: 'transport', label: 'Transport' },
+  { value: 'other', label: 'Other' },
+];
 
 // The document types that actually own a number series (every value the server
 // allocates a series for, from the numbering call-sites). A dropdown of these
@@ -65,6 +75,8 @@ const DOCUMENT_TYPES = [
   'dispatch', 'delivery_challan', 'invoice', 'receipt', 'weighbridge',
   'material_inward', 'goods_receipt', 'purchase_order', 'purchase_bill',
   'purchase_payment', 'expense_voucher', 'maintenance_job', 'qc_cube_set', 'lead', 'pump_job',
+  // Masters numbered on request: a customer, site or employee code left blank.
+  'customer', 'site', 'employee',
 ] as const;
 const DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPES.map((d) => ({ value: d, label: titleCase(d.replace(/_/g, ' ')) }));
 
@@ -90,7 +102,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     description: 'Who you sell to.',
     columns: ['customerCode', 'customerName', 'gstin', 'state', 'creditLimit', 'status'],
     fields: [
-      { key: 'customerCode', label: 'Code', required: true },
+      { key: 'customerCode', label: 'Code', help: 'Leave blank and Mix Nova numbers it (CUST-0001). Set the prefix under Setup → Number Series.' },
       { key: 'customerName', label: 'Name', required: true },
       { key: 'customerType', label: 'Customer type', options: CUSTOMER_TYPE_OPTIONS },
       { key: 'gstin', label: 'GSTIN' },
@@ -119,7 +131,7 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     description: 'Where the concrete goes: each customer\'s project sites, with the contact on site and whether a pump is needed. An order is booked against a site.',
     columns: ['siteCode', 'siteName', 'city', 'state', 'status'],
     fields: [
-      { key: 'siteCode', label: 'Code', required: true },
+      { key: 'siteCode', label: 'Code', help: 'Leave blank and Mix Nova numbers it (SITE-0001). Set the prefix under Setup → Number Series.' },
       { key: 'siteName', label: 'Name', required: true },
       { key: 'customerId', label: 'Customer', ref: { path: 'customers', value: 'id', label: 'customerName' } },
       { key: 'address', label: 'Address' },
@@ -180,16 +192,21 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     path: 'suppliers',
     title: 'Suppliers',
     singular: 'supplier',
-    description: 'Who you buy from: GSTIN and state for the purchase bills, a contact, and the payment terms agreed.',
-    columns: ['supplierCode', 'supplierName', 'gstin', 'state', 'status'],
+    description: 'Who you buy from: GSTIN and state for the purchase bills, what they supply, a contact, and the payment terms agreed.',
+    columns: ['supplierCode', 'supplierName', 'supplyCategory', 'gstin', 'state', 'status'],
     fields: [
       { key: 'supplierCode', label: 'Code', required: true },
       { key: 'supplierName', label: 'Name', required: true },
+      { key: 'supplyCategory', label: 'Category', options: SUPPLY_CATEGORY_OPTIONS, help: 'What kind of supplier they are; filters the list.' },
+      { key: 'suppliesNote', label: 'Supplies', help: 'e.g. spare part names or the materials they supply.' },
       { key: 'gstin', label: 'GSTIN' },
       { key: 'pan', label: 'PAN' },
+      { key: 'address', label: 'Address' },
+      { key: 'city', label: 'City' },
       { key: 'state', label: 'State', options: STATE_OPTIONS },
       { key: 'contactPerson', label: 'Contact person' },
       { key: 'mobile', label: 'Mobile' },
+      { key: 'altMobile', label: 'Alternate mobile', help: 'A second number, e.g. the yard or the accounts desk.' },
       { key: 'email', label: 'Email' },
       { key: 'paymentTerms', label: 'Payment terms', help: 'As agreed, e.g. 30 days or advance.' },
     ],
@@ -199,14 +216,17 @@ export const ENTITY_CONFIG: Record<string, EntityConfig> = {
     title: 'Vehicles',
     singular: 'vehicle',
     nameKey: 'vehicleNo',
-    description: 'The fleet: transit mixers, pumps and tippers, with the papers that expire. A vehicle with lapsed insurance or fitness is flagged here before it is sent out.',
-    columns: ['vehicleNo', 'vehicleType', 'capacityM3', 'insuranceExpiry', 'fitnessExpiry', 'status'],
+    description: 'The fleet: transit mixers, pumps and tippers, with the papers that expire. A vehicle with lapsed insurance, fitness or a service overdue is flagged here before it is sent out.',
+    columns: ['vehicleNo', 'vehicleType', 'vehicleModel', 'capacityM3', 'insuranceExpiry', 'fitnessExpiry', 'serviceExpiry', 'status'],
     fields: [
       { key: 'vehicleNo', label: 'Vehicle No', required: true },
       { key: 'vehicleType', label: 'Type', options: VEHICLE_TYPE_OPTIONS },
+      { key: 'vehicleModel', label: 'Model', help: 'Make and model, e.g. Ashok Leyland 2518 or Schwing SP 1800.' },
       { key: 'driverId', label: 'Assigned driver', ref: { path: 'drivers', value: 'id', label: 'driverName' } },
       { key: 'capacityM3', label: 'Capacity (m³)', type: 'number', help: 'Drum capacity; a dispatch cannot load more than this.' },
       { key: 'ownershipType', label: 'Ownership', options: OWNERSHIP_OPTIONS },
+      { key: 'ownerName', label: 'Owner name', help: 'Whose vehicle it is; for a hired truck, the owner it is settled with.' },
+      { key: 'serviceExpiry', label: 'Service due', type: 'date', help: 'When the next service falls due. Flagged under Papers due when it lapses or is within 30 days, like insurance and FC.' },
       { key: 'insuranceExpiry', label: 'Insurance expiry', type: 'date' },
       { key: 'fitnessExpiry', label: 'Fitness (FC) expiry', type: 'date' },
       { key: 'permitExpiry', label: 'Permit expiry', type: 'date' },

@@ -6,20 +6,25 @@ import { useRouter } from 'next/navigation';
 import { getAccess } from '../../../lib/session';
 import {
   ClipboardList, Lock, Ticket, Truck, PackageCheck, ReceiptText, Clock, Wallet, TrendingDown,
-  AlertTriangle, MonitorSmartphone, ArrowUpRight,
+  AlertTriangle, MonitorSmartphone, ArrowUpRight, CalendarRange, Layers, Droplets,
 } from 'lucide-react';
 import {
-  dashboardApi, billingReportsApi, ordersApi, type Row, type TrendsResult, type TrendSeries,
+  dashboardApi, billingReportsApi, ordersApi, type Row, type TrendsResult, type TrendSeries, type DashboardPeriod,
 } from '../../../lib/api';
 import { formatDate } from '../../../lib/format-date';
+import { currentMonthRange, todayLocal } from '../../../lib/report-range';
 import { Card } from '../../../components/ui/Card';
 import { StatusBadge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
+import { Input } from '../../../components/ui/Field';
 import { AlertsCard } from '../../../components/AlertsCard';
 import { InsightsCard } from '../../../components/InsightsCard';
+import { SeverityLegend } from '../../../components/SeverityLegend';
 import { Loading, ErrorState } from '../../../components/ui/States';
 
 const money = (v: unknown) => '₹' + Number(v ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const n = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN');
+const m3 = (v: unknown) => Number(v ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 1 });
 const pos = (v: unknown) => Number(v ?? 0) > 0;
 
 /** Compact Indian-currency form for space-tight chart labels (donut, gauge). */
@@ -32,6 +37,52 @@ const compact = (v: unknown) => {
 };
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+
+// ---- Period ----------------------------------------------------------------
+type PeriodKey = 'today' | 'week' | 'month' | 'custom';
+interface PeriodChoice extends DashboardPeriod {
+  key: PeriodKey;
+}
+/** Remembered per browser so the dashboard opens on the window last chosen. */
+const PERIOD_STORAGE_KEY = 'mn.dashboard.period';
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const ymd = (d: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+/** The quick windows, each a pure function of "now" (local calendar, see report-range.ts). */
+const PRESETS: Array<{ key: Exclude<PeriodKey, 'custom'>; label: string; range: (now: Date) => DashboardPeriod }> = [
+  { key: 'today', label: 'Today', range: (now) => ({ from: todayLocal(now), to: todayLocal(now) }) },
+  {
+    key: 'week',
+    label: 'This week',
+    range: (now) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
+      return { from: ymd(d), to: todayLocal(now) };
+    },
+  },
+  { key: 'month', label: 'This month', range: (now) => currentMonthRange(now) },
+];
+const DEFAULT_PERIOD = (): PeriodChoice => ({ key: 'month', ...currentMonthRange() });
+/** A preset is re-derived from today's date; a custom window is kept as saved. */
+function readStoredPeriod(): PeriodChoice {
+  try {
+    const raw = localStorage.getItem(PERIOD_STORAGE_KEY);
+    if (!raw) return DEFAULT_PERIOD();
+    const v = JSON.parse(raw) as Partial<PeriodChoice>;
+    const preset = PRESETS.find((p) => p.key === v.key);
+    if (preset) return { key: preset.key, ...preset.range(new Date()) };
+    if (v.key === 'custom' && YMD.test(String(v.from)) && YMD.test(String(v.to)) && String(v.from) <= String(v.to)) {
+      return { key: 'custom', from: String(v.from), to: String(v.to) };
+    }
+  } catch {
+    /* storage blocked or garbage — the default month */
+  }
+  return DEFAULT_PERIOD();
+}
+/** "1 Oct 2026 → 11 Oct 2026", or just the day when the window is one day. */
+const periodLabel = (p: DashboardPeriod) => (p.from === p.to ? formatDate(p.from) : `${formatDate(p.from)} → ${formatDate(p.to)}`);
 
 /**
  * The owner's home screen — one layout for both skins (the UI V2 flag only
@@ -63,25 +114,52 @@ export default function DashboardPage() {
   const [trendsDays, setTrendsDays] = useState(30);
   const [trendsBusy, setTrendsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The window the event figures cover. Read from storage after mount (the
+  // server render has no storage), so the first fetch waits for it.
+  const [period, setPeriod] = useState<PeriodChoice | null>(null);
+  const [draft, setDraft] = useState<DashboardPeriod>({ from: '', to: '' });
+  const [periodBusy, setPeriodBusy] = useState(false);
+  useEffect(() => {
+    const p = readStoredPeriod();
+    setPeriod(p);
+    setDraft({ from: p.from, to: p.to });
+  }, []);
+  function applyPeriod(p: PeriodChoice) {
+    setPeriod(p);
+    setDraft({ from: p.from, to: p.to });
+    try {
+      localStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify(p));
+    } catch {
+      /* storage blocked — the choice still applies for this visit */
+    }
+  }
 
   useEffect(() => {
+    if (!period) return;
+    let cancelled = false;
+    setPeriodBusy(true);
     // Summary + funnel are the core (an error here blocks the page); the aging
     // report and the latest orders are read-only extras, so a hiccup in either
-    // simply hides its card.
+    // simply hides its card. Old figures stay on screen while a new period
+    // loads; a stale answer is dropped if the period changed again meanwhile.
     Promise.all([
-      dashboardApi.summary(),
-      dashboardApi.funnel(),
+      dashboardApi.summary(period),
+      dashboardApi.funnel(period),
       billingReportsApi.outstanding().catch(() => null),
       ordersApi.list(undefined, 6).catch(() => null),
     ])
       .then(([sum, f, out, orders]) => {
+        if (cancelled) return;
         setS(sum as Row);
         setFunnel(f as Row);
         setAging(out as Row | null);
         setRecent(Array.isArray(orders) ? orders : null);
+        setError(null);
       })
-      .catch((e) => setError(String(e)));
-  }, []);
+      .catch((e) => { if (!cancelled) setError(String(e)); })
+      .finally(() => { if (!cancelled) setPeriodBusy(false); });
+    return () => { cancelled = true; };
+  }, [period]);
 
   // Activity trend-lines — re-fetched whenever the range toggle changes. Old
   // data stays on screen while the new range loads (no flicker); the cancelled
@@ -98,7 +176,8 @@ export default function DashboardPage() {
   }, [trendsDays]);
 
   if (error) return <ErrorState message={error} />;
-  if (!s) return <Loading label="Loading dashboard…" />;
+  if (!s || !period) return <Loading label="Loading dashboard…" />;
+  const inPeriod = `in the period (${periodLabel(period)})`;
 
   const orders = s.orders as Row,
     dispatch = s.dispatch as Row,
@@ -120,18 +199,23 @@ export default function DashboardPage() {
   const fmax = Math.max(1, ...funnelSteps.map(([, v]) => v));
 
   // Hero — the four figures an owner opens the app for.
+  // Hero — the four figures an owner opens the app for. Each hint says whether
+  // the figure follows the period or is the position now.
   const hero: { label: string; value: ReactNode; hint: string; icon: ReactNode; tone: Tone; href: string }[] = [
-    { label: 'Outstanding', value: money(billing.outstandingTotal), hint: 'Issued invoices still unpaid', icon: <Clock size={16} />, tone: pos(billing.outstandingTotal) ? 'warning' : 'neutral', href: '/app/billing/outstanding' },
-    { label: 'Collected', value: money(billing.receiptsTotal), hint: 'Receipts recorded to date', icon: <Wallet size={16} />, tone: 'success', href: '/app/billing/receipts' },
-    { label: 'Confirmed orders', value: n(orders.confirmed), hint: 'Ready for planning and batching', icon: <ClipboardList size={16} />, tone: 'neutral', href: '/app/orders' },
+    { label: 'Outstanding', value: money(billing.outstandingTotal), hint: 'Issued invoices still unpaid · now', icon: <Clock size={16} />, tone: pos(billing.outstandingTotal) ? 'warning' : 'neutral', href: '/app/billing/outstanding' },
+    { label: 'Collected', value: money(billing.receiptsTotal), hint: 'Receipts recorded in the period', icon: <Wallet size={16} />, tone: 'success', href: '/app/billing/receipts' },
+    { label: 'Confirmed orders', value: n(orders.confirmed), hint: 'Booked in the period', icon: <ClipboardList size={16} />, tone: 'neutral', href: '/app/orders' },
     { label: 'Dispatches active', value: n(dispatch.active), hint: 'Transit mixers on the road now', icon: <Truck size={16} />, tone: 'neutral', href: '/app/dispatch/board' },
   ];
 
   // Operations — the remaining counters as compact tiles. Every href kept.
-  const ops: { label: string; value: ReactNode; icon: ReactNode; href: string; flag?: boolean; crit?: boolean }[] = [
-    { label: 'Batch tickets', value: n(production.batchTicketsConfirmed), icon: <Ticket size={15} />, href: '/app/production/batch-tickets' },
+  // `period` marks a count of events in the window; the rest are the position now.
+  const ops: { label: string; value: ReactNode; icon: ReactNode; href: string; flag?: boolean; crit?: boolean; period?: boolean }[] = [
+    { label: 'Batch tickets', value: n(production.batchTicketsConfirmed), icon: <Ticket size={15} />, href: '/app/production/batch-tickets', period: true },
+    { label: 'Batched m³', value: m3(production.batchedM3), icon: <Layers size={15} />, href: '/app/production/batch-tickets', period: true },
+    { label: 'Delivered m³', value: m3(dispatch.deliveredM3), icon: <Droplets size={15} />, href: '/app/dispatch/delivery-register', period: true },
+    { label: 'Invoices issued', value: n(billing.invoicesIssued), icon: <ReceiptText size={15} />, href: '/app/billing/invoices', period: true },
     { label: 'Delivered · uninvoiced', value: n(dispatch.uninvoiced), icon: <PackageCheck size={15} />, href: '/app/billing/invoices', flag: pos(dispatch.uninvoiced) },
-    { label: 'Invoices issued', value: n(billing.invoicesIssued), icon: <ReceiptText size={15} />, href: '/app/billing/invoices' },
     { label: 'Credit holds', value: n(s.creditHoldsPending), icon: <Lock size={15} />, href: '/app/credit-holds', flag: pos(s.creditHoldsPending) },
     { label: 'Low stock', value: n(inventory.lowStock), icon: <TrendingDown size={15} />, href: '/app/inventory/reports', flag: pos(inventory.lowStock) },
     { label: 'Negative stock', value: n(inventory.negativeStock), icon: <AlertTriangle size={15} />, href: '/app/inventory/negative-stock', crit: pos(inventory.negativeStock) },
@@ -151,8 +235,8 @@ export default function DashboardPage() {
     : [];
   const ageTotal = ageBuckets.reduce((a, b) => a + b.amt, 0);
 
-  // Collections gauge — share of what has come due (paid + still owed) that is
-  // collected. Bounded [0,1] from two figures already in the hero.
+  // Collections gauge — the period's receipts against what is still owed now
+  // (paid + still owed). Bounded [0,1] from two figures already in the hero.
   const collected = Number(billing.receiptsTotal ?? 0);
   const owed = Number(billing.outstandingTotal ?? 0);
   const collDenom = collected + owed;
@@ -172,6 +256,7 @@ export default function DashboardPage() {
           </span>
           <h1>Dashboard</h1>
           <p>Orders, batching, dispatch and billing at a glance. Every figure opens the screen behind it.</p>
+          <SeverityLegend lead="Tile tones" onDark />
         </div>
         <div className="mn-dash-kpis">
           {hero.map((t) => (
@@ -187,13 +272,45 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {/* Period bar: the event figures (booked, batched, delivered, invoiced,
+          collected) follow this window; the position figures are always now. */}
+      <div className="mn-dr-period mn-dash-period" role="group" aria-label="Period">
+        <div className="mn-board-strip">
+          {PRESETS.map((p) => {
+            const on = period.key === p.key;
+            return (
+              <button key={p.key} type="button" className={`mn-board-chip mn-dr-chip${on ? ' is-on' : ''}`} aria-pressed={on} disabled={periodBusy} onClick={() => applyPeriod({ key: p.key, ...p.range(new Date()) })}>
+                <span className="mn-board-chip-l">{p.label}</span>
+              </button>
+            );
+          })}
+          <button type="button" className={`mn-board-chip mn-dr-chip${period.key === 'custom' ? ' is-on' : ''}`} aria-pressed={period.key === 'custom'} disabled={periodBusy} onClick={() => applyPeriod({ key: 'custom', from: draft.from || period.from, to: draft.to || period.to })}>
+            <span className="mn-board-chip-l">Custom</span>
+          </button>
+          <span className="mn-ord-meta mn-dash-period-label" aria-live="polite">{periodBusy ? 'Loading…' : periodLabel(period)}</span>
+        </div>
+        <form
+          className="mn-dr-range"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (YMD.test(draft.from) && YMD.test(draft.to) && draft.from <= draft.to) applyPeriod({ key: 'custom', ...draft });
+          }}
+        >
+          <CalendarRange size={14} aria-hidden />
+          <Input type="date" aria-label="From" value={draft.from} max={draft.to || undefined} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+          <span className="mn-ord-meta">to</span>
+          <Input type="date" aria-label="To" value={draft.to} min={draft.from || undefined} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+          <Button type="submit" variant="secondary" size="sm" disabled={periodBusy || !draft.from || !draft.to || draft.from > draft.to || (draft.from === period.from && draft.to === period.to)}>Apply</Button>
+        </form>
+      </div>
+
       <div className="mn-dash-stack">
         <AlertsCard />
         <InsightsCard />
       </div>
 
       <div className="mn-dash-charts">
-        <Card title="Order-to-cash funnel">
+        <Card title="Order-to-cash funnel" actions={<span className="mn-ord-meta">{inPeriod}</span>}>
           <div className="mn-chart-body">
             <div className="mn-funnel">
               {funnelSteps.map(([label, val], i) => {
@@ -242,7 +359,7 @@ export default function DashboardPage() {
               <div className="mn-gauge">
                 <CollectionsGauge rate={collRate} />
                 <div className="mn-gauge-big">{Math.round(collRate * 100)}%</div>
-                <div className="mn-gauge-cap">{compact(collected)} collected · {compact(owed)} outstanding</div>
+                <div className="mn-gauge-cap">{compact(collected)} collected in the period · {compact(owed)} outstanding now</div>
               </div>
             ) : (
               <div className="mn-chart-empty">No receipts or outstanding yet.</div>
@@ -311,13 +428,14 @@ export default function DashboardPage() {
 
       <div className="mn-ops-head">
         <h2>Operations</h2>
-        <span>— tap any tile to open it</span>
+        <span>— tap any tile to open it. Counts of events are for the period; the rest are the position now.</span>
       </div>
       <div className="mn-ops">
         {ops.map((o) => (
           <Link key={o.label} href={o.href} className={`mn-op${o.flag ? ' mn-op-flag' : ''}${o.crit ? ' mn-op-crit' : ''}`}>
             <span className="mn-op-l">{o.icon}{o.label}</span>
             <span className="mn-op-v">{o.value}</span>
+            <span className="mn-op-h">{o.period ? 'in the period' : 'now'}</span>
           </Link>
         ))}
       </div>

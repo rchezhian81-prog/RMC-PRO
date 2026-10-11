@@ -102,6 +102,13 @@ export class Supplier extends TenantScopedEntity {
   @Column({ name: 'email', type: 'varchar', nullable: true }) email!: string | null;
   @Column({ name: 'state', type: 'varchar', nullable: true }) state!: string | null;
   @Column({ name: 'payment_terms', type: 'varchar', nullable: true }) paymentTerms!: string | null;
+  @Column({ name: 'address', type: 'varchar', nullable: true }) address!: string | null;
+  @Column({ name: 'city', type: 'varchar', nullable: true }) city!: string | null;
+  /** cement | aggregates | admixture | fly_ash | spares | fuel | transport | other */
+  @Column({ name: 'supply_category', type: 'varchar', nullable: true }) supplyCategory!: string | null;
+  /** Free text: the spare parts or materials they supply. */
+  @Column({ name: 'supplies_note', type: 'varchar', nullable: true }) suppliesNote!: string | null;
+  @Column({ name: 'alt_mobile', type: 'varchar', nullable: true }) altMobile!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'active' }) status!: string;
 }
 
@@ -120,6 +127,11 @@ export class Vehicle extends TenantScopedEntity {
   @Column({ name: 'permit_expiry', type: 'date', nullable: true }) permitExpiry!: string | null;
   @Column({ name: 'pollution_expiry', type: 'date', nullable: true }) pollutionExpiry!: string | null;
   @Column({ name: 'road_tax_expiry', type: 'date', nullable: true }) roadTaxExpiry!: string | null;
+  /** When the next service is due; flagged with the papers when lapsed or due within 30 days. */
+  @Column({ name: 'service_expiry', type: 'date', nullable: true }) serviceExpiry!: string | null;
+  /** Whose truck it is (a hired mixer carries its owner's name). */
+  @Column({ name: 'owner_name', type: 'varchar', nullable: true }) ownerName!: string | null;
+  @Column({ name: 'vehicle_model', type: 'varchar', nullable: true }) vehicleModel!: string | null;
   /** The tracker's device id / IMEI, so a GPS vendor can post positions by device instead of by number. */
   @Column({ name: 'gps_device_id', type: 'varchar', nullable: true }) gpsDeviceId!: string | null;
   /** Last known position from any source (vendor feed, driver phone, board ping) — kept even when the truck is idle. */

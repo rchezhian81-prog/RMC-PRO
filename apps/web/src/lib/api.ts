@@ -210,7 +210,7 @@ async function performFetch<T>(path: string, opts: RequestInit = {}): Promise<T>
 export interface LoginResult {
   access_token: string;
   refresh_token: string;
-  user: { email: string; userType: string };
+  user: { id: string; email: string; userType: string };
   tenant: { code: string } | null;
   permissions: string[];
   roles: string[];
@@ -227,7 +227,7 @@ export interface PlanUsage {
   plants: { used: number; limit: number | null };
 }
 export interface MeResult {
-  user: { email: string; userType: string };
+  user: { id: string; email: string; userType: string };
   tenant: { code: string; name: string; status: string } | null;
   permissions: string[];
   roles: string[];
@@ -459,6 +459,8 @@ export const settings = {
       method: 'PUT',
       body: JSON.stringify({ value }),
     }),
+  /** The company's idle sign-out window, readable by any signed-in user. 0 = never. */
+  idleTimeout: () => apiFetch<{ minutes: number }>('/settings/idle-timeout'),
 };
 
 export const usersApi = {
@@ -467,6 +469,21 @@ export const usersApi = {
     apiFetch<Row>('/users', { method: 'POST', body: JSON.stringify(b) }),
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  /** Upload / replace a user's photo. `data` is base64 (no data-URL prefix). */
+  uploadPhoto: (id: string, mime: string, data: string) =>
+    apiFetch<{ hasPhoto: boolean; photoMime: string }>(`/users/${id}/photo`, { method: 'PUT', body: JSON.stringify({ mime, data }) }),
+  removePhoto: (id: string) => apiFetch<{ hasPhoto: boolean }>(`/users/${id}/photo`, { method: 'DELETE' }),
+  /** Upload / replace a user's ID proof (image or PDF) with its file name. */
+  uploadIdProof: (id: string, mime: string, data: string, name: string) =>
+    apiFetch<{ idProofName: string; idProofMime: string }>(`/users/${id}/id-proof`, { method: 'PUT', body: JSON.stringify({ mime, data, name }) }),
+  removeIdProof: (id: string) => apiFetch<{ idProofName: null }>(`/users/${id}/id-proof`, { method: 'DELETE' }),
+  /**
+   * The photo as an object URL for an <img>. The route needs the bearer token,
+   * so a plain src would be refused; the caller revokes the URL when done.
+   */
+  photoObjectUrl: (id: string) => fetchObjectUrl(`/users/${id}/photo`),
+  /** Open the ID proof (image or PDF) in a new tab. */
+  openIdProof: (id: string, name?: string | null) => openPdf(`/users/${id}/id-proof`, name),
 };
 
 /** What the tenant's plan allows, and how much of it is already used. */
@@ -530,6 +547,9 @@ export const leadsApi = {
   update: (id: string, b: Record<string, unknown>) =>
     apiFetch<Row>(`/leads/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   addFollowup: (id: string, b: Record<string, unknown>) => post(`/leads/${id}/followups`, b),
+  /** Create the customer (and the site, when the lead has a location) under Masters from this lead. */
+  createCustomer: (id: string) =>
+    apiFetch<{ customerId: string; customerCode: string; customerName: string; siteId: string | null; siteCode: string | null }>(`/leads/${id}/create-customer`, { method: 'POST' }),
 };
 
 export const quotationsApi = {
@@ -1151,9 +1171,18 @@ export interface TrendsResult {
   series: TrendSeries[];
 }
 
+/** A dashboard window: both ends inclusive YYYY-MM-DD, at most 366 days. */
+export interface DashboardPeriod {
+  from: string;
+  to: string;
+}
+const periodQuery = (p?: DashboardPeriod | null) =>
+  p && p.from && p.to ? `?from=${encodeURIComponent(p.from)}&to=${encodeURIComponent(p.to)}` : '';
+
 export const dashboardApi = {
-  summary: () => apiFetch<Row>('/dashboard/summary'),
-  funnel: () => apiFetch<Row>('/dashboard/operations-funnel'),
+  /** Event counts and sums follow the period (all time when absent); the live figures never do. */
+  summary: (period?: DashboardPeriod | null) => apiFetch<Row>(`/dashboard/summary${periodQuery(period)}`),
+  funnel: (period?: DashboardPeriod | null) => apiFetch<Row>(`/dashboard/operations-funnel${periodQuery(period)}`),
   /** Daily activity trend-lines (default 30-day window). Read-only. */
   trends: (days = 30) => apiFetch<TrendsResult>(`/dashboard/trends?days=${days}`),
 };
@@ -1163,9 +1192,13 @@ export const reportsCatalogApi = {
 };
 
 // ---- Alerts & message templates (no external service required) ----
+export type AlertSeverity = 'high' | 'medium' | 'low';
 export interface Alert {
   key: string;
-  severity: 'danger' | 'warning' | 'info';
+  /** high = act now, medium = soon, low = for information. */
+  severity: AlertSeverity;
+  /** The colour the rule paints it in; the word above is what it means. */
+  tone?: 'danger' | 'warning' | 'info';
   title: string;
   detail: string;
   href: string;
@@ -1356,6 +1389,26 @@ export async function openWhatsAppShare(call: () => Promise<Row>): Promise<strin
  * `name` is the document number the caller already has; the API's own
  * Content-Disposition filename wins when the browser lets us read it.
  */
+/**
+ * Fetch an authenticated binary route (a stored image) and return an object URL
+ * for an <img>. Throws with the server's message when it is refused.
+ */
+export async function fetchObjectUrl(path: string): Promise<string> {
+  const token = getSession()?.token;
+  const res = await fetch(`${BASE}/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    let reason = `The file could not be loaded (HTTP ${res.status}).`;
+    try {
+      const j = (await res.json()) as { error?: { message?: string }; message?: string } | null;
+      reason = j?.error?.message ?? j?.message ?? reason;
+    } catch {
+      // A non-JSON body: keep the status-code message.
+    }
+    throw new Error(reason);
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
 export async function openPdf(path: string, name?: string | null): Promise<void> {
   const tab = window.open('', '_blank');
   try {

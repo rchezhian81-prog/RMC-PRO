@@ -56,6 +56,16 @@ export class LeadsController {
   addFollowup(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
     return this.service.addFollowup(tid(u), id, dto);
   }
+  /**
+   * Create the customer (and site) under Masters from this lead. Gated by
+   * leads.manage: `customers.create` is in the catalogue but no route enforces
+   * it yet (customers are gated as masters.create), so the person who works
+   * the lead is the one who converts it.
+   */
+  @Post(':id/create-customer') @RequirePermissions('leads.manage')
+  createCustomer(@CurrentUser() u: AuthUser, @Param('id') id: string) {
+    return this.service.createCustomer(tid(u), id, u.userId);
+  }
 }
 
 @Controller('quotations')

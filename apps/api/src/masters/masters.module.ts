@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TenantGuard } from '../rbac/tenant.guard';
 import { CrudPermissionsGuard } from '../rbac/crud-permissions.guard';
+import { NumberingService } from '../sales/numbering.service';
 import {
   CustomerExposureController,
   CustomersController,
@@ -52,6 +53,8 @@ import {
     TransportersService,
     UomsService,
     UomConversionsService,
+    // Customer and site codes left blank are numbered from Number Series.
+    NumberingService,
     TenantGuard,
     CrudPermissionsGuard,
   ],

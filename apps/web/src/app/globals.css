@@ -4249,7 +4249,8 @@ button.mn-mi-instock:hover { text-decoration: underline; }
 .mn-ld-h { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--mn-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .mn-ld-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; padding: 14px 16px 0; }
 .mn-ld-details > * { min-width: 0; }
-.mn-ld-h--full, .mn-ld-details > :nth-child(8) { grid-column: 1 / -1; }
+.mn-ld-h--full, .mn-ld-details > .mn-ld-wide { grid-column: 1 / -1; }
+.mn-ld-cust { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 860px) {
   .mn-ld .mn-ord-row--acts {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -5076,6 +5077,20 @@ button.mn-mi-instock:hover { text-decoration: underline; }
 .mn-us-acts, .mn-ro-acts { display: flex; gap: 2px; justify-content: flex-end; flex-wrap: wrap; }
 .mn-us-acts button, .mn-ro-acts button { white-space: nowrap; }
 .mn-us .mn-ord-id .mn-ord-meta { white-space: normal; overflow-wrap: anywhere; }
+/* The search box sits at the end of the status strip, on its own line when narrow. */
+.mn-us-strip { align-items: center; }
+.mn-us-search { margin-left: auto; }
+.mn-us-row.is-on { background: color-mix(in srgb, var(--mn-primary) 7%, var(--mn-surface)); }
+/* Edit card: the photo and the ID proof, side by side. */
+.mn-us-files { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--mn-border); }
+.mn-us-file { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.mn-us-file-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mn-us-thumb { display: flex; align-items: center; justify-content: center; width: 72px; height: 72px; flex: 0 0 auto; border: 1px dashed var(--mn-border); border-radius: 50%; background: var(--mn-surface-2); overflow: hidden; font-size: 11px; text-align: center; }
+.mn-us-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.mn-us-file-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-us-file-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; }
+.mn-us-file-name svg { color: var(--mn-primary); flex: 0 0 auto; }
+.mn-us-file-open { background: none; border: 0; padding: 0; font: inherit; color: var(--mn-primary); cursor: pointer; text-decoration: underline; overflow-wrap: anywhere; text-align: left; }
 .mn-ro .mn-ro-cols,
 .mn-ro .mn-ro-row { grid-template-columns: minmax(200px, 1.1fr) minmax(120px, 0.6fr) minmax(170px, 0.9fr) minmax(90px, auto) auto; }
 .mn-ro-row.is-open { background: color-mix(in srgb, var(--mn-primary) 7%, var(--mn-surface)); }
@@ -5140,6 +5155,9 @@ button.mn-mi-instock:hover { text-decoration: underline; }
 .mn-co-logo-hint { white-space: normal; margin: 0; }
 @media (max-width: 860px) {
   .mn-us-form, .mn-ro-form, .mn-co-fields, .mn-ro-ws-head { grid-template-columns: minmax(0, 1fr); }
+  .mn-us-files { grid-template-columns: minmax(0, 1fr); }
+  .mn-us-search { margin-left: 0; width: 100%; }
+  .mn-us-search .mn-input { width: 100%; }
   .mn-us .mn-ord-row--acts {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
@@ -5429,3 +5447,78 @@ button.mn-mi-instock:hover { text-decoration: underline; }
 .mn-td-user-acts .mn-btn { white-space: nowrap; }
 .mn-td .mn-ord-cols--acts,
 .mn-td .mn-ord-row--acts { grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(70px, auto) minmax(230px, auto); }
+
+/* ============================================================================
+   TOP BAR CLOCK · SEVERITY LEGEND · DASHBOARD PERIOD · SECURITY SETTING
+   ============================================================================ */
+/* The date and time at the right of the top bar: muted, fixed-width digits so
+   the minute tick does not shift the controls beside it. Gone on a phone. */
+.mn-topbar-clock {
+  font-size: 12.5px;
+  color: var(--mn-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .mn-topbar-clock { display: none; }
+}
+
+/* Severity: colour + the word, never colour alone. Chips in the legend rows,
+   a badge beside each alert title. The three tones are the design tokens. */
+.mn-sev-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-sev-lead { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mn-subtle); }
+.mn-sev-chip {
+  --sev: var(--mn-info);
+  --sev-tint: var(--mn-info-tint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--sev);
+  background: var(--sev-tint);
+  border: 1px solid color-mix(in srgb, var(--sev) 35%, transparent);
+}
+.mn-sev-chip[data-severity='high'] { --sev: var(--mn-danger); --sev-tint: var(--mn-danger-tint); }
+.mn-sev-chip[data-severity='medium'] { --sev: var(--mn-warning); --sev-tint: var(--mn-warning-tint); }
+.mn-sev-chip[data-severity='low'] { --sev: var(--mn-info); --sev-tint: var(--mn-info-tint); }
+.mn-sev-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sev); flex: none; }
+/* On the hero gradient the tint would vanish: a translucent white pill with
+   the word in white and only the dot in the severity colour (lightened so the
+   red and amber hold contrast on violet). */
+.mn-sev-legend--dark { margin-top: 14px; }
+.mn-sev-legend--dark .mn-sev-lead { color: #d9ccff; }
+.mn-sev-chip--dark { color: #ffffff; background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.22); }
+.mn-sev-chip--dark[data-severity='high'] { --sev: #ff8a8a; }
+.mn-sev-chip--dark[data-severity='medium'] { --sev: #ffc555; }
+.mn-sev-chip--dark[data-severity='low'] { --sev: #c9a8ff; }
+.mn-sev-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.mn-alerts-legend { padding: 10px 16px; border-bottom: 1px solid var(--mn-border); background: var(--mn-surface-2); }
+.mn-alert-row:hover { background: var(--mn-surface-2); }
+
+/* Dashboard period bar — the delivery register's bar, with the label of the
+   window in force at the end of the chip strip. */
+.mn-dash-period .mn-board-strip { align-items: center; }
+.mn-dash-period-label { white-space: nowrap; }
+.mn-dash-period .mn-board-chip:disabled { cursor: progress; opacity: 0.7; transform: none; }
+/* Operations tile: "in the period" / "now" under the figure. */
+.mn-op-h { display: block; margin-top: 4px; font-size: 11px; color: var(--mn-subtle); }
+
+/* Settings → Security: one field and its Save side by side. */
+.mn-se-security { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.mn-se-security-field { flex: 1 1 280px; max-width: 420px; }
+.mn-se-security-field > div { margin-bottom: 0; }
+.mn-se-security .mn-se-save { padding-top: 24px; }

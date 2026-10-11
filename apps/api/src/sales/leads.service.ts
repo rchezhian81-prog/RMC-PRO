@@ -1,11 +1,22 @@
 import { listLimit } from '../common/list-limit.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
+import { validateMasterFields } from '@rmc/shared';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { Lead, LeadFollowup } from '../core/database/entities';
+import { Customer, Lead, LeadFollowup, Site, User } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
-import { NumberingService } from './numbering.service';
+import { assertFields } from '../common/validation';
+import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
+import { NumberingService, defaultPrefixFor } from './numbering.service';
 
 const notFound = () => new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'Not found' });
+
+/** What a lead carries beside its own columns: the marketing person's name and the customer it became. */
+interface LeadRefs {
+  assignedSalesUserName: string | null;
+  linkedCustomerName: string | null;
+  linkedCustomerCode: string | null;
+}
 
 /** Sales leads + follow-ups (Design Doc 6 §8.1). */
 @Injectable()
@@ -13,7 +24,48 @@ export class LeadsService {
   constructor(
     private readonly db: TenantDbService,
     private readonly numbering: NumberingService,
+    private readonly audit: AuditService,
   ) {}
+
+  /**
+   * Resolve the marketing person (a user of this company) and the linked
+   * customer for a set of leads: two grouped queries, not one per lead.
+   * Keyed by lead id.
+   */
+  private async refsFor(m: EntityManager, leads: Lead[]): Promise<Map<string, LeadRefs>> {
+    const out = new Map<string, LeadRefs>();
+    const userIds = [...new Set(leads.map((l) => l.assignedSalesUserId).filter((x): x is string => Boolean(x)))];
+    const customerIds = [...new Set(leads.map((l) => l.customerId).filter((x): x is string => Boolean(x)))];
+    const users = userIds.length
+      ? ((await m.query(`SELECT id, name FROM users WHERE id = ANY($1::uuid[])`, [userIds])) as Array<{ id: string; name: string }>)
+      : [];
+    const customers = customerIds.length
+      ? ((await m.query(`SELECT id, customer_code AS code, customer_name AS name FROM customers WHERE id = ANY($1::uuid[])`, [customerIds])) as Array<{ id: string; code: string; name: string }>)
+      : [];
+    const userName = new Map(users.map((u) => [u.id, u.name]));
+    const customer = new Map(customers.map((c) => [c.id, c]));
+    for (const l of leads) {
+      const c = l.customerId ? customer.get(l.customerId) : undefined;
+      out.set(l.id, {
+        assignedSalesUserName: (l.assignedSalesUserId && userName.get(l.assignedSalesUserId)) || null,
+        linkedCustomerName: c?.name ?? null,
+        linkedCustomerCode: c?.code ?? null,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The marketing person must be a user of THIS company. Postgres checks no FK
+   * here, and a foreign id would show as nobody on every screen.
+   */
+  private async assertAssignee(m: EntityManager, dto: Record<string, unknown>): Promise<void> {
+    if (dto.assignedSalesUserId === undefined || dto.assignedSalesUserId === null) return;
+    const user = await m.getRepository(User).findOne({ where: { id: String(dto.assignedSalesUserId) } });
+    if (!user || user.userType !== 'tenant_user') {
+      assertFields({ assignedSalesUserId: 'Choose a person from Setup → Users.' });
+    }
+  }
 
   /**
    * The list carries what the pipeline screen needs beside each lead: how many
@@ -49,11 +101,13 @@ export class LeadsService {
         );
       const fu = new Map(followups.map((f) => [f.leadId, f]));
       const qu = new Map(quotes.map((q) => [q.leadId, q]));
+      const refs = await this.refsFor(m, leads);
       return leads.map((l) => {
         const f = fu.get(l.id);
         const q = qu.get(l.id);
         return {
           ...l,
+          ...refs.get(l.id),
           followupCount: Number(f?.followupCount ?? 0),
           lastFollowupAt: f?.lastFollowupAt ?? null,
           lastOutcome: f?.lastOutcome ?? null,
@@ -74,7 +128,8 @@ export class LeadsService {
       const followups = await m
         .getRepository(LeadFollowup)
         .find({ where: { leadId: id }, order: { createdAt: 'DESC' } });
-      return { ...lead, followups };
+      const refs = await this.refsFor(m, [lead]);
+      return { ...lead, ...refs.get(lead.id), followups };
     });
   }
 
@@ -89,6 +144,9 @@ export class LeadsService {
       delete rest.id;
       delete rest.tenantId;
       delete rest.leadNo;
+      // The customer link is made by createCustomer, never typed in.
+      delete rest.customerId;
+      await this.assertAssignee(m, rest);
       return repo.save(repo.create({ ...rest, tenantId, leadNo } as Record<string, unknown>));
     });
   }
@@ -102,9 +160,104 @@ export class LeadsService {
       delete rest.id;
       delete rest.tenantId;
       delete rest.leadNo;
+      delete rest.customerId;
+      await this.assertAssignee(m, rest);
       await repo.update(id, rest as Record<string, unknown>);
       return repo.findOne({ where: { id } });
     });
+  }
+
+  /**
+   * Turn a lead into a customer under Masters: the customer (name, contact,
+   * mobile, email; code from the `customer` series) and, when the lead names a
+   * site location, a site for that customer (code from the `site` series).
+   * One transaction, so a refused site leaves no half-made customer. Runs
+   * once per lead: a lead that already has a customer is refused.
+   */
+  async createCustomer(tenantId: string, leadId: string, userId?: string | null) {
+    const result = await this.db.runInTenant(tenantId, async (m) => {
+      const lead = await m.getRepository(Lead).findOne({ where: { id: leadId } });
+      if (!lead) throw notFound();
+      if (lead.customerId) {
+        const existing = await m.getRepository(Customer).findOne({ where: { id: lead.customerId } });
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: `This lead already has a customer${existing ? `: ${existing.customerName} (${existing.customerCode})` : ''}. Open it under Masters → Customers.`,
+        });
+      }
+      const customerDto = {
+        customerName: lead.customerName,
+        contactPerson: lead.contactPerson,
+        mobile: lead.mobile,
+        email: lead.email,
+      };
+      // Same field rules as a customer typed in by hand, so a bad mobile on the
+      // lead is fixed on the lead rather than copied into the master.
+      const problems = validateMasterFields(customerDto);
+      if (Object.keys(problems).length) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: `Fix the lead first: ${Object.values(problems).join(' ')}`,
+          fields: problems,
+        });
+      }
+      const customers = m.getRepository(Customer);
+      const customer = await customers.save(
+        customers.create({
+          ...customerDto,
+          tenantId,
+          customerCode: await this.numbering.next(m, tenantId, 'customer', defaultPrefixFor('customer')),
+        }),
+      );
+      let site: Site | null = null;
+      const location = (lead.siteLocation ?? '').trim();
+      if (location) {
+        const sites = m.getRepository(Site);
+        site = await sites.save(
+          sites.create({
+            tenantId,
+            customerId: customer.id,
+            siteCode: await this.numbering.next(m, tenantId, 'site', defaultPrefixFor('site')),
+            siteName: location,
+            address: location,
+            contactPerson: lead.contactPerson,
+            mobile: lead.mobile,
+          }),
+        );
+      }
+      await m.getRepository(Lead).update(leadId, { customerId: customer.id });
+      return { lead, customer, site };
+    });
+    const { lead, customer, site } = result;
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId ?? null,
+      action: AUDIT_ACTIONS.MASTER_CREATE,
+      entityType: 'customer',
+      entityId: customer.id,
+      entityLabel: customer.customerName,
+      summary: `Created customer ${customer.customerName} (${customer.customerCode}) from lead ${lead.leadNo}`,
+      details: { leadId: lead.id, leadNo: lead.leadNo, siteId: site?.id ?? null },
+    });
+    if (site) {
+      await this.audit.record({
+        tenantId,
+        actorUserId: userId ?? null,
+        action: AUDIT_ACTIONS.MASTER_CREATE,
+        entityType: 'site',
+        entityId: site.id,
+        entityLabel: site.siteName,
+        summary: `Created site ${site.siteName} (${site.siteCode}) from lead ${lead.leadNo}`,
+        details: { leadId: lead.id, leadNo: lead.leadNo, customerId: customer.id },
+      });
+    }
+    return {
+      customerId: customer.id,
+      customerCode: customer.customerCode,
+      customerName: customer.customerName,
+      siteId: site?.id ?? null,
+      siteCode: site?.siteCode ?? null,
+    };
   }
 
   addFollowup(tenantId: string, leadId: string, dto: Record<string, unknown>) {

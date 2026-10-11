@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, KeyRound, Plus, RefreshCw, ShieldCheck, UserCheck, UserPlus, UserX, Users, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileText, KeyRound, Pencil, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, Upload, UserCheck, UserPlus, UserX, Users, X } from 'lucide-react';
 import { PASSWORD_MIN_LENGTH, passwordProblems } from '@rmc/shared';
 import { formatDate, formatDateTime } from '../../../lib/format-date';
 import { planUsageApi, rolesApi, usersApi, type PlanUsage, type Row } from '../../../lib/api';
@@ -20,24 +20,51 @@ import { useConfirm } from '../../../components/ui/ConfirmDialog';
  * Users — who can sign in, and what each of them can do.
  *
  * A status strip (active / inactive / no role) with live counts doubles as
- * the filter, a pill counts the seats used against the plan, notes name
- * the people with no role and a full plan, and each user is one row: name
- * with email and mobile; the role as a select that saves as it changes;
- * when they last signed in and when they were added; the status; and
- * Password / Deactivate / Activate. The new-user form opens on demand with
- * the password rule shown. Same layout in both skins; every colour reads
- * the semantic tokens.
+ * the filter, a search box finds a person by employee code, name, email or
+ * mobile, a pill counts the seats used against the plan, notes name the
+ * people with no role and a full plan, and each user is one row: employee
+ * code and name with email and mobile; the role as a select that saves as
+ * it changes; when they last signed in and when they were added; the status;
+ * and Edit / Password / Deactivate / Activate. The new-user form opens on
+ * demand with the password rule shown; Edit opens the person's details
+ * (code, gender, date of joining, address) with their photo and ID proof.
+ * Same layout in both skins; every colour reads the semantic tokens.
  */
 
-const EMPTY = { name: '', email: '', password: '', mobile: '', roleId: '' };
+const EMPTY = { name: '', email: '', password: '', mobile: '', roleId: '', employeeCode: '', gender: '', dateOfJoining: '', address: '' };
+const EMPTY_EDIT = { name: '', mobile: '', employeeCode: '', gender: '', dateOfJoining: '', address: '' };
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 const STATES: Array<{ key: string; label: string; tone: Tone; hint: string }> = [
   { key: 'active', label: 'Active', tone: 'success', hint: 'Can sign in' },
   { key: 'inactive', label: 'Inactive', tone: 'neutral', hint: 'Cannot sign in; history kept' },
   { key: 'no_role', label: 'No role', tone: 'danger', hint: 'Can sign in but can open nothing' },
 ];
+const GENDERS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'other', label: 'Other' },
+];
 const stateOf = (u: Row) => (u.userType === 'super_admin' ? 'active' : !u.roleId ? 'no_role' : String(u.status ?? 'active'));
 const daysSince = (d: unknown) => (d ? Math.floor((Date.now() - new Date(String(d)).getTime()) / 86_400_000) : null);
+
+/** File rules, kept in step with the server (apps/api/src/setup/logo.ts). */
+const PHOTO_MAX_BYTES = 1024 * 1024;
+const PHOTO_ACCEPT = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
+const PROOF_MAX_BYTES = 3 * 1024 * 1024;
+const PROOF_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf,.png,.jpg,.jpeg,.webp,.pdf';
+
+/** Read a File as a base64 string with no data-URL prefix. */
+function fileToBase64(file: File): Promise<{ mime: string; base64: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      resolve({ mime: file.type || 'application/octet-stream', base64: dataUrl.slice(dataUrl.indexOf(',') + 1) });
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function UsersPage() {
   const { confirm, prompt } = useConfirm();
@@ -47,12 +74,18 @@ export default function UsersPage() {
   const [form, setForm] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState('');
+  const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // The person being edited, their details form, and the photo shown for them.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [edit, setEdit] = useState(EMPTY_EDIT);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [fileBusy, setFileBusy] = useState(false);
 
   const reload = useCallback(async () => {
     const [u, r] = await Promise.all([usersApi.list(), rolesApi.list()]);
@@ -70,6 +103,25 @@ export default function UsersPage() {
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
   }, [reload]);
+
+  const editing = useMemo(() => (editId ? rows.find((u) => String(u.id) === editId) ?? null : null), [rows, editId]);
+
+  // The photo is fetched with the bearer token (a plain <img src> would be
+  // refused) and shown as an object URL, released when it changes.
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    setPhotoUrl(null);
+    if (editing?.hasPhoto) {
+      usersApi.photoObjectUrl(String(editing.id))
+        .then((u) => { if (cancelled) URL.revokeObjectURL(u); else { url = u; setPhotoUrl(u); } })
+        .catch(() => setPhotoUrl(null));
+    }
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [editing?.id, editing?.hasPhoto, editing?.photoMime]);
 
   async function refresh() {
     setRefreshing(true);
@@ -93,8 +145,8 @@ export default function UsersPage() {
     if (problems.length) { setError(`The password must ${problems.join(', ')}.`); return; }
     setBusy(true);
     try {
-      await usersApi.create(form);
-      setNotice(`${form.name.trim()} can sign in with ${form.email.trim().toLowerCase()}. Give them the password yourself; it is not sent anywhere, and they choose their own at the first sign-in.`);
+      const created = await usersApi.create(form);
+      setNotice(`${form.name.trim()} (${String(created.employeeCode ?? '')}) can sign in with ${form.email.trim().toLowerCase()}. Give them the password yourself; it is not sent anywhere, and they choose their own at the first sign-in.`);
       setForm(EMPTY);
       setShowForm(false);
       await reload();
@@ -102,6 +154,111 @@ export default function UsersPage() {
       setError(err instanceof Error ? err.message : 'Could not create the user.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Open the details card for one person, seeded from the row. */
+  function startEdit(u: Row) {
+    setEditId(String(u.id));
+    setEdit({
+      name: String(u.name ?? ''),
+      mobile: String(u.mobile ?? ''),
+      employeeCode: String(u.employeeCode ?? ''),
+      gender: String(u.gender ?? ''),
+      dateOfJoining: String(u.dateOfJoining ?? '').slice(0, 10),
+      address: String(u.address ?? ''),
+    });
+    setNotice(null);
+    setError(null);
+  }
+  function closeEdit() {
+    setEditId(null);
+  }
+
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editId) return;
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await usersApi.update(editId, edit);
+      await reload();
+      setNotice(`Details saved for ${edit.name.trim()}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the details.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Photo: read the chosen file, send it, and show the stored copy. */
+  async function onPickPhoto(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editId) return;
+    setError(null);
+    setNotice(null);
+    if (file.size > PHOTO_MAX_BYTES) { setError(`The photo must be ${Math.round(PHOTO_MAX_BYTES / 1024 / 1024)} MB or smaller.`); return; }
+    setFileBusy(true);
+    try {
+      const { mime, base64 } = await fileToBase64(file);
+      await usersApi.uploadPhoto(editId, mime, base64);
+      await reload();
+      setNotice('Photo saved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the photo.');
+    } finally {
+      setFileBusy(false);
+    }
+  }
+  async function removePhoto() {
+    if (!editId || !editing) return;
+    if (!(await confirm({ title: `Remove the photo of ${String(editing.name)}`, message: 'The stored photo is deleted. A new one can be uploaded at any time.', confirmLabel: 'Remove', danger: true }))) return;
+    setFileBusy(true);
+    try {
+      await usersApi.removePhoto(editId);
+      await reload();
+      setNotice('Photo removed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove the photo.');
+    } finally {
+      setFileBusy(false);
+    }
+  }
+
+  /** ID proof: an image or a PDF, kept with its file name. */
+  async function onPickProof(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editId) return;
+    setError(null);
+    setNotice(null);
+    if (file.size > PROOF_MAX_BYTES) { setError(`The ID proof must be ${Math.round(PROOF_MAX_BYTES / 1024 / 1024)} MB or smaller.`); return; }
+    setFileBusy(true);
+    try {
+      const { mime, base64 } = await fileToBase64(file);
+      await usersApi.uploadIdProof(editId, mime, base64, file.name);
+      await reload();
+      setNotice(`ID proof saved (${file.name}).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the ID proof.');
+    } finally {
+      setFileBusy(false);
+    }
+  }
+  async function removeProof() {
+    if (!editId || !editing) return;
+    if (!(await confirm({ title: `Remove the ID proof of ${String(editing.name)}`, message: 'The stored file is deleted. A new one can be uploaded at any time.', confirmLabel: 'Remove', danger: true }))) return;
+    setFileBusy(true);
+    try {
+      await usersApi.removeIdProof(editId);
+      await reload();
+      setNotice('ID proof removed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove the ID proof.');
+    } finally {
+      setFileBusy(false);
     }
   }
 
@@ -182,7 +339,14 @@ export default function UsersPage() {
     for (const u of rows) c.set(stateOf(u), (c.get(stateOf(u)) ?? 0) + 1);
     return c;
   }, [rows]);
-  const shown = filter ? rows.filter((u) => stateOf(u) === filter) : rows;
+  const q = query.trim().toLowerCase();
+  const shown = useMemo(() => {
+    let list = filter ? rows.filter((u) => stateOf(u) === filter) : rows;
+    // Client-side: the list is already in hand, and a company has tens of
+    // people, not thousands. Matches the code, the name, the email or the mobile.
+    if (q) list = list.filter((u) => [u.employeeCode, u.name, u.email, u.mobile].some((v) => String(v ?? '').toLowerCase().includes(q)));
+    return list;
+  }, [rows, filter, q]);
   const noRole = counts.get('no_role') ?? 0;
   const myEmail = getSession()?.email;
   // A null limit means no plan is assigned, so nothing is capped.
@@ -212,8 +376,8 @@ export default function UsersPage() {
         </div>
       </header>
 
-      {/* Status strip — counts per state; press one to filter, press again for all. */}
-      <div className="mn-board-strip" role="group" aria-label="Filter by status">
+      {/* Status strip — counts per state; press one to filter, press again for all. The search box sits beside it. */}
+      <div className="mn-board-strip mn-us-strip" role="group" aria-label="Filter by status">
         {STATES.map((s) => {
           const c = counts.get(s.key) ?? 0;
           const on = filter === s.key;
@@ -225,6 +389,10 @@ export default function UsersPage() {
           );
         })}
         {filter && <button type="button" className="mn-board-chip mn-board-chip-clear" onClick={() => setFilter('')}>Show all</button>}
+        <label className="mn-cu-search mn-us-search">
+          <Search size={14} aria-hidden />
+          <input className="mn-input" placeholder="Search by code, name, email or mobile" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search users by employee code, name, email or mobile" />
+        </label>
       </div>
 
       {loaded && (noRole > 0 || seatsFull) && !filter && (
@@ -262,6 +430,21 @@ export default function UsersPage() {
             <Field label="Mobile">
               <Input value={form.mobile} inputMode="tel" placeholder="10 digits" onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
             </Field>
+            <Field label="Employee code" help="Leave blank and Mix Nova numbers it (EMP-0001). Set the prefix under Setup → Number Series.">
+              <Input value={form.employeeCode} placeholder="Auto" onChange={(e) => setForm({ ...form, employeeCode: e.target.value })} />
+            </Field>
+            <Field label="Gender">
+              <Select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                <option value="">—</option>
+                {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </Select>
+            </Field>
+            <Field label="Date of joining">
+              <Input type="date" value={form.dateOfJoining} onChange={(e) => setForm({ ...form, dateOfJoining: e.target.value })} />
+            </Field>
+            <Field label="Address">
+              <Input value={form.address} placeholder="Street, area, city" onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </Field>
             <Field label="Role" required help="Decides which screens they can open.">
               <Select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })} required>
                 <option value="">Choose…</option>
@@ -274,9 +457,86 @@ export default function UsersPage() {
             <div className="mn-us-form-submit">
               <Button type="submit" loading={busy} disabled={seatsFull} icon={<UserPlus size={14} />}>Create the user</Button>
               <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
-              <span className="mn-ord-how">Tell them the password yourself; the app does not send it.</span>
+              <span className="mn-ord-how">Tell them the password yourself; the app does not send it. The photo and ID proof are added from Edit on their row.</span>
             </div>
           </Form>
+        </Card>
+      )}
+
+      {editing && (
+        <Card
+          title={<span className="mn-board-card-title"><Pencil size={16} aria-hidden /> {String(editing.name ?? '')} <span className="mn-pp-sub">· {String(editing.employeeCode ?? 'no code')}</span></span>}
+          actions={<Button variant="ghost" size="sm" icon={<X size={14} />} onClick={closeEdit}>Close</Button>}
+        >
+          <Form onSubmit={saveEdit} className="mn-us-form">
+            <Field label="Name" required>
+              <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required />
+            </Field>
+            <Field label="Mobile">
+              <Input value={edit.mobile} inputMode="tel" placeholder="10 digits" onChange={(e) => setEdit({ ...edit, mobile: e.target.value })} />
+            </Field>
+            <Field label="Employee code" help="Must be unique within the company.">
+              <Input value={edit.employeeCode} onChange={(e) => setEdit({ ...edit, employeeCode: e.target.value })} />
+            </Field>
+            <Field label="Gender">
+              <Select value={edit.gender} onChange={(e) => setEdit({ ...edit, gender: e.target.value })}>
+                <option value="">—</option>
+                {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </Select>
+            </Field>
+            <Field label="Date of joining">
+              <Input type="date" value={edit.dateOfJoining} onChange={(e) => setEdit({ ...edit, dateOfJoining: e.target.value })} />
+            </Field>
+            <Field label="Address">
+              <Input value={edit.address} placeholder="Street, area, city" onChange={(e) => setEdit({ ...edit, address: e.target.value })} />
+            </Field>
+            <div className="mn-us-form-submit">
+              <Button type="submit" loading={busy} icon={<Save size={14} />}>Save details</Button>
+              <span className="mn-ord-how">The email and the role are changed on the row; the password with the Password button.</span>
+            </div>
+          </Form>
+
+          <div className="mn-us-files">
+            <div className="mn-us-file">
+              <h3 className="mn-ld-h">Photo</h3>
+              <div className="mn-us-file-row">
+                <div className="mn-us-thumb" aria-hidden={!photoUrl}>
+                  {photoUrl ? <img src={photoUrl} alt={`Photo of ${String(editing.name ?? '')}`} /> : <span className="mn-ord-meta">{editing.hasPhoto ? 'Loading…' : 'No photo'}</span>}
+                </div>
+                <div className="mn-us-file-acts">
+                  <label className="mn-im-file">
+                    <input type="file" accept={PHOTO_ACCEPT} onChange={onPickPhoto} disabled={fileBusy} />
+                    <Upload size={16} aria-hidden />
+                    <span>{editing.hasPhoto ? 'Choose a different photo' : 'Choose a photo'}</span>
+                  </label>
+                  {editing.hasPhoto ? <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={removePhoto} disabled={fileBusy}>Remove</Button> : null}
+                </div>
+              </div>
+              <p className="mn-ord-how mn-co-logo-hint">PNG, JPG or WebP up to {Math.round(PHOTO_MAX_BYTES / 1024 / 1024)} MB. Saved as soon as it is chosen.</p>
+            </div>
+            <div className="mn-us-file">
+              <h3 className="mn-ld-h">ID proof</h3>
+              <div className="mn-us-file-row">
+                <div className="mn-us-file-name">
+                  <FileText size={16} aria-hidden />
+                  {editing.idProofName ? (
+                    <button type="button" className="mn-ord-link mn-us-file-open" onClick={() => usersApi.openIdProof(String(editing.id), String(editing.idProofName)).catch((e) => setError(String(e)))}>{String(editing.idProofName)}</button>
+                  ) : (
+                    <span className="mn-ord-meta">No ID proof on file</span>
+                  )}
+                </div>
+                <div className="mn-us-file-acts">
+                  <label className="mn-im-file">
+                    <input type="file" accept={PROOF_ACCEPT} onChange={onPickProof} disabled={fileBusy} />
+                    <Upload size={16} aria-hidden />
+                    <span>{editing.idProofName ? 'Choose a different file' : 'Choose a file'}</span>
+                  </label>
+                  {editing.idProofName ? <Button variant="ghost" size="sm" icon={<Trash2 size={14} />} onClick={removeProof} disabled={fileBusy}>Remove</Button> : null}
+                </div>
+              </div>
+              <p className="mn-ord-how mn-co-logo-hint">Aadhaar, PAN or licence as a PNG, JPG, WebP or PDF up to {Math.round(PROOF_MAX_BYTES / 1024 / 1024)} MB. Saved as soon as it is chosen; only people who manage users can open it.</p>
+            </div>
+          </div>
         </Card>
       )}
 
@@ -302,11 +562,12 @@ export default function UsersPage() {
               const active = String(u.status ?? '') === 'active';
               const since = daysSince(u.lastLoginAt);
               const me = String(u.email ?? '') === myEmail;
+              const on = editId === String(u.id);
               return (
-                <div key={String(u.id)} className={`mn-ord-row mn-ord-row--acts mn-us-row${!active ? ' is-void' : ''}`} data-tone={state === 'no_role' ? 'danger' : active ? 'success' : 'neutral'} role="listitem">
+                <div key={String(u.id)} className={`mn-ord-row mn-ord-row--acts mn-us-row${!active ? ' is-void' : ''}${on ? ' is-on' : ''}`} data-tone={state === 'no_role' ? 'danger' : active ? 'success' : 'neutral'} role="listitem">
                   <div className="mn-ord-id">
                     <span className="mn-ord-no">{String(u.name ?? '')}{me ? <span className="mn-ord-meta"> · you</span> : null}</span>
-                    <span className="mn-ord-meta">{String(u.email ?? '')}{u.mobile ? ` · ${String(u.mobile)}` : ''}</span>
+                    <span className="mn-ord-meta">{[u.employeeCode, u.email, u.mobile].filter(Boolean).map(String).join(' · ')}</span>
                   </div>
                   <div className="mn-us-role">
                     {isSuper ? (
@@ -327,6 +588,7 @@ export default function UsersPage() {
                   <div className="mn-ord-act mn-us-acts">
                     {!isSuper && (
                       <>
+                        <Button variant={on ? 'secondary' : 'ghost'} size="sm" icon={<Pencil size={14} />} disabled={savingId === String(u.id)} onClick={() => (on ? closeEdit() : startEdit(u))} title="Edit the person's details, photo and ID proof">{on ? 'Close' : 'Edit'}</Button>
                         <Button variant="ghost" size="sm" icon={<KeyRound size={14} />} disabled={savingId === String(u.id)} onClick={() => resetPassword(u)} title="Set a new password for this person">Password</Button>
                         {!me && (
                           <Button variant={active ? 'ghost' : 'secondary'} size="sm" icon={active ? <UserX size={14} /> : <UserCheck size={14} />} disabled={savingId === String(u.id)} onClick={() => toggleActive(u)}>
@@ -342,9 +604,9 @@ export default function UsersPage() {
           </div>
         ) : (
           <EmptyState
-            title={filter ? `Nobody ${STATES.find((s) => s.key === filter)?.label.toLowerCase()}` : 'No users yet'}
-            description={filter ? 'Press the chip again to see everyone.' : 'Press New user to add the first person: their name, email, a first password and the role that matches their job.'}
-            action={filter ? <Button variant="secondary" size="sm" onClick={() => setFilter('')}>Show all</Button> : <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>New user</Button>}
+            title={q ? `Nobody matches "${query.trim()}"` : filter ? `Nobody ${STATES.find((s) => s.key === filter)?.label.toLowerCase()}` : 'No users yet'}
+            description={q ? 'Try part of the employee code, the name, the email or the mobile.' : filter ? 'Press the chip again to see everyone.' : 'Press New user to add the first person: their name, email, a first password and the role that matches their job.'}
+            action={q || filter ? <Button variant="secondary" size="sm" onClick={() => { setFilter(''); setQuery(''); }}>Show all</Button> : <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>New user</Button>}
           />
         )}
       </Card>

@@ -23,6 +23,8 @@ export class Lead extends TenantScopedEntity {
   @Column({ name: 'lead_stage', type: 'varchar', default: 'new' }) leadStage!: string;
   @Column({ name: 'next_followup_date', type: 'date', nullable: true }) nextFollowupDate!: string | null;
   @Column({ name: 'lost_reason', type: 'varchar', nullable: true }) lostReason!: string | null;
+  /** The customer master record this lead became ("Create customer"); null until then. */
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true }) customerId!: string | null;
   @Column({ name: 'status', type: 'varchar', default: 'open' }) status!: string;
 }
 

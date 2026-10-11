@@ -123,6 +123,7 @@ export class AlertsService {
             UNION ALL SELECT vehicle_no, 'Permit',          permit_expiry,    status FROM vehicles WHERE permit_expiry    IS NOT NULL
             UNION ALL SELECT vehicle_no, 'Pollution (PUC)', pollution_expiry, status FROM vehicles WHERE pollution_expiry IS NOT NULL
             UNION ALL SELECT vehicle_no, 'Road tax',        road_tax_expiry,  status FROM vehicles WHERE road_tax_expiry  IS NOT NULL
+            UNION ALL SELECT vehicle_no, 'Service',         service_expiry,   status FROM vehicles WHERE service_expiry   IS NOT NULL
             UNION ALL SELECT driver_name, 'Licence',        license_expiry,   status FROM drivers  WHERE license_expiry   IS NOT NULL
           ) d
           WHERE COALESCE(status, '') <> 'inactive' AND expiry <= CURRENT_DATE + 30

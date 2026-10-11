@@ -48,6 +48,7 @@ function useLogin() {
         token: r.access_token,
         userType: r.user.userType,
         email: r.user.email,
+        userId: r.user.id,
         permissions: r.permissions,
         roles: r.roles,
         modules: r.modules,

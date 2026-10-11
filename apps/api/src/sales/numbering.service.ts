@@ -38,7 +38,18 @@ interface ResolvedSeries {
  * of a new financial year would have been numbered into the old year's series —
  * on the one day of the year when that is least forgivable.
  */
-const defaultPrefixFor = (documentType: string): string => documentType.slice(0, 3).toUpperCase() + '-';
+/**
+ * The prefix a series starts with when nobody has set one under Setup → Number
+ * Series: the first three letters of the document type (INV-, QUO-, LEA-), except
+ * the masters that are numbered on request, which read better in full.
+ */
+const DEFAULT_PREFIXES: Record<string, string> = {
+  customer: 'CUST-',
+  site: 'SITE-',
+  employee: 'EMP-',
+};
+export const defaultPrefixFor = (documentType: string): string =>
+  DEFAULT_PREFIXES[documentType] ?? documentType.slice(0, 3).toUpperCase() + '-';
 
 /**
  * Atomic document numbering (Design Doc 6 §5.4, Doc 11 §7; activated in Plan F2).

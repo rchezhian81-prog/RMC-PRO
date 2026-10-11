@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { In, type DeepPartial, IsNull } from 'typeorm';
+import { In, type DeepPartial, type EntityManager, IsNull } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import {
-  ROLE_KEYS, passwordProblemMessage, validateCompanyProfile,
+  ROLE_KEYS, passwordProblemMessage, validateCompanyProfile, isYmdDate,
   SETTINGS_CATALOG, SETTINGS_BY_KEY, validateSettingValue, isPlatformPermission, SYSTEM_ROLE_KEYS,
 } from '@rmc/shared';
 import { TenantCrudService } from '../common/tenant-crud.service';
@@ -11,7 +11,8 @@ import { isTenantOwner } from '../rbac/access';
 import { UserAccessService } from '../rbac/user-access.service';
 import { PlanLimitsService } from '../rbac/plan-limits.service';
 import { AuditService, AUDIT_ACTIONS } from '../audit/audit.service';
-import { validateLogo } from './logo';
+import { USER_ID_PROOF_RULE, USER_PHOTO_RULE, validateLogo, validateUpload } from './logo';
+import { NumberingService, defaultPrefixFor } from '../sales/numbering.service';
 import {
   Company,
   NumberSeries,
@@ -242,6 +243,8 @@ export class NumberSeriesService extends TenantCrudService<NumberSeries> {
   }
 }
 
+const GENDERS = ['male', 'female', 'other'];
+
 /** Tenant-side user management (Design Doc 6 §6.1). `users` is RLS-scoped, so
  *  reads and writes run inside the tenant's context; the one cross-tenant check
  *  (email is globally unique) runs in the platform context. */
@@ -252,7 +255,51 @@ export class UsersService {
     private readonly planLimits: PlanLimitsService,
     private readonly audit: AuditService,
     private readonly userAccess: UserAccessService,
+    private readonly numbering: NumberingService,
   ) {}
+
+  /**
+   * The profile fields an administrator may set on a user, checked and
+   * normalised. Only keys present in the payload come back, so an update
+   * leaves the rest untouched; an empty string clears a value.
+   */
+  private profilePatch(dto: Record<string, unknown>): Partial<Pick<User, 'employeeCode' | 'gender' | 'dateOfJoining' | 'address'>> {
+    const out: Partial<Pick<User, 'employeeCode' | 'gender' | 'dateOfJoining' | 'address'>> = {};
+    const text = (v: unknown): string | null => (v === undefined || v === null ? null : String(v).trim() || null);
+    if (dto.employeeCode !== undefined) out.employeeCode = text(dto.employeeCode);
+    if (dto.gender !== undefined) {
+      const g = text(dto.gender)?.toLowerCase() ?? null;
+      if (g !== null && !GENDERS.includes(g)) {
+        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Gender must be male, female or other.', fields: { gender: 'Choose male, female or other.' } });
+      }
+      out.gender = g;
+    }
+    if (dto.dateOfJoining !== undefined) {
+      const d = text(dto.dateOfJoining);
+      if (d !== null && !isYmdDate(d)) {
+        throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Date of joining must be a date (YYYY-MM-DD).', fields: { dateOfJoining: 'Enter a date.' } });
+      }
+      out.dateOfJoining = d;
+    }
+    if (dto.address !== undefined) out.address = text(dto.address);
+    return out;
+  }
+
+  /** An employee code is unique per company (case-insensitive); say so before the index does. */
+  private async assertEmployeeCodeFree(m: EntityManager, code: string | null | undefined, selfId?: string): Promise<void> {
+    if (!code) return;
+    const rows: Array<{ id: string }> = await m.query(
+      `SELECT id FROM users WHERE upper(employee_code) = upper($1) LIMIT 1`,
+      [code],
+    );
+    if (rows[0] && rows[0].id !== selfId) {
+      throw new BadRequestException({
+        code: 'DUPLICATE_RECORD',
+        message: `Employee code ${code} is already in use.`,
+        fields: { employeeCode: 'Another person already has this code.' },
+      });
+    }
+  }
 
   async list(tenantId: string) {
     const users = await this.db.runInTenant(tenantId, (m) =>
@@ -285,6 +332,15 @@ export class UsersService {
         // When they last signed in and when they were added: the screen says who is really using the app.
         lastLoginAt: u.lastLoginAt ?? null,
         createdAt: u.createdAt,
+        employeeCode: u.employeeCode ?? null,
+        gender: u.gender ?? null,
+        dateOfJoining: u.dateOfJoining ?? null,
+        address: u.address ?? null,
+        // The files themselves never travel with the list: only whether they exist.
+        hasPhoto: Boolean(u.photoData),
+        photoMime: u.photoData ? u.photoMime : null,
+        idProofName: u.idProofData ? (u.idProofName ?? 'ID proof') : null,
+        idProofMime: u.idProofData ? u.idProofMime : null,
       };
     });
   }
@@ -316,6 +372,7 @@ export class UsersService {
     }
     // A users.manage holder must not be able to mint a new Company Owner.
     await this.assertMayGrantOwnerRole(tenantId, String(dto.roleId ?? ''), actingUserId);
+    const profile = this.profilePatch(dto);
     const passwordHash = await bcrypt.hash(password, 10);
     const roleId = String(dto.roleId ?? '').trim();
     // One transaction for the seat check, the user row and its role. Split
@@ -338,6 +395,11 @@ export class UsersService {
         if (!role) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown role' });
         if (role.archivedAt) throw new BadRequestException({ code: 'VALIDATION_ERROR', message: `The role "${role.roleName}" is archived — restore it in Setup → Roles before assigning it` });
       }
+      // A blank employee code is numbered from the `employee` series (EMP-0001)
+      // in this same transaction, so the number is consumed only if the user
+      // is created; a typed one must not already belong to someone else.
+      const employeeCode = profile.employeeCode ?? (await this.numbering.next(m, tenantId, 'employee', defaultPrefixFor('employee')));
+      await this.assertEmployeeCodeFree(m, employeeCode);
       const saved = await m.getRepository(User).save(
         m.getRepository(User).create({
           tenantId,
@@ -349,6 +411,8 @@ export class UsersService {
           // An administrator typed this password: the app asks for a new one
           // the first time they sign in.
           mustChangePassword: true,
+          ...profile,
+          employeeCode,
         }),
       );
       if (role) {
@@ -370,7 +434,7 @@ export class UsersService {
       entityLabel: user.email,
       summary: `Created user ${user.email}`,
     });
-    return { id: user.id, name: user.name, email: user.email, status: user.status };
+    return { id: user.id, name: user.name, email: user.email, status: user.status, employeeCode: user.employeeCode };
   }
 
   /**
@@ -472,6 +536,7 @@ export class UsersService {
     // An empty roleId clears the role, which leaves the user with no access —
     // the honest way to suspend someone without deleting their history.
     const roleIdIn = dto.roleId !== undefined ? String(dto.roleId ?? '').trim() : undefined;
+    const profile = this.profilePatch(dto);
     let newRoleName: string | null = null;
     // One transaction, with the role validated FIRST: the password/status update
     // used to commit on its own and only then was 'Unknown role' thrown — the
@@ -493,10 +558,12 @@ export class UsersService {
         await m.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`users:${tenantId}`]);
         await this.planLimits.assertCanAddUser(tenantId, m);
       }
+      if (profile.employeeCode !== undefined) await this.assertEmployeeCodeFree(m, profile.employeeCode, id);
       await m.getRepository(User).update(id, {
         ...(dto.name !== undefined ? { name: String(dto.name) } : {}),
         ...(dto.status !== undefined ? { status: String(dto.status) } : {}),
         ...(dto.mobile !== undefined ? { mobile: dto.mobile ? String(dto.mobile) : null } : {}),
+        ...profile,
         // A password someone else typed is asked to be replaced at the next
         // sign-in; one you set for yourself is your own already.
         ...(passwordHash ? { passwordHash, mustChangePassword: !isSelf, passwordResetTokenHash: null, passwordResetExpiresAt: null } : {}),
@@ -522,6 +589,82 @@ export class UsersService {
     // single opaque "updated user".
     await this.recordUserChanges(tenantId, actingUserId ?? null, user, dto, newRoleName);
     return this.list(tenantId).then((rows) => rows.find((r) => r.id === id));
+  }
+
+  /** The user row, inside the tenant context, or a 404. */
+  private async findUser(m: EntityManager, tenantId: string, id: string): Promise<User> {
+    const user = await m.getRepository(User).findOne({ where: { id, tenantId } });
+    if (!user) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'User not found' });
+    return user;
+  }
+
+  /** One audit line for a file change; the file itself is never part of the trail. */
+  private auditFile(tenantId: string, actingUserId: string | undefined, user: User, summary: string) {
+    return this.audit.record({ tenantId, actorUserId: actingUserId ?? null, action: AUDIT_ACTIONS.USER_UPDATE, entityType: 'user', entityId: user.id, entityLabel: user.email, summary });
+  }
+
+  /**
+   * Store (or replace) a user's photo. Validated here — sniffed and size-capped
+   * — exactly like the company logo, so the browser cannot smuggle in a bad
+   * file. Kept off the profile `update()` path so a routine edit never carries
+   * the file payload.
+   */
+  async setPhoto(tenantId: string, id: string, rawMime: unknown, rawData: unknown, actingUserId?: string) {
+    const { mime, data } = validateUpload(rawMime, rawData, USER_PHOTO_RULE);
+    const user = await this.db.runInTenant(tenantId, async (m) => {
+      const u = await this.findUser(m, tenantId, id);
+      await m.getRepository(User).update(id, { photoMime: mime, photoData: data });
+      return u;
+    });
+    await this.auditFile(tenantId, actingUserId, user, `Updated the photo for ${user.email}`);
+    return { hasPhoto: true, photoMime: mime };
+  }
+
+  async removePhoto(tenantId: string, id: string, actingUserId?: string) {
+    const user = await this.db.runInTenant(tenantId, async (m) => {
+      const u = await this.findUser(m, tenantId, id);
+      await m.getRepository(User).update(id, { photoMime: null, photoData: null });
+      return u;
+    });
+    await this.auditFile(tenantId, actingUserId, user, `Removed the photo for ${user.email}`);
+    return { hasPhoto: false };
+  }
+
+  /** The photo bytes and content type, or a 404 when there is none. */
+  async getPhoto(tenantId: string, id: string): Promise<{ mime: string; buffer: Buffer }> {
+    const user = await this.db.runInTenant(tenantId, (m) => this.findUser(m, tenantId, id));
+    if (!user.photoData || !user.photoMime) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'This user has no photo.' });
+    return { mime: user.photoMime, buffer: Buffer.from(user.photoData, 'base64') };
+  }
+
+  /** Store (or replace) a user's ID proof: an image or a PDF scan, with its file name. */
+  async setIdProof(tenantId: string, id: string, rawMime: unknown, rawData: unknown, rawName: unknown, actingUserId?: string) {
+    const { mime, data } = validateUpload(rawMime, rawData, USER_ID_PROOF_RULE);
+    // The file name is only a label: keep it short and free of path characters.
+    const name = String(rawName ?? '').trim().replace(/[\\/]/g, '').slice(0, 120) || `id-proof.${mime === 'application/pdf' ? 'pdf' : mime.slice(6)}`;
+    const user = await this.db.runInTenant(tenantId, async (m) => {
+      const u = await this.findUser(m, tenantId, id);
+      await m.getRepository(User).update(id, { idProofMime: mime, idProofData: data, idProofName: name });
+      return u;
+    });
+    await this.auditFile(tenantId, actingUserId, user, `Updated the ID proof for ${user.email}`);
+    return { idProofName: name, idProofMime: mime };
+  }
+
+  async removeIdProof(tenantId: string, id: string, actingUserId?: string) {
+    const user = await this.db.runInTenant(tenantId, async (m) => {
+      const u = await this.findUser(m, tenantId, id);
+      await m.getRepository(User).update(id, { idProofMime: null, idProofData: null, idProofName: null });
+      return u;
+    });
+    await this.auditFile(tenantId, actingUserId, user, `Removed the ID proof for ${user.email}`);
+    return { idProofName: null };
+  }
+
+  async getIdProof(tenantId: string, id: string): Promise<{ mime: string; name: string; buffer: Buffer }> {
+    const user = await this.db.runInTenant(tenantId, (m) => this.findUser(m, tenantId, id));
+    if (!user.idProofData || !user.idProofMime) throw new NotFoundException({ code: 'RECORD_NOT_FOUND', message: 'This user has no ID proof on file.' });
+    return { mime: user.idProofMime, name: user.idProofName ?? 'id-proof', buffer: Buffer.from(user.idProofData, 'base64') };
   }
 
   /** Emit an audit event for each consequential field the update touched. */

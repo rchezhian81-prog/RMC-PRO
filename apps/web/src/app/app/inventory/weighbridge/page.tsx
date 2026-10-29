@@ -68,6 +68,9 @@ export default function WeighbridgePage() {
   const [indicators, setIndicators] = useState<Row[]>([]);
   const [vehicles, setVehicles] = useState<Row[]>([]);
   const [dispatches, setDispatches] = useState<Row[]>([]);
+  // Settings → "Weights only from the indicator": when on, the figures come
+  // off the indicator alone and the API checks them against its readings.
+  const [indicatorOnly, setIndicatorOnly] = useState(false);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState(EMPTY);
   const [indicatorId, setIndicatorId] = useState('');
@@ -80,7 +83,7 @@ export default function WeighbridgePage() {
   const win = useListWindow();
 
   const reload = useCallback(async () => {
-    const [w, m, s, p, ind, v, d] = await Promise.all([
+    const [w, m, s, p, ind, v, d, pol] = await Promise.all([
       weighbridgeApi.list(undefined, win.limit),
       crud('materials').list(),
       crud('suppliers').list(),
@@ -90,6 +93,7 @@ export default function WeighbridgePage() {
       // a hiccup there must not blank the weighbridge.
       crud('vehicles').list().catch(() => [] as Row[]),
       dispatchApi.list().catch(() => [] as Row[]),
+      weighbridgeApi.policy().catch(() => ({ indicatorOnly: false, readingWindowMinutes: 15 })),
     ]);
     setRows(w);
     setMaterials(m);
@@ -98,6 +102,7 @@ export default function WeighbridgePage() {
     setIndicators(ind);
     setVehicles(v);
     setDispatches(d);
+    setIndicatorOnly(!!pol.indicatorOnly);
     setIndicatorId((cur) => cur || (ind[0] ? String(ind[0].id) : ''));
     setForm((f) => (f.plantId || p.length !== 1 ? f : { ...f, plantId: String(p[0]?.id ?? '') }));
   }, [win.limit]);
@@ -175,6 +180,7 @@ export default function WeighbridgePage() {
 
   // A hand-edit of a device-captured field is a manual override (kept on the slip).
   function onWeightChange(target: 'first' | 'second', x: string) {
+    if (indicatorOnly) return; // the figure comes off the indicator alone
     if (target === 'first') {
       setForm((f) => ({ ...f, firstWeight: x }));
       setCapture((c) => (c.firstFromDevice ? { ...c, overridden: true } : c));
@@ -226,7 +232,8 @@ export default function WeighbridgePage() {
 
   async function create(e: FormEvent) {
     e.preventDefault();
-    if (!(first > 0)) { setError('Enter the first weight.'); return; }
+    if (!(first > 0)) { setError(indicatorOnly ? 'Press Get with the truck on the bridge to read the first weight.' : 'Enter the first weight.'); return; }
+    if (indicatorOnly && (!capture.firstFromDevice || (second > 0 && !capture.secondFromDevice))) { setError('Weights only from the indicator is on: every weight must be read with Get.'); return; }
     if (second > 0 && second === first) { setError('The second weight equals the first, so the net would be zero. Check the reading.'); return; }
     await run(async () => {
       const created = (await weighbridgeApi.create({
@@ -262,6 +269,7 @@ export default function WeighbridgePage() {
     let fromDevice = false;
     let reading = '';
     const device = indicators.find((d) => String(d.id) === indicatorId);
+    if (indicatorOnly && !device) { setError('Weights only from the indicator is on, but no indicator is set up. Add one in the Indicators card below.'); return; }
     if (device) {
       try {
         let rawFrames: string[] | undefined;
@@ -273,8 +281,23 @@ export default function WeighbridgePage() {
         reading = String(got.weightKg);
         fromDevice = true;
       } catch (e) {
+        if (indicatorOnly) { setError(e instanceof Error ? e.message : 'Indicator read failed'); return; }
         setMsg(`${e instanceof Error ? e.message : 'Indicator read failed'} Key the weight by hand.`);
       }
+    }
+    if (indicatorOnly) {
+      // The reading is shown for confirmation and cannot be edited.
+      const go = await confirm({
+        title: `Second weight for ${String(r.slipNo)}`,
+        message: `${String(device?.name ?? 'Indicator')} reads ${kg(reading)} kg. First weight ${kg(firstKg)} kg${r.vehicleNo ? ` for ${String(r.vehicleNo)}` : ''}; the heavier becomes the gross, the lighter the tare. Save this as the second weight?`,
+        confirmLabel: 'Save second weight',
+      });
+      if (!go) return;
+      await run(async () => {
+        const out = (await weighbridgeApi.secondWeight(String(r.id), { weight: num(reading), weightSource: 'device', indicatorId, manualOverride: false })) as Row;
+        return `${String(r.slipNo)} weighed: ${kg(out?.netWeight)} kg net (${kg(out?.grossWeight)} − ${kg(out?.tareWeight)}). Press To inward to book it.`;
+      });
+      return;
     }
     const typed = await prompt({
       title: `Second weight for ${String(r.slipNo)}`,
@@ -401,7 +424,10 @@ export default function WeighbridgePage() {
       {error && <ErrorState message={error} />}
       {msg && <div className="mn-ord-note mn-ord-note--ok" role="status"><CheckCircle2 size={16} aria-hidden /><span>{msg}</span></div>}
 
-      <Card title={<span className="mn-board-card-title"><Truck size={16} aria-hidden /> New slip</span>}>
+      <Card title={<span className="mn-board-card-title"><Truck size={16} aria-hidden /> New slip</span>} actions={indicatorOnly ? <span className="mn-ord-how"><Scale size={13} aria-hidden /> Weights only from the indicator</span> : undefined}>
+        {indicatorOnly && !indicators.length && (
+          <div className="mn-ord-note mn-ord-note--warn" role="status"><Scale size={16} aria-hidden /><span><strong>Weights only from the indicator is on, but no indicator is set up.</strong> Add one in the Indicators card below, or turn the setting off under Settings.</span></div>
+        )}
         <Form onSubmit={create} className="mn-wb-form">
           {multiPlant && (
             <Field label="Plant">
@@ -480,15 +506,15 @@ export default function WeighbridgePage() {
               )}
             </Field>
           )}
-          <Field label="First weight (kg)" required help="Loaded for a supplier truck coming in; empty for a mixer going out.">
+          <Field label="First weight (kg)" required help={indicatorOnly ? 'Read off the indicator with Get; it cannot be typed.' : 'Loaded for a supplier truck coming in; empty for a mixer going out.'}>
             <div className="mn-wb-weigh">
-              <Input type="number" step="any" inputMode="decimal" min={0} value={form.firstWeight} onChange={(e) => onWeightChange('first', e.target.value)} required placeholder="On the bridge now" />
+              <Input type="number" step="any" inputMode="decimal" min={0} value={form.firstWeight} onChange={(e) => onWeightChange('first', e.target.value)} required readOnly={indicatorOnly} placeholder={indicatorOnly ? 'Press Get' : 'On the bridge now'} />
               <Button type="button" variant="secondary" size="sm" icon={<Scale size={14} />} onClick={() => getWeight('first')} disabled={!indicators.length} title={indicators.length ? 'Read the weight off the indicator' : 'Add an indicator below to read weights'}>Get</Button>
             </div>
           </Field>
           <Field label="Second weight (kg)" help="Leave blank if the truck is weighed again later; the slip then takes it from Second weight on the row.">
             <div className="mn-wb-weigh">
-              <Input type="number" step="any" inputMode="decimal" min={0} value={form.secondWeight} onChange={(e) => onWeightChange('second', e.target.value)} placeholder="When it crosses again" />
+              <Input type="number" step="any" inputMode="decimal" min={0} value={form.secondWeight} onChange={(e) => onWeightChange('second', e.target.value)} readOnly={indicatorOnly} placeholder={indicatorOnly ? 'Press Get when it crosses again' : 'When it crosses again'} />
               <Button type="button" variant="secondary" size="sm" icon={<Scale size={14} />} onClick={() => getWeight('second')} disabled={!indicators.length} title={indicators.length ? 'Read the weight off the indicator' : 'Add an indicator below to read weights'}>Get</Button>
             </div>
           </Field>

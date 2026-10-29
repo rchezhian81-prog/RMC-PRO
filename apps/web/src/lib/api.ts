@@ -793,6 +793,8 @@ export const materialInwardApi = {
 
 export const weighbridgeApi = {
   list: (status?: string, limit?: number) => apiFetch<Row[]>(`/weighbridge${listQs(status, limit)}`),
+  /** Whether weights must come off the indicator (Settings → Weights only from the indicator). */
+  policy: () => apiFetch<{ indicatorOnly: boolean; readingWindowMinutes: number }>('/weighbridge/policy'),
   create: (b: Record<string, unknown>) => post('/weighbridge', b),
   toInward: (id: string, rate: number) => post(`/weighbridge/${id}/to-inward`, { rate }),
   setStatus: (id: string, status: string) => post(`/weighbridge/${id}/status`, { status }),

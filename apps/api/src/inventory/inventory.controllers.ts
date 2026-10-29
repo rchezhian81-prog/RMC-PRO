@@ -66,6 +66,8 @@ export class WeighbridgeController {
   ) {}
 
   @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
+  /** How the gate may take weights: indicator-only or also by hand. Any weighbridge user may read it. */
+  @Get('policy') policy(@CurrentUser() u: AuthUser) { return this.service.policy(tid(u)); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post() @RequirePermissions('stock.adjust')
@@ -117,7 +119,7 @@ export class WeighbridgeIndicatorController {
 
   @Post(':id/read') @RequirePermissions('weighbridge.device')
   read(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) {
-    return this.service.read(tid(u), id, { rawFrames: dto?.rawFrames });
+    return this.service.read(tid(u), id, { rawFrames: dto?.rawFrames, userId: u.userId });
   }
 }
 

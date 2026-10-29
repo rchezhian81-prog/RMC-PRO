@@ -98,6 +98,14 @@ export const SETTINGS_CATALOG: readonly SettingDef[] = [
     integer: true,
   },
   {
+    key: 'weighbridge.indicator_only',
+    label: 'Weights only from the indicator',
+    description:
+      'When on, a weighbridge slip only accepts weights read off a registered indicator: the Get button fills the figure, typing or editing it is refused, and the API checks each weight against the readings that indicator actually gave in the last 15 minutes. Off, the operator may also key a weight by hand.',
+    type: 'boolean',
+    default: 'false',
+  },
+  {
     key: 'security.idle_timeout_minutes',
     label: 'Sign out after inactivity (minutes)',
     description:
@@ -126,6 +134,15 @@ export function idleTimeoutMinutes(raw: string | null | undefined): number {
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0) return IDLE_TIMEOUT_DEFAULT_MINUTES;
   return Math.min(IDLE_TIMEOUT_MAX_MINUTES, Math.floor(n));
+}
+
+/** Indicator-only weighing: the setting's key, and how long a reading stays usable for a slip. */
+export const INDICATOR_ONLY_SETTING_KEY = 'weighbridge.indicator_only';
+export const INDICATOR_READING_WINDOW_MINUTES = 15;
+
+/** Read the stored indicator-only flag the way the API and the browser apply it: only an explicit 'true' turns it on. */
+export function indicatorOnlyWeighing(raw: string | null | undefined): boolean {
+  return String(raw ?? '').trim().toLowerCase() === 'true';
 }
 
 export const SETTINGS_BY_KEY: Record<string, SettingDef> = Object.fromEntries(

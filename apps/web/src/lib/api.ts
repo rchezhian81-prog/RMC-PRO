@@ -656,6 +656,8 @@ export const batchQueueApi = {
 
 export const batchTicketsApi = {
   list: (status?: string, limit?: number) => apiFetch<Row[]>(`/batch-tickets${listQs(status, limit)}`),
+  /** Confirmed tickets still waiting for a truck (no live dispatch). */
+  listUndispatched: (limit?: number) => apiFetch<Row[]>(`/batch-tickets${listQs('confirmed', limit)}&undispatched=true`),
   get: (id: string) => apiFetch<Row>(`/batch-tickets/${id}`),
   createFromQueue: (queueId: string, b: Record<string, unknown>) => post(`/batch-tickets/from-queue/${queueId}`, b),
   updateActuals: (id: string, materials: Record<string, unknown>[]) => post(`/batch-tickets/${id}/actuals`, { materials }),

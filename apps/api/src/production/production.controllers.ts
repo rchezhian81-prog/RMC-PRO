@@ -113,7 +113,13 @@ export class BatchQueueController {
 export class BatchTicketsController {
   constructor(private readonly service: BatchTicketsService) {}
 
-  @Get() list(@CurrentUser() u: AuthUser, @Query('status') status?: string, @Query('limit') limit?: string) { return this.service.list(tid(u), status, limit); }
+  /** `undispatched=true` keeps only tickets with no live dispatch — what the Dispatch board offers for a new truck. */
+  @Get() list(
+    @CurrentUser() u: AuthUser,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('undispatched') undispatched?: string,
+  ) { return this.service.list(tid(u), status, limit, undispatched === 'true' || undispatched === '1'); }
   @Get(':id') get(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.service.get(tid(u), id); }
 
   @Post('from-queue/:queueId')

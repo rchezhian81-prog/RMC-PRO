@@ -123,7 +123,7 @@ export default function DispatchBoardPage() {
     // must not blank the board — they fall back to empty lists.
     const [d, b, v, dr, ch, cu, si] = await Promise.all([
       dispatchApi.list(),
-      batchTicketsApi.list('confirmed'),
+      batchTicketsApi.listUndispatched(),
       crud('vehicles').list(),
       crud('drivers').list(),
       challansApi.list(),
@@ -339,7 +339,7 @@ export default function DispatchBoardPage() {
           </div>
         </Form>
         {loaded && batches.length === 0 && (
-          <p className="mn-board-form-hint">No confirmed batch tickets waiting. Confirm one in Production → Batch tickets and it appears here.</p>
+          <p className="mn-board-form-hint">No confirmed batch waiting for a truck. A batch appears here once it is confirmed under Production → Batch tickets, and leaves once it is dispatched.</p>
         )}
       </Card>
 

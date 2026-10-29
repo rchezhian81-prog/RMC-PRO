@@ -92,7 +92,18 @@ console.log('\n[1] batched, on the road — the moment the two screens used to d
   ok('book agrees with detail', !!b && near(b.batched, d.quantities.batchedM3) && near(b.delivered, d.quantities.deliveredM3) && near(b.balance, d.quantities.balanceM3) && near(b.pending, QTY));
 }
 
+{
+  const waiting = await api('GET', '/batch-tickets?status=confirmed&undispatched=true');
+  ok('dispatch board picker: the confirmed ticket is waiting for a truck', waiting.some((t) => String(t.id) === String(ticket.id)));
+}
 const dispatch = await api('POST', `/dispatches/from-batch-ticket/${ticket.id}`, {});
+{
+  const waiting = await api('GET', '/batch-tickets?status=confirmed&undispatched=true');
+  ok('dispatch board picker: a dispatched ticket is no longer offered', !waiting.some((t) => String(t.id) === String(ticket.id)));
+  const all = await api('GET', '/batch-tickets?status=confirmed');
+  const mine = all.find((t) => String(t.id) === String(ticket.id));
+  ok('ticket list says which dispatch carries it', !!mine && String(mine.dispatchNo) === String(dispatch.dispatchNo));
+}
 let challan = await api('POST', `/delivery-challans/from-dispatch/${dispatch.id}`, {});
 challan = await api('POST', `/delivery-challans/${challan.id}/issue`);
 await api('POST', `/delivery-challans/${challan.id}/deliver`, { receiverName: 'Site Engineer', returnQuantityM3: RETURN, returnReason: 'excess_ordered' });

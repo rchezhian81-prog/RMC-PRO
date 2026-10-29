@@ -125,6 +125,19 @@ export class WeighbridgeIndicator extends TenantScopedEntity {
 }
 
 /** Negative-stock approval request (Doc 6 §12.5). */
+/**
+ * One weight an indicator gave. Written on every read; what indicator-only
+ * weighing checks a slip's figures against.
+ */
+@Entity('weighbridge_readings')
+export class WeighbridgeReading extends TenantScopedEntity {
+  @Column({ name: 'indicator_id', type: 'uuid' }) indicatorId!: string;
+  @Column({ name: 'weight_kg', type: 'numeric', precision: 16, scale: 3 }) weightKg!: string;
+  @Column({ name: 'stable', type: 'boolean', default: true }) stable!: boolean;
+  @Column({ name: 'read_at', type: 'timestamptz' }) readAt!: Date;
+  @Column({ name: 'user_id', type: 'uuid', nullable: true }) userId!: string | null;
+}
+
 @Entity('negative_stock_requests')
 export class NegativeStockRequest extends TenantScopedEntity {
   @Column({ name: 'plant_id', type: 'uuid', nullable: true }) plantId!: string | null;

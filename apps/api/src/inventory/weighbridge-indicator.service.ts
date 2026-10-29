@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Socket } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { TenantDbService } from '../core/database/tenant-db.service';
-import { WeighbridgeIndicator } from '../core/database/entities';
+import { WeighbridgeIndicator, WeighbridgeReading } from '../core/database/entities';
 import { nullifyEmpty } from '../common/sanitize';
 import {
   parseIndicatorFrame,
@@ -115,7 +115,7 @@ export class WeighbridgeIndicatorService {
    * path: the plant-side reader supplies the frames it pulled from the serial
    * port and the server just parses/validates them.
    */
-  read(tenantId: string, id: string, opts?: { rawFrames?: unknown }): Promise<LiveReading> {
+  read(tenantId: string, id: string, opts?: { rawFrames?: unknown; userId?: string | null }): Promise<LiveReading> {
     return this.db.runInTenant(tenantId, async (m) => {
       const device = await m.getRepository(WeighbridgeIndicator).findOne({ where: { id } });
       if (!device) throw notFound();
@@ -138,6 +138,13 @@ export class WeighbridgeIndicatorService {
       } else {
         throw badReq('Serial indicators are read by the plant-side agent — post the raw frames to this endpoint');
       }
+
+      // Log the reading: indicator-only weighing checks a slip's figures against
+      // what the indicator actually gave in the last few minutes. Two days of
+      // readings are kept per indicator; older ones go on each read.
+      const log = m.getRepository(WeighbridgeReading);
+      await log.save(log.create({ tenantId, indicatorId: device.id, weightKg: String(reading.weightKg), stable: !!reading.stable, readAt: new Date(), userId: opts?.userId ?? null }));
+      await m.query(`DELETE FROM weighbridge_readings WHERE indicator_id = $1 AND read_at < now() - interval '2 days'`, [device.id]);
 
       return {
         indicatorId: device.id,

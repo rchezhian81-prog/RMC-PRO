@@ -97,5 +97,30 @@ ok('a tare above the gross is rejected',
 ok('a reconciling net override still saves',
   await reconcile({ plantId: PLANT_ID, vehicleNo: 'TN09ZZ0003', grossWeight: 30000, tareWeight: 12000, netWeight: 18000 }));
 
+// ---- F. Indicator-only weighing: a weight must be one the indicator gave ----
+const refused = async (method, path, body) => { try { await api(method, path, body); return false; } catch { return true; } };
+await api('PUT', '/settings/weighbridge.indicator_only', { value: 'true' });
+const policyOn = await api('GET', '/weighbridge/policy');
+ok('policy reports indicator-only on', policyOn.indicatorOnly === true && policyOn.readingWindowMinutes > 0);
+ok('a hand-keyed slip is refused', await refused('POST', '/weighbridge', { plantId: PLANT_ID, vehicleNo: 'TN10IO0001', grossWeight: 30000, tareWeight: 0 }));
+ok('a "device" slip with a weight the indicator never gave is refused',
+  await refused('POST', '/weighbridge', { plantId: PLANT_ID, vehicleNo: 'TN10IO0002', grossWeight: NOMINAL + 500, tareWeight: 0, weightSource: 'device', indicatorId: device.id }));
+const fresh = await api('POST', `/weighbridge-indicators/${device.id}/read`, {});
+const ioSlip = await api('POST', '/weighbridge', { plantId: PLANT_ID, vehicleNo: 'TN10IO0003', grossWeight: fresh.weightKg, tareWeight: 0, weightSource: 'device', indicatorId: device.id });
+ok('the weight the indicator just gave is accepted', ioSlip.status === 'draft' && near(ioSlip.grossWeight, fresh.weightKg));
+ok('an edited reading is refused',
+  await refused('POST', '/weighbridge', { plantId: PLANT_ID, vehicleNo: 'TN10IO0004', grossWeight: fresh.weightKg, tareWeight: 0, weightSource: 'device', indicatorId: device.id, manualOverride: true }));
+ok('a hand-keyed second weight is refused', await refused('POST', `/weighbridge/${ioSlip.id}/second-weight`, { weight: 8000 }));
+await api('POST', `/weighbridge-indicators/${device.id}`, { simulatedWeightKg: 8000 });
+const empty = await api('POST', `/weighbridge-indicators/${device.id}/read`, {});
+const ioDone = await api('POST', `/weighbridge/${ioSlip.id}/second-weight`, { weight: empty.weightKg, weightSource: 'device', indicatorId: device.id });
+ok('the indicator\'s second reading completes the slip with the right net',
+  ioDone.status === 'completed' && near(ioDone.netWeight, Number(fresh.weightKg) - Number(empty.weightKg)));
+await api('PUT', '/settings/weighbridge.indicator_only', { value: 'false' });
+const policyOff = await api('GET', '/weighbridge/policy');
+ok('policy reports indicator-only off again', policyOff.indicatorOnly === false);
+const typedAgain = await api('POST', '/weighbridge', { plantId: PLANT_ID, vehicleNo: 'TN10IO0005', grossWeight: 30000, tareWeight: 12000 });
+ok('with the setting off a hand-keyed slip saves again', near(typedAgain.netWeight, 18000));
+
 console.log(`\nWEIGHBRIDGE HARDWARE TEST: ${pass} passed ✓`);
 process.exit(0);

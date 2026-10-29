@@ -3,7 +3,9 @@ import { round2 } from '../common/money.util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDbService } from '../core/database/tenant-db.service';
 import { leavesTerminal } from '../common/state-machine.util';
-import { Company, Material, MaterialInward, Supplier, UomConversion, WeighbridgeEntry } from '../core/database/entities';
+import { Company, Material, MaterialInward, Supplier, TenantSetting, UomConversion, WeighbridgeEntry } from '../core/database/entities';
+import { INDICATOR_ONLY_SETTING_KEY, INDICATOR_READING_WINDOW_MINUTES, indicatorOnlyWeighing } from '@rmc/shared';
+import type { EntityManager } from 'typeorm';
 import { nullifyEmpty } from '../common/sanitize';
 import { NumberingService } from '../sales/numbering.service';
 import { weighbridgeQuantity } from './weighbridge-uom.util';
@@ -80,12 +82,54 @@ export class WeighbridgeService {
     });
   }
 
+  /** The gate's weighing policy: whether weights must come off an indicator, and how fresh a reading has to be. */
+  policy(tenantId: string) {
+    return this.db.runInTenant(tenantId, async (m) => ({
+      indicatorOnly: await this.indicatorOnly(m),
+      readingWindowMinutes: INDICATOR_READING_WINDOW_MINUTES,
+    }));
+  }
+
+  private async indicatorOnly(m: EntityManager): Promise<boolean> {
+    const row = await m.getRepository(TenantSetting).findOne({ where: { settingKey: INDICATOR_ONLY_SETTING_KEY } });
+    return indicatorOnlyWeighing(row?.settingValue);
+  }
+
+  /**
+   * Indicator-only weighing: every weight on the slip must be one the named
+   * indicator actually gave, stable, within the last few minutes. The client
+   * saying "device" is not enough — the figure is matched against the reading
+   * log, within the indicator's own rounding (5 kg or 0.2%, whichever is more).
+   * Nothing typed, edited or invented at the gate becomes stock.
+   */
+  private async assertIndicatorWeights(m: EntityManager, dto: Record<string, unknown>, weights: number[]): Promise<void> {
+    if (!(await this.indicatorOnly(m))) return;
+    const refuse = (why: string) => badReq(`Indicator-only weighing is on: ${why}`);
+    if (dto.weightSource !== 'device' || !dto.indicatorId) throw refuse('press Get to read the weight off the indicator; weights cannot be keyed by hand.');
+    if (dto.manualOverride === true) throw refuse('a reading taken off the indicator cannot be edited.');
+    const indicatorId = String(dto.indicatorId);
+    const recent: Array<{ weightKg: string }> = await m.query(
+      `SELECT weight_kg AS "weightKg" FROM weighbridge_readings
+        WHERE indicator_id = $1 AND stable AND read_at >= now() - ($2 || ' minutes')::interval
+        ORDER BY read_at DESC LIMIT 200`,
+      [indicatorId, String(INDICATOR_READING_WINDOW_MINUTES)],
+    );
+    for (const w of weights) {
+      if (!(w > 0)) continue;
+      const tol = Math.max(5, w * 0.002);
+      if (!recent.some((r) => Math.abs(num(r.weightKg) - w) <= tol)) {
+        throw refuse(`${w} kg is not a reading this indicator gave in the last ${INDICATOR_READING_WINDOW_MINUTES} minutes. Press Get again with the truck on the bridge.`);
+      }
+    }
+  }
+
   create(tenantId: string, dto: Record<string, unknown>, userId: string) {
     return this.db.runInTenant(tenantId, async (m) => {
       const material = dto.materialId ? await m.getRepository(Material).findOne({ where: { id: String(dto.materialId) } }) : null;
       if (dto.materialId && !material) throw badReq('Material not found');
       const gross = num(dto.grossWeight);
       const tare = num(dto.tareWeight);
+      await this.assertIndicatorWeights(m, dto, [gross, tare]);
       const derived = gross - tare;
       const net = dto.netWeight !== undefined ? num(dto.netWeight) : derived;
       if (net < 0) throw badReq('Net weight cannot be negative — check the gross and tare weights');
@@ -140,6 +184,7 @@ export class WeighbridgeService {
       const entry = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!entry) throw notFound();
       if (entry.status !== 'draft') throw badReq(`A ${entry.status} slip cannot take a second weight.`);
+      await this.assertIndicatorWeights(m, dto, [weight]);
       const first = num(entry.grossWeight) > 0 ? num(entry.grossWeight) : num(entry.tareWeight);
       if (!(first > 0)) throw badReq('The slip has no first weight.');
       if (num(entry.tareWeight) > 0 && num(entry.grossWeight) > 0) throw badReq('Both weights are already on the slip; press Complete weighing.');

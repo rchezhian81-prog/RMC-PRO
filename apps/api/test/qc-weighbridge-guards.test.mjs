@@ -146,6 +146,28 @@ console.log('\n[W5] concurrent status writes cannot re-open a matched slip');
      'the slip is still matched');
 }
 
+// ───────────────────────── W6 — second weighing: heavier = gross, lighter = tare ─────────────────────────
+console.log('\n[W6] the second weight completes a draft slip whichever way round the truck was weighed');
+{
+  // A mixer: weighed empty first (tare), loaded on the way out.
+  const mixer = await post('/weighbridge', { materialId: MATERIAL, vehicleNo: `TN-${tag}-MX`, grossWeight: 12000, tareWeight: 0 });
+  ok(mixer.ok && mixer.data.status === 'draft', 'first weight saved as a draft slip');
+  const done = await post(`/weighbridge/${mixer.data.id}/second-weight`, { weight: 26000 });
+  ok(done.ok && done.data.status === 'completed', 'second weight completes the slip');
+  ok(Number(done.data.grossWeight) === 26000 && Number(done.data.tareWeight) === 12000 && Number(done.data.netWeight) === 14000,
+     `heavier is gross, lighter is tare, net is the difference (${done.data.grossWeight} / ${done.data.tareWeight} / ${done.data.netWeight})`);
+  // A supplier truck: weighed loaded first, empty on the way out.
+  const tipper = await post('/weighbridge', { materialId: MATERIAL, vehicleNo: `TN-${tag}-TP`, grossWeight: 30000, tareWeight: 0 });
+  const out = await post(`/weighbridge/${tipper.data.id}/second-weight`, { weight: 11000 });
+  ok(out.ok && Number(out.data.grossWeight) === 30000 && Number(out.data.tareWeight) === 11000 && Number(out.data.netWeight) === 19000,
+     'loaded-first truck: same result');
+  const again = await post(`/weighbridge/${tipper.data.id}/second-weight`, { weight: 11000 });
+  ok(!again.ok, 'a completed slip refuses a third weight');
+  const zero = await post('/weighbridge', { materialId: MATERIAL, vehicleNo: `TN-${tag}-Z`, grossWeight: 9000, tareWeight: 0 });
+  const same = await post(`/weighbridge/${zero.data.id}/second-weight`, { weight: 9000 });
+  ok(!same.ok, 'an identical second weight (zero net) is refused');
+}
+
 // ───────────────────────── W1 — the indicator cannot dial the private network ─────────────────────────
 console.log('\n[W1] a TCP indicator pointed at a non-routable address is refused');
 {

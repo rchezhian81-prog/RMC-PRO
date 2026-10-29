@@ -6,7 +6,7 @@ import { ArrowDownToLine, CheckCircle2, Cpu, Download, Plug, Plus, RefreshCw, Sc
 import { formatDateTime } from '../../../../lib/format-date';
 import { useListWindow } from '../../../../lib/list-window';
 import { ListCap } from '../../../../components/ListCap';
-import { crud, openPdf, weighbridgeApi, weighbridgeIndicatorApi, type Row } from '../../../../lib/api';
+import { crud, dispatchApi, openPdf, weighbridgeApi, weighbridgeIndicatorApi, type Row } from '../../../../lib/api';
 import { chooseSerialPort, readSerialFrames, serialSupported } from '../../../../lib/serial-reader';
 import { Card } from '../../../../components/ui/Card';
 import { Badge, StatusBadge } from '../../../../components/ui/Badge';
@@ -39,7 +39,7 @@ const tonnes = (v: unknown) => (num(v) / 1000).toLocaleString('en-IN', { maximum
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 const STATUSES: Array<{ key: string; label: string; tone: Tone; hint: string }> = [
-  { key: 'draft', label: 'Weighing', tone: 'warning', hint: 'Gross or tare still to come; press Complete weighing once both are on the slip' },
+  { key: 'draft', label: 'Weighing', tone: 'warning', hint: 'First weight taken; press Second weight when the truck crosses the bridge again' },
   { key: 'completed', label: 'Weighed', tone: 'info', hint: 'Both weights in; convert it to a material inward so the load reaches stock' },
   { key: 'matched', label: 'Converted', tone: 'success', hint: 'Turned into a material inward; post that to add the load to stock' },
   { key: 'mismatch', label: 'Mismatch', tone: 'danger', hint: 'The weights did not reconcile with the challan; sort it out with the supplier' },
@@ -49,10 +49,15 @@ const toneOf = (status: string): Tone => STATUSES.find((s) => s.key === status)?
 const labelOf = (status: string) => STATUSES.find((s) => s.key === status)?.label.toLowerCase() ?? status;
 const sourceOf = (r: Row) => (String(r.weightSource) === 'device' ? (r.manualOverride ? `${String(r.indicatorName ?? 'indicator')}, adjusted by hand` : `off ${String(r.indicatorName ?? 'the indicator')}`) : 'keyed by hand');
 
-const EMPTY = { plantId: '', supplierId: '', materialId: '', vehicleNo: '', supplierChallanNo: '', grossWeight: '', tareWeight: '' };
+// The truck is picked from the vehicle master (fleet and hired trucks); a
+// supplier's truck that is not in the master is typed under "Other truck".
+const OTHER_TRUCK = '__other__';
+const EMPTY = { plantId: '', supplierId: '', materialId: '', truckPick: '', vehicleNo: '', supplierChallanNo: '', firstWeight: '', secondWeight: '' };
 // Provenance for the hardware bridge: which weights came off the indicator,
 // and whether the operator hand-edited a device reading afterwards.
-const NO_CAPTURE = { grossFromDevice: false, tareFromDevice: false, overridden: false };
+const NO_CAPTURE = { firstFromDevice: false, secondFromDevice: false, overridden: false };
+/** Dispatch stages where the truck is out with concrete, or about to be: it shows at the top of the truck list. */
+const LIVE_DISPATCH = ['waiting', 'loaded', 'left_plant', 'reached_site', 'pouring', 'delayed', 'returning'];
 
 export default function WeighbridgePage() {
   const { prompt, confirm } = useConfirm();
@@ -61,6 +66,8 @@ export default function WeighbridgePage() {
   const [suppliers, setSuppliers] = useState<Row[]>([]);
   const [plants, setPlants] = useState<Row[]>([]);
   const [indicators, setIndicators] = useState<Row[]>([]);
+  const [vehicles, setVehicles] = useState<Row[]>([]);
+  const [dispatches, setDispatches] = useState<Row[]>([]);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState(EMPTY);
   const [indicatorId, setIndicatorId] = useState('');
@@ -73,18 +80,24 @@ export default function WeighbridgePage() {
   const win = useListWindow();
 
   const reload = useCallback(async () => {
-    const [w, m, s, p, ind] = await Promise.all([
+    const [w, m, s, p, ind, v, d] = await Promise.all([
       weighbridgeApi.list(undefined, win.limit),
       crud('materials').list(),
       crud('suppliers').list(),
       crud('plants').list(),
       weighbridgeIndicatorApi.list().catch(() => [] as Row[]),
+      // The truck list and the trucks out on dispatch only label the picker, so
+      // a hiccup there must not blank the weighbridge.
+      crud('vehicles').list().catch(() => [] as Row[]),
+      dispatchApi.list().catch(() => [] as Row[]),
     ]);
     setRows(w);
     setMaterials(m);
     setSuppliers(s);
     setPlants(p);
     setIndicators(ind);
+    setVehicles(v);
+    setDispatches(d);
     setIndicatorId((cur) => cur || (ind[0] ? String(ind[0].id) : ''));
     setForm((f) => (f.plantId || p.length !== 1 ? f : { ...f, plantId: String(p[0]?.id ?? '') }));
   }, [win.limit]);
@@ -125,7 +138,7 @@ export default function WeighbridgePage() {
   }
 
   // ---- live "Get weight" read off the selected indicator ----
-  async function getWeight(target: 'gross' | 'tare') {
+  async function getWeight(target: 'first' | 'second') {
     setError(null);
     setMsg(null);
     if (!indicatorId) {
@@ -147,12 +160,12 @@ export default function WeighbridgePage() {
       }
       const reading = await weighbridgeIndicatorApi.read(indicatorId, rawFrames);
       const w = String(reading.weightKg);
-      if (target === 'gross') {
-        setForm((f) => ({ ...f, grossWeight: w }));
-        setCapture((c) => ({ ...c, grossFromDevice: true }));
+      if (target === 'first') {
+        setForm((f) => ({ ...f, firstWeight: w }));
+        setCapture((c) => ({ ...c, firstFromDevice: true }));
       } else {
-        setForm((f) => ({ ...f, tareWeight: w }));
-        setCapture((c) => ({ ...c, tareFromDevice: true }));
+        setForm((f) => ({ ...f, secondWeight: w }));
+        setCapture((c) => ({ ...c, secondFromDevice: true }));
       }
       setMsg(`${reading.indicatorName}: ${kg(reading.weightKg)} kg${reading.stable ? '' : ' (not yet stable; read again)'}.`);
     } catch (e) {
@@ -161,32 +174,66 @@ export default function WeighbridgePage() {
   }
 
   // A hand-edit of a device-captured field is a manual override (kept on the slip).
-  function onWeightChange(target: 'gross' | 'tare', x: string) {
-    if (target === 'gross') {
-      setForm((f) => ({ ...f, grossWeight: x }));
-      setCapture((c) => (c.grossFromDevice ? { ...c, overridden: true } : c));
+  function onWeightChange(target: 'first' | 'second', x: string) {
+    if (target === 'first') {
+      setForm((f) => ({ ...f, firstWeight: x }));
+      setCapture((c) => (c.firstFromDevice ? { ...c, overridden: true } : c));
     } else {
-      setForm((f) => ({ ...f, tareWeight: x }));
-      setCapture((c) => (c.tareFromDevice ? { ...c, overridden: true } : c));
+      setForm((f) => ({ ...f, secondWeight: x }));
+      setCapture((c) => (c.secondFromDevice ? { ...c, overridden: true } : c));
     }
   }
 
-  const gross = num(form.grossWeight);
-  const tare = num(form.tareWeight);
+  // Whichever weighing came first, the heavier reading is the gross, the
+  // lighter the tare, and the net is the difference: a supplier truck comes
+  // in loaded and leaves empty; a transit mixer leaves loaded and comes back
+  // empty. The slip is saved after the first weight and completed by the second.
+  const first = num(form.firstWeight);
+  const second = num(form.secondWeight);
+  const gross = second > 0 ? Math.max(first, second) : first;
+  const tare = second > 0 ? Math.min(first, second) : 0;
   const net = Math.max(0, gross - tare);
-  const usedDevice = capture.grossFromDevice || capture.tareFromDevice;
+  const usedDevice = capture.firstFromDevice || capture.secondFromDevice;
   const chosen = materials.find((x) => String(x.id) === form.materialId);
+
+  // The truck picker: trucks out on a live dispatch first (the loaded mixer
+  // about to cross the bridge), then the rest of the active fleet, then
+  // "Other truck" for a supplier's vehicle that is not in the master.
+  const vehicleById = useMemo(() => new Map(vehicles.map((v) => [String(v.id), v])), [vehicles]);
+  const onDispatch = useMemo(() => {
+    const out: Row[] = [];
+    const seen = new Set<string>();
+    for (const d of dispatches) {
+      if (!LIVE_DISPATCH.includes(String(d.dispatchStatus))) continue;
+      const v = d.vehicleId ? vehicleById.get(String(d.vehicleId)) : undefined;
+      if (!v || seen.has(String(v.id))) continue;
+      seen.add(String(v.id));
+      out.push({ ...v, dispatchNo: d.dispatchNo, dispatchStatus: d.dispatchStatus });
+    }
+    return out;
+  }, [dispatches, vehicleById]);
+  const fleet = useMemo(() => {
+    const busy = new Set(onDispatch.map((v) => String(v.id)));
+    return vehicles
+      .filter((v) => !busy.has(String(v.id)) && String(v.status ?? 'available') !== 'inactive')
+      .sort((a, b) => String(a.vehicleNo).localeCompare(String(b.vehicleNo)));
+  }, [vehicles, onDispatch]);
+  const truckNo = form.truckPick === OTHER_TRUCK ? form.vehicleNo.trim() : String(vehicleById.get(form.truckPick)?.vehicleNo ?? '');
+
+  function pickTruck(value: string) {
+    setForm((f) => ({ ...f, truckPick: value, vehicleNo: value === OTHER_TRUCK ? f.vehicleNo : '' }));
+  }
 
   async function create(e: FormEvent) {
     e.preventDefault();
-    if (!(gross > 0)) { setError('Enter the gross weight (the loaded truck).'); return; }
-    if (tare > gross) { setError('Tare cannot be more than gross.'); return; }
+    if (!(first > 0)) { setError('Enter the first weight.'); return; }
+    if (second > 0 && second === first) { setError('The second weight equals the first, so the net would be zero. Check the reading.'); return; }
     await run(async () => {
       const created = (await weighbridgeApi.create({
         plantId: form.plantId || undefined,
         supplierId: form.supplierId || undefined,
         materialId: form.materialId || undefined,
-        vehicleNo: form.vehicleNo.trim() || undefined,
+        vehicleNo: truckNo || undefined,
         supplierChallanNo: form.supplierChallanNo.trim() || undefined,
         grossWeight: gross,
         tareWeight: tare,
@@ -196,16 +243,59 @@ export default function WeighbridgePage() {
       })) as Row;
       setForm((f) => ({ ...EMPTY, plantId: f.plantId }));
       setCapture(NO_CAPTURE);
-      return `${String(created?.slipNo ?? 'Slip')} saved${tare > 0 ? `: ${kg(net)} kg net. Complete the weighing, then convert it to an inward.` : ' with the gross weight; weigh the empty truck for the tare, then complete it.'}`;
+      return `${String(created?.slipNo ?? 'Slip')} saved${second > 0 ? `: ${kg(net)} kg net. Press Complete weighing, then convert it to an inward.` : ` with the first weight (${kg(first)} kg). When the truck crosses the bridge again, press Second weight on the slip.`}`;
     });
   }
 
   async function complete(r: Row) {
     if (!(num(r.tareWeight) > 0)) {
-      setError(`${String(r.slipNo)} has no tare weight yet. Weigh the empty truck and save a fresh slip, or cancel this one.`);
+      setError(`${String(r.slipNo)} has only its first weight. Press Second weight when the truck crosses the bridge again.`);
       return;
     }
     await run(() => weighbridgeApi.setStatus(String(r.id), 'completed'), `${String(r.slipNo)} weighed: ${kg(r.netWeight)} kg net. Press To inward to book it.`);
+  }
+
+  /** The truck is back on the bridge: read or key its second weight; the slip works out gross, tare and net. */
+  async function secondWeight(r: Row) {
+    setError(null);
+    const firstKg = num(r.grossWeight) > 0 ? num(r.grossWeight) : num(r.tareWeight);
+    let fromDevice = false;
+    let reading = '';
+    const device = indicators.find((d) => String(d.id) === indicatorId);
+    if (device) {
+      try {
+        let rawFrames: string[] | undefined;
+        if (String(device.connectionType) === 'serial') {
+          if (!serialSupported()) throw new Error('This indicator is read over the COM port, which needs Chrome or Edge on the weighbridge PC.');
+          rawFrames = await readSerialFrames({ baudRate: Number(device.baudRate ?? 9600) });
+        }
+        const got = await weighbridgeIndicatorApi.read(indicatorId, rawFrames);
+        reading = String(got.weightKg);
+        fromDevice = true;
+      } catch (e) {
+        setMsg(`${e instanceof Error ? e.message : 'Indicator read failed'} Key the weight by hand.`);
+      }
+    }
+    const typed = await prompt({
+      title: `Second weight for ${String(r.slipNo)}`,
+      message: `First weight ${kg(firstKg)} kg${r.vehicleNo ? ` for ${String(r.vehicleNo)}` : ''}. The heavier reading becomes the gross, the lighter the tare, and the net is the difference.`,
+      label: 'Second weight (kg)',
+      defaultValue: reading,
+      type: 'number',
+    });
+    if (typed === null) return;
+    const weight = num(typed);
+    if (!(weight > 0)) { setError('Enter the second weight in kg.'); return; }
+    const overridden = fromDevice && String(typed).trim() !== reading;
+    await run(async () => {
+      const out = (await weighbridgeApi.secondWeight(String(r.id), {
+        weight,
+        weightSource: fromDevice ? 'device' : 'manual',
+        indicatorId: fromDevice ? indicatorId : undefined,
+        manualOverride: overridden,
+      })) as Row;
+      return `${String(r.slipNo)} weighed: ${kg(out?.netWeight)} kg net (${kg(out?.grossWeight)} − ${kg(out?.tareWeight)}). Press To inward to book it.`;
+    });
   }
 
   async function toInward(r: Row) {
@@ -323,8 +413,28 @@ export default function WeighbridgePage() {
               </Select>
             </Field>
           )}
-          <Field label="Truck">
-            <Input value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} placeholder="TN 01 AB 1234" />
+          <Field label="Truck" help={form.truckPick === OTHER_TRUCK ? 'A supplier truck that is not in Masters → Vehicles.' : onDispatch.length ? 'Trucks out on a dispatch are listed first.' : undefined}>
+            <Select value={form.truckPick} onChange={(e) => pickTruck(e.target.value)}>
+              <option value="">{vehicles.length ? 'Pick the truck' : 'No vehicles in the master yet'}</option>
+              {onDispatch.length > 0 && (
+                <optgroup label="On dispatch now">
+                  {onDispatch.map((v) => (
+                    <option key={String(v.id)} value={String(v.id)}>{String(v.vehicleNo)} · {String(v.dispatchNo ?? '')} {String(v.dispatchStatus ?? '').replace(/_/g, ' ')}</option>
+                  ))}
+                </optgroup>
+              )}
+              {fleet.length > 0 && (
+                <optgroup label="Fleet">
+                  {fleet.map((v) => (
+                    <option key={String(v.id)} value={String(v.id)}>{String(v.vehicleNo)}{v.vehicleType ? ` · ${String(v.vehicleType).replace(/_/g, ' ')}` : ''}</option>
+                  ))}
+                </optgroup>
+              )}
+              <option value={OTHER_TRUCK}>Other truck (type the number)</option>
+            </Select>
+            {form.truckPick === OTHER_TRUCK && (
+              <Input value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} placeholder="TN 01 AB 1234" aria-label="Truck number" autoFocus />
+            )}
           </Field>
           <Field label="Supplier" help={suppliers.length ? undefined : 'No suppliers yet: add them under Masters → Suppliers'}>
             <Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
@@ -370,28 +480,28 @@ export default function WeighbridgePage() {
               )}
             </Field>
           )}
-          <Field label="Gross (kg)" required>
+          <Field label="First weight (kg)" required help="Loaded for a supplier truck coming in; empty for a mixer going out.">
             <div className="mn-wb-weigh">
-              <Input type="number" step="any" inputMode="decimal" min={0} value={form.grossWeight} onChange={(e) => onWeightChange('gross', e.target.value)} required placeholder="Loaded truck" />
-              <Button type="button" variant="secondary" size="sm" icon={<Scale size={14} />} onClick={() => getWeight('gross')} disabled={!indicators.length} title={indicators.length ? 'Read the weight off the indicator' : 'Add an indicator below to read weights'}>Get</Button>
+              <Input type="number" step="any" inputMode="decimal" min={0} value={form.firstWeight} onChange={(e) => onWeightChange('first', e.target.value)} required placeholder="On the bridge now" />
+              <Button type="button" variant="secondary" size="sm" icon={<Scale size={14} />} onClick={() => getWeight('first')} disabled={!indicators.length} title={indicators.length ? 'Read the weight off the indicator' : 'Add an indicator below to read weights'}>Get</Button>
             </div>
           </Field>
-          <Field label="Tare (kg)">
+          <Field label="Second weight (kg)" help="Leave blank if the truck is weighed again later; the slip then takes it from Second weight on the row.">
             <div className="mn-wb-weigh">
-              <Input type="number" step="any" inputMode="decimal" min={0} value={form.tareWeight} onChange={(e) => onWeightChange('tare', e.target.value)} placeholder="Empty truck" />
-              <Button type="button" variant="secondary" size="sm" icon={<Scale size={14} />} onClick={() => getWeight('tare')} disabled={!indicators.length} title={indicators.length ? 'Read the weight off the indicator' : 'Add an indicator below to read weights'}>Get</Button>
+              <Input type="number" step="any" inputMode="decimal" min={0} value={form.secondWeight} onChange={(e) => onWeightChange('second', e.target.value)} placeholder="When it crosses again" />
+              <Button type="button" variant="secondary" size="sm" icon={<Scale size={14} />} onClick={() => getWeight('second')} disabled={!indicators.length} title={indicators.length ? 'Read the weight off the indicator' : 'Add an indicator below to read weights'}>Get</Button>
             </div>
           </Field>
           <div className="mn-wb-form-submit">
-            <Button type="submit" icon={<Plus size={14} />} loading={busy} disabled={!(gross > 0)}>Save slip</Button>
+            <Button type="submit" icon={<Plus size={14} />} loading={busy} disabled={!(first > 0)}>Save slip</Button>
             <span className="mn-wb-net" aria-live="polite">
-              {gross > 0 ? (
+              {first > 0 ? (
                 <>
-                  <strong>{kg(net)} kg net</strong>
-                  <span className="mn-ord-meta">{tare > 0 ? `${kg(gross)} gross − ${kg(tare)} tare${chosen?.uom && String(chosen.uom).toLowerCase().startsWith('ton') ? ` = ${tonnes(net)} t` : ''}` : 'tare still to come'}{usedDevice ? ` · ${capture.overridden ? 'read off the indicator, adjusted by hand' : 'read off the indicator'}` : ''}</span>
+                  <strong>{second > 0 ? `${kg(net)} kg net` : `${kg(first)} kg first weight`}</strong>
+                  <span className="mn-ord-meta">{second > 0 ? `${kg(gross)} gross − ${kg(tare)} tare${chosen?.uom && String(chosen.uom).toLowerCase().startsWith('ton') ? ` = ${tonnes(net)} t` : ''}` : 'net is worked out once the second weight is in'}{usedDevice ? ` · ${capture.overridden ? 'read off the indicator, adjusted by hand' : 'read off the indicator'}` : ''}</span>
                 </>
               ) : (
-                <span className="mn-ord-meta">Net is gross minus tare; the slip is saved as weighing until both are in.</span>
+                <span className="mn-ord-meta">Net is the difference between the two weighings; the heavier one is the gross.</span>
               )}
             </span>
           </div>
@@ -436,8 +546,8 @@ export default function WeighbridgePage() {
                     <span className="mn-ord-meta">{sourceOf(r)}</span>
                   </div>
                   <div className="mn-ord-val">
-                    <span className="mn-ord-amt">{hasTare ? `${kg(r.netWeight)} kg` : `${kg(r.grossWeight)} kg gross`}</span>
-                    <span className="mn-ord-meta">{hasTare ? `${kg(r.grossWeight)} − ${kg(r.tareWeight)}` : 'tare still to come'}</span>
+                    <span className="mn-ord-amt">{hasTare ? `${kg(r.netWeight)} kg` : `${kg(r.grossWeight)} kg`}</span>
+                    <span className="mn-ord-meta">{hasTare ? `${kg(r.grossWeight)} − ${kg(r.tareWeight)}` : 'first weight; second still to come'}</span>
                   </div>
                   <div className="mn-ord-status mn-wb-status">
                     <StatusBadge status={status} />
@@ -445,7 +555,8 @@ export default function WeighbridgePage() {
                   </div>
                   <div className="mn-ord-act mn-wb-acts">
                     <Button variant="ghost" size="sm" icon={<Download size={14} />} onClick={() => openPdf(`/weighbridge/${String(r.id)}/slip`, String(r.slipNo ?? 'slip')).catch((e) => setError(String(e)))} aria-label={`Print ${String(r.slipNo)}`}>Slip</Button>
-                    {status === 'draft' && <Button size="sm" variant="secondary" icon={<CheckCircle2 size={14} />} onClick={() => complete(r)} disabled={busy}>Complete weighing</Button>}
+                    {status === 'draft' && !hasTare && <Button size="sm" variant="secondary" icon={<Scale size={14} />} onClick={() => secondWeight(r)} disabled={busy}>Second weight</Button>}
+                    {status === 'draft' && hasTare && <Button size="sm" variant="secondary" icon={<CheckCircle2 size={14} />} onClick={() => complete(r)} disabled={busy}>Complete weighing</Button>}
                     {(status === 'completed' || status === 'mismatch') && !r.inwardId && <Button size="sm" icon={<ArrowDownToLine size={14} />} onClick={() => toInward(r)} disabled={busy || !r.materialId} title={r.materialId ? undefined : 'The slip has no material; it cannot become an inward'}>To inward</Button>}
                     {(status === 'draft' || status === 'completed' || status === 'mismatch') && <Button size="sm" variant="ghost" icon={<XCircle size={14} />} onClick={() => cancel(r)} disabled={busy} aria-label={`Cancel ${String(r.slipNo)}`}>Cancel</Button>}
                   </div>
@@ -456,7 +567,7 @@ export default function WeighbridgePage() {
         ) : filter ? (
           <EmptyState title={`No ${labelOf(filter)} slips`} description="Press the chip again to show every slip." />
         ) : (
-          <EmptyState title="No trucks weighed yet" description="Weigh the first truck above: gross loaded, tare empty. The slip then becomes a material inward." />
+          <EmptyState title="No trucks weighed yet" description="Pick the truck and take its first weight above; the second weighing completes the slip and the net becomes a material inward." />
         )}
         <ListCap shown={rows.length} limit={win.limit} canWiden={win.canWiden} onWiden={() => win.setLimit(win.widen())} noun="slips" />
       </Card>

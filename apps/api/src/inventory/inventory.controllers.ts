@@ -74,6 +74,10 @@ export class WeighbridgeController {
   @Post(':id/status') @RequirePermissions('stock.adjust')
   setStatus(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.setStatus(tid(u), id, String(dto.status)); }
 
+  /** Second weighing of a draft slip: heavier = gross, lighter = tare, net = difference; completes it. */
+  @Post(':id/second-weight') @RequirePermissions('stock.adjust')
+  secondWeight(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.secondWeight(tid(u), id, dto); }
+
   @Post(':id/to-inward') @RequirePermissions('stock.adjust')
   toInward(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: Record<string, unknown>) { return this.service.toInward(tid(u), id, dto, u.userId); }
 

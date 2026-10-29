@@ -125,6 +125,44 @@ export class WeighbridgeService {
     });
   }
 
+  /**
+   * The second weighing of a truck whose first weight is already on a draft
+   * slip. A supplier truck is weighed loaded first and empty on the way out; a
+   * transit mixer is weighed empty first and loaded on the way out — so the
+   * slip does not care which came first: the heavier reading is the gross,
+   * the lighter the tare, and the net is the difference. Completes the slip.
+   */
+  secondWeight(tenantId: string, id: string, dto: Record<string, unknown>) {
+    const weight = num(dto.weight);
+    if (!(weight > 0)) throw badReq('Enter the second weight in kg.');
+    return this.db.runInTenant(tenantId, async (m) => {
+      const repo = m.getRepository(WeighbridgeEntry);
+      const entry = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!entry) throw notFound();
+      if (entry.status !== 'draft') throw badReq(`A ${entry.status} slip cannot take a second weight.`);
+      const first = num(entry.grossWeight) > 0 ? num(entry.grossWeight) : num(entry.tareWeight);
+      if (!(first > 0)) throw badReq('The slip has no first weight.');
+      if (num(entry.tareWeight) > 0 && num(entry.grossWeight) > 0) throw badReq('Both weights are already on the slip; press Complete weighing.');
+      const gross = Math.max(first, weight);
+      const tare = Math.min(first, weight);
+      const net = gross - tare;
+      if (!(net > 0)) throw badReq('The two weights are the same, so the net would be zero. Check the reading.');
+      const fromDevice = dto.weightSource === 'device';
+      await repo.update(
+        { id, status: 'draft' },
+        {
+          grossWeight: String(gross), tareWeight: String(tare), netWeight: String(net), status: 'completed',
+          // One device read on either weighing marks the slip as device-captured;
+          // a hand-keyed second weight on a device-read first is an override.
+          weightSource: fromDevice || entry.weightSource === 'device' ? 'device' : 'manual',
+          indicatorId: fromDevice && dto.indicatorId ? String(dto.indicatorId) : entry.indicatorId,
+          manualOverride: entry.manualOverride || (!fromDevice && entry.weightSource === 'device') || dto.manualOverride === true,
+        },
+      );
+      return repo.findOne({ where: { id } });
+    });
+  }
+
   setStatus(tenantId: string, id: string, status: string) {
     const allowed = ['draft', 'completed', 'matched', 'mismatch', 'cancelled'];
     if (!allowed.includes(status)) throw badReq(`Invalid status ${status}`);

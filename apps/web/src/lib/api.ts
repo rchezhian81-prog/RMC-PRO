@@ -796,6 +796,9 @@ export const weighbridgeApi = {
   create: (b: Record<string, unknown>) => post('/weighbridge', b),
   toInward: (id: string, rate: number) => post(`/weighbridge/${id}/to-inward`, { rate }),
   setStatus: (id: string, status: string) => post(`/weighbridge/${id}/status`, { status }),
+  /** The truck's second weighing: the slip works out gross, tare and net and completes. */
+  secondWeight: (id: string, b: { weight: number; weightSource?: 'device' | 'manual'; indicatorId?: string; manualOverride?: boolean }) =>
+    post(`/weighbridge/${id}/second-weight`, b),
 };
 
 // E1 weighbridge hardware bridge: indicator devices + the live "Get weight" read.

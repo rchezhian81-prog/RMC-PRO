@@ -42,7 +42,7 @@ export class BatchTicketsService {
    * materials were weighed, how many missed their tolerance, the worst miss).
    * Three batched lookups for the whole page.
    */
-  list(tenantId: string, status?: string, limit?: string) {
+  list(tenantId: string, status?: string, limit?: string, undispatched = false) {
     return this.db.runInTenant(tenantId, async (m) => {
       const rows = await m.getRepository(BatchTicket).find({
         where: status ? { status } : {},
@@ -75,14 +75,33 @@ export class BatchTicketsService {
             [ticketIds],
           )
         : [];
+      // Which tickets already went out on a truck. A dispatch claims the whole
+      // batch, so a ticket with a live (not cancelled / rejected) dispatch is
+      // not waiting for one: the Dispatch board asks for `undispatched` and gets
+      // only the concrete still standing at the plant.
+      const live: Array<{ batchTicketId: string; dispatchNo: string; dispatchStatus: string }> = ticketIds.length
+        ? await m.query(
+            `SELECT DISTINCT ON (batch_ticket_id) batch_ticket_id AS "batchTicketId",
+                    dispatch_no AS "dispatchNo", dispatch_status AS "dispatchStatus"
+               FROM dispatches
+              WHERE batch_ticket_id = ANY($1) AND dispatch_status NOT IN ('cancelled', 'rejected')
+              ORDER BY batch_ticket_id, created_at DESC`,
+            [ticketIds],
+          )
+        : [];
       const order = new Map(orders.map((o) => [o.id, o]));
       const userName = new Map(users.map((u) => [u.id, u.name]));
       const stat = new Map(stats.map((s) => [s.batchTicketId, s]));
-      return rows.map((r) => {
+      const dispatchOf = new Map(live.map((d) => [d.batchTicketId, d]));
+      const shown = undispatched ? rows.filter((r) => !dispatchOf.has(r.id)) : rows;
+      return shown.map((r) => {
         const o = r.orderId ? order.get(r.orderId) : undefined;
         const s = stat.get(r.id);
+        const d = dispatchOf.get(r.id);
         return {
           ...r,
+          dispatchNo: d?.dispatchNo ?? null,
+          dispatchStatus: d?.dispatchStatus ?? null,
           orderNo: o?.orderNo ?? null,
           customerName: o?.customerName ?? null,
           operatorName: r.operatorUserId ? userName.get(r.operatorUserId) ?? null : null,

@@ -4045,6 +4045,7 @@ button.mn-mi-instock:hover { text-decoration: underline; }
    ============================================================================ */
 .mn-wb-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
 .mn-wb-weigh { display: flex; gap: 6px; align-items: center; }
+.mn-wb-outgoing { display: flex; align-items: center; gap: 6px; min-height: 40px; color: var(--mn-text); background: var(--mn-surface-2); cursor: default; }
 .mn-wb-weigh .mn-input { min-width: 0; flex: 1 1 auto; }
 .mn-wb-weigh button { flex: none; white-space: nowrap; }
 .mn-wb-form-submit { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; }

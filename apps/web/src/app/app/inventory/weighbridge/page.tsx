@@ -71,6 +71,8 @@ export default function WeighbridgePage() {
   // Settings → "Weights only from the indicator": when on, the figures come
   // off the indicator alone and the API checks them against its readings.
   const [indicatorOnly, setIndicatorOnly] = useState(false);
+  // False when the role cannot read Masters → Suppliers / Materials (the lists came back refused).
+  const [mastersReadable, setMastersReadable] = useState(true);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState(EMPTY);
   const [indicatorId, setIndicatorId] = useState('');
@@ -85,9 +87,11 @@ export default function WeighbridgePage() {
   const reload = useCallback(async () => {
     const [w, m, s, p, ind, v, d, pol] = await Promise.all([
       weighbridgeApi.list(undefined, win.limit),
-      crud('materials').list(),
-      crud('suppliers').list(),
-      crud('plants').list(),
+      // The masters only fill the pickers: a role without Masters view still
+      // gets the weighbridge, with a hint on why the list is empty.
+      crud('materials').list().catch(() => null),
+      crud('suppliers').list().catch(() => null),
+      crud('plants').list().catch(() => [] as Row[]),
       weighbridgeIndicatorApi.list().catch(() => [] as Row[]),
       // The truck list and the trucks out on dispatch only label the picker, so
       // a hiccup there must not blank the weighbridge.
@@ -96,8 +100,9 @@ export default function WeighbridgePage() {
       weighbridgeApi.policy().catch(() => ({ indicatorOnly: false, readingWindowMinutes: 15 })),
     ]);
     setRows(w);
-    setMaterials(m);
-    setSuppliers(s);
+    setMaterials(m ?? []);
+    setSuppliers(s ?? []);
+    setMastersReadable(m !== null && s !== null);
     setPlants(p);
     setIndicators(ind);
     setVehicles(v);
@@ -225,6 +230,10 @@ export default function WeighbridgePage() {
       .sort((a, b) => String(a.vehicleNo).localeCompare(String(b.vehicleNo)));
   }, [vehicles, onDispatch]);
   const truckNo = form.truckPick === OTHER_TRUCK ? form.vehicleNo.trim() : String(vehicleById.get(form.truckPick)?.vehicleNo ?? '');
+  // An outgoing load: the truck picked is on a dispatch, so the slip weighs
+  // concrete leaving the plant, not a supplier's material coming in.
+  const outgoing = form.truckPick && form.truckPick !== OTHER_TRUCK ? onDispatch.find((v) => String(v.id) === form.truckPick) ?? null : null;
+  const outgoingDispatch = outgoing ? dispatches.find((d) => String(d.dispatchNo) === String(outgoing.dispatchNo)) ?? null : null;
 
   function pickTruck(value: string) {
     setForm((f) => ({ ...f, truckPick: value, vehicleNo: value === OTHER_TRUCK ? f.vehicleNo : '' }));
@@ -232,14 +241,17 @@ export default function WeighbridgePage() {
 
   async function create(e: FormEvent) {
     e.preventDefault();
+    if (!outgoing && !form.supplierId) { setError('Pick the supplier the truck came from.'); return; }
+    if (!outgoing && !form.materialId) { setError('Pick the material on the truck.'); return; }
     if (!(first > 0)) { setError(indicatorOnly ? 'Press Get with the truck on the bridge to read the first weight.' : 'Enter the first weight.'); return; }
     if (indicatorOnly && (!capture.firstFromDevice || (second > 0 && !capture.secondFromDevice))) { setError('Weights only from the indicator is on: every weight must be read with Get.'); return; }
     if (second > 0 && second === first) { setError('The second weight equals the first, so the net would be zero. Check the reading.'); return; }
     await run(async () => {
       const created = (await weighbridgeApi.create({
         plantId: form.plantId || undefined,
-        supplierId: form.supplierId || undefined,
-        materialId: form.materialId || undefined,
+        supplierId: outgoing ? undefined : form.supplierId || undefined,
+        materialId: outgoing ? form.materialId || undefined : form.materialId || undefined,
+        materialLabel: outgoing && !form.materialId ? `${String(outgoingDispatch?.gradeLabel ?? 'Concrete')} out on ${String(outgoing.dispatchNo ?? 'dispatch')}` : undefined,
         vehicleNo: truckNo || undefined,
         supplierChallanNo: form.supplierChallanNo.trim() || undefined,
         grossWeight: gross,
@@ -462,25 +474,37 @@ export default function WeighbridgePage() {
               <Input value={form.vehicleNo} onChange={(e) => setForm({ ...form, vehicleNo: e.target.value })} placeholder="TN 01 AB 1234" aria-label="Truck number" autoFocus />
             )}
           </Field>
-          <Field label="Supplier" help={suppliers.length ? undefined : 'No suppliers yet: add them under Masters → Suppliers'}>
-            <Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
-              <option value="">{suppliers.length ? 'Pick the supplier' : 'No suppliers set up'}</option>
-              {suppliers.map((s) => (
-                <option key={String(s.id)} value={String(s.id)}>{String(s.supplierName)}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Material">
-            <Select value={form.materialId} onChange={(e) => setForm({ ...form, materialId: e.target.value })}>
-              <option value="">Pick the material</option>
-              {materials.map((m) => (
-                <option key={String(m.id)} value={String(m.id)}>{String(m.materialName)}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Supplier challan no">
-            <Input value={form.supplierChallanNo} onChange={(e) => setForm({ ...form, supplierChallanNo: e.target.value })} placeholder="On the delivery note" />
-          </Field>
+          {outgoing ? (
+            <Field label="Outgoing load" help="Concrete leaving the plant: no supplier or material to pick. The slip records the dispatch and its grade.">
+              <div className="mn-input mn-wb-outgoing" aria-live="polite">
+                <strong>{String(outgoing.dispatchNo ?? '')}</strong>
+                {outgoingDispatch ? ` · ${String(outgoingDispatch.gradeLabel ?? '')} · ${num(outgoingDispatch.quantityM3).toLocaleString('en-IN', { maximumFractionDigits: 2 })} m³` : ''}
+                {` · ${String(outgoing.dispatchStatus ?? '').replace(/_/g, ' ')}`}
+              </div>
+            </Field>
+          ) : (
+            <>
+              <Field label="Supplier" required help={!mastersReadable ? 'Your role cannot read Masters → Suppliers. Ask the admin for Masters view.' : suppliers.length ? undefined : 'No suppliers yet: add them under Masters → Suppliers'}>
+                <Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} required>
+                  <option value="">{suppliers.length ? 'Pick the supplier' : 'No suppliers to pick'}</option>
+                  {suppliers.map((s) => (
+                    <option key={String(s.id)} value={String(s.id)}>{String(s.supplierName)}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Material" required help={!mastersReadable ? 'Your role cannot read Masters → Materials. Ask the admin for Masters view.' : materials.length ? undefined : 'No materials yet: add them under Masters → Materials'}>
+                <Select value={form.materialId} onChange={(e) => setForm({ ...form, materialId: e.target.value })} required>
+                  <option value="">{materials.length ? 'Pick the material' : 'No materials to pick'}</option>
+                  {materials.map((m) => (
+                    <option key={String(m.id)} value={String(m.id)}>{String(m.materialName)}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Supplier challan no">
+                <Input value={form.supplierChallanNo} onChange={(e) => setForm({ ...form, supplierChallanNo: e.target.value })} placeholder="On the delivery note" />
+              </Field>
+            </>
+          )}
           {indicators.length > 0 && (
             <Field label="Indicator">
               <Select value={indicatorId} onChange={(e) => setIndicatorId(e.target.value)}>

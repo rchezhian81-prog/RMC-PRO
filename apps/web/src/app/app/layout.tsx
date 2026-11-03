@@ -36,6 +36,8 @@ interface NavItem {
    * open to any tenant user are intentionally left ungated.
    */
   perm?: string;
+  /** Shown when the user holds ANY of these keys (the API's own read gate for that screen). */
+  anyPerm?: string[];
   /**
    * Subscription module this screen belongs to, matching the `@RequireModule`
    * on the controller behind it. Left out when the company's plan does not
@@ -45,6 +47,9 @@ interface NavItem {
   /** Hidden while the AI features are switched off, so there are no dead ends. */
   ai?: boolean;
 }
+
+/** Who may read the board and the challans: the API's own any-of gate for GET /dispatches. A driver holds none of these. */
+const DISPATCH_READ = ['masters.view', 'orders.view', 'dispatch.update_status', 'delivery_challans.create', 'gps.view', 'reports.view', 'sync.manage'];
 
 const GROUPS: { title: string; items: NavItem[] }[] = [
   {
@@ -124,13 +129,13 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Dispatch',
     items: [
-      { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, module: 'dispatch' },
+      { href: '/app/dispatch/board', label: 'Dispatch Board', icon: <Truck size={IS} />, anyPerm: DISPATCH_READ, module: 'dispatch' },
       { href: '/app/dispatch/tracking', label: 'Live Tracking', icon: <Navigation size={IS} />, perm: 'gps.view', module: 'gps' },
       { href: '/app/dispatch/pumps', label: 'Pumps', icon: <Droplets size={IS} />, perm: 'pump.view', module: 'dispatch' },
       { href: '/app/driver', label: 'My Trips (driver)', icon: <Smartphone size={IS} />, perm: 'driver.trips', module: 'driver_app' },
-      { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, module: 'dispatch' },
+      { href: '/app/dispatch/challans', label: 'Delivery Challans', icon: <Receipt size={IS} />, anyPerm: DISPATCH_READ, module: 'dispatch' },
       { href: '/app/dispatch/delivery-register', label: 'Delivery Register', icon: <BarChart3 size={IS} />, perm: 'reports.view', module: 'dispatch' },
-      { href: '/app/dispatch/fleet-utilization', label: 'Fleet Utilization', icon: <BarChart3 size={IS} />, module: 'dispatch' },
+      { href: '/app/dispatch/fleet-utilization', label: 'Fleet Utilization', icon: <BarChart3 size={IS} />, perm: 'reports.view', module: 'dispatch' },
     ],
   },
   {
@@ -299,6 +304,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       (it) =>
         (!driverOnly || it.perm === 'driver.trips' || it.href === '/app/account') &&
         (!it.perm || access.has(it.perm)) &&
+        (!it.anyPerm || it.anyPerm.some((k) => access.has(k))) &&
         // The owner bypasses permissions but not the subscription: a module
         // outside the plan is refused for them too.
         (!it.module || access.hasModule(it.module)) &&

@@ -4,9 +4,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Truck, UserRound, MapPin, RefreshCw, Plus, AlertTriangle, Undo2, FileText, ArrowUpRight, CheckCircle2,
-} from 'lucide-react';
+  Truck, UserRound, MapPin, RefreshCw, Plus, AlertTriangle, Undo2, FileText, ArrowUpRight, CheckCircle2, Smartphone } from 'lucide-react';
 import { batchTicketsApi, challansApi, crud, dispatchApi, type Row } from '../../../../lib/api';
+import { getAccess } from '../../../../lib/session';
 import { Card } from '../../../../components/ui/Card';
 import { StatusBadge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
@@ -297,7 +297,12 @@ export default function DispatchBoardPage() {
         )}
       </div>
 
-      {error && <ErrorState message={error} />}
+      {error && /permission/i.test(error) && getAccess().has('driver.trips') ? (
+        <Card title={<span className="mn-board-card-title"><Smartphone size={16} aria-hidden /> Your trips are under My Trips</span>}>
+          <p className="mn-ord-meta" style={{ margin: '0 0 12px' }}>This board is the office view of every truck. The loads assigned to you, with the buttons for each leg of the trip, are on your own screen.</p>
+          <Link href="/app/driver"><Button icon={<Smartphone size={15} />}>Open My Trips</Button></Link>
+        </Card>
+      ) : error ? <ErrorState message={error} /> : null}
       {msg && <AlertSurface tone="success">{msg}</AlertSurface>}
 
       <Card title={<span className="mn-board-card-title"><Plus size={16} aria-hidden /> New dispatch</span>}>
